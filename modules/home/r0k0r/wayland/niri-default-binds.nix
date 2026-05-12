@@ -3,10 +3,6 @@
 {
   "Mod+Shift+Slash".action.show-hotkey-overlay = [ ];
 
-  "Mod+T".action.spawn = "alacritty";
-  "Mod+D".action.spawn = "fuzzel";
-  "Super+Alt+L".action.spawn = "swaylock";
-
   "XF86AudioRaiseVolume".action.spawn = [
     "wpctl"
     "set-volume"
@@ -21,6 +17,20 @@
   ];
 
   "Mod+Q".action.close-window = [ ];
+
+  /* Workspace overview (also: top-left hot corner / touchpad gesture). */
+  "Mod+O" = {
+    repeat = false;
+    action.toggle-overview = [ ];
+  };
+
+  /* Consume/expel focused window vs neighbor column (see niri wiki). */
+  "Mod+BracketLeft".action.consume-or-expel-window-left = [ ];
+  "Mod+BracketRight".action.consume-or-expel-window-right = [ ];
+
+  /* Floating vs tiling */
+  "Mod+Alt+Space".action.toggle-window-floating = [ ];
+  "Mod+Shift+V".action.switch-focus-between-floating-and-tiling = [ ];
 
   "Mod+Left".action.focus-column-left = [ ];
   "Mod+Down".action.focus-window-down = [ ];
