@@ -3,18 +3,10 @@
 {
   "Mod+Shift+Slash".action.show-hotkey-overlay = [ ];
 
-  "XF86AudioRaiseVolume".action.spawn = [
-    "wpctl"
-    "set-volume"
-    "@DEFAULT_AUDIO_SINK@"
-    "0.1+"
-  ];
-  "XF86AudioLowerVolume".action.spawn = [
-    "wpctl"
-    "set-volume"
-    "@DEFAULT_AUDIO_SINK@"
-    "0.1-"
-  ];
+  /*
+    Omit XF86 volume keys: DMS niri.enableKeybinds binds them to `dms ipc`; duplicating wpctl errors.
+    Mod+Comma / Mod+I vs DMS: overrides live in wayland/niri.nix (mkForce).
+  */
 
   "Mod+Q".action.close-window = [ ];
 
@@ -37,8 +29,9 @@
   "Mod+Up".action.focus-window-up = [ ];
   "Mod+Right".action.focus-column-right = [ ];
   "Mod+H".action.focus-column-left = [ ];
-  "Mod+J".action.focus-window-down = [ ];
-  "Mod+K".action.focus-window-up = [ ];
+  /* j/k: workspace down/up (same as vim); use Mod+Down/Up for window-in-column. */
+  "Mod+J".action.focus-workspace-down = [ ];
+  "Mod+K".action.focus-workspace-up = [ ];
   "Mod+L".action.focus-column-right = [ ];
 
   "Mod+Ctrl+Left".action.move-column-left = [ ];
@@ -75,8 +68,6 @@
 
   "Mod+Page_Down".action.focus-workspace-down = [ ];
   "Mod+Page_Up".action.focus-workspace-up = [ ];
-  "Mod+U".action.focus-workspace-down = [ ];
-  "Mod+I".action.focus-workspace-up = [ ];
   "Mod+Ctrl+Page_Down".action.move-column-to-workspace-down = [ ];
   "Mod+Ctrl+Page_Up".action.move-column-to-workspace-up = [ ];
   "Mod+Ctrl+U".action.move-column-to-workspace-down = [ ];
@@ -107,7 +98,6 @@
   "Mod+Ctrl+8".action.move-column-to-workspace = 8;
   "Mod+Ctrl+9".action.move-column-to-workspace = 9;
 
-  "Mod+Comma".action.consume-window-into-column = [ ];
   "Mod+Period".action.expel-window-from-column = [ ];
 
   "Mod+R".action.switch-preset-column-width = [ ];

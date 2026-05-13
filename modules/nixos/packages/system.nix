@@ -15,6 +15,7 @@
     nixd
     nixfmt-rfc-style
     statix
+    starship
     deadnix
     nautilus
     kdePackages.kdeconnect-kde
@@ -37,6 +38,9 @@
 
     flutter
     dart
+
+    tinymist
+    typst
 
     (pkgs.texlive.combine {
       inherit (pkgs.texlive)

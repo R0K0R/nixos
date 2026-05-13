@@ -2,6 +2,9 @@
 
 let
   dmsDefaultMainBar = import ./bar-spec.nix;
+  aiOllamaHost = "10.8.0.22";
+  /* Must match `ollama list`; adjust if yours differs e.g. `gemma3:27b`. */
+  aiOllamaModel = "gemma4:31b";
 in
 {
   programs.dank-material-shell = {
@@ -34,6 +37,7 @@ in
           ];
         })
       ];
+      useAutoLocation = true;
     };
 
     systemd = {
@@ -49,11 +53,23 @@ in
     enableClipboardPaste = true;
 
     niri = {
-      enableSpawn = true;
+      # systemd already starts `dms`; spawn-at-startup would run a second copy (duplicate bar).
+      enableSpawn = false;
+      /* Merge DMS default niri binds (IPC toggles); `wayland/niri.nix` layers your overrides atop. */
+      enableKeybinds = true;
     };
 
     plugins = {
       dankKDEConnect.enable = true;
+      aiAssistant = {
+        enable = true;
+        settings = {
+          provider = "custom";
+          baseUrl = "http://${aiOllamaHost}:11434/v1";
+          model = aiOllamaModel;
+          saveApiKey = false;
+        };
+      };
     };
   };
 }
