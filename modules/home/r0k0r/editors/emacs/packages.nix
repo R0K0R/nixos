@@ -30,6 +30,8 @@ in
       '')
 
       git
+      # tree-sitter grammars compile via Emacs `treesit-install-language-grammar` (calls cc/clang).
+      gcc
       ripgrep
       fd
       findutils

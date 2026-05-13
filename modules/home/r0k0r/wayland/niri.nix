@@ -55,9 +55,19 @@
       binds = lib.mergeAttrs niriBindsBase (
         with config.lib.niri.actions;
         {
-          "Mod+Space" = {
+          /* Override same combo as DMS `enableKeybinds` hotkey-overlay title. */
+          "Mod+Space" = lib.mkForce {
             action = spawn "dms" "ipc" "spotlight" "toggle";
             hotkey-overlay.title = "Launcher";
+          };
+
+          "Mod+Comma" = lib.mkForce {
+            action = { consume-window-into-column = [ ]; };
+          };
+
+          "Mod+I" = lib.mkForce {
+            action = spawn "dms" "ipc" "settings" "toggle";
+            hotkey-overlay.title = "Settings";
           };
 
           "Mod+Return" = {
@@ -76,6 +86,10 @@
             hotkey-overlay.title = "Editor";
           };
 
+          "Mod+a" = {
+            action = spawn "dms" "ipc" "call" "plugins" "toggle" "aiAssistant";
+            hotkey-overlay.title = "AI Assistant";
+          };
           /*
             To hide from overlay but keep working:
               "Mod+X" = { hotkey-overlay.hidden = true; action.spawn = "foo"; };
