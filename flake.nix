@@ -5,6 +5,9 @@
     # Pinned in flake.lock. Use nixos-YY.MM when that branch exists, or keep unstable.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+    # No public `nixpkgs` flake input — do not wire `follows` (flakes warns otherwise).
+    nixos-hardware.url = "github:NixOS/nixos-hardware";
+
     /* webkitgtk_4_1 only: Emacs xwidgets configure requires webkit2gtk-4.1 < 2.41.92; unstable is newer.
        Do not `follows` nixpkgs — we want an independent lock (currently nixos-22.11 → webkit 2.38.x). */
     nixpkgs-emacs-webkit.url = "github:NixOS/nixpkgs/nixos-22.11";
