@@ -8,7 +8,6 @@ with pkgs; [
   gh
   starship
   nixd
-  nixfmt-rfc-style
   statix
   deadnix
   tree
@@ -21,12 +20,4 @@ with pkgs; [
   dart
   tinymist
   typst
-  (pkgs.texlive.combine {
-    inherit (pkgs.texlive)
-      scheme-medium
-      graphics
-      amsmath
-      latexmk
-      ;
-  })
 ]
