@@ -1,10 +1,10 @@
-{ inputs, ... }:
+{ inputs, hostName, ... }:
 
 {
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;
-    extraSpecialArgs = { inherit inputs; };
+    extraSpecialArgs = { inherit inputs hostName; };
     backupFileExtension = "hm-backup";
     /* Allow replacing an existing *.hm-backup when backing up again (avoids activation crash). */
     overwriteBackup = true;

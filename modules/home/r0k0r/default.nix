@@ -4,6 +4,7 @@
   imports = [
     ./imports/third-party.nix
     ./core/account.nix
+    ./packages
     ./wayland/niri.nix
     ./i18n/fcitx.nix
     ./ssh/default.nix

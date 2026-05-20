@@ -1,5 +1,5 @@
 {
-  description = "NixOS configuration (victus-15)";
+  description = "NixOS configuration (multi-host)";
 
   inputs = {
     # Pinned in flake.lock. Use nixos-YY.MM when that branch exists, or keep unstable.
@@ -48,14 +48,20 @@
     , home-manager
     , ...
     }:
+    let
+      mkHost =
+        hostName:
+        nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          specialArgs = { inherit inputs hostName; };
+          modules = [
+            home-manager.nixosModules.home-manager
+            ./hosts/${hostName}
+          ];
+        };
+    in
     {
-      nixosConfigurations.victus-15 = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        specialArgs = { inherit inputs; };
-        modules = [
-          home-manager.nixosModules.home-manager
-          ./configuration.nix
-        ];
-      };
+      nixosConfigurations.victus-15 = mkHost "victus-15";
+      nixosConfigurations.galaxybook4-pro360 = mkHost "galaxybook4-pro360";
     };
 }

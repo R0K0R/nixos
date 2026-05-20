@@ -1,8 +1,6 @@
 { pkgs, ... }:
 
 {
-  home.packages = [ pkgs.eza ];
-
   programs.fish = {
     enable = true;
 
