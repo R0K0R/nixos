@@ -2,7 +2,6 @@
 
 {
   imports = [
-    ./boot/loader.nix
     ./locale/timezone.nix
     ./system/state-version.nix
     ./network/core.nix
@@ -17,7 +16,7 @@
     ./fonts/default.nix
     ./nix/pkgs-config.nix
     ./nix/flake-settings.nix
-    ./packages/system.nix
+    ./packages
     ./packages/session-env.nix
     ./programs/firefox.nix
     ./services/upower.nix
