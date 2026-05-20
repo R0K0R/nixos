@@ -1,37 +1,28 @@
-{ pkgs, ... }:
+{ ... }:
 
 {
-  boot.loader.grub = {
+  boot.loader.systemd-boot = {
     enable = true;
-    device = "nodev";
-    efiSupport = true;
-    efiInstallAsRemovable = true;
-    useOSProber = false;
-    configurationLimit = 10;
-    /* starfield lives on ESP already; nixpkgs no longer ships nixos-grub-themes.starfield. */
-    theme = pkgs.nixos-grub2-theme;
-    extraEntries = ''
-      menuentry "Windows" {
-        insmod part_gpt
-        insmod fat
-        search --no-floppy --fs-uuid --set=root 26A5-2CDE
-        chainloader /EFI/Microsoft/Boot/bootmgfw.efi
-      }
-      menuentry "Netboot" {
-        insmod part_gpt
-        insmod fat
-        search --no-floppy --fs-uuid --set=root 26A5-2CDE
-        chainloader /EFI/netboot/netboot.xyz.efi
-      }
-      menuentry "Asclepius" {
-        insmod part_gpt
-        insmod fat
-        search --no-floppy --fs-uuid --set=root 26A5-2CDE
-        chainloader /EFI/Asclepius/bootx64.efi
-      }
+    configurationLimit = 2;
+  };
+
+  boot.loader.systemd-boot.extraEntries = {
+    "windows.conf" = ''
+      title Windows
+      efi /EFI/Microsoft/Boot/bootmgfw.efi
+      sort-key o_windows
+    '';
+    "netboot.conf" = ''
+      title Netboot
+      efi /EFI/netboot/netboot.xyz.efi
+      sort-key o_netboot
+    '';
+    "asclepius.conf" = ''
+      title Asclepius
+      efi /EFI/Asclepius/bootx64.efi
+      sort-key o_asclepius
     '';
   };
 
-  /* Incompatible with boot.loader.grub.efiInstallAsRemovable on multi-boot ESPs. */
-  boot.loader.efi.canTouchEfiVariables = false;
+  boot.loader.efi.canTouchEfiVariables = true;
 }
