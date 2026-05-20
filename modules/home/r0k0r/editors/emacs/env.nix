@@ -12,6 +12,7 @@ let
   emacsPgtkBase = (
     pkgs.emacs-pgtk.override {
       webkitgtk_4_1 = pkgsWebkit.webkitgtk_4_1;
+      glib-networking = pkgsWebkit.glib-networking;
       withNativeCompilation = true;
       withTreeSitter = true;
       withSystemd = true;

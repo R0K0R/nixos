@@ -82,7 +82,7 @@
 
           # Not Mod+c: niri folds case; Mod+C is center-column in upstream defaults.
           "Mod+e" = {
-            action = spawn "emacs";
+            action = spawn "emacsclient" "-c";
             hotkey-overlay.title = "Editor";
           };
 
