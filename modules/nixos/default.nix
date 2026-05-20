@@ -9,6 +9,8 @@
     ./vpn/openvpn.nix
     ./desktop/niri.nix
     ./desktop/greetd.nix
+    ./desktop/session-services.nix
+    ./desktop/dms-greeter.nix
     ./desktop/audio-pipewire.nix
     ./desktop/libinput.nix
     ./input/keyd.nix
@@ -22,5 +24,7 @@
     ./services/upower.nix
     ./i18n/fcitx5.nix
     ./integration/home-manager.nix
+
+    ./virtualisation/waydroid.nix
   ];
 }
