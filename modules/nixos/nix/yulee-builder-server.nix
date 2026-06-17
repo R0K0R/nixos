@@ -6,7 +6,8 @@
 
 {
   nix.settings = {
-    max-jobs = 12;
+    max-jobs = 10;
+    cores = 10;
     trusted-users = [
       "root"
       "@wheel"
@@ -17,6 +18,8 @@
       "https://cache.nixos.org"
       "https://niri.cachix.org"
     ];
+    # Sign all built paths so laptops can use yulee as a substituter.
+    secret-key-files = [ "/etc/nix/yulee-store-secret.key" ];
   };
 
   users.users.r0k0r.openssh.authorizedKeys.keys = [
