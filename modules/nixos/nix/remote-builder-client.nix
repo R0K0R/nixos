@@ -10,7 +10,7 @@
     # then run switch once with --builders (see script output)
 
   On Yulee (/etc/nix/nix.conf):
-    max-jobs = 12
+    max-jobs = 10
     trusted-users = root @wheel r0k0r
     experimental-features = nix-command flakes
     system-features = benchmark big-parallel kvm nixos-test gccarch-meteorlake gccarch-znver3
@@ -30,13 +30,15 @@
       hostName = "yulee";
       system = "x86_64-linux";
       protocol = "ssh";
-      maxJobs = 12;
+      maxJobs = 10;
       speedFactor = 4;
       sshUser = "r0k0r";
       sshKey = "/etc/nix/remote-builder/ssh_key";
       # Yulee: znver3 for running bootstrap tools; meteorlake for compiling final -march=meteorlake outputs.
       supportedFeatures = lib.unique (
-        config.nix.settings.system-features
+        # Exclude local-only features (galaxybook-*) that are only meaningful
+        # on the local machine and would wrongly dispatch builds to yulee.
+        lib.filter (f: !(lib.hasPrefix "galaxybook-" f)) config.nix.settings.system-features
         ++ [
           "gccarch-meteorlake"
           "gccarch-znver3"
@@ -52,5 +54,9 @@
     builders-use-substitutes = true;
     # Never build locally — delegate everything to yulee.
     max-jobs = 0;
+    # Use yulee's /nix/store as a binary cache — meteorlake-specific builds
+    # that miss cache.nixos.org are served from yulee directly.
+    substituters = [ "ssh://r0k0r@yulee" ];
+    trusted-public-keys = [ "yulee-1:KgdwkCN5m+hewJTk+A05PjwI3BbnZAE9NW2n634N7vM=" ];
   };
 }

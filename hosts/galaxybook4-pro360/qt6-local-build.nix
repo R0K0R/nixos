@@ -53,6 +53,7 @@ in
         pyPkgs
         // {
           pyside6 = pyPkgs.pyside6.override {
+            withQtWebEngine = false;
             python =
               (prev.python3.override {
                 passthru = prev.python3.passthru // {

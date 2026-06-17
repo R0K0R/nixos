@@ -9,6 +9,10 @@
   i18n.inputMethod = {
     enable = true;
     type = "fcitx5";
+    # GTK3 immodule cache requires dlopen-ing HOST im-fcitx5.so at build time,
+    # which fails in cross builds (exec stack / sandbox restrictions).
+    # Wayland input method protocol makes the cache unnecessary anyway.
+    enableGtk3 = false;
     fcitx5 = {
       waylandFrontend = true;
       addons =
@@ -47,11 +51,11 @@
     partOf = [ "graphical-session.target" ];
     after = [ "graphical-session.target" ];
     serviceConfig = {
-      Type = "dbus";
-      BusName = "org.fcitx.Fcitx5";
+      Type = "simple";
       ExecStart = "${config.i18n.inputMethod.package}/bin/fcitx5";
       Slice = "session.slice";
-      Restart = "on-failure";
+      Restart = "always";
+      RestartSec = 5;
     };
     wantedBy = [ "graphical-session.target" ];
   };

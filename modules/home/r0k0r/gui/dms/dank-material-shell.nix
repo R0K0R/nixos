@@ -2,9 +2,9 @@
 
 let
   dmsDefaultMainBar = import ./bar-spec.nix;
-  aiOllamaHost = "10.8.0.22";
+  aiOllamaHost = "yulee";
   /* Must match `ollama list`; adjust if yours differs e.g. `gemma3:27b`. */
-  aiOllamaModel = "gemma4:31b";
+  aiOllamaModel = "gemma4-31b";
 in
 {
   programs.dank-material-shell = {
@@ -65,7 +65,7 @@ in
         enable = true;
         settings = {
           provider = "custom";
-          baseUrl = "http://${aiOllamaHost}:11434/v1";
+          baseUrl = "http://${aiOllamaHost}:8000/v1";
           model = aiOllamaModel;
           saveApiKey = false;
         };

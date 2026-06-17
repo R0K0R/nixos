@@ -16,6 +16,32 @@ let
     '';
     meta.platforms = [ "x86_64-linux" ];
   };
+
+  managerConfig = pkgs.writeText "flamenco-manager.yaml" ''
+    _meta:
+      version: 3
+    manager_name: "Flamenco Manager"
+    listen: ":8080"
+    autodiscoverable: true
+    shared_storage_path: "/var/lib/flamenco-manager/shared"
+    local_manager_storage_path: "/var/lib/flamenco-manager/local-storage"
+    shaman:
+      enabled: true
+      garbageCollect:
+        enabled: true
+        period: 24h0m0s
+        maxAge: 744h0m0s
+        extraCheckoutPaths: []
+    task_timeout: 10m0s
+    worker_timeout: 1m0s
+    blocklist_threshold: 3
+    task_fail_after_softfail_count: 3
+    variables:
+      blender:
+        values:
+          - platform: linux
+            value: /snap/bin/blender
+  '';
 in
 {
   users.users.flamenco = {
@@ -26,17 +52,25 @@ in
   };
   users.groups.flamenco = { };
 
+  systemd.tmpfiles.rules = [
+    "d /var/lib/flamenco-manager/shared        0775 flamenco flamenco -"
+    "d /var/lib/flamenco-manager/local-storage  0750 flamenco flamenco -"
+  ];
+
   environment.systemPackages = [ flamenco ];
 
-  # First-run: sudo -u flamenco flamenco-manager (from /var/lib/flamenco-manager)
-  # It will write flamenco-manager.yaml, then start this service.
   systemd.services.flamenco-manager = {
     description = "Flamenco render farm manager";
     after = [ "network.target" ];
     wantedBy = [ "multi-user.target" ];
-    # Don't start until the config file exists (written by first-run wizard).
-    unitConfig.ConditionPathExists = "/var/lib/flamenco-manager/flamenco-manager.yaml";
     serviceConfig = {
+      # Nix config is authoritative — overwrite on every start.
+      ExecStartPre = pkgs.writeShellScript "flamenco-manager-init" ''
+        cfg=/var/lib/flamenco-manager/flamenco-manager.yaml
+        cp ${managerConfig} "$cfg"
+        chmod 600 "$cfg"
+        chown flamenco:flamenco "$cfg"
+      '';
       ExecStart = "${flamenco}/bin/flamenco-manager";
       WorkingDirectory = "/var/lib/flamenco-manager";
       User = "flamenco";

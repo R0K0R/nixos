@@ -9,9 +9,14 @@ let
   kernelPackages = config.boot.kernelPackages;
   kernel = kernelPackages.kernel;
   kernelUsesClang = kernel.stdenv.cc.isClang or false;
-  cc = if kernelUsesClang then pkgs.llvmPackages.clang-unwrapped else pkgs.gcc;
+  isCross = !pkgs.stdenv.buildPlatform.canExecute pkgs.stdenv.hostPlatform;
+  cc = if kernelUsesClang then pkgs.llvmPackages.clang-unwrapped else pkgs.stdenv.cc;
   clangMakeFlags =
     lib.optionalString kernelUsesClang "LLVM=1 CC=${cc}/bin/clang LD=${pkgs.llvmPackages.lld}/bin/ld.lld";
+  # In cross builds the kernel Makefile defaults to CC=$(CROSS_COMPILE)gcc with empty
+  # CROSS_COMPILE, falling back to bare 'gcc' which is not in PATH. Pass CC explicitly.
+  gccMakeFlags =
+    lib.optionalString (!kernelUsesClang && isCross) "CC=${cc}/bin/${pkgs.stdenv.cc.targetPrefix}gcc";
 
   ivscModules = [
     "mei-vsc"
@@ -28,7 +33,7 @@ let
       ++ lib.optionals kernelUsesClang [ pkgs.llvmPackages.lld ];
     buildPhase = ''
       make -C ${kernel.dev}/lib/modules/${kernel.modDirVersion}/build \
-        M=$PWD modules ${clangMakeFlags}
+        M=$PWD modules ${clangMakeFlags} ${gccMakeFlags}
     '';
     installPhase = ''
       install -Dm644 ipu-bridge.ko $out/lib/modules/${kernel.modDirVersion}/extra/ipu-bridge.ko
@@ -40,15 +45,14 @@ let
     };
   };
 
-  cameraRelayMonitor = pkgs.stdenvNoCC.mkDerivation {
+  cameraRelayMonitor = pkgs.stdenv.mkDerivation {
     pname = "camera-relay-monitor";
     version = "1.0";
     src = "${fixes}/camera-relay";
-    nativeBuildInputs = [ pkgs.gcc ];
     dontConfigure = true;
     dontFixup = true;
     buildPhase = ''
-      gcc -O2 -Wall -o camera-relay-monitor camera-relay-monitor.c
+      $CC -O2 -Wall -o camera-relay-monitor camera-relay-monitor.c
     '';
     installPhase = ''
       install -Dm755 camera-relay-monitor $out/bin/camera-relay-monitor
