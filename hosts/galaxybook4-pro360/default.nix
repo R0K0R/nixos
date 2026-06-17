@@ -236,83 +236,30 @@
       }
     )
 
-    # Pseudo-cross stdenv fixes for build (generic x86_64) != host (meteorlake):
-    #
-    #   Issue A — bare `ld`: cross binutils-wrapper only ships `${triple}-ld`,
-    #   but collect2 calls `ld` unprefixed when build triple == target triple
-    #   (which pseudo-cross satisfies). Without a bare-`ld` symlink it falls
-    #   through to the native binutils.
-    #
-    #   Issue B — wrapper shadowed in PATH: depsBuildBuild's native gcc also
-    #   installs `${triple}-gcc` (since for it x86_64-linux-gnu IS the target).
-    #   setup-hooks append depsBuildBuild bins to PATH so it ends up earlier
-    #   than the cross cc-wrapper, and anything doing PATH lookup for
-    #   `${triple}-gcc` gets the native one → output isn't meteorlake-tuned.
-    #
-    # Guard: only when hostPlatform's gcc.arch is meteorlake (i.e. the final
-    # cross-stdenv), so bootstrap stages and pkgsBuildBuild stay untouched.
-    (final: prev: let
-      isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
-
-      # Shared helper for Issue A. The `[ -e ]` guard makes this safe in derived
-      # package sets (pkgsMusl etc.) where the binary prefix differs — no dangling
-      # symlinks.
-      addBareLd = triple: drv: drv.overrideAttrs (old: {
-        postFixup = (old.postFixup or "") + ''
-          [ -e "$out/bin/${triple}-ld" ] && \
-            ln -sf "${triple}-ld" "$out/bin/ld" || true
-          [ -e "$out/bin/${triple}-ld.bfd" ] && \
-            ln -sf "${triple}-ld.bfd" "$out/bin/ld.bfd" || true
-        '';
-      });
-
-      # Issue A, layer 1: override wrapBintoolsWith so every binutils wrapper
-      # built AFTER this overlay applies (pkgsStatic, pkgsMusl, pkgsCross, etc.)
-      # gets the bare-ld symlink. Only emit it when targetPlatform.config matches
-      # the build triple — otherwise the prefix wouldn't exist and the symlink
-      # would dangle.
-      bintoolsWithLd = args:
-        let
-          result = prev.wrapBintoolsWith args;
-          tp = args.targetPlatform or null;
-          buildTriple = prev.buildPackages.stdenv.hostPlatform.config;
-        in
-        if tp != null && tp.config == buildTriple
-        then addBareLd tp.config result
-        else result;
-
-    in {
-      # Issue A applies to every bintools-wrapper whose target triple == build
-      # triple, including the nolibc bootstrap wrapper used to build musl libc.
-      # bintoolsWithLd's internal `tp.config == buildTriple` check is the
-      # correctness guard, so we apply it globally (not just for meteorlake) —
-      # musl/static derived sets with different prefixes naturally skip themselves.
-      wrapBintoolsWith = bintoolsWithLd;
-    } // lib.optionalAttrs isMeteorLakeHost {
-      stdenv = prev.stdenv.override (old: {
-        # Issue A, layer 2: the primary stdenv's bintools was constructed
-        # before our `wrapBintoolsWith` override applied, so patch it directly.
-        cc = prev.stdenv.cc.override {
-          cc = prev.stdenv.cc.cc;
-          bintools = addBareLd prev.stdenv.hostPlatform.config prev.stdenv.cc.bintools;
-        };
-        # Issue B: setup-hook that fires right before configure/build/check/install
-        # phases (after all input setup-hooks have run), pushing $NIX_CC/bin to the
-        # front of PATH so the cross cc-wrapper wins the name lookup.
-        extraNativeBuildInputs = (old.extraNativeBuildInputs or [ ]) ++ [
-          (prev.buildPackages.runCommand "cross-cc-priority-hook" { } ''
-            mkdir -p $out/nix-support
-            cat > $out/nix-support/setup-hook <<'EOF'
-            _crossCcFront() { export PATH=$NIX_CC/bin:$PATH; }
-            preConfigureHooks+=(_crossCcFront)
-            preBuildHooks+=(_crossCcFront)
-            preCheckHooks+=(_crossCcFront)
-            preInstallHooks+=(_crossCcFront)
-            EOF
-          '')
-        ];
-      });
-    })
+    # Issue B: depsBuildBuild's native gcc also installs `${triple}-gcc` (since
+    # for it x86_64-linux-gnu IS the target). setup-hooks append depsBuildBuild
+    # bins to PATH, so the native gcc can shadow the cross cc-wrapper for
+    # prefixed name lookups. The setup-hook below pushes $NIX_CC/bin to the
+    # front of PATH just before each phase so the cross wrapper always wins.
+    # (Issue A — bare `ld` — is handled by F3 in nixpkgs-contrib bintools-wrapper.)
+    (final: prev:
+      let isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
+      in lib.optionalAttrs isMeteorLakeHost {
+        stdenv = prev.stdenv.override (old: {
+          extraNativeBuildInputs = (old.extraNativeBuildInputs or [ ]) ++ [
+            (prev.buildPackages.runCommand "cross-cc-priority-hook" { } ''
+              mkdir -p $out/nix-support
+              cat > $out/nix-support/setup-hook <<'EOF'
+              _crossCcFront() { export PATH=$NIX_CC/bin:$PATH; }
+              preConfigureHooks+=(_crossCcFront)
+              preBuildHooks+=(_crossCcFront)
+              preCheckHooks+=(_crossCcFront)
+              preInstallHooks+=(_crossCcFront)
+              EOF
+            '')
+          ];
+        });
+      })
 
     # kdePackages.breeze (v6) builds a Qt5 Breeze style plugin by referencing
     # libsForQt5.__internalKF5.kirigami2, which pulls in the KDE5 framework chain
@@ -388,24 +335,11 @@
     # F7: Use lld for pseudo-cross builds. Pattern C (cross-debug/78, cross-debug/91).
     # ld.bfd is strict about hidden base-class typeinfo symbols across DSO boundaries;
     # lld tolerates them and matches native x86_64-linux linker behaviour.
-    # prev.stdenv here already has the Issue A/B fixes from the earlier overlay;
-    # overrideAttrs on cc appends to postFixup, preserving all previous changes.
-    # extraNativeBuildInputs is threaded from old: to preserve the cc-priority hook.
+    # useLLVMLinker is defined in nixpkgs-contrib pkgs/stdenv/adapters.nix.
     (final: prev:
       let isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
       in lib.optionalAttrs isMeteorLakeHost {
-        stdenv = prev.stdenv.override (old: {
-          allowedRequisites = null;
-          cc = prev.stdenv.cc.overrideAttrs (ccOld: {
-            postFixup = (ccOld.postFixup or "") + ''
-              # lld symlink in cc-wrapper bin/ → lld is accessible in sandboxes via
-              # closure without extra nativeBuildInputs on every package.
-              ln -sf ${prev.buildPackages.lld}/bin/ld.lld $out/bin/ld.lld
-              echo "-fuse-ld=lld" >> $out/nix-support/cc-ldflags
-            '';
-          });
-          extraNativeBuildInputs = old.extraNativeBuildInputs or [];
-        });
+        stdenv = final.stdenvAdapters.useLLVMLinker prev.stdenv;
       })
 
     # F8: Fresh native i686 stdenv, bypassing the pseudo-cross overlay. Pattern D.
