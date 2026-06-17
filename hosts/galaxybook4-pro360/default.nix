@@ -1,17 +1,424 @@
-{ inputs, ... }:
+{ inputs, lib, ... }:
 
 {
   imports = [
     ./hardware-configuration.nix
     ./boot.nix
     ./home.nix
+    ./hardware.nix
+    ./power.nix
+    ./samsung-fixes.nix
+    ./webcam.nix
+    ./flamenco.nix
+    ./sshfs-yulee.nix
     inputs.niri.nixosModules.niri
     ../../modules/nixos
+    ../../modules/nixos/nix/remote-builder-client.nix
   ];
+
+  services.tailscale.enable = true;
 
   networking.hostName = "galaxybook4-pro360";
 
-  nixpkgs.overlays = [ inputs.niri.overlays.niri ];
+  # Declare the local-Qt6 build capability so packages with
+  # requiredSystemFeatures = ["galaxybook-local-qt6"] can build here.
+  nix.settings.system-features = [ "galaxybook-local-qt6" ];
 
-  hardware.graphics.enable = true;
+  nixpkgs.buildPlatform = "x86_64-linux";
+
+  nixpkgs.hostPlatform = lib.systems.elaborate {
+    system = "x86_64-linux";
+    gcc.arch = "meteorlake";
+  };
+
+  nixpkgs.overlays = [
+    inputs.niri.overlays.niri
+
+    # pyside6 builds qtwebengine (Chromium, several GB) by default on Linux.
+    # KDE Python bindings don't need it; skip it to avoid a multi-hour build.
+    (final: prev: {
+      python3Packages = prev.python3Packages // {
+        pyside6 = prev.python3Packages.pyside6.override { withQtWebEngine = false; };
+      };
+    })
+
+    # xapian's test suite (apitest etc.) hangs indefinitely when built remotely
+    # on yulee. Not a cross issue — disable checks for this host's builds only.
+    (final: prev: {
+      xapian_1_4 = prev.xapian_1_4.overrideAttrs (_: { doCheck = false; });
+
+      # tint0r.c uses __m128 (float) as a raw 128-bit container for integer SSE
+      # ops (__m128i). GCC 15 made this a hard error regardless of -std mode.
+      # Drop just the tint0r filter (minor video tint effect); all others build fine.
+      frei0r = prev.frei0r.overrideAttrs (old: {
+        postPatch = (old.postPatch or "") + ''
+          sed -i '/tint0r/d' src/filter/CMakeLists.txt
+        '';
+      });
+    })
+
+    # Pseudo-cross Qt6 native-tool fixes.  Several HOST Qt modules need native
+    # (build-platform) tool executables during their own build phase.  Qt cmake
+    # doesn't find them in a pseudo-cross setup because NIXPKGS_CMAKE_PREFIX_PATH
+    # only includes HOST packages; native tool cmake dirs are never added.
+    # Pattern: add nativePkg to nativeBuildInputs (so Nix copies it into the
+    # sandbox) and point cmake directly at the tools package via -D.
+    # See cross-debug/45, cross-debug/46, cross-debug/48.
+    (final: prev:
+      let
+        isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
+        nativeBuildQt = attr: final.pkgsBuildBuild.qt6.${attr};
+        addQtNativeTool = nativePkg: toolsPkg: pkg:
+          pkg.overrideAttrs (old: {
+            nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ nativePkg ];
+            cmakeFlags = (old.cmakeFlags or [ ]) ++ [
+              "-D${toolsPkg}_DIR=${nativePkg}/lib/cmake/${toolsPkg}"
+            ];
+          });
+        nativeQtShaderTools = nativeBuildQt "qtshadertools";
+        # Native qtdeclarative has Qt6QuickTools (svgtoqml) and Qt6QmlTools.
+        # nixpkgs already adds Qt6QmlTools_DIR via its own setup hooks; we only
+        # need to add the Quick tools dir (new in Qt 6.8+, not yet in nixpkgs cross logic).
+        nativeQtDeclarative = nativeBuildQt "qtdeclarative";
+
+      in
+      # Guard: only apply to the HOST (meteorlake) package set.  Without this the
+      # overlay would also mutate pkgsBuildBuild.qt6, causing the native qtdeclarative
+      # to gain a (harmless but drv-invalidating) extra nativeBuildInput.
+      lib.optionalAttrs isMeteorLakeHost {
+        # overrideScope returns a plain scope without the makeOverridable `.override`
+        # attribute that callPackage added.  python-packages.nix calls
+        # `pkgs.qt6.override { python3 = self.python; }` which would break without
+        # it.  Restore it from prev so python3Packages can still build its Qt6 scope.
+        qt6 = (prev.qt6.overrideScope (_qfinal: qprev: {
+          # Quick is entirely absent from the HOST build without the native qsb
+          # tool (qtshadertools).  All Qt Quick-dependent packages fail downstream.
+          # Qt6QuickTools (svgtoqml) also lives only in native qtdeclarative.
+          qtdeclarative = qprev.qtdeclarative.overrideAttrs (old: {
+            nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
+              nativeQtShaderTools
+              nativeQtDeclarative
+            ];
+            cmakeFlags = (old.cmakeFlags or [ ]) ++ [
+              "-DQt6ShaderToolsTools_DIR=${nativeQtShaderTools}/lib/cmake/Qt6ShaderToolsTools"
+              "-DQt6QuickTools_DIR=${nativeQtDeclarative}/lib/cmake/Qt6QuickTools"
+            ];
+          });
+          # qscxmlc is only in the native qtscxml; HOST qtscxml can't find it
+          # via cmake's default search, so the HOST build fails to configure.
+          qtscxml = addQtNativeTool
+            (nativeBuildQt "qtscxml") "Qt6ScxmlTools" qprev.qtscxml;
+          # repc (remote object compiler) is only in native qtremoteobjects.
+          qtremoteobjects = addQtNativeTool
+            (nativeBuildQt "qtremoteobjects") "Qt6RemoteObjectsTools" qprev.qtremoteobjects;
+        })) // { inherit (prev.qt6) override; };
+      }
+    )
+
+    # python-packages.nix creates python3Packages.qt6 via
+    # `pkgs.qt6.override { python3 = self.python; }`.  Because we restored
+    # prev.qt6.override (the un-fixed override), that scope gets the OLD
+    # qtdeclarative and pulls the stale qtquicktimeline drv into the closure via
+    # pyside6 → qtgraphs → qtquicktimeline.  Override python3Packages.qt6 directly
+    # to the already-fixed final.qt6 so all C++ Qt modules are shared.
+    # The python3 arg passed in the original override only matters for qt packages
+    # that carry python3 as a build dep (none in the pyside6→qtgraphs chain).
+    (final: prev:
+      let
+        isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
+      in
+      lib.optionalAttrs isMeteorLakeHost {
+        python3Packages = prev.python3Packages // {
+          qt6 = final.qt6;
+        };
+      }
+    )
+
+
+    # qcoro calls find_package(Qt6 COMPONENTS Quick) which makes Qt6Config.cmake
+    # validate each component at qtbase's prefix. nixpkgs puts qtdeclarative in a
+    # separate store path, so the validation fails. qtModule.nix converts the
+    # QT_ADDITIONAL_PACKAGES_PREFIX_PATH env var → cmake cache, but qcoro is not
+    # a Qt module and skips that hook. Pass the variable explicitly.
+    (final: prev:
+      let
+        isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
+      in
+      lib.optionalAttrs isMeteorLakeHost {
+        qt6Packages = prev.qt6Packages.overrideScope (_qpfinal: qpprev: {
+          qcoro = qpprev.qcoro.overrideAttrs (old: {
+            # Qt6QuickConfig.cmake calls find_dependency(Qt6QuickTools).  The
+            # native tools cmake config lives in pkgsBuildBuild.qt6.qtdeclarative,
+            # not the host qtdeclarative, so point cmake there explicitly.
+            nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
+              final.pkgsBuildBuild.qt6.qtdeclarative
+            ];
+            cmakeFlags = (old.cmakeFlags or [ ]) ++ [
+              "-DQT_ADDITIONAL_PACKAGES_PREFIX_PATH=${final.qt6.qtdeclarative}"
+              "-DQt6QuickTools_DIR=${final.pkgsBuildBuild.qt6.qtdeclarative}/lib/cmake/Qt6QuickTools"
+            ];
+          });
+          # kdsoap lives in qt6Packages (not top-level).  With Qt6 the code
+          # generator is built as kdwsdl2cpp-qt6 but examples call kdwsdl2cpp
+          # (no suffix) → command not found at build time.  Skip examples only.
+          kdsoap = qpprev.kdsoap.overrideAttrs (old: {
+            postPatch = (old.postPatch or "") + ''
+              sed -i '/add_subdirectory.*[Ee]xamples/d' CMakeLists.txt
+            '';
+          });
+        });
+
+        # rnnoise-plugin depends on webkitgtk_4_1 only because JUCE bundles a
+        # WebBrowserComponent in juce_gui_extra.  The LADSPA/LV2/VST audio plugins
+        # have no need for a web browser.  webkitgtk_4_1 cannot be built in a
+        # pseudo-cross setup: JSC/Inspector/WTF typeinfo symbols are hidden by
+        # -fvisibility=hidden and can't cross DSO boundaries (ld.bfd requires export;
+        # lld also errors on STV_HIDDEN symbols in shared libs it links).
+        # Fix: drop webkitgtk_4_1 from rnnoise-plugin's inputs and define
+        # JUCE_WEB_BROWSER=0 so JUCE compiles without the web view backend.
+        rnnoise-plugin = prev.rnnoise-plugin.overrideAttrs (old: {
+          buildInputs = builtins.filter (d: d != prev.webkitgtk_4_1) (old.buildInputs or [ ]);
+          # JUCE spawns a subprocess cmake to build 'juceaide' (its native code-gen
+          # tool) and that subprocess searches PATH for plain 'cc'/'gcc'.  The cross
+          # cc-wrapper only provides triple-prefixed names ('x86_64-unknown-linux-
+          # gnu-gcc'), so cmake reports "No CMAKE_C_COMPILER could be found".
+          # Adding pkgsBuildBuild.stdenv.cc puts plain gcc/cc in PATH for juceaide.
+          nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
+            final.pkgsBuildBuild.stdenv.cc
+          ];
+          # LV2 requires juce_lv2_helper, a HOST-compiled post-processor that cmake
+          # runs on the BUILD machine (yulee/znver5).  In pseudo-cross, the binary
+          # is -march=meteorlake-tuned and SIGILLs on yulee.  We only need LADSPA
+          # for kdenlive; disable LV2 to skip the helper entirely.
+          cmakeFlags = (old.cmakeFlags or [ ]) ++ [
+            "-DBUILD_LV2_PLUGIN=OFF"
+          ];
+          # Without LV2 the lv2/ subdir is never created; guard the move so the
+          # postInstall loop doesn't fail, and create an empty lv2 output so the
+          # declared output store path is populated.
+          postInstall = ''
+            for plugin in ladspa lxvst vst3; do
+              mkdir -p ''${!plugin}/lib
+              mv $out/lib/$plugin ''${!plugin}/lib/$plugin
+              ln -s ''${!plugin}/lib/$plugin $out/lib/$plugin
+            done
+            mkdir -p $lv2/lib
+          '';
+          env = (old.env or { }) // { NIX_CFLAGS_COMPILE = "-DJUCE_WEB_BROWSER=0"; };
+        });
+
+        # kdsoap-ws-discovery-client lives in kdePackages.  It runs the HOST
+        # KDSoap::kdwsdl2cpp cmake imported target (from kdePackages.kdsoap)
+        # at build time to generate WSDL headers.  On meteorlake the binary is
+        # compiled with -march=meteorlake (waitpkg), so it SIGILLs on yulee
+        # (AMD znver5).  Build a patched copy of the kdsoap cmake config that
+        # points kdwsdl2cpp-qt6 to the BUILD-platform binary, then override
+        # KDSoap-qt6_DIR so cmake uses it instead of the HOST cmake config.
+        kdePackages = prev.kdePackages.overrideScope (_kfinal: kprev: {
+          kdsoap-ws-discovery-client = kprev.kdsoap-ws-discovery-client.overrideAttrs (old:
+            let
+              nativeKdsoap = final.pkgsBuildBuild.kdePackages.kdsoap;
+              patchedKdsoapCmake = prev.runCommand "kdsoap-ws-native-cmake" { } ''
+                mkdir -p $out
+                cp -rT "${kprev.kdsoap.dev}/lib/cmake/KDSoap-qt6" $out
+                substituteInPlace "$out/KDSoapTargets-release.cmake" \
+                  --replace-fail \
+                    "${kprev.kdsoap.dev}/bin/kdwsdl2cpp-qt6" \
+                    "${nativeKdsoap.dev}/bin/kdwsdl2cpp-qt6"
+              '';
+            in {
+              nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ nativeKdsoap.dev ];
+              cmakeFlags = (old.cmakeFlags or [ ]) ++ [
+                "-DKDSoap-qt6_DIR=${patchedKdsoapCmake}"
+              ];
+            });
+        });
+      }
+    )
+
+    # Pseudo-cross stdenv fixes for build (generic x86_64) != host (meteorlake):
+    #
+    #   Issue A — bare `ld`: cross binutils-wrapper only ships `${triple}-ld`,
+    #   but collect2 calls `ld` unprefixed when build triple == target triple
+    #   (which pseudo-cross satisfies). Without a bare-`ld` symlink it falls
+    #   through to the native binutils.
+    #
+    #   Issue B — wrapper shadowed in PATH: depsBuildBuild's native gcc also
+    #   installs `${triple}-gcc` (since for it x86_64-linux-gnu IS the target).
+    #   setup-hooks append depsBuildBuild bins to PATH so it ends up earlier
+    #   than the cross cc-wrapper, and anything doing PATH lookup for
+    #   `${triple}-gcc` gets the native one → output isn't meteorlake-tuned.
+    #
+    # Guard: only when hostPlatform's gcc.arch is meteorlake (i.e. the final
+    # cross-stdenv), so bootstrap stages and pkgsBuildBuild stay untouched.
+    (final: prev: let
+      isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
+
+      # Shared helper for Issue A. The `[ -e ]` guard makes this safe in derived
+      # package sets (pkgsMusl etc.) where the binary prefix differs — no dangling
+      # symlinks.
+      addBareLd = triple: drv: drv.overrideAttrs (old: {
+        postFixup = (old.postFixup or "") + ''
+          [ -e "$out/bin/${triple}-ld" ] && \
+            ln -sf "${triple}-ld" "$out/bin/ld" || true
+          [ -e "$out/bin/${triple}-ld.bfd" ] && \
+            ln -sf "${triple}-ld.bfd" "$out/bin/ld.bfd" || true
+        '';
+      });
+
+      # Issue A, layer 1: override wrapBintoolsWith so every binutils wrapper
+      # built AFTER this overlay applies (pkgsStatic, pkgsMusl, pkgsCross, etc.)
+      # gets the bare-ld symlink. Only emit it when targetPlatform.config matches
+      # the build triple — otherwise the prefix wouldn't exist and the symlink
+      # would dangle.
+      bintoolsWithLd = args:
+        let
+          result = prev.wrapBintoolsWith args;
+          tp = args.targetPlatform or null;
+          buildTriple = prev.buildPackages.stdenv.hostPlatform.config;
+        in
+        if tp != null && tp.config == buildTriple
+        then addBareLd tp.config result
+        else result;
+
+    in {
+      # Issue A applies to every bintools-wrapper whose target triple == build
+      # triple, including the nolibc bootstrap wrapper used to build musl libc.
+      # bintoolsWithLd's internal `tp.config == buildTriple` check is the
+      # correctness guard, so we apply it globally (not just for meteorlake) —
+      # musl/static derived sets with different prefixes naturally skip themselves.
+      wrapBintoolsWith = bintoolsWithLd;
+    } // lib.optionalAttrs isMeteorLakeHost {
+      stdenv = prev.stdenv.override (old: {
+        # Issue A, layer 2: the primary stdenv's bintools was constructed
+        # before our `wrapBintoolsWith` override applied, so patch it directly.
+        cc = prev.stdenv.cc.override {
+          cc = prev.stdenv.cc.cc;
+          bintools = addBareLd prev.stdenv.hostPlatform.config prev.stdenv.cc.bintools;
+        };
+        # Issue B: setup-hook that fires right before configure/build/check/install
+        # phases (after all input setup-hooks have run), pushing $NIX_CC/bin to the
+        # front of PATH so the cross cc-wrapper wins the name lookup.
+        extraNativeBuildInputs = (old.extraNativeBuildInputs or [ ]) ++ [
+          (prev.buildPackages.runCommand "cross-cc-priority-hook" { } ''
+            mkdir -p $out/nix-support
+            cat > $out/nix-support/setup-hook <<'EOF'
+            _crossCcFront() { export PATH=$NIX_CC/bin:$PATH; }
+            preConfigureHooks+=(_crossCcFront)
+            preBuildHooks+=(_crossCcFront)
+            preCheckHooks+=(_crossCcFront)
+            preInstallHooks+=(_crossCcFront)
+            EOF
+          '')
+        ];
+      });
+    })
+
+    # kdePackages.breeze (v6) builds a Qt5 Breeze style plugin by referencing
+    # libsForQt5.__internalKF5.kirigami2, which pulls in the KDE5 framework chain
+    # and hits a qtquickcontrols2 API mismatch. We don't need the Breeze style
+    # on niri; drop it from easyeffects while keeping breeze-icons.
+    (final: prev:
+      let isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
+      in lib.optionalAttrs isMeteorLakeHost {
+        # kdePackages.breeze (v6) pulls in the KDE5 framework chain via its Qt5
+        # style plugin, hitting a qtquickcontrols2 API mismatch. Not needed on niri.
+        #
+        # Qt6Graphs (in qtgraphs), Qt6Quick/Qt6Qml (in qtdeclarative), and
+        # Qt6Quick3D (in qtquick3d) are split into separate store paths. Two cmake
+        # fixes are required to build against them in pseudo-cross:
+        #
+        #   1. QT_ADDITIONAL_PACKAGES_PREFIX_PATH — tells Qt6Config.cmake's prefix
+        #      validation that those extra prefixes are allowed for components.
+        #
+        #   2. _qt_additional_packages_prefix_paths (cmake CACHE var so it is global
+        #      across nested find_package scopes) — Qt's internal PATHS list used by
+        #      _qt_internal_find_qt_dependencies. Qt6GraphsDependencies.cmake calls
+        #      that macro to find Qt6Quick/Qt6Qml, which live in qtdeclarative, not
+        #      in qtbase or qtgraphs. Without this the PATHS are empty in the nested
+        #      scope and Quick/Qml are not found.
+        #
+        #   3. *Tools_DIR cache vars — Qt6Quick needs Qt6QuickTools and Qt6Qml needs
+        #      Qt6QmlTools (native build-time tools). They live in pkgsBuildBuild
+        #      qtdeclarative (vyayar14…), not the HOST qtdeclarative. Qt6Quick3D
+        #      needs Qt6Quick3DTools from pkgsBuildBuild qtquick3d. cmake only
+        #      searches under CMAKE_CURRENT_LIST_DIR/.. (= HOST prefix), so the
+        #      native tool cmake dirs must be pointed at explicitly via _DIR vars.
+        easyeffects = prev.easyeffects.overrideAttrs (old:
+          let
+            nativeKconfig = final.pkgsBuildBuild.kdePackages.kconfig;
+            # KF6ConfigCompilerTargets-release.cmake has IMPORTED_LOCATION pointing
+            # to the HOST (meteorlake) binaries. Replace both with native binaries so
+            # they don't SIGILL on yulee during the build phase.
+            patchedKconfigCmake = prev.runCommand "kconfig-native-cmake" { } ''
+              mkdir -p $out
+              cp -rT "${prev.kdePackages.kconfig.dev}/lib/cmake/KF6Config" $out
+              substituteInPlace "$out/KF6ConfigCompilerTargets-release.cmake" \
+                --replace-fail \
+                  "${prev.kdePackages.kconfig}/libexec/kf6/kconfig_compiler_kf6" \
+                  "${nativeKconfig}/libexec/kf6/kconfig_compiler_kf6" \
+                --replace-fail \
+                  "${prev.kdePackages.kconfig}/libexec/kf6/kconf_update" \
+                  "${nativeKconfig}/libexec/kf6/kconf_update"
+            '';
+          in {
+          buildInputs = lib.filter (p: (p.pname or "") != "breeze") (old.buildInputs or [ ]);
+          nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
+            final.pkgsBuildBuild.qt6.qtdeclarative
+            final.pkgsBuildBuild.qt6.qtquick3d
+            nativeKconfig
+          ];
+          cmakeFlags = (old.cmakeFlags or [ ]) ++ [
+            "-DQT_ADDITIONAL_PACKAGES_PREFIX_PATH=${final.qt6.qtgraphs};${final.qt6.qtdeclarative};${final.qt6.qtquick3d}"
+            "-D_qt_additional_packages_prefix_paths=${final.qt6.qtgraphs}/lib/cmake;${final.qt6.qtdeclarative}/lib/cmake;${final.qt6.qtquick3d}/lib/cmake"
+            "-DQt6QmlTools_DIR=${final.pkgsBuildBuild.qt6.qtdeclarative}/lib/cmake/Qt6QmlTools"
+            "-DQt6QuickTools_DIR=${final.pkgsBuildBuild.qt6.qtdeclarative}/lib/cmake/Qt6QuickTools"
+            "-DQt6Quick3DTools_DIR=${final.pkgsBuildBuild.qt6.qtquick3d}/lib/cmake/Qt6Quick3DTools"
+            "-DKF6Config_DIR=${patchedKconfigCmake}"
+          ];
+        });
+
+        # zam-plugins marks itself broken for cross-builds, but pseudo-cross here is
+        # x86_64→x86_64 (meteorlake tuning only), so the binaries execute fine on yulee.
+        zam-plugins = prev.zam-plugins.overrideAttrs (old: {
+          meta = old.meta // { broken = false; };
+        });
+      })
+
+    # F7: Use lld for pseudo-cross builds. Pattern C (cross-debug/78, cross-debug/91).
+    # ld.bfd is strict about hidden base-class typeinfo symbols across DSO boundaries;
+    # lld tolerates them and matches native x86_64-linux linker behaviour.
+    # prev.stdenv here already has the Issue A/B fixes from the earlier overlay;
+    # overrideAttrs on cc appends to postFixup, preserving all previous changes.
+    # extraNativeBuildInputs is threaded from old: to preserve the cc-priority hook.
+    (final: prev:
+      let isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
+      in lib.optionalAttrs isMeteorLakeHost {
+        stdenv = prev.stdenv.override (old: {
+          allowedRequisites = null;
+          cc = prev.stdenv.cc.overrideAttrs (ccOld: {
+            postFixup = (ccOld.postFixup or "") + ''
+              # lld symlink in cc-wrapper bin/ → lld is accessible in sandboxes via
+              # closure without extra nativeBuildInputs on every package.
+              ln -sf ${prev.buildPackages.lld}/bin/ld.lld $out/bin/ld.lld
+              echo "-fuse-ld=lld" >> $out/nix-support/cc-ldflags
+            '';
+          });
+          extraNativeBuildInputs = old.extraNativeBuildInputs or [];
+        });
+      })
+
+    # F8: Fresh native i686 stdenv, bypassing the pseudo-cross overlay. Pattern D.
+    # Without this, pkgsi686Linux inherits the meteorlake hostPlatform overlay →
+    # triple-cross (BUILD=x86_64 → HOST=i686 → TARGET=i686 pseudo-cross) which
+    # breaks 32-bit compat packages (mesa i686, libgcrypt i686, etc.).
+    (final: prev:
+      let isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
+      in lib.optionalAttrs isMeteorLakeHost {
+        pkgsi686Linux = import inputs.nixpkgs {
+          localSystem = { system = "i686-linux"; };
+          config = prev.config;
+        };
+      })
+  ];
 }
