@@ -15,4 +15,10 @@ with pkgs; [
   */
   kdePackages.breeze-icons
   adwaita-icon-theme
+  google-chrome
+
+  claude-code
+
+  opencode
+  opencode-claude-auth
 ]

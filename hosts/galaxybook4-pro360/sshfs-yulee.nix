@@ -6,6 +6,6 @@
   users.users.r0k0r.extraGroups = [ "flamenco" ];
 
   users.users.r0k0r.openssh.authorizedKeys.keys = [
-    (builtins.readFile ../../secrets/flamenco-mount.pub)
+    (builtins.readFile ./flamenco-mount.pub)
   ];
 }

@@ -1,5 +1,8 @@
-{ ... }:
+{ pkgs, ... }:
 
 {
-  programs.firefox.enable = true;
+  programs.firefox = {
+    enable = true;
+    package = pkgs.firefox-bin;
+  };
 }

@@ -4,8 +4,10 @@
   imports = [
     ./locale/timezone.nix
     ./system/state-version.nix
+    ./system/swapfile-btrfs.nix
     ./network/core.nix
     ./network/discovery.nix
+    ./network/headscale-client.nix
     ./vpn/openvpn.nix
     ./desktop/niri.nix
     ./desktop/greetd.nix

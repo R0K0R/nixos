@@ -21,9 +21,11 @@
       Host yulee
         HostName 100.64.0.1
         User r0k0r
+        IdentityFile /etc/nix/remote-builder/ssh_key
         ControlMaster auto
         ControlPath /run/nix-yulee-ssh-%r@%h:%p
         ControlPersist yes
+        StrictHostKeyChecking yes
         ServerAliveInterval 30
         ServerAliveCountMax 3
     '';

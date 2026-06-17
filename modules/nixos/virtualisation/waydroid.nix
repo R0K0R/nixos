@@ -11,7 +11,7 @@ in
   options.custom.waydroid = {
 
     enable = lib.mkEnableOption "Waydroid (Android compatibility layer)" // {
-      default = false;
+      default = true;
     };
 
     /* When enableAutoAdbConfigure is true, switches `auto_adb = False` → `True` in /var/lib/waydroid/waydroid.cfg on

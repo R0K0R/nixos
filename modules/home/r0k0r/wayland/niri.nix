@@ -90,6 +90,18 @@
             action = spawn "dms" "ipc" "call" "plugins" "toggle" "aiAssistant";
             hotkey-overlay.title = "AI Assistant";
           };
+
+          # Compositor-level IME toggle: works in all apps including Firefox where
+          # GTK3's zwp_input_method_v2 key routing is unreliable. niri intercepts
+          # this before any app, so Firefox can never steal it.
+          # -s switches IM, -o/-c activates/deactivates fcitx5 processing (state 2/1).
+          # Without -o, fcitx5 stays inactive (state 1 = passthrough) even with hangul IM selected.
+          "Hangul" = {
+            repeat = false;
+            hotkey-overlay.hidden = true;
+            action = spawn "sh" "-c"
+              ''im=$(fcitx5-remote -n); if [ "$im" = hangul ]; then fcitx5-remote -s keyboard-us; fcitx5-remote -c; else fcitx5-remote -s hangul; fcitx5-remote -o; fi'';
+          };
           /*
             To hide from overlay but keep working:
               "Mod+X" = { hotkey-overlay.hidden = true; action.spawn = "foo"; };

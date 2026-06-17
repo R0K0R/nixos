@@ -5,18 +5,19 @@
     provider = {
       yulee = {
         name = "Yulee (Local)";
-        api = "openai";
+        npm = "@ai-sdk/openai-compatible";
         options = {
           apiKey = "dummy";
-          baseURL = "http://yulee:8000/v1/";
+          baseURL = "http://yulee:8002/v1/";
         };
         models = {
           diffusiongemma = {
             id = "diffusiongemma";
             name = "DiffusionGemma";
-            tool_call = false;
+            tool_call = true;
+            reasoning = true;
             limit = {
-              context = 32768;
+              context = 262144;
               output = 8192;
             };
           };
@@ -24,8 +25,9 @@
             id = "gemma4-31b";
             name = "Gemma 4 31B";
             tool_call = true;
+            reasoning = true;
             limit = {
-              context = 131072;
+              context = 204800;
               output = 8192;
             };
           };

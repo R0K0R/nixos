@@ -85,6 +85,5 @@
     {
       nixosConfigurations.victus-15 = mkHost "victus-15";
       nixosConfigurations.galaxybook4-pro360 = mkHost "galaxybook4-pro360";
-      nixosConfigurations.yulee = mkHost "yulee";
     };
 }

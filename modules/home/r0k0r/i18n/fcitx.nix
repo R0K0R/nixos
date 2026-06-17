@@ -9,13 +9,8 @@ let
       "0" = "Control+space";
       "1" = "Zenkaku_Hankaku";
     };
-    /*
-      Physical Hangul/Eisu emitted by keyd (`hangeul`); must not collide with Hangul inside TriggerKeys
-      unless you accept double-hotkey semantics.
-    */
-    "Hotkey/EnumerateForwardKeys" = {
-      "0" = "Hangul";
-    };
+    # EnumerateForwardKeys intentionally omitted: the Hangul toggle is a niri
+    # compositor keybind (wayland/niri.nix) so it fires before any app can steal it.
     "Behavior".ActiveByDefault = true;
   };
 
