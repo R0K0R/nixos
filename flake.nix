@@ -3,7 +3,7 @@
 
   inputs = {
     # Pinned in flake.lock. Use nixos-YY.MM when that branch exists, or keep unstable.
-    nixpkgs.url = "git+file:///home/r0k0r/nixpkgs-contrib?ref=pseudo-cross-fundamental";
+    nixpkgs.url = "github:R0K0R/nixpkgs/pseudo-cross-fundamental";
 
     # Intentionally NOT follows = "nixpkgs" — unaffected by
     # --override-input nixpkgs path:/home/r0k0r/nixpkgs-patch.

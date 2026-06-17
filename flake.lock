@@ -198,16 +198,16 @@
       "locked": {
         "lastModified": 1781722312,
         "narHash": "sha256-XyhXZ3fPQGnDlgi6UXgUGLjLlecG/6hVRUDKXPKaHrw=",
-        "ref": "pseudo-cross-fundamental",
+        "owner": "R0K0R",
+        "repo": "nixpkgs",
         "rev": "a671740e6bff0fe689d472599da7fddb66f5b35c",
-        "revCount": 1018293,
-        "type": "git",
-        "url": "file:///home/r0k0r/nixpkgs-contrib"
+        "type": "github"
       },
       "original": {
+        "owner": "R0K0R",
         "ref": "pseudo-cross-fundamental",
-        "type": "git",
-        "url": "file:///home/r0k0r/nixpkgs-contrib"
+        "repo": "nixpkgs",
+        "type": "github"
       }
     },
     "nixpkgs-emacs-webkit": {
