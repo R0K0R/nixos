@@ -60,16 +60,32 @@
     "doom-private": {
       "flake": false,
       "locked": {
-        "lastModified": 1779234708,
-        "narHash": "sha256-xoGnV/gfAlFcEG9ADAh7Wx3vMo1XP+tfWy06clh0Phg=",
+        "lastModified": 1781074331,
+        "narHash": "sha256-kUXCoLLoi2MzeJ8JqeNm8nCi2UKxbjUNHIbWX44OqDk=",
         "owner": "R0K0R",
         "repo": "doom-emacs",
-        "rev": "c4f342b3e591539f379fb9f7b4f54b0f31fea831",
+        "rev": "c6e1f73b4be36669f2321b6fbc053a4853161850",
         "type": "github"
       },
       "original": {
         "owner": "R0K0R",
         "repo": "doom-emacs",
+        "type": "github"
+      }
+    },
+    "easyeffects-presets": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1780142087,
+        "narHash": "sha256-JpQVWuEokBRu01xkGA22dPeV5Jo8Xzvfrg5oQ8RtIrI=",
+        "owner": "JackHack96",
+        "repo": "EasyEffects-Presets",
+        "rev": "dd966e41ad9e44d4b11e19047f526ba718bbbe57",
+        "type": "github"
+      },
+      "original": {
+        "owner": "JackHack96",
+        "repo": "EasyEffects-Presets",
         "type": "github"
       }
     },
@@ -121,18 +137,14 @@
         "xwayland-satellite-unstable": "xwayland-satellite-unstable"
       },
       "locked": {
-        "lastModified": 1779213531,
-        "narHash": "sha256-B4pOfIX6CpCD/cKckwNP3DYDxEUBG1x/K3vqwYNonx4=",
-        "owner": "sodiboo",
-        "repo": "niri-flake",
-        "rev": "f4027707431220ffb660ae0da0e03fd5229ab4d9",
-        "type": "github"
+        "path": "./niri-flake-patch",
+        "type": "path"
       },
       "original": {
-        "owner": "sodiboo",
-        "repo": "niri-flake",
-        "type": "github"
-      }
+        "path": "./niri-flake-patch",
+        "type": "path"
+      },
+      "parent": []
     },
     "niri-stable": {
       "flake": false,
@@ -184,18 +196,18 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1778869304,
-        "narHash": "sha256-30sZNZoA1cqF5JNO9fVX+wgiQYjB7HJqqJ4ztCDeBZE=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "d233902339c02a9c334e7e593de68855ad26c4cb",
-        "type": "github"
+        "lastModified": 1781722312,
+        "narHash": "sha256-XyhXZ3fPQGnDlgi6UXgUGLjLlecG/6hVRUDKXPKaHrw=",
+        "ref": "pseudo-cross-fundamental",
+        "rev": "a671740e6bff0fe689d472599da7fddb66f5b35c",
+        "revCount": 1018293,
+        "type": "git",
+        "url": "file:///home/r0k0r/nixpkgs-contrib"
       },
       "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
+        "ref": "pseudo-cross-fundamental",
+        "type": "git",
+        "url": "file:///home/r0k0r/nixpkgs-contrib"
       }
     },
     "nixpkgs-emacs-webkit": {
@@ -230,17 +242,53 @@
         "type": "github"
       }
     },
+    "nixpkgs-upstream": {
+      "locked": {
+        "lastModified": 1780749050,
+        "narHash": "sha256-3av0pIjlOWQ6rDbNOmpUSvbNnJkGORQKKjb4LtCZsIY=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "a799d3e3886da994fa307f817a6bc705ae538eeb",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "dms": "dms",
         "dms-plugin-registry": "dms-plugin-registry",
         "doom-emacs": "doom-emacs",
         "doom-private": "doom-private",
+        "easyeffects-presets": "easyeffects-presets",
         "home-manager": "home-manager",
         "niri": "niri",
         "nixos-hardware": "nixos-hardware",
         "nixpkgs": "nixpkgs",
-        "nixpkgs-emacs-webkit": "nixpkgs-emacs-webkit"
+        "nixpkgs-emacs-webkit": "nixpkgs-emacs-webkit",
+        "nixpkgs-upstream": "nixpkgs-upstream",
+        "samsung-galaxy-book-linux-fixes": "samsung-galaxy-book-linux-fixes"
+      }
+    },
+    "samsung-galaxy-book-linux-fixes": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776194732,
+        "narHash": "sha256-KCLAOaeoJedYE2su0Sxj5twq/sSwewmcHKKQwmqoNfk=",
+        "owner": "Andycodeman",
+        "repo": "samsung-galaxy-book-linux-fixes",
+        "rev": "f5a52f0e792a6cf39a0bf0512c01c563376f03fe",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Andycodeman",
+        "ref": "v0.3.34",
+        "repo": "samsung-galaxy-book-linux-fixes",
+        "type": "github"
       }
     },
     "xwayland-satellite-stable": {
