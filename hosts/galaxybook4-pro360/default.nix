@@ -335,11 +335,28 @@
     # F7: Use lld for pseudo-cross builds. Pattern C (cross-debug/78, cross-debug/91).
     # ld.bfd is strict about hidden base-class typeinfo symbols across DSO boundaries;
     # lld tolerates them and matches native x86_64-linux linker behaviour.
-    # useLLVMLinker is defined in nixpkgs-contrib pkgs/stdenv/adapters.nix.
+    # Inlined rather than stdenvAdapters.useLLVMLinker to avoid overlay recursion
+    # (stdenvAdapters is callPackage-bound to the full fixed-point which triggers
+    # cross-bootstrap evaluation when accessed from within an overlay).
     (final: prev:
       let isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
       in lib.optionalAttrs isMeteorLakeHost {
-        stdenv = final.stdenvAdapters.useLLVMLinker prev.stdenv;
+        stdenv =
+          let
+            pfx = prev.stdenv.cc.bintools.targetPrefix;
+            bintools = prev.stdenv.cc.bintools.override {
+              extraBuildCommands = ''
+                ln -sf ${prev.lld}/bin/ld.lld $out/bin/${pfx}ld.lld
+                ln -sf ${pfx}ld.lld $out/bin/ld.lld
+                ln -sf ld.lld $out/bin/${pfx}ld
+                ln -sf ${pfx}ld $out/bin/ld
+              '';
+            };
+          in
+          prev.stdenv.override {
+            allowedRequisites = null;
+            cc = prev.stdenv.cc.override { inherit bintools; };
+          };
       })
 
     # F8: Fresh native i686 stdenv, bypassing the pseudo-cross overlay. Pattern D.

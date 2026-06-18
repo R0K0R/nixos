@@ -71,6 +71,7 @@
     , ...
     }:
     let
+      lib = nixpkgs.lib;
       mkHost =
         hostName:
         nixpkgs.lib.nixosSystem {
@@ -79,6 +80,10 @@
           modules = [
             home-manager.nixosModules.home-manager
             ./hosts/${hostName}
+            # Phase-1 bootstrap: pin nixos-rebuild to unpatched upstream so it
+            # hits cache.nixos.org and doesn't need to be built from our patched stdenv.
+            { system.build.nixos-rebuild = lib.mkForce
+                inputs.nixpkgs-upstream.legacyPackages.x86_64-linux.nixos-rebuild; }
           ];
         };
     in
