@@ -28,7 +28,7 @@
   nix.buildMachines = [
     {
       hostName = "yulee";
-      system = "x86_64-linux";
+      systems = [ "x86_64-linux" "i686-linux" ];
       protocol = "ssh";
       maxJobs = 10;
       speedFactor = 4;
