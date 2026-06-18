@@ -41,9 +41,6 @@
     # on yulee. Not a cross issue — disable checks for this host's builds only.
     (final: prev: {
       xapian_1_4 = prev.xapian_1_4.overrideAttrs (_: { doCheck = false; });
-      # patch 2.8 bad-filenames test fails in yulee's sandbox (filesystem sandbox
-      # doesn't handle null-byte filenames the way the test expects).
-      patch = prev.patch.overrideAttrs (_: { doCheck = false; });
 
       # tint0r.c uses __m128 (float) as a raw 128-bit container for integer SSE
       # ops (__m128i). GCC 15 made this a hard error regardless of -std mode.
