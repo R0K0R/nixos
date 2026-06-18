@@ -57,6 +57,7 @@ in
       enableSpawn = false;
       /* Merge DMS default niri binds (IPC toggles); `wayland/niri.nix` layers your overrides atop. */
       enableKeybinds = true;
+      includes.enable = false;
     };
 
     plugins = {

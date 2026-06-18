@@ -1,7 +1,7 @@
 { pkgs, ... }:
 
 with pkgs; [
-  nixfmt-rfc-style
+  nixfmt
 
   (texlive.combine {
     inherit (texlive)
