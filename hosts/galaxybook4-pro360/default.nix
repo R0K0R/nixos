@@ -33,6 +33,7 @@
 
   nixpkgs.overlays = [
     inputs.niri.overlays.niri
+    (import ./o3-overlay.nix)
 
     # pyside6 builds qtwebengine (Chromium, several GB) by default on Linux.
     # pyside6: withQtWebEngine was removed upstream; qtwebengine is now always included.
