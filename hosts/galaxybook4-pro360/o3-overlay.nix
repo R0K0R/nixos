@@ -44,9 +44,6 @@ let
     # Serialization / data processing
     "protobuf" "jq" "abseil-cpp"
 
-    # Language runtimes
-    "python3"
-
     # Crypto (compute-bound paths)
     "argon2"
 
