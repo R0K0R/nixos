@@ -1,8 +1,12 @@
 final: prev:
 let
-  o3 = pkg: pkg.overrideAttrs (old: {
-    NIX_CFLAGS_COMPILE = (old.NIX_CFLAGS_COMPILE or "") + " -O3";
-  });
+  # Append -O3 to whichever location the package uses for NIX_CFLAGS_COMPILE.
+  # nixpkgs forbids the same var appearing in both `env` and top-level args.
+  o3 = pkg: pkg.overrideAttrs (old:
+    if (old.env or { }) ? NIX_CFLAGS_COMPILE
+    then { env = old.env // { NIX_CFLAGS_COMPILE = old.env.NIX_CFLAGS_COMPILE + " -O3"; }; }
+    else { NIX_CFLAGS_COMPILE = (old.NIX_CFLAGS_COMPILE or "") + " -O3"; }
+  );
 
   packages = [
     # Compression
