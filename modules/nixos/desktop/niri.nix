@@ -7,4 +7,7 @@
     enable = true;
     package = pkgs.niri-unstable;
   };
+
+  # All packages get meteorlake-specific hashes; niri.cachix.org never hits.
+  niri-flake.cache.enable = false;
 }
