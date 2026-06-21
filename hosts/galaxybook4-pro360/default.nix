@@ -353,7 +353,13 @@
               extraBuildCommands = ''
                 ln -sf ${nativeLld}/bin/ld.lld $out/bin/${pfx}ld.lld
                 ln -sf ${pfx}ld.lld $out/bin/ld.lld
-                ln -sf ld.lld $out/bin/${pfx}ld
+                # Wrap ld as a script passing --undefined-version so lld matches
+                # ld.bfd's permissive behaviour for version script symbol entries.
+                cat > $out/bin/${pfx}ld << 'WRAPPER'
+#!/bin/sh
+exec ${nativeLld}/bin/ld.lld --undefined-version "$@"
+WRAPPER
+                chmod +x $out/bin/${pfx}ld
                 ln -sf ${pfx}ld $out/bin/ld
               '';
             };
