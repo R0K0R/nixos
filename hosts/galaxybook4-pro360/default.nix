@@ -43,6 +43,10 @@
     (final: prev: {
       xapian_1_4 = prev.xapian_1_4.overrideAttrs (_: { doCheck = false; });
 
+      # test-performance-eventloopdelay is timing-sensitive and fails under build load.
+      nodejs-slim_24 = prev.nodejs-slim_24.overrideAttrs (_: { doCheck = false; });
+      nodejs_24 = prev.nodejs_24.overrideAttrs (_: { doCheck = false; });
+
       # tint0r.c uses __m128 (float) as a raw 128-bit container for integer SSE
       # ops (__m128i). GCC 15 made this a hard error regardless of -std mode.
       # Drop just the tint0r filter (minor video tint effect); all others build fine.
