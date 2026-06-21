@@ -332,42 +332,9 @@
         });
       })
 
-    # F7: Use lld for pseudo-cross builds. Pattern C (cross-debug/78, cross-debug/91).
-    # ld.bfd is strict about hidden base-class typeinfo symbols across DSO boundaries;
-    # lld tolerates them and matches native x86_64-linux linker behaviour.
-    # Inlined rather than stdenvAdapters.useLLVMLinker to avoid overlay recursion
-    # (stdenvAdapters is callPackage-bound to the full fixed-point which triggers
-    # cross-bootstrap evaluation when accessed from within an overlay).
-    (final: prev:
-      let isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
-      in lib.optionalAttrs isMeteorLakeHost {
-        stdenv =
-          let
-            pfx = prev.stdenv.cc.bintools.targetPrefix;
-            # Use BUILD-native lld (buildPackages), not HOST lld (prev.lld).
-            # prev.lld is the HOST-platform cross derivation; it goes through
-            # nixpkgs splicing and ends up depending on final.stdenv → cycle.
-            # buildPackages.lld uses the native BUILD stdenv, no cycle.
-            nativeLld = prev.buildPackages.lld;
-            bintools = prev.stdenv.cc.bintools.override {
-              extraBuildCommands = ''
-                ln -sf ${nativeLld}/bin/ld.lld $out/bin/${pfx}ld.lld
-                ln -sf ${pfx}ld.lld $out/bin/ld.lld
-                ln -sf ld.lld $out/bin/${pfx}ld
-                ln -sf ${pfx}ld $out/bin/ld
-                # lld is stricter than ld.bfd about version scripts: it errors on
-                # version script entries for undefined symbols. Inject --undefined-version
-                # into the bintools setup hook so it flows through NIX_LDFLAGS to lld.
-                sed -i 's/\(export NIX_LDFLAGS_[A-Za-z0-9_]*="\)/\1--undefined-version /' \
-                  $out/nix-support/setup-hook
-              '';
-            };
-          in
-          prev.stdenv.override {
-            allowedRequisites = null;
-            cc = prev.stdenv.cc.override { inherit bintools; };
-          };
-      })
+    # F7: lld disabled globally — lld links test programs against HOST glibc (meteorlake)
+    # which crashes on znver5 BUILD when configure tries to run them. Will be re-enabled
+    # per-package for webkitgtk/embree (Pattern C) once the system is up.
 
     # F8: Fresh native i686 stdenv, bypassing the pseudo-cross overlay. Pattern D.
     # Without this, pkgsi686Linux inherits the meteorlake hostPlatform overlay →
