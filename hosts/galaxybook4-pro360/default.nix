@@ -53,8 +53,8 @@
       # explicitly so pkg-config finds the HOST libpng and generates the
       # correct Makefile (without this, it falls back to /usr/local/include
       # which doesn't exist in the sandbox, breaking texlive-scripts).
-      perlPackages = prev.perlPackages // {
-        Tk = prev.perlPackages.Tk.overrideAttrs (old: {
+      perlPackages = prev.perlPackages.overrideScope (pself: psuper: {
+        Tk = psuper.Tk.overrideAttrs (old: {
           preConfigure = (old.preConfigure or "") + ''
             export PKG_CONFIG_PATH="${final.libpng.dev}/lib/pkgconfig:''${PKG_CONFIG_PATH:-}"
           '';
@@ -67,12 +67,12 @@
         # trailing newline, breaking the rmtree cwd restoration.
         # HTML-Tree ships both Build.PL and Makefile.PL; removing Build.PL
         # forces the nixpkgs builder to use MakeMaker, sidestepping the issue.
-        HTMLTree = prev.perlPackages.HTMLTree.overrideAttrs (old: {
+        HTMLTree = psuper.HTMLTree.overrideAttrs (old: {
           postPatch = (old.postPatch or "") + ''
             rm -f Build.PL
           '';
         });
-      };
+      });
 
       # tint0r.c uses __m128 (float) as a raw 128-bit container for integer SSE
       # ops (__m128i). GCC 15 made this a hard error regardless of -std mode.
