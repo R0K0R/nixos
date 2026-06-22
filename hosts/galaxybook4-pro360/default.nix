@@ -43,10 +43,50 @@
     (final: prev: {
       xapian_1_4 = prev.xapian_1_4.overrideAttrs (_: { doCheck = false; });
 
+      # embree builds ISA-dispatch object files per -march (sse42, avx, avx2, …)
+      # with -fvisibility=hidden.  ld.bfd refuses to link hidden symbols from one
+      # object into a shared lib that references them from another (Pattern C).
+      # lld is more lenient; force it via -fuse-ld=lld for this package only.
+      # (F7 overlay-wide lld is still disabled — it breaks configure try_run probes
+      # for other packages.  See cross-debug-2 F7 comment and cross-debug/90-91.)
+      embree = prev.embree.overrideAttrs (old: {
+        nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ final.buildPackages.lld ];
+        cmakeFlags = (old.cmakeFlags or [ ]) ++ [
+          "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld"
+          "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=lld"
+          "-DCMAKE_MODULE_LINKER_FLAGS=-fuse-ld=lld"
+        ];
+      });
+
+      # Qt5's configure sets PKG_CONFIG_LIBDIR to the wrapper binary dir (not
+      # where .pc files are), so pkg-config finds nothing in cross builds. MySQL
+      # detection silently fails but -plugin-sql-mysql is explicitly requested,
+      # causing a hard error. Qt5 is EOL; disable MySQL support for this host.
+      qt5 = prev.qt5.overrideScope (_qself: qsuper: {
+        qtbase = (qsuper.qtbase.override { mysqlSupport = false; }).overrideAttrs (old: {
+          postPatch = (old.postPatch or "") + ''
+            # With -march=meteorlake injected, __F16C__ is always defined.
+            # Qt's configure ran without -march so QT_COMPILER_SUPPORTS(F16C)==0
+            # → static fallback stubs compiled at line 253 in the #else branch.
+            # But QFLOAT16_INCLUDE_FAST is also defined so qfloat16_f16c.c is
+            # included at line 305, defining the same functions as non-static
+            # → "redefinition" error.  Add QT_COMPILER_SUPPORTS(F16C) guard.
+            sed -i '/^#include "qfloat16tables.cpp"$/{n; s/#ifdef QFLOAT16_INCLUDE_FAST/#if defined(QFLOAT16_INCLUDE_FAST) \&\& QT_COMPILER_SUPPORTS(F16C)/}' src/corelib/global/qfloat16.cpp
+          '';
+        });
+      });
+
       # jasper's CMakeLists.txt refuses to auto-detect __STDC_VERSION__ in
-      # cross-compilation mode.  Provide C17 (201710L) explicitly.
+      # cross-compilation mode and sets the sentinel "0L" via CACHE INTERNAL
+      # (which always overwrites the initial value even if a -D flag was passed).
+      # Patch the sentinel to C17 (201710L) directly so the downstream check passes.
       jasper = prev.jasper.overrideAttrs (old: {
-        cmakeFlags = (old.cmakeFlags or []) ++ [ "-DJAS_STDC_VERSION=201710L" ];
+        postPatch = (old.postPatch or "") + ''
+          substituteInPlace CMakeLists.txt \
+            --replace-fail \
+              'set(JAS_STDC_VERSION "0L" CACHE INTERNAL "The value of __STDC_VERSION__.")' \
+              'set(JAS_STDC_VERSION "201710L" CACHE INTERNAL "The value of __STDC_VERSION__.")'
+        '';
       });
 
       # test-performance-eventloopdelay is timing-sensitive and fails under build load.
@@ -71,11 +111,26 @@
         # Perl 5.42 now warns on stat with newlines in paths; something in the
         # cross build environment causes fastcwd() to return a path with a
         # trailing newline, breaking the rmtree cwd restoration.
-        # HTML-Tree ships both Build.PL and Makefile.PL; removing Build.PL
-        # forces the nixpkgs builder to use MakeMaker, sidestepping the issue.
+        # buildPerlModule hard-codes "perl Build.PL; ./Build build" in
+        # buildPhase. HTML-Tree also ships Makefile.PL; builder.sh's
+        # preConfigure always runs "perl Makefile.PL", so we can bypass
+        # Module::Build entirely by switching the build/install/check phases
+        # to use make instead of ./Build.
         HTMLTree = psuper.HTMLTree.overrideAttrs (old: {
-          postPatch = (old.postPatch or "") + ''
-            rm -f Build.PL
+          buildPhase = ''
+            runHook preBuild
+            make
+            runHook postBuild
+          '';
+          installPhase = ''
+            runHook preInstall
+            make install
+            runHook postInstall
+          '';
+          checkPhase = ''
+            runHook preCheck
+            make test
+            runHook postCheck
           '';
         });
       });
