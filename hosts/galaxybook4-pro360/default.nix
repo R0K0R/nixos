@@ -59,6 +59,19 @@
             export PKG_CONFIG_PATH="${final.libpng.dev}/lib/pkgconfig:''${PKG_CONFIG_PATH:-}"
           '';
         });
+
+        # Module::Build 0.4234's delete_filetree uses the deprecated
+        # File::Path::rmtree API which saves/restores cwd via Cwd::fastcwd().
+        # Perl 5.42 now warns on stat with newlines in paths; something in the
+        # cross build environment causes fastcwd() to return a path with a
+        # trailing newline, breaking the rmtree cwd restoration.
+        # HTML-Tree ships both Build.PL and Makefile.PL; removing Build.PL
+        # forces the nixpkgs builder to use MakeMaker, sidestepping the issue.
+        HTMLTree = prev.perlPackages.HTMLTree.overrideAttrs (old: {
+          postPatch = (old.postPatch or "") + ''
+            rm -f Build.PL
+          '';
+        });
       };
 
       # tint0r.c uses __m128 (float) as a raw 128-bit container for integer SSE
