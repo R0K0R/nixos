@@ -1,6 +1,8 @@
-{ ... }:
+{ pkgs, ... }:
 
 {
+  boot.kernelPackages = pkgs.linuxPackages_7_1;
+
   boot.loader.systemd-boot = {
     enable = true;
     configurationLimit = 2;
