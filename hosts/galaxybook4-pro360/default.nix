@@ -47,6 +47,20 @@
       nodejs-slim_24 = prev.nodejs-slim_24.overrideAttrs (_: { doCheck = false; });
       nodejs_24 = prev.nodejs_24.overrideAttrs (_: { doCheck = false; });
 
+      # perl-Tk's PNG/Makefile.PL calls `pkg-config libpng` directly.  In
+      # pseudo-cross the setup hook for libpng.dev adds to PKG_CONFIG_PATH
+      # but the value isn't visible when Makefile.PL shells out.  Set it
+      # explicitly so pkg-config finds the HOST libpng and generates the
+      # correct Makefile (without this, it falls back to /usr/local/include
+      # which doesn't exist in the sandbox, breaking texlive-scripts).
+      perlPackages = prev.perlPackages // {
+        Tk = prev.perlPackages.Tk.overrideAttrs (old: {
+          preConfigure = (old.preConfigure or "") + ''
+            export PKG_CONFIG_PATH="${final.libpng.dev}/lib/pkgconfig:''${PKG_CONFIG_PATH:-}"
+          '';
+        });
+      };
+
       # tint0r.c uses __m128 (float) as a raw 128-bit container for integer SSE
       # ops (__m128i). GCC 15 made this a hard error regardless of -std mode.
       # Drop just the tint0r filter (minor video tint effect); all others build fine.
