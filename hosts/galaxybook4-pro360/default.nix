@@ -43,6 +43,12 @@
     (final: prev: {
       xapian_1_4 = prev.xapian_1_4.overrideAttrs (_: { doCheck = false; });
 
+      # jasper's CMakeLists.txt refuses to auto-detect __STDC_VERSION__ in
+      # cross-compilation mode.  Provide C17 (201710L) explicitly.
+      jasper = prev.jasper.overrideAttrs (old: {
+        cmakeFlags = (old.cmakeFlags or []) ++ [ "-DJAS_STDC_VERSION=201710L" ];
+      });
+
       # test-performance-eventloopdelay is timing-sensitive and fails under build load.
       nodejs-slim_24 = prev.nodejs-slim_24.overrideAttrs (_: { doCheck = false; });
       nodejs_24 = prev.nodejs_24.overrideAttrs (_: { doCheck = false; });
