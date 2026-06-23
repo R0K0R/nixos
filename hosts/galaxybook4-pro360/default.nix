@@ -77,6 +77,19 @@
             sed -i '/^#include "qfloat16tables.cpp"$/{n; s/#ifdef QFLOAT16_INCLUDE_FAST/#if defined(QFLOAT16_INCLUDE_FAST) \&\& QT_COMPILER_SUPPORTS(F16C)/}' src/corelib/global/qfloat16.cpp
           '';
         });
+
+        # In pseudo-cross, qmlcachegen (from qtdeclarative.dev/bin) is not found
+        # via QT_HOST_BINS (which points to qtbase, not qtdeclarative).  qtPrepareTool
+        # resolves to an empty path → Makefile recipe is just "-o output.qmlc source.qml"
+        # → bash: o: command not found (Error 127, ignored during build) → install step
+        # tries to copy non-existent .qmlc files → fatal Error 3.
+        # .qmlc files are optional ahead-of-time QML cache; strip CONFIG += qmlcache
+        # so the EXTRA_COMPILERS and INSTALLS entries are never generated.
+        qtquickcontrols = qsuper.qtquickcontrols.overrideAttrs (old: {
+          postPatch = (old.postPatch or "") + ''
+            find . -name '*.pro' -exec sed -i 's/CONFIG += qmlcache//' {} +
+          '';
+        });
       });
 
       # jasper's CMakeLists.txt refuses to auto-detect __STDC_VERSION__ in
