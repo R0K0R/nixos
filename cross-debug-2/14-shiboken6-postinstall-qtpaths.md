@@ -51,20 +51,28 @@ the command being run.
 
 ## Fix
 
-Pass `--qt-target-path` pointing to qt6.qtbase (which is already a `buildInput`
-and therefore exists in the nix store). When `qt_target_path` is set,
-`_determine_defaults_and_check()` skips the qtpaths requirement entirely (only
-checks that the provided path exists, which it does).
+Add `python.pkgs.qt6.qtbase` to `nativeBuildInputs` for cross/pseudo-cross
+builds. `qtpaths6` lives in `qtbase/bin/`; putting qtbase in nativeBuildInputs
+makes it findable in PATH during postInstall.
 
 ```nix
-# Before:
-python3 setup.py egg_info --build-type=shiboken6
-
-# After:
-python3 setup.py egg_info --build-type=shiboken6 \
-  --qt-target-path ${python.pkgs.qt6.qtbase}
+nativeBuildInputs = [
+    cmake
+    python.pkgs.ninja
+    (python.pythonOnBuildForHost.withPackages (ps: [ ps.packaging ps.setuptools ]))
+  ]
+  ++ lib.optionals (stdenv.isPseudoCross or (!stdenv.buildPlatform.canExecute stdenv.hostPlatform)) [
+    python.pkgs.qt6.qtbase
+  ];
 ```
 
-The `--qt-target-path` propagates to the inner invocation automatically via
-`setup_runner.new_setup_internal_invocation()` which forwards all original
-argv to the subprocess.
+### Why not `--qt-target-path`?
+
+An earlier attempt passed `--qt-target-path ${python.pkgs.qt6.qtbase}` to the
+`egg_info` invocation. This bypasses the qtpaths check in the outer
+`_determine_defaults_and_check()`. But `option_value()` (with `remove=True`)
+does NOT remove `--qt-target-path` from `sys.argv` because it is not listed in
+the `BootstrappingMixin.resolve()` dict. The option stays in `sys.argv` when
+`setup(**kwargs)` runs the inner `egg_info` command. The standard setuptools
+`EggInfo` class doesn't inherit `CommandMixin` and thus doesn't recognize
+`--qt-target-path` → `error: option --qt-target-path not recognized`.
