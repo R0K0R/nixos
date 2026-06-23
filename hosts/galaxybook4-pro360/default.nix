@@ -151,12 +151,6 @@
         });
       });
 
-      # nixfmt is a Haskell tool.  Cross-compiling it for HOST drags in iserv-proxy
-      # → network (C-FFI); network's autoconf configure fails with the cross GCC.
-      # Use the BUILD-platform binary — GHC doesn't autovectorize and glibc uses
-      # IFUNC runtime dispatch, so znver5-compiled code runs safely on meteorlake.
-      nixfmt = prev.pkgsBuildBuild.nixfmt;
-
       # tint0r.c uses __m128 (float) as a raw 128-bit container for integer SSE
       # ops (__m128i). GCC 15 made this a hard error regardless of -std mode.
       # Drop just the tint0r filter (minor video tint effect); all others build fine.
@@ -222,6 +216,19 @@
           qtremoteobjects = addQtNativeTool
             (nativeBuildQt "qtremoteobjects") "Qt6RemoteObjectsTools" qprev.qtremoteobjects;
         })) // { inherit (prev.qt6) override; };
+      }
+    )
+
+    # nixfmt is Haskell; cross-compiling it drags in iserv-proxy → network (C-FFI)
+    # which fails configure with the cross GCC.  Use BUILD-platform binary instead.
+    # GHC doesn't autovectorize; glibc uses IFUNC, so znver5 code runs on meteorlake.
+    # isMeteorLakeHost guard prevents recursion when overlay applies to pkgsBuildBuild.
+    (final: prev:
+      let
+        isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
+      in
+      lib.optionalAttrs isMeteorLakeHost {
+        nixfmt = prev.pkgsBuildBuild.nixfmt;
       }
     )
 
