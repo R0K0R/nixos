@@ -56,6 +56,7 @@ nixos-rebuild switch \
 | 27 | cross-debug/28 | basedpyright keytar npm rebuild hook timing | nixpkgs-contrib basedpyright/package.nix | `fc1b35307` |
 | 28 | [30](30-basedpyright-keytar-npm-config-hook-timing.md) | basedpyright keytar: npmRebuildFlags (hook timing insight) | nixpkgs-contrib basedpyright/package.nix | `fc1b35307` |
 | 29 | [29](29-mk-python-derivation-disallowed-refs-pseudo-cross.md) | mk-python-derivation disallowedReferences pseudo-cross (F13) | nixpkgs-contrib mk-python-derivation.nix | `e87d8fb67` |
+| 30 | [31](31-qtbase6-cross-cxx-stdlib-h-isystem-order.md) | Qt6 qtbase cross C++ headers -isystem order (stdlib.h / c++config.h) | nixpkgs-contrib qt-6/modules/qtbase/default.nix | `fbbf81253`→`ae4f068b7` (4 iter) |
 
 ## Files modified
 
@@ -83,6 +84,7 @@ nixos-rebuild switch \
 - `pkgs/by-name/as/asymptote/package.nix` (libtirpc NIX_CFLAGS_COMPILE)
 - `pkgs/by-name/ba/basedpyright/package.nix` (npmRebuildFlags cross)
 - `pkgs/development/interpreters/python/mk-python-derivation.nix` (disallowedReferences pseudo-cross F13)
+- `pkgs/development/libraries/qt-6/modules/qtbase/default.nix` (NIX_CFLAGS_COMPILE_BEFORE cross C++ headers)
 
 ### flakes/nixos (`/home/r0k0r/flakes/nixos`)
 
