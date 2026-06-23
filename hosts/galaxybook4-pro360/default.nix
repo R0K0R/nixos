@@ -151,6 +151,12 @@
         });
       });
 
+      # nixfmt is a Haskell tool.  Cross-compiling it for HOST drags in iserv-proxy
+      # → network (C-FFI); network's autoconf configure fails with the cross GCC.
+      # Use the BUILD-platform binary — GHC doesn't autovectorize and glibc uses
+      # IFUNC runtime dispatch, so znver5-compiled code runs safely on meteorlake.
+      nixfmt = final.pkgsBuildBuild.nixfmt;
+
       # tint0r.c uses __m128 (float) as a raw 128-bit container for integer SSE
       # ops (__m128i). GCC 15 made this a hard error regardless of -std mode.
       # Drop just the tint0r filter (minor video tint effect); all others build fine.
