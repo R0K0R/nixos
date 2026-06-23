@@ -49,26 +49,50 @@ The F11 cmake preload sets vars as `CACHE STRING FORCE`.  But
 (e.g. `WAYLAND_SCANNER_FOUND`), which also implies FORCE.  So preload-set
 vars are always overridden by pkg_check_modules.
 
+## Why plain PKG_CONFIG_PATH export doesn't work
+
+The nixpkgs pkg-config-wrapper replaces `PKG_CONFIG_PATH` with a salt-keyed
+variable at exec time:
+```bash
+PKG_CONFIG_PATH=$PKG_CONFIG_PATH_abc123 exec /nix/store/.../pkg-config "$@"
+```
+Exporting `PKG_CONFIG_PATH` in preConfigure is silently ignored — the wrapper
+replaces it unconditionally.
+
 ## Fix
 
-In `preConfigure`, when `stdenv.isPseudoCross`, locate the BUILD-platform
-`wayland-scanner` binary already in PATH (it is there via nativeBuildInputs),
-derive its store prefix, and prepend its `lib/pkgconfig` dir to
-`PKG_CONFIG_PATH`:
+In `preConfigure`, when `stdenv.isPseudoCross`:
+1. Locate the BUILD wayland-scanner via `command -v wayland-scanner` (it's in
+   PATH from nativeBuildInputs)
+2. Find the HOST pkg-config wrapper (`x86_64-unknown-linux-gnu-pkg-config`)
+3. Read the wrapper script to extract the actual salt variable name via
+   `grep -oE 'PKG_CONFIG_PATH_[A-Za-z0-9_]+'`
+4. Prepend the BUILD wayland-scanner pkgconfig dir to that salt-keyed variable
+   directly, bypassing the wrapper's replacement logic
 
 ```bash
 ws_bin="$(command -v wayland-scanner || true)"
 if [ -n "$ws_bin" ]; then
   ws_prefix="$(dirname "$(dirname "$ws_bin")")"
-  export PKG_CONFIG_PATH="$ws_prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  ws_pcdir="$ws_prefix/lib/pkgconfig"
+  host_pc_bin="$(command -v x86_64-unknown-linux-gnu-pkg-config 2>/dev/null || true)"
+  if [ -n "$host_pc_bin" ]; then
+    pc_salt_var="$(grep -oE 'PKG_CONFIG_PATH_[A-Za-z0-9_]+' "$host_pc_bin" 2>/dev/null | head -1 || true)"
+    if [ -n "$pc_salt_var" ]; then
+      eval "export $pc_salt_var=\"\$ws_pcdir:\${$pc_salt_var}\""
+    fi
+  fi
 fi
 ```
 
-After this, `pkg_check_modules(WAYLAND_SCANNER wayland-scanner)` succeeds
-using the BUILD prefix.  cmake then finds the BUILD-platform binary at
+After this, when the HOST wrapper runs `PKG_CONFIG_PATH=$PKG_CONFIG_PATH_abc123
+exec pkg-config wayland-scanner`, the underlying pkg-config sees the BUILD
+wayland-scanner's pkgconfig dir and returns it as found.
+
+cmake then finds the BUILD-platform binary at
 `${WAYLAND_SCANNER_wayland-scanner_PREFIX}/bin/wayland-scanner`, which is
-correct — wayland-scanner is a BUILD-time code generator (runs `wayland-scanner
---code`) and must execute on the BUILD machine.
+correct — wayland-scanner is a BUILD-time code generator that must execute on
+the BUILD machine.
 
 ## Pattern
 
