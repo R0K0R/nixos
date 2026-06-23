@@ -49,30 +49,49 @@ The `egg_info` command doesn't actually use Qt — it only generates PKG-INFO
 metadata. But pyside6's setup.py always validates Qt presence regardless of
 the command being run.
 
-## Fix
+## Attempted Fix 1 (broken): `--qt-target-path`
 
-Add `python.pkgs.qt6.qtbase` to `nativeBuildInputs` for cross/pseudo-cross
-builds. `qtpaths6` lives in `qtbase/bin/`; putting qtbase in nativeBuildInputs
-makes it findable in PATH during postInstall.
+Passing `--qt-target-path ${python.pkgs.qt6.qtbase}` to the `egg_info`
+invocation bypasses the qtpaths check. But `option_value()` (with `remove=True`)
+does NOT remove `--qt-target-path` from `sys.argv` because it is not in
+`BootstrappingMixin.resolve()`. The option stays in `sys.argv` when
+`setup(**kwargs)` runs the inner `egg_info` command. The standard setuptools
+`EggInfo` class doesn't inherit `CommandMixin` so doesn't recognize the option
+→ `error: option --qt-target-path not recognized`.
 
-```nix
-nativeBuildInputs = [
-    cmake
-    python.pkgs.ninja
-    (python.pythonOnBuildForHost.withPackages (ps: [ ps.packaging ps.setuptools ]))
-  ]
-  ++ lib.optionals (stdenv.isPseudoCross or (!stdenv.buildPlatform.canExecute stdenv.hostPlatform)) [
-    python.pkgs.qt6.qtbase
-  ];
+## Attempted Fix 2 (broken): qtbase in nativeBuildInputs
+
+Adding `python.pkgs.qt6.qtbase` to nativeBuildInputs makes `qtpaths6` findable,
+which fixes the qtpaths check. But then `_do_finalize()` proceeds to call
+`QtInfo().setup()` → `_get_other_properties()` → `_get_cmake_mkspecs_variables()`
+which runs a cmake config test:
+
+```
+cmake -DCMAKE_PREFIX_PATH=/nix/store/.../qtbase-x86_64-unknown-linux-gnu-6.11.0
 ```
 
-### Why not `--qt-target-path`?
+The HOST qtbase's `Qt6CoreConfig.cmake` requires `Qt6CoreTools` (moc, rcc, etc.)
+which only exists in the BUILD-platform `qtbase-6.11.0`. HOST qtbase doesn't ship
+it. cmake fails: `Could NOT find Qt6CoreTools (missing: Qt6CoreTools_DIR)`.
 
-An earlier attempt passed `--qt-target-path ${python.pkgs.qt6.qtbase}` to the
-`egg_info` invocation. This bypasses the qtpaths check in the outer
-`_determine_defaults_and_check()`. But `option_value()` (with `remove=True`)
-does NOT remove `--qt-target-path` from `sys.argv` because it is not listed in
-the `BootstrappingMixin.resolve()` dict. The option stays in `sys.argv` when
-`setup(**kwargs)` runs the inner `egg_info` command. The standard setuptools
-`EggInfo` class doesn't inherit `CommandMixin` and thus doesn't recognize
-`--qt-target-path` → `error: option --qt-target-path not recognized`.
+## Actual Fix (commit `4c1ec83a7`)
+
+Skip `setup.py egg_info` entirely for cross/pseudo-cross builds and write the
+egg-info directory manually. The egg-info is only package metadata; the cmake
+probe inside `qtinfo._get_cmake_mkspecs_variables()` is not needed for it.
+
+```nix
+postInstall =
+  if (stdenv.isPseudoCross or (!stdenv.buildPlatform.canExecute stdenv.hostPlatform)) then ''
+    eggdir=$out/${python.sitePackages}/shiboken6.egg-info
+    mkdir -p "$eggdir"
+    printf 'Metadata-Version: 2.1\nName: shiboken6\nVersion: ...\n...\n' \
+      > "$eggdir/PKG-INFO"
+    printf 'shiboken6\n' > "$eggdir/top_level.txt"
+    touch "$eggdir/dependency_links.txt"
+  '' else ''
+    cd ../../..
+    python3 setup.py egg_info --build-type=shiboken6
+    cp -r shiboken6.egg-info $out/${python.sitePackages}/
+  '';
+```
