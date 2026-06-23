@@ -43,15 +43,18 @@
     (final: prev: {
       xapian_1_4 = prev.xapian_1_4.overrideAttrs (_: { doCheck = false; });
 
-      # embree builds ISA-dispatch object files per -march (sse42, avx, avx2, …)
-      # with -fvisibility=hidden.  ld.bfd refuses to link hidden symbols from one
-      # object into a shared lib that references them from another (Pattern C).
-      # lld is more lenient; force it via -fuse-ld=lld for this package only.
-      # (F7 overlay-wide lld is still disabled — it breaks configure try_run probes
-      # for other packages.  See cross-debug-2 F7 comment and cross-debug/90-91.)
+      # Pattern F (cross-debug/90): -march=meteorlake is ambient via NIX_CFLAGS_COMPILE.
+      # Embree builds ISA-dispatch kernels (sse42, avx, avx2, avx512) each compiled with
+      # ISA-specific feature flags (-msse4.2, -mavx2, -march=skylake-avx512).  The ambient
+      # -march=meteorlake overrides the avx512 arch flag → AVX512 files compile as meteorlake
+      # → symbol namespace confusion between ISA tiers → lld reports undefined sse42 symbols.
+      # EMBREE_MAX_ISA=DEFAULT detects the native ISA from the compiler flags (meteorlake →
+      # AVX2) and builds only that single ISA kernel, eliminating multi-ISA dispatch entirely.
+      # lld is still used for Pattern C (hidden typeinfo across DSO; cross-debug/91).
       embree = prev.embree.overrideAttrs (old: {
         nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ final.buildPackages.lld ];
         cmakeFlags = (old.cmakeFlags or [ ]) ++ [
+          "-DEMBREE_MAX_ISA=DEFAULT"
           "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld"
           "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=lld"
           "-DCMAKE_MODULE_LINKER_FLAGS=-fuse-ld=lld"
