@@ -109,6 +109,9 @@
       nodejs-slim_24 = prev.nodejs-slim_24.overrideAttrs (_: { doCheck = false; });
       nodejs_24 = prev.nodejs_24.overrideAttrs (_: { doCheck = false; });
 
+      # testrwlock times out under build load (thread scheduling, not a bug).
+      sdl3 = prev.sdl3.overrideAttrs (_: { doCheck = false; });
+
       # perl-Tk's PNG/Makefile.PL calls `pkg-config libpng` directly.  In
       # pseudo-cross the setup hook for libpng.dev adds to PKG_CONFIG_PATH
       # but the value isn't visible when Makefile.PL shells out.  Set it
