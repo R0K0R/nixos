@@ -61,28 +61,35 @@ replaces it unconditionally.
 
 ## Fix
 
-In `preConfigure`, when `stdenv.isPseudoCross`:
-1. Locate the BUILD wayland-scanner via `command -v wayland-scanner` (it's in
-   PATH from nativeBuildInputs)
-2. Find the HOST pkg-config wrapper (`x86_64-unknown-linux-gnu-pkg-config`)
-3. Read the wrapper script to extract the actual salt variable name via
+In `preConfigure`, when `stdenv.isPseudoCross && waylandSupport`:
+1. Find the HOST pkg-config wrapper (`x86_64-unknown-linux-gnu-pkg-config`)
+2. Read the wrapper script to extract the actual salt variable name via
    `grep -oE 'PKG_CONFIG_PATH_[A-Za-z0-9_]+'`
-4. Prepend the BUILD wayland-scanner pkgconfig dir to that salt-keyed variable
+3. Prepend `${wayland-scanner.dev}/lib/pkgconfig` to that salt-keyed variable
    directly, bypassing the wrapper's replacement logic
 
-```bash
-ws_bin="$(command -v wayland-scanner || true)"
-if [ -n "$ws_bin" ]; then
-  ws_prefix="$(dirname "$(dirname "$ws_bin")")"
-  ws_pcdir="$ws_prefix/lib/pkgconfig"
+The key insight: use Nix string interpolation (`${wayland-scanner.dev}`) to
+embed the exact store path at Nix eval time.  This has two effects:
+- The correct path is baked in without needing `find` or deriving from the
+  binary location
+- Nix automatically adds `wayland-scanner.dev` to the build closure (making it
+  accessible in the sandbox)
+
+Note: `nativeBuildInputs` only contains `lib.getBin wayland-scanner` (the
+`-bin` output with the binary). The `-dev` output (which has `wayland-scanner.pc`)
+is a separate store path with a different hash.  It is NOT accessible via
+`find /nix/store` from the sandbox unless explicitly in the closure.
+
+```nix
++ lib.optionalString (stdenv.isPseudoCross or false && waylandSupport) ''
   host_pc_bin="$(command -v x86_64-unknown-linux-gnu-pkg-config 2>/dev/null || true)"
   if [ -n "$host_pc_bin" ]; then
     pc_salt_var="$(grep -oE 'PKG_CONFIG_PATH_[A-Za-z0-9_]+' "$host_pc_bin" 2>/dev/null | head -1 || true)"
     if [ -n "$pc_salt_var" ]; then
-      eval "export $pc_salt_var=\"\$ws_pcdir:\${$pc_salt_var}\""
+      eval "export $pc_salt_var=\"${wayland-scanner.dev}/lib/pkgconfig:\$$pc_salt_var\""
     fi
   fi
-fi
+''
 ```
 
 After this, when the HOST wrapper runs `PKG_CONFIG_PATH=$PKG_CONFIG_PATH_abc123
@@ -93,6 +100,26 @@ cmake then finds the BUILD-platform binary at
 `${WAYLAND_SCANNER_wayland-scanner_PREFIX}/bin/wayland-scanner`, which is
 correct — wayland-scanner is a BUILD-time code generator that must execute on
 the BUILD machine.
+
+## Failed approaches
+
+### Approach 1: derive pkgconfig path from binary path
+`ws_prefix="$(dirname "$(dirname "$ws_bin")")"` → `$ws_prefix/lib/pkgconfig`
+
+Fails because `lib.getBin wayland-scanner` gives the `-bin` output store path.
+The `.pc` file is in the `-dev` output which has a completely different hash.
+
+### Approach 2: `find /nix/store -maxdepth 4 -name "wayland-scanner.pc"`
+
+Fails because the nix sandbox restricts `/nix/store` access to the build's
+closure.  Only the `-bin` output is in the closure (from `nativeBuildInputs`);
+the `-dev` output is not, so `find` returns empty.
+
+### Approach 3: cmake preload via `CMAKE_PROJECT_INCLUDE`
+
+Fails because `pkg_check_modules` uses `CACHE INTERNAL` (which implies FORCE)
+to write result variables like `WAYLAND_SCANNER_FOUND`.  Any preload-set value
+is unconditionally overwritten.
 
 ## Pattern
 
