@@ -109,6 +109,12 @@
       nodejs-slim_24 = prev.nodejs-slim_24.overrideAttrs (_: { doCheck = false; });
       nodejs_24 = prev.nodejs_24.overrideAttrs (_: { doCheck = false; });
 
+      # test_brokenpipeerror expects returncode=1 from SIGPIPE but Python 3.13
+      # changed SIGPIPE handling so the process exits 0 instead.
+      python3Packages = prev.python3Packages // {
+        rich = prev.python3Packages.rich.overrideAttrs (_: { doCheck = false; });
+      };
+
       # perl-Tk's PNG/Makefile.PL calls `pkg-config libpng` directly.  In
       # pseudo-cross the setup hook for libpng.dev adds to PKG_CONFIG_PATH
       # but the value isn't visible when Makefile.PL shells out.  Set it
