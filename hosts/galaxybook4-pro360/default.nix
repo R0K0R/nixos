@@ -154,18 +154,6 @@
         });
       });
 
-      # try_run() in src/crash/CMakeLists.txt probes cpptrace::can_signal_safe_unwind()
-      # at configure time. In pseudo-cross (CMAKE_CROSSCOMPILING=TRUE) cmake cannot
-      # execute the test binary → CPPTRACE_SIGNAL_SAFE_UNWIND=PLEASE_FILL_OUT-FAILED_TO_RUN.
-      # cpptrace IS built with CPPTRACE_UNWIND_WITH_LIBUNWIND=true (package.nix line 55),
-      # so signal-safe unwind actually works. Quickshell provides DO_NOT_CHECK_CPPTRACE_USABILITY
-      # exactly for this cross-compilation scenario.
-      quickshell = prev.quickshell.overrideAttrs (old: {
-        cmakeFlags = (old.cmakeFlags or [ ]) ++ [
-          "-DDO_NOT_CHECK_CPPTRACE_USABILITY=true"
-        ];
-      });
-
       # tint0r.c uses __m128 (float) as a raw 128-bit container for integer SSE
       # ops (__m128i). GCC 15 made this a hard error regardless of -std mode.
       # Drop just the tint0r filter (minor video tint effect); all others build fine.
