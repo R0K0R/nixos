@@ -414,20 +414,6 @@
         easyeffects = prev.easyeffects.overrideAttrs (old:
           let
             nativeKconfig = final.pkgsBuildBuild.kdePackages.kconfig;
-            # KF6ConfigCompilerTargets-release.cmake has IMPORTED_LOCATION pointing
-            # to the HOST (meteorlake) binaries. Replace both with native binaries so
-            # they don't SIGILL on yulee during the build phase.
-            patchedKconfigCmake = prev.runCommand "kconfig-native-cmake" { } ''
-              mkdir -p $out
-              cp -rT "${prev.kdePackages.kconfig.dev}/lib/cmake/KF6Config" $out
-              substituteInPlace "$out/KF6ConfigCompilerTargets-release.cmake" \
-                --replace-fail \
-                  "${prev.kdePackages.kconfig}/libexec/kf6/kconfig_compiler_kf6" \
-                  "${nativeKconfig}/libexec/kf6/kconfig_compiler_kf6" \
-                --replace-fail \
-                  "${prev.kdePackages.kconfig}/libexec/kf6/kconf_update" \
-                  "${nativeKconfig}/libexec/kf6/kconf_update"
-            '';
           in {
           buildInputs = lib.filter (p: (p.pname or "") != "breeze") (old.buildInputs or [ ]);
           nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
@@ -441,7 +427,10 @@
             "-DQt6QmlTools_DIR=${final.pkgsBuildBuild.qt6.qtdeclarative}/lib/cmake/Qt6QmlTools"
             "-DQt6QuickTools_DIR=${final.pkgsBuildBuild.qt6.qtdeclarative}/lib/cmake/Qt6QuickTools"
             "-DQt6Quick3DTools_DIR=${final.pkgsBuildBuild.qt6.qtquick3d}/lib/cmake/Qt6Quick3DTools"
-            "-DKF6Config_DIR=${patchedKconfigCmake}"
+            # BUILD kconfig cmake already references BUILD binaries — point directly at it
+            # instead of patching the HOST cmake files (kf6HostTooling covers KDE packages;
+            # easyeffects is not built with mkKdeDerivation so needs an explicit flag).
+            "-DKF6Config_DIR=${nativeKconfig.dev}/lib/cmake/KF6Config"
           ];
         });
 
