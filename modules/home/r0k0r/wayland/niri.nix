@@ -1,6 +1,8 @@
 {
+  pkgs,
   config,
   lib,
+  osConfig,
   ...
 }:
 
@@ -11,7 +13,12 @@
     CSD; `undecorated' is set in $DOOMDIR/init.el for that case.
   */
 
-  programs.niri.settings =
+  # Autorotate: iio-niri listens to iio-sensor-proxy (hardware.nix enables it,
+  # accel_3d + hinge sensors confirmed present) and rotates eDP-1, same role as
+  # iio-hyprland in wayland/hyprland.nix.
+  home.packages = lib.mkIf (osConfig.wm.compositor == "niri") [ pkgs.iio-niri ];
+
+  programs.niri.settings = lib.mkIf (osConfig.wm.compositor == "niri") (
     let
       niriDefaults = import ./niri-default-binds.nix;
       # Remove whole default binds by key name (same strings as in ./niri-default-binds.nix).
@@ -23,6 +30,10 @@
     in
     {
       prefer-no-csd = true;
+
+      spawn-at-startup = [
+        { command = [ "iio-niri" "listen" "--monitor" "eDP-1" ]; }
+      ];
 
       /*
         niri-flake’s merged default uses `default-column-width {}`, which makes niri send a (0, H)
@@ -54,6 +65,9 @@
       # niri-flake emits exactly these binds — defaults live in ./niri-default-binds.nix.
       binds = lib.mergeAttrs niriBindsBase (
         with config.lib.niri.actions;
+        let
+          dms-ipc = spawn "dms" "ipc";
+        in
         {
           /* Override same combo as DMS `enableKeybinds` hotkey-overlay title. */
           "Mod+Space" = lib.mkForce {
@@ -68,6 +82,66 @@
           "Mod+I" = lib.mkForce {
             action = spawn "dms" "ipc" "settings" "toggle";
             hotkey-overlay.title = "Settings";
+          };
+
+          /*
+            Below: replicated from DMS's distro/nix/niri.nix `enableKeybinds` block
+            (now disabled in gui/dms/dank-material-shell.nix so this file is the
+            single source of truth for keybinds).
+          */
+          "Mod+N" = {
+            action = dms-ipc "notifications" "toggle";
+            hotkey-overlay.title = "Toggle Notification Center";
+          };
+          "Mod+P" = {
+            action = dms-ipc "notepad" "toggle";
+            hotkey-overlay.title = "Toggle Notepad";
+          };
+          "Mod+V" = {
+            action = dms-ipc "clipboard" "toggle";
+            hotkey-overlay.title = "Toggle Clipboard Manager";
+          };
+          "Mod+X" = {
+            action = dms-ipc "powermenu" "toggle";
+            hotkey-overlay.title = "Toggle Power Menu";
+          };
+          "Mod+M" = {
+            action = dms-ipc "processlist" "toggle";
+            hotkey-overlay.title = "Toggle Process List";
+          };
+          "Mod+Alt+N" = {
+            allow-when-locked = true;
+            action = dms-ipc "night" "toggle";
+            hotkey-overlay.title = "Toggle Night Mode";
+          };
+          "Super+Alt+L" = {
+            allow-when-locked = true;
+            action = dms-ipc "lock" "lock";
+            hotkey-overlay.title = "Toggle Lock Screen";
+          };
+          "XF86AudioRaiseVolume" = {
+            allow-when-locked = true;
+            action = dms-ipc "audio" "increment" "3";
+          };
+          "XF86AudioLowerVolume" = {
+            allow-when-locked = true;
+            action = dms-ipc "audio" "decrement" "3";
+          };
+          "XF86AudioMute" = {
+            allow-when-locked = true;
+            action = dms-ipc "audio" "mute";
+          };
+          "XF86AudioMicMute" = {
+            allow-when-locked = true;
+            action = dms-ipc "audio" "micmute";
+          };
+          "XF86MonBrightnessUp" = {
+            allow-when-locked = true;
+            action = dms-ipc "brightness" "increment" "5" "";
+          };
+          "XF86MonBrightnessDown" = {
+            allow-when-locked = true;
+            action = dms-ipc "brightness" "decrement" "5" "";
           };
 
           "Mod+Return" = {
@@ -108,5 +182,5 @@
           */
         }
       );
-    };
+    });
 }

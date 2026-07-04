@@ -18,6 +18,8 @@
 
   services.tailscale.enable = true;
 
+  wm.compositor = "hyprland";
+
   networking.hostName = "galaxybook4-pro360";
 
   # Declare the local-Qt6 build capability so packages with
@@ -31,9 +33,37 @@
     gcc.arch = "meteorlake";
   };
 
+  systemd.tmpfiles.rules = [
+    "L /root/.claude - - - - /home/r0k0r/.claude"
+  ];
+
   nixpkgs.overlays = [
     inputs.niri.overlays.niri
     (import ./o3-overlay.nix)
+
+    /*
+      Fingerprint sensor (USB 1c7a:05a1, Egis Technology "Match-On-Chip") enrolls
+      and verifies successfully but forgets the print immediately: upstream
+      libfprint's egismoc driver doesn't implement SDCP (Secure Device
+      Communication Protocol), which these newer Egis MOC sensors require for
+      the enrolled template to actually be committed to the sensor's own
+      storage — enrollment silently "succeeds" without ever writing anything.
+      TenSeventy7/libfprint-egismoc-sdcp implements SDCP support (device table
+      confirms 0x05a1); no other patches needed (nixpkgs' libfprint has no
+      patches of its own beyond build-system shebang/cross fixups, and openssl
+      — the fork's one new hard dependency for SDCP's crypto handshake — is
+      already a buildInput).
+    */
+    (final: prev: {
+      libfprint = prev.libfprint.overrideAttrs (old: {
+        src = prev.fetchFromGitHub {
+          owner = "TenSeventy7";
+          repo = "libfprint-egismoc-sdcp";
+          rev = "4d128d4f6f0b46182572126e84df88a73ac27859";
+          sha256 = "130b1dap0sxysg3grm5yk3fl7l072qv4vsiv9h6s69ln5gka0gwa";
+        };
+      });
+    })
 
     # pyside6 builds qtwebengine (Chromium, several GB) by default on Linux.
     # pyside6: withQtWebEngine was removed upstream; qtwebengine is now always included.

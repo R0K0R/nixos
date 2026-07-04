@@ -1,0 +1,293 @@
+{
+  pkgs,
+  lib,
+  osConfig,
+  ...
+}:
+
+let
+  # hyprlang (Hyprland's config parser) uses bare $ for its own variable
+  # substitution and chokes on embedded shell $(...) / $var syntax in exec
+  # strings ("<name> expected near '$'"). Keep the shell logic in a real
+  # script file instead of inlining it into hyprland.conf.
+  hangulToggle = pkgs.writeShellScript "hangul-toggle" ''
+    im=$(fcitx5-remote -n)
+    if [ "$im" = hangul ]; then
+      fcitx5-remote -s keyboard-us
+      fcitx5-remote -c
+    else
+      fcitx5-remote -s hangul
+      fcitx5-remote -o
+    fi
+  '';
+in
+{
+  /*
+    DMS's screenshot IPC (`dms ipc call niri screenshot*`) is documented as niri-only
+    (requires niri 25.11+); no hyprland equivalent exists. Use grimblast, the standard
+    Hyprland screen/window/area capture wrapper around grim+slurp+hyprctl, instead.
+  */
+  home.packages = lib.mkIf (osConfig.wm.compositor == "hyprland") [
+    pkgs.grimblast
+    pkgs.iio-hyprland
+    # iio-hyprland shells out to `hyprctl -j monitors | jq` internally; without
+    # jq in PATH it fails immediately and aborts uncleanly (dbus_disconnect
+    # crash) instead of just erroring on the missing monitor lookup.
+    pkgs.jq
+  ];
+
+  wayland.windowManager.hyprland = {
+    enable = osConfig.wm.compositor == "hyprland";
+
+    # Pin explicitly: home-manager >=26.05 defaults this to "lua" based on
+    # home.stateVersion, which silently mangled our hyprlang bind strings
+    # (e.g. "$mod" = "SUPER" -> invalid `hl.$mod("SUPER")` call) and can't
+    # source DMS's plain-hyprlang colors/layout/outputs.conf files at all.
+    configType = "hyprlang";
+
+    settings = lib.mkIf (osConfig.wm.compositor == "hyprland") {
+      "$mod" = "SUPER";
+
+      /*
+        DMS's Hyprland theming (Matugen colors + gaps/rounding) writes Lua snippets
+        (~/.config/hypr/dms/{colors,layout}.lua using hl.config({...})), not the
+        .conf files this module's `source=` used to point at (always empty ->
+        rounding/focus-ring/border-color never applied). hyprlang can't source a
+        .lua file, and DMS has no .conf output mode, so this is a static snapshot
+        of the current DMS-generated values, not live-updating with dynamicTheming.
+      */
+      general = {
+        "col.active_border" = "rgb(ffffff)";
+        "col.inactive_border" = "rgb(929092)";
+        gaps_in = 4;
+        gaps_out = 4;
+        border_size = 0;
+        layout = "scrolling";
+      };
+
+      # Niri's touchpad block explicitly enables natural-scroll; Hyprland has no
+      # input block at all here, defaulting to non-natural (i.e. inverted relative
+      # to what niri was doing).
+      input.touchpad.natural_scroll = true;
+
+      # 3-finger swipe drags/moves the focused window around; 4-finger swipe
+      # switches workspaces. Vertical to match niri's vertical-workspace model
+      # (workspaces animation style below must also be "slidevert" — the swipe's
+      # up/down vs left/right behavior is derived from the animation style, not
+      # just this direction setting).
+      gesture = [
+        "3, swipe, move"
+        "4, vertical, workspace"
+        # scrollMove: purpose-built gesture for the scrolling layout's tape —
+        # live momentum + snap-to-column (gestures:scrolling:* defaults handle it).
+        "4, horizontal, scrollMove"
+      ];
+
+      # Real hyprlang keys mix separators: "category:col.field", not
+      # "category:col:field" — a nested `col = {...}` attrset gets serialized
+      # with `:` at every level, which doesn't exist ("does not exist" errors).
+      # Flat string keys with the literal dot preserve the real key exactly.
+      group = {
+        "col.border_active" = "rgb(ffffff)";
+        "col.border_inactive" = "rgb(929092)";
+        "col.border_locked_active" = "rgb(ffb4ab)";
+        "col.border_locked_inactive" = "rgb(929092)";
+      };
+
+      decoration.rounding = 16;
+
+      # DMS's cursorSettings plumbing is niri-only (cursorSettings.niri.hideWhenTyping);
+      # Hyprland never gets these applied, so it falls back to its own built-in
+      # hyprcursor theme instead of the system Adwaita cursor niri was showing.
+      # Set both XCURSOR_* (X/Wayland apps) and HYPRCURSOR_* (Hyprland's native
+      # cursor renderer) so it's consistent everywhere. adwaita-icon-theme is
+      # already a system package (modules/nixos/packages/common.nix).
+      env = [
+        "XCURSOR_THEME,Adwaita"
+        "XCURSOR_SIZE,24"
+        "HYPRCURSOR_THEME,Adwaita"
+        "HYPRCURSOR_SIZE,24"
+      ];
+
+      # eDP-1 auto-scale differs between compositors (Hyprland picked 2.0 for this
+      # 2880x1800 panel; niri's own auto heuristic apparently picked something
+      # smaller, hence text/buttons looking oversized after switching). Pin
+      # explicitly so it doesn't depend on Hyprland's auto-detection.
+      monitor = [ "eDP-1, preferred, auto, 1.5" ];
+
+      # Hyprland's stock animation speeds read as sluggish coming from niri.
+      animations = {
+        enabled = true;
+        animation = [
+          "global, 1, 4, default"
+          "windows, 1, 3, default"
+          "border, 1, 3, default"
+          "fade, 1, 3, default"
+          # slidevert: vertical slide, matching niri's vertical workspace model
+          # and the gesture's vertical swipe direction above.
+          "workspaces, 1, 3, default, slidevert"
+        ];
+      };
+
+      # iio-hyprland: reads iio-sensor-proxy orientation over D-Bus, rotates the
+      # eDP-1 output and touch input transform automatically (accel_3d + hinge
+      # sensors confirmed present via /sys/bus/iio/devices; enabled in hardware.nix).
+      exec-once = [
+        "dms run"
+        "iio-hyprland eDP-1"
+      ];
+
+      # New rule syntax (0.55+): each comma-separated element is "key value",
+      # not the old bare-keyword form ("noanim" alone errors: "missing a value").
+      layerrule = [
+        "no_anim on, match:namespace ^(dms)$"
+      ];
+
+      /*
+        Native scrolling layout (Hyprland >=0.55, src/layout/algorithm/tiled/scrolling) —
+        niri-like columns, no plugin needed. column_width matches niri's
+        layout.default-column-width.proportion = 0.5 from wayland/niri.nix.
+      */
+      scrolling = {
+        column_width = 0.5;
+        fullscreen_on_one_column = true;
+        follow_focus = true;
+      };
+
+      # DMS's Hangul toggle, mirrored from wayland/niri.nix.
+      bind =
+        [
+          # Custom overrides (same as niri.nix).
+          "$mod, space, exec, dms ipc call spotlight toggle"
+          # niri's Mod+Comma (consume-window-into-column) has no scrolling-layout
+          # equivalent (columns hold exactly one window on the tape); omitted.
+          "$mod, I, exec, dms ipc call settings toggle"
+          "$mod, Return, exec, kitty"
+          "$mod, W, exec, firefox"
+          "$mod, E, exec, emacsclient -c"
+          "$mod, A, exec, dms ipc call plugins toggle aiAssistant"
+
+          # DMS IPC toggles, replicated by hand (single source of truth: DMS's own
+          # niri enableKeybinds module has no hyprland equivalent, see niri.nix).
+          "$mod, N, exec, dms ipc call notifications toggle"
+          "$mod, P, exec, dms ipc call notepad toggle"
+          "$mod, V, exec, dms ipc call clipboard toggle"
+          "$mod, X, exec, dms ipc call powermenu toggle"
+          "$mod, M, exec, dms ipc call processlist toggle"
+          "$mod ALT, N, exec, dms ipc call night toggle"
+          "SUPER ALT, L, exec, dms ipc call lock lock"
+
+          # Window management
+          "$mod, Q, killactive,"
+          "$mod, F, fullscreen, 0"
+          "$mod SHIFT, F, fullscreen, 1"
+          "$mod ALT, space, togglefloating,"
+          # niri's Mod+Shift+V (switch focus between floating/tiling) has no
+          # direct hyprland dispatcher; `togglegroup` is a different concept
+          # (window grouping), so it's dropped rather than mis-mapped.
+
+          # niri's Mod+R (switch-preset-column-width) -> scrolling layout's
+          # colresize +conf, which cycles through scrolling:explicit_column_widths.
+          "$mod, R, layoutmsg, colresize +conf"
+
+          # Focus movement (h/j/k/l + arrows)
+          "$mod, left, movefocus, l"
+          "$mod, down, movefocus, d"
+          "$mod, up, movefocus, u"
+          "$mod, right, movefocus, r"
+          "$mod, H, movefocus, l"
+          "$mod, J, workspace, e-1"
+          "$mod, K, workspace, e+1"
+          "$mod, L, movefocus, r"
+          "$mod, Page_Down, workspace, e-1"
+          "$mod, Page_Up, workspace, e+1"
+          "$mod CTRL, U, movetoworkspace, e-1"
+          "$mod CTRL, I, movetoworkspace, e+1"
+
+          # Move window
+          "$mod CTRL, left, movewindow, l"
+          "$mod CTRL, down, movewindow, d"
+          "$mod CTRL, up, movewindow, u"
+          "$mod CTRL, right, movewindow, r"
+          "$mod CTRL, H, movewindow, l"
+          "$mod CTRL, J, movewindow, d"
+          "$mod CTRL, K, movewindow, u"
+          "$mod CTRL, L, movewindow, r"
+          "$mod CTRL, Page_Down, movetoworkspace, e-1"
+          "$mod CTRL, Page_Up, movetoworkspace, e+1"
+
+          # Resize (niri's Mod+Minus/Equal, Mod+Shift+Minus/Equal)
+          "$mod, minus, resizeactive, -10% 0"
+          "$mod, equal, resizeactive, 10% 0"
+          "$mod SHIFT, minus, resizeactive, 0 -10%"
+          "$mod SHIFT, equal, resizeactive, 0 10%"
+
+          # Monitor focus
+          "$mod SHIFT, left, focusmonitor, l"
+          "$mod SHIFT, down, focusmonitor, d"
+          "$mod SHIFT, up, focusmonitor, u"
+          "$mod SHIFT, right, focusmonitor, r"
+
+          # Move column to monitor (niri's Mod+Shift+Ctrl+...)
+          "$mod SHIFT CTRL, left, movewindow, mon:l"
+          "$mod SHIFT CTRL, down, movewindow, mon:d"
+          "$mod SHIFT CTRL, up, movewindow, mon:u"
+          "$mod SHIFT CTRL, right, movewindow, mon:r"
+          "$mod SHIFT CTRL, H, movewindow, mon:l"
+          "$mod SHIFT CTRL, J, movewindow, mon:d"
+          "$mod SHIFT CTRL, K, movewindow, mon:u"
+          "$mod SHIFT CTRL, L, movewindow, mon:r"
+
+          # Workspaces 1-9
+          "$mod, 1, workspace, 1"
+          "$mod, 2, workspace, 2"
+          "$mod, 3, workspace, 3"
+          "$mod, 4, workspace, 4"
+          "$mod, 5, workspace, 5"
+          "$mod, 6, workspace, 6"
+          "$mod, 7, workspace, 7"
+          "$mod, 8, workspace, 8"
+          "$mod, 9, workspace, 9"
+
+          "$mod CTRL, 1, movetoworkspace, 1"
+          "$mod CTRL, 2, movetoworkspace, 2"
+          "$mod CTRL, 3, movetoworkspace, 3"
+          "$mod CTRL, 4, movetoworkspace, 4"
+          "$mod CTRL, 5, movetoworkspace, 5"
+          "$mod CTRL, 6, movetoworkspace, 6"
+          "$mod CTRL, 7, movetoworkspace, 7"
+          "$mod CTRL, 8, movetoworkspace, 8"
+          "$mod CTRL, 9, movetoworkspace, 9"
+
+          "$mod SHIFT, E, exit,"
+          ", Print, exec, grimblast copy area"
+          "CTRL, Print, exec, grimblast copy screen"
+          "ALT, Print, exec, grimblast copy active"
+          "$mod SHIFT, P, dpms, off"
+        ]
+        ++ [
+          # Compositor-level IME toggle, same logic as niri.nix's Hangul bind.
+          ", Hangul, exec, ${hangulToggle}"
+        ];
+
+      bindel = [
+        ", XF86AudioRaiseVolume, exec, dms ipc call audio increment 3"
+        ", XF86AudioLowerVolume, exec, dms ipc call audio decrement 3"
+        ", XF86MonBrightnessUp, exec, dms ipc call brightness increment 5 \"\""
+        ", XF86MonBrightnessDown, exec, dms ipc call brightness decrement 5 \"\""
+      ];
+
+      bindl = [
+        ", XF86AudioMute, exec, dms ipc call audio mute"
+        ", XF86AudioMicMute, exec, dms ipc call audio micmute"
+      ];
+
+      # windowrulev2 is deprecated/removed (0.55+); plain windowrule now carries the
+      # same multi-match syntax, but each element is "key value" (no bare keywords).
+      windowrule = [
+        "maximize on, match:class ^(emacs)$"
+        "maximize on, match:class ^(org.gnu.emacs)$"
+      ];
+    };
+  };
+}

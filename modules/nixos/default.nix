@@ -9,7 +9,9 @@
     ./network/discovery.nix
     ./network/headscale-client.nix
     ./vpn/openvpn.nix
+    ./desktop/compositor.nix
     ./desktop/niri.nix
+    ./desktop/hyprland.nix
     ./desktop/greetd.nix
     ./desktop/session-services.nix
     ./desktop/dms-greeter.nix

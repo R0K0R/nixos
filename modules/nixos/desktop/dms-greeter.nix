@@ -8,7 +8,7 @@ in
 
   programs.dank-material-shell.greeter = {
     enable = true;
-    compositor.name = "niri";
+    compositor.name = config.wm.compositor;
 
     configHome = config.users.users.${primaryLogin}.home;
 

@@ -38,6 +38,7 @@ in
         })
       ];
       useAutoLocation = true;
+      greeterEnableFprint = true;
     };
 
     systemd = {
@@ -55,8 +56,14 @@ in
     niri = {
       # systemd already starts `dms`; spawn-at-startup would run a second copy (duplicate bar).
       enableSpawn = false;
-      /* Merge DMS default niri binds (IPC toggles); `wayland/niri.nix` layers your overrides atop. */
-      enableKeybinds = true;
+      /*
+        Single source of truth for keybinds lives in wayland/niri.nix and wayland/hyprland.nix
+        (DMS has no hyprland equivalent of this module, so keeping bindings there is the only
+        thing that works for both compositors). DMS's own IPC toggle binds (notifications,
+        clipboard, notepad, powermenu, lock, night-mode, audio/brightness, process-list) are
+        replicated by hand in those files instead of injected here.
+      */
+      enableKeybinds = false;
       includes.enable = false;
     };
 
