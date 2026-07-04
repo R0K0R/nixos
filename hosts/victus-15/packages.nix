@@ -5,6 +5,7 @@
 
   environment.systemPackages = with pkgs; [
     vim
+    git
     tailscale
     nbfc-linux
     ryzenadj
