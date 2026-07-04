@@ -1,4 +1,4 @@
-{ pkgs, hostName, ... }:
+{ pkgs, inputs, hostName, ... }:
 
 let
   hostSysFile = ./hosts/${hostName}.nix;
@@ -11,6 +11,6 @@ let
     if builtins.pathExists hostAccountFile then import hostAccountFile { inherit pkgs; } else [ ];
 in
 {
-  environment.systemPackages = (import ./common.nix { inherit pkgs; }) ++ hostSysPkgs;
+  environment.systemPackages = (import ./common.nix { inherit pkgs inputs; }) ++ hostSysPkgs;
   users.users.r0k0r.packages = accountCommon ++ hostAccountPkgs;
 }

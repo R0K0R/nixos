@@ -4,6 +4,12 @@
   programs.ssh = {
     enable = true;
     enableDefaultConfig = false;
+    settings."yulee" = {
+      IdentityFile = "/etc/nix/remote-builder/ssh_key";
+    };
+    settings."victus-15" = {
+      IdentityFile = "/etc/nix/remote-builder/ssh_key";
+    };
     settings."*" = {
       ForwardAgent = false;
       AddKeysToAgent = "no";

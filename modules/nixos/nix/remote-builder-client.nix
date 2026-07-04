@@ -13,7 +13,7 @@
     max-jobs = 10
     trusted-users = root @wheel r0k0r
     experimental-features = nix-command flakes
-    system-features = benchmark big-parallel kvm nixos-test gccarch-meteorlake gccarch-znver3
+    system-features = benchmark big-parallel kvm nixos-test gccarch-meteorlake
 
   r0k0r must be in group nix-users on Yulee. Builder pubkey in authorized_keys
   (see modules/nixos/nix/nix-remote-builder.pub).
@@ -21,9 +21,15 @@
 { config, lib, ... }:
 
 {
-  imports = [ ../network/yulee.nix ];
+  imports = [ ../network/yulee.nix ../network/victus-15.nix ];
 
   nix.distributedBuilds = true;
+
+  # Make the builder SSH key readable by r0k0r so `ssh yulee` / `ssh victus-15`
+  # works interactively without a separate key.
+  systemd.tmpfiles.rules = [
+    "z /etc/nix/remote-builder/ssh_key 0600 r0k0r r0k0r -"
+  ];
 
   nix.buildMachines = [
     {
@@ -31,18 +37,29 @@
       systems = [ "x86_64-linux" "i686-linux" ];
       protocol = "ssh";
       maxJobs = 10;
+      speedFactor = 10;
+      sshUser = "r0k0r";
+      sshKey = "/etc/nix/remote-builder/ssh_key";
+      # Bootstrap tools are generic x86-64 (hit cache.nixos.org); only HOST outputs need meteorlake.
+      supportedFeatures = lib.unique (
+        lib.filter (f: !(lib.hasPrefix "galaxybook-" f)) config.nix.settings.system-features
+        ++ [ "gccarch-meteorlake" ]
+      );
+    }
+
+
+    {
+      hostName = "victus-15";
+      systems = [ "x86_64-linux" "i686-linux" ];
+      protocol = "ssh";
+      maxJobs = 5;
       speedFactor = 4;
       sshUser = "r0k0r";
       sshKey = "/etc/nix/remote-builder/ssh_key";
-      # Yulee: znver3 for running bootstrap tools; meteorlake for compiling final -march=meteorlake outputs.
+      # Bootstrap tools are generic x86-64 (hit cache.nixos.org); only HOST outputs need meteorlake.
       supportedFeatures = lib.unique (
-        # Exclude local-only features (galaxybook-*) that are only meaningful
-        # on the local machine and would wrongly dispatch builds to yulee.
         lib.filter (f: !(lib.hasPrefix "galaxybook-" f)) config.nix.settings.system-features
-        ++ [
-          "gccarch-meteorlake"
-          "gccarch-znver3"
-        ]
+        ++ [ "gccarch-meteorlake" ]
       );
     }
   ];
@@ -56,7 +73,11 @@
     max-jobs = 0;
     # Use yulee's /nix/store as a binary cache — meteorlake-specific builds
     # that miss cache.nixos.org are served from yulee directly.
-    substituters = [ "ssh://r0k0r@yulee" ];
-    trusted-public-keys = [ "yulee-1:KgdwkCN5m+hewJTk+A05PjwI3BbnZAE9NW2n634N7vM=" ];
+    substituters = [ "https://cache.nixos.org" "ssh://r0k0r@yulee" "ssh://r0k0r@victus-15" ];
+    trusted-public-keys = [
+      "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
+      "yulee-1:KgdwkCN5m+hewJTk+A05PjwI3BbnZAE9NW2n634N7vM="
+      "victus-15-1:W5OP8VVbu7Q7z2o5grHJ5Zp+ynm536+QVv+b8fBQJlQ="
+    ];
   };
 }

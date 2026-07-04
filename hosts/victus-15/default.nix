@@ -1,22 +1,23 @@
-{ inputs, lib, ... }:
+{ pkgs, ... }:
 
 {
   imports = [
     ./hardware-configuration.nix
     ./boot.nix
-    ./home.nix
     ./hardware.nix
-    inputs.niri.nixosModules.niri
-    ../../modules/nixos
-    ../../modules/nixos/nix/remote-builder-client.nix
+    ./power.nix
+    ./filesystems.nix
+    ./users.nix
+    ./locale.nix
+    ./services.nix
+    ./nix-cache.nix
+    ./packages.nix
+    ./home.nix
   ];
 
   networking.hostName = "victus-15";
 
-  nixpkgs.hostPlatform = lib.systems.elaborate {
-    system = "x86_64-linux";
-    gcc.arch = "znver3";
-  };
+  boot.kernelPackages = pkgs.linuxPackages_latest;
 
-  nixpkgs.overlays = [ inputs.niri.overlays.niri ];
+  system.stateVersion = "26.05";
 }
