@@ -54,7 +54,7 @@
 
     # Pinned tag in URL (flake = false inputs do not accept ref/rev attributes).
     samsung-galaxy-book-linux-fixes.url =
-      "github:Andycodeman/samsung-galaxy-book-linux-fixes/v0.3.34";
+      "github:Andycodeman/samsung-galaxy-book-linux-fixes/v0.3.50";
     samsung-galaxy-book-linux-fixes.flake = false;
 
     easyeffects-presets = {

@@ -197,11 +197,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1782821081,
-        "narHash": "sha256-0qhXpj09+YlgOMEsD5zWgPajVy5QNNLziBkg8xyuoW4=",
+        "lastModified": 1783138086,
+        "narHash": "sha256-E8RStCstrymaBxlvhmI59yH/fg1zQ6+eSjzhZR/63Ss=",
         "owner": "R0K0R",
         "repo": "nixpkgs",
-        "rev": "3ffe64921c5e24757e1d5629ec9acf586fd0dc37",
+        "rev": "93a9c909461a0162e9a7dc65badc22f707216507",
         "type": "github"
       },
       "original": {
@@ -245,11 +245,11 @@
     },
     "nixpkgs-upstream": {
       "locked": {
-        "lastModified": 1780749050,
-        "narHash": "sha256-3av0pIjlOWQ6rDbNOmpUSvbNnJkGORQKKjb4LtCZsIY=",
+        "lastModified": 1782723713,
+        "narHash": "sha256-oPXCU/SSUokcGaJREHibG1CBX3+s/W7orDWQOZDsEeQ=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "a799d3e3886da994fa307f817a6bc705ae538eeb",
+        "rev": "b5aa0fbd538984f6e3d201be0005b4463d8b09f8",
         "type": "github"
       },
       "original": {
@@ -278,16 +278,16 @@
     "samsung-galaxy-book-linux-fixes": {
       "flake": false,
       "locked": {
-        "lastModified": 1776194732,
-        "narHash": "sha256-KCLAOaeoJedYE2su0Sxj5twq/sSwewmcHKKQwmqoNfk=",
+        "lastModified": 1779151423,
+        "narHash": "sha256-fcwLBR+oE6VoEOJyjiusqzia/pyslcjLGFDwARY5wcQ=",
         "owner": "Andycodeman",
         "repo": "samsung-galaxy-book-linux-fixes",
-        "rev": "f5a52f0e792a6cf39a0bf0512c01c563376f03fe",
+        "rev": "70fd253adaa184c267f733f4606dc5d6dbec47db",
         "type": "github"
       },
       "original": {
         "owner": "Andycodeman",
-        "ref": "v0.3.34",
+        "ref": "v0.3.50",
         "repo": "samsung-galaxy-book-linux-fixes",
         "type": "github"
       }
