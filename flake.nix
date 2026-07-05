@@ -3,7 +3,10 @@
 
   inputs = {
     # Pinned in flake.lock. Use nixos-YY.MM when that branch exists, or keep unstable.
-    nixpkgs.url = "github:R0K0R/nixpkgs/pseudo-cross-fundamental";
+    # combined-fundamental: all cross-build fixes merged onto current
+    # nixos-unstable, rebuilt as individual pr/* branches (see nixpkgs-contrib)
+    # for upstreaming, plus this one combined branch actually used for building.
+    nixpkgs.url = "github:R0K0R/nixpkgs/combined-fundamental";
 
     # Intentionally NOT follows = "nixpkgs" — unaffected by
     # --override-input nixpkgs path:/home/r0k0r/nixpkgs-patch.
