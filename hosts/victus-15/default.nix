@@ -1,5 +1,11 @@
-{ lib, pkgs, ... }:
+{ lib, pkgs, inputs, ... }:
 
+let
+  hostRuntimeClassifier = import ../../modules/nixos/nix/host-runtime-classifier.nix {
+    inherit inputs;
+    system = "x86_64-linux";
+  };
+in
 {
   imports = [
     ./hardware-configuration.nix
@@ -26,7 +32,8 @@
   };
 
   nixpkgs.overlays = [
-    (import ../../modules/nixos/nix/gentoo-lto-overlay.nix)
+    (import ../../modules/nixos/nix/o3-overlay.nix { inherit hostRuntimeClassifier; })
+    (import ../../modules/nixos/nix/gentoo-lto-overlay.nix { inherit hostRuntimeClassifier; })
   ];
 
   boot.kernelPackages = pkgs.linuxPackages_latest;

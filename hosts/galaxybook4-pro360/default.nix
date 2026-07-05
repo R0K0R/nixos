@@ -1,5 +1,15 @@
 { inputs, lib, ... }:
 
+let
+  # Computed once and shared between o3-overlay.nix and gentoo-lto-overlay.nix
+  # -- each independently importing/recomputing this (a genericClosure walk
+  # across ~400 packages) roughly doubles eval time for no benefit, since both
+  # need the identical result.
+  hostRuntimeClassifier = import ../../modules/nixos/nix/host-runtime-classifier.nix {
+    inherit inputs;
+    system = "x86_64-linux";
+  };
+in
 {
   imports = [
     ./hardware-configuration.nix
@@ -39,8 +49,8 @@
 
   nixpkgs.overlays = [
     inputs.niri.overlays.niri
-    (import ./o3-overlay.nix)
-    (import ../../modules/nixos/nix/gentoo-lto-overlay.nix)
+    (import ../../modules/nixos/nix/o3-overlay.nix { inherit hostRuntimeClassifier; })
+    (import ../../modules/nixos/nix/gentoo-lto-overlay.nix { inherit hostRuntimeClassifier; })
 
     # Meteor Lake-P integrated graphics (Intel Arc Graphics, PCI 8086:7d55)
     # is the only GPU on this laptop — no discrete AMD/NVIDIA to support.

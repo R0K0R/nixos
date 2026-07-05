@@ -1,3 +1,4 @@
+{ hostRuntimeClassifier }:
 final: prev:
 # nixpkgs' own stdenv bootstrap chain (pkgs/stdenv/booter.nix) re-evaluates
 # the entire overlay list fresh for each bootstrap stage, with that stage's
@@ -43,13 +44,13 @@ let
       envOverrides
   );
 
-  # Packages o3-overlay.nix (galaxybook4-pro360 only, not used on victus-15)
-  # already applies its own overrideAttrs to. Stacking a second, separate
+  # Packages o3-overlay.nix already applies its own overrideAttrs to.
+  # Stacking a second, separate
   # overrideAttrs call on the same package here confuses nixpkgs' env/
   # top-level attribute tracking (observed: "attribute cannot exist in both
   # env and derivation arguments" once two independent overlays each
-  # overrideAttrs the same package). Skip these entirely here; they already
-  # get -O3 from o3-overlay.nix. Kept in sync manually with that file's list.
+  # overrideAttrs the same package). Skip these entirely here. Kept in sync
+  # manually with that file's own candidate list.
   o3OverlayPackages = [
     "zstd" "zlib" "lz4" "xz" "brotli" "snappy" "bzip2" "zopfli" "libarchive"
     "ffmpeg" "opus" "dav1d" "libaom" "libvpx" "libwebp"
@@ -68,6 +69,10 @@ let
     "redis" "lmdb"
   ];
 
+  # Full candidate universe -- every package considered for LTO tuning,
+  # regardless of whether it turns out to be a genuine host-runtime dependency
+  # or purely a build-time tool. host-runtime-classifier.nix (checked below)
+  # is what actually decides which treatment each one gets.
   packages = [
     # Compression
     "lzo" "lzip" "zpaq" "p7zip"
@@ -93,7 +98,7 @@ let
     # System libraries and tools
     "ripgrep" "fd" "bat" "fzf" "util-linux"
 
-    # Developer toolchain
+    # Developer toolchain (mostly build-time-only in practice -- see classifier)
     "cmake" "ninja" "meson"
 
     # Serialization / data processing
@@ -111,20 +116,42 @@ let
     # Numeric / scientific
     "fftw" "fftwFloat" "openblas" "gsl"
 
-    # Parsing / build tooling
+    # Parsing / build tooling (mostly build-time-only in practice -- see classifier)
     "bison" "flex" "m4"
 
     # Shell / terminal
     "tmux" "ncurses" "readline" "zsh" "fish"
   ];
 
-  # Only apply to packages that actually exist as top-level attrs (some of
-  # the names above may not be defined depending on the nixpkgs revision),
-  # and skip anything o3-overlay.nix already touches.
+  # Only consider packages that actually exist as top-level attrs (some names
+  # may not be defined depending on the nixpkgs revision), and skip anything
+  # o3-overlay.nix already claims.
   existingPackages = builtins.filter
     (name: (prev ? ${name}) && !(builtins.elem name o3OverlayPackages))
     packages;
+
+  # isHostRuntime: does ANYTHING actually installed (environment.systemPackages
+  # / home.packages, see host-runtime-classifier.nix's anchor list) reference
+  # this package via buildInputs/propagatedBuildInputs (a genuine runtime
+  # dependency edge) anywhere in its transitive closure -- as opposed to only
+  # ever being pulled in via nativeBuildInputs (a build-time-only edge, e.g.
+  # a parser generator whose output gets compiled in and never invoked again)?
+  #
+  # host-runtime = true: tune the shared top-level attribute directly, same
+  # as every other package here -- something genuinely executes this code on
+  # the host, so tuning provides real benefit.
+  #
+  # host-runtime = false: leave the top-level attribute untouched (protects
+  # every nativeBuildInputs consumer -- e.g. the bootstrap-stage m4 failure --
+  # from blast radius that provides zero benefit, since nothing runs this on
+  # host anyway) and expose only a "<name>-tuned" variant, available to
+  # install explicitly if this ever becomes something run directly.
+  hostRuntimeNames = builtins.filter hostRuntimeClassifier.isHostRuntime existingPackages;
+  buildOnlyNames = builtins.filter (n: !(hostRuntimeClassifier.isHostRuntime n)) existingPackages;
 in
-builtins.listToAttrs (
-  map (name: { inherit name; value = addFlags prev.${name}; }) existingPackages
-)
+(builtins.listToAttrs (
+  map (name: { inherit name; value = addFlags prev.${name}; }) hostRuntimeNames
+))
+// (builtins.listToAttrs (
+  map (name: { name = name + "-tuned"; value = addFlags prev.${name}; }) buildOnlyNames
+))
