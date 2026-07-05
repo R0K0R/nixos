@@ -42,6 +42,20 @@
     (import ./o3-overlay.nix)
     (import ../../modules/nixos/nix/gentoo-lto-overlay.nix)
 
+    # Meteor Lake-P integrated graphics (Intel Arc Graphics, PCI 8086:7d55)
+    # is the only GPU on this laptop — no discrete AMD/NVIDIA to support.
+    # Mesa's default driver lists build ~24 gallium + ~12 vulkan backends "to
+    # support cross tools and emulation use cases"; trim to just what this
+    # hardware needs plus a software fallback (llvmpipe/swrast — blender's own
+    # test derivation uses mesa.llvmpipeHook, so keep that one rather than
+    # dropping software rendering entirely).
+    (final: prev: {
+      mesa = prev.mesa.override {
+        galliumDrivers = [ "iris" "llvmpipe" ];
+        vulkanDrivers = [ "intel" "swrast" ];
+      };
+    })
+
     /*
       Fingerprint sensor (USB 1c7a:05a1, Egis Technology "Match-On-Chip") enrolls
       and verifies successfully but forgets the print immediately: upstream

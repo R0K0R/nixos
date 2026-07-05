@@ -65,7 +65,7 @@ with pkgs; [
   easyeffects
   moonlight-qt
 
-  nautilus
+  kdePackages.dolphin
   kdePackages.kdeconnect-kde
   kdePackages.qt6ct
 
