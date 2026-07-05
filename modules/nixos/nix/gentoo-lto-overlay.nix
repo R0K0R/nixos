@@ -1,4 +1,19 @@
 final: prev:
+# nixpkgs' own stdenv bootstrap chain (pkgs/stdenv/booter.nix) re-evaluates
+# the entire overlay list fresh for each bootstrap stage, with that stage's
+# own minimal stdenv already substituted in from the start -- this overlay
+# genuinely runs again standalone inside bootstrap stages, not just once for
+# the final package set. Confirmed by a real build failure: m4 built at
+# bootstrap-stage1 (an i686 static-toolchain stage with no LTO plugin
+# support) got "-pipe -flto=auto -ffat-lto-objects" injected via this same
+# overlay and failed its own "C compiler cannot create executables" check.
+# The final stdenv is named "stdenv-linux"; every bootstrap stage's stdenv
+# name contains "bootstrap" (e.g. "bootstrap-stage1-stdenv-linux") -- skip
+# the whole overlay during those stages rather than trying to guess which
+# specific packages might get pulled into bootstrap construction.
+if builtins.match ".*bootstrap.*" (prev.stdenv.name or "") != null then
+  { }
+else
 let
   # Append LTO/pipe flags to whichever location the package uses for
   # NIX_CFLAGS_COMPILE / NIX_CFLAGS_LINK. nixpkgs forbids the same var
@@ -78,6 +93,9 @@ let
     # System libraries and tools
     "ripgrep" "fd" "bat" "fzf" "util-linux"
 
+    # Developer toolchain
+    "cmake" "ninja" "meson"
+
     # Serialization / data processing
     "capnproto" "flatbuffers" "msgpack-c"
 
@@ -92,6 +110,9 @@ let
 
     # Numeric / scientific
     "fftw" "fftwFloat" "openblas" "gsl"
+
+    # Parsing / build tooling
+    "bison" "flex" "m4"
 
     # Shell / terminal
     "tmux" "ncurses" "readline" "zsh" "fish"
