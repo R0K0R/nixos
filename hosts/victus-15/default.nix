@@ -25,6 +25,10 @@
     gcc.arch = "znver3";
   };
 
+  nixpkgs.overlays = [
+    (import ../../modules/nixos/nix/gentoo-lto-overlay.nix)
+  ];
+
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
   system.stateVersion = "26.05";
