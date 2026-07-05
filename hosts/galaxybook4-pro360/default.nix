@@ -56,30 +56,6 @@
       };
     })
 
-    # nixpkgs' fcitx5-with-addons (pkgs/tools/inputmethods/fcitx5/with-addons.nix)
-    # unconditionally bundles libsForQt5.fcitx5-qt (the Qt5 IME plugin)
-    # alongside qt6Packages.fcitx5-qt, regardless of the `addons` list — no
-    # override toggle for this exists. No Qt5 apps are installed here.
-    #
-    # NixOS's own input-method module calls
-    # `pkgs.qt6Packages.fcitx5-with-addons.override { inherit (cfg) addons; }`
-    # afterward. .override calls compose with each other (later .override
-    # sees this override's args as its "old" and merges in), but a later
-    # .override does NOT preserve an earlier .overrideAttrs — it recomputes
-    # from the original function, discarding attrs-level changes. So the fix
-    # has to happen via .override on the `libsForQt5` argument itself
-    # (swapping in a scope where fcitx5-qt is a no-op stub), not via
-    # .overrideAttrs on the constructed derivation's `paths`.
-    (final: prev: {
-      qt6Packages = prev.qt6Packages.overrideScope (qfinal: qprev: {
-        fcitx5-with-addons = qprev.fcitx5-with-addons.override {
-          libsForQt5 = prev.libsForQt5 // {
-            fcitx5-qt = prev.runCommand "fcitx5-qt5-disabled" { } "mkdir -p $out";
-          };
-        };
-      });
-    })
-
     /*
       Fingerprint sensor (USB 1c7a:05a1, Egis Technology "Match-On-Chip") enrolls
       and verifies successfully but forgets the print immediately: upstream
