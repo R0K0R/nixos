@@ -78,9 +78,6 @@ let
     # System libraries and tools
     "ripgrep" "fd" "bat" "fzf" "util-linux"
 
-    # Developer toolchain
-    "cmake" "ninja" "meson"
-
     # Serialization / data processing
     "capnproto" "flatbuffers" "msgpack-c"
 
@@ -95,9 +92,6 @@ let
 
     # Numeric / scientific
     "fftw" "fftwFloat" "openblas" "gsl"
-
-    # Parsing / build tooling
-    "bison" "flex" "m4"
 
     # Shell / terminal
     "tmux" "ncurses" "readline" "zsh" "fish"
