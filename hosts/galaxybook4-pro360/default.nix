@@ -40,6 +40,7 @@
   nixpkgs.overlays = [
     inputs.niri.overlays.niri
     (import ./o3-overlay.nix)
+    (import ../../modules/nixos/nix/gentoo-lto-overlay.nix)
 
     /*
       Fingerprint sensor (USB 1c7a:05a1, Egis Technology "Match-On-Chip") enrolls
