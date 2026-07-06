@@ -49,7 +49,15 @@ let
     "tree-sitter"
 
     # System libraries and tools
-    "sqlite" "diffutils" "ccache"
+    # sqlite deliberately excluded: -O3 causes a genuine correctness bug, not
+    # just a build failure. Confirmed via sqlite's own tcltest suite: 1 error
+    # out of 400028 tests (like-14.2, the LIKE operator) under -O3. SQLite's
+    # C code relies on careful patterns (fallthrough switches, pointer
+    # aliasing, integer overflow handling) that aggressive optimizers can
+    # silently miscompile -- well-documented sqlite build-flag sensitivity,
+    # not a one-off fluke. This also matters more than most: nix itself uses
+    # sqlite for its own store database.
+    "diffutils" "ccache"
 
     # Developer toolchain (mostly build-time-only in practice -- see classifier)
     "nix" "git" "mold"
