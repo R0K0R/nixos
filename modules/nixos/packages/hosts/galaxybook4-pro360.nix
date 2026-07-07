@@ -23,11 +23,18 @@ with pkgs; [
 
   (writeScriptBin "nixos-rebuild-victus-15" ''
     #! /bin/sh
+    # HTTP (nix-serve, port 5000 on victus's Tailscale IP) listed first for
+    # substitutability queries -- real parallel .narinfo requests, much
+    # faster than ssh-ng's single worker-protocol channel for bulk querying.
+    # ssh-ng kept as a substituter fallback (in case nix-serve is down) and
+    # still required separately as --builders for actual build delegation.
+    # cache.nixos.org dropped: confirmed it never has anything for this
+    # patched fork, even for architecturally-untainted build tools.
     exec nixos-rebuild \
       --flake /home/r0k0r/flakes/nixos#galaxybook4-pro360 \
       --option max-jobs 0 \
       --builders "ssh://r0k0r@victus-15 x86_64-linux /etc/nix/remote-builder/ssh_key 5 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
-      --option substituters "https://cache.nixos.org ssh://r0k0r@victus-15" \
+      --option substituters "http://100.64.0.2:5000 ssh-ng://r0k0r@victus-15" \
       "$@"
   '')
 
