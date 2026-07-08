@@ -30,10 +30,12 @@ with pkgs; [
     # still required separately as --builders for actual build delegation.
     # cache.nixos.org dropped: confirmed it never has anything for this
     # patched fork, even for architecturally-untainted build tools.
+    # maxJobs 3 (third field after the key): 5 parallel builds drove victus
+    # deep into swap -- LTO link steps in particular are memory-hungry.
     exec nixos-rebuild \
       --flake /home/r0k0r/flakes/nixos#galaxybook4-pro360 \
       --option max-jobs 0 \
-      --builders "ssh://r0k0r@victus-15 x86_64-linux /etc/nix/remote-builder/ssh_key 5 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
+      --builders "ssh://r0k0r@victus-15 x86_64-linux /etc/nix/remote-builder/ssh_key 3 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
       --option substituters "http://100.64.0.2:5000 ssh-ng://r0k0r@victus-15" \
       "$@"
   '')
@@ -60,7 +62,7 @@ with pkgs; [
     #! /bin/sh
     exec nix-shell \
       --option max-jobs 0 \
-      --option builders "ssh://r0k0r@victus-15 x86_64-linux /etc/nix/remote-builder/ssh_key 5 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
+      --option builders "ssh://r0k0r@victus-15 x86_64-linux /etc/nix/remote-builder/ssh_key 3 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
       --option substituters "https://cache.nixos.org ssh://r0k0r@victus-15" \
       "$@"
   '')
