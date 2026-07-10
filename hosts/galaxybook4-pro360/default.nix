@@ -66,6 +66,28 @@ in
       };
     })
 
+    # Eight KF6 frameworks (kcoreaddons, knotifications, kxmlgui, ...) set
+    # hasPythonBindings = true, dragging in pyside6 -- which since upstream
+    # removed its withQtWebEngine toggle unconditionally builds qtwebengine
+    # (full Chromium). Traced via `nix why-depends --derivation`: this was the
+    # SOLE route to qtwebengine in the closure, and it appeared TWICE (host
+    # cross build via knotifications, plus a second native build via
+    # kf6-host-tooling -> kcmutils -> kxmlgui). The bindings exist for writing
+    # KDE apps in Python; nothing installed here uses them. Forcing them off
+    # through the scope's mkKdeDerivation covers all frameworks at once --
+    # packages that never set hasPythonBindings produce identical args
+    # (default is already false), so only the eight opted-in frameworks and
+    # their dependents change hashes.
+    (final: prev: {
+      kdePackages = prev.kdePackages.overrideScope (kf: kp: {
+        # mkKdeDerivation is an attrset with __functor (it also carries
+        # kf6HostTooling); wrap the call while preserving the other attrs.
+        mkKdeDerivation = kp.mkKdeDerivation // {
+          __functor = _self: args: kp.mkKdeDerivation (args // { hasPythonBindings = false; });
+        };
+      });
+    })
+
     /*
       Fingerprint sensor (USB 1c7a:05a1, Egis Technology "Match-On-Chip") enrolls
       and verifies successfully but forgets the print immediately: upstream
