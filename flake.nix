@@ -22,7 +22,11 @@
     nixpkgs-emacs-webkit.url = "github:NixOS/nixpkgs/nixos-22.11";
 
     home-manager = {
-      url = "github:nix-community/home-manager/release-26.05";
+      # master, not a release branch: nixpkgs here tracks unstable (26.11), and
+      # release-26.05's fish module still referenced the pre-fish-4.x
+      # share/fish/tools/create_manpage_completions.py path, breaking every
+      # *-fish-completions derivation. master is the pairing for nixpkgs unstable.
+      url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
