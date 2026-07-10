@@ -87,6 +87,13 @@ in
           rev = "4d128d4f6f0b46182572126e84df88a73ac27859";
           sha256 = "130b1dap0sxysg3grm5yk3fl7l072qv4vsiv9h6s69ln5gka0gwa";
         };
+        # nixpkgs has since grown patches on libfprint, all of them new-hardware
+        # USB product IDs (realtek-3274-9003, elan-0c58, elan-04F3-0C9C,
+        # focal-077a-079a, focal-a97a) that don't apply to this fork's tree and
+        # are for sensors this machine doesn't have (ours is the Egis 1c7a:05a1
+        # the fork itself supports). The cross fixups live in postPatch, which
+        # this override leaves intact.
+        patches = [ ];
       });
     })
 
