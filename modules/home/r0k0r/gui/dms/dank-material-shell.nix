@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ ... }:
 
 let
   aiOllamaHost = "yulee";
@@ -9,21 +9,9 @@ in
   programs.dank-material-shell = {
     enable = true;
 
-    /* Full DMS config lives in ./settings-base.json -- a complete, editable
-       snapshot of the runtime config (schema v11), so every knob is a
-       placeholder ready to tweak. To adopt changes made in DMS's own settings
-       UI: export/copy the live config over settings-base.json and rebuild.
-       Deliberate nix-side overrides go in the attrset below (recursiveUpdate:
-       attrsets merge deep, lists replace whole).
-
-       Glassmorphism note: schema v11 has no global transparency key -- the
-       real knobs are barConfigs[*].transparency/widgetTransparency (0.6/0.65
-       in the base) plus popupTransparency/dockTransparency. The frosted look
-       itself comes from Hyprland's blur layerrules (wayland/hyprland.nix). */
-    settings = lib.recursiveUpdate (lib.importJSON ./settings-base.json) {
-      theme = "dark";
-      dynamicTheming = true;
-    };
+    /* The full DMS config lives in ./settings.nix as a plain Nix attrset --
+       every knob is a visible placeholder; edit there and rebuild. */
+    settings = import ./settings.nix;
 
     systemd = {
       enable = true;
