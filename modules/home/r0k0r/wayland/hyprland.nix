@@ -157,12 +157,12 @@ in
       # New rule syntax (0.55+): each comma-separated element is "key value",
       # not the old bare-keyword form ("noanim" alone errors: "missing a value").
       layerrule = [
-        "no_anim on, match:namespace ^(dms)$"
+        "no_anim on, match:namespace ^(dms.*)$"
         # Glassmorphism for DMS layer surfaces. ignore_alpha skips
         # near-fully-transparent pixels (the empty regions of the bar
         # surface) so they don't render as a hazy smear.
-        "blur on, match:namespace ^(dms)$"
-        "ignore_alpha 0.05, match:namespace ^(dms)$"
+        "blur on, match:namespace ^(dms.*)$"
+        "ignore_alpha 0.05, match:namespace ^(dms.*)$"
       ];
 
       /*
