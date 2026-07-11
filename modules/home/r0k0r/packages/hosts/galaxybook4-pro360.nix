@@ -1,9 +1,11 @@
-{ pkgs, ... }:
+{ pkgs, inputs, ... }:
 
 let
   # Same pinned claude-code as modules/nixos/packages/common.nix (vendored
-  # package over Anthropic's release channel, version in its manifest.json).
-  claude-code = pkgs.callPackage ../../../../nixos/packages/claude-code/package.nix { };
+  # package; binary hash-pinned via the claude-code-bin flake input).
+  claude-code = pkgs.callPackage ../../../../nixos/packages/claude-code/package.nix {
+    src = inputs.claude-code-bin;
+  };
 in
 with pkgs; [
   (writeScriptBin "gemma-claude" ''
