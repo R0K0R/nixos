@@ -18,7 +18,6 @@ in
     ./services.nix
     ./nix-cache.nix
     ./packages.nix
-    ./home.nix
   ];
 
   networking.hostName = "victus-15";

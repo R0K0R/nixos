@@ -9,7 +9,6 @@
     ./wayland/hyprland.nix
     ./i18n/fcitx.nix
     ./ssh/default.nix
-    ./cli/claude-code.nix
     ./editors/opencode.nix
     ./editors/emacs/packages.nix
     ./editors/emacs/doom-config.nix

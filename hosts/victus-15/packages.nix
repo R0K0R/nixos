@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, inputs, ... }:
 
 {
   nixpkgs.config.allowUnfree = true;
@@ -10,5 +10,5 @@
     nbfc-linux
     ryzenadj
     gh
-  ] ++ (import ../../modules/nixos/packages/common.nix { inherit pkgs; });
+  ] ++ (import ../../modules/nixos/packages/common.nix { inherit pkgs inputs; });
 }
