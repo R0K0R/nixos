@@ -17,15 +17,6 @@
     # No public `nixpkgs` flake input — do not wire `follows` (flakes warns otherwise).
     nixos-hardware.url = "github:NixOS/nixos-hardware";
 
-    /* Dedicated pin for claude-code (replaces the old npm-install-at-activation
-       approach, which needed the network during every HM activation and wasn't
-       pinned/rollbackable). Independent lock — update with:
-         nix flake update nixpkgs-claude
-       Not `follows nixpkgs`: through the fork, every stdenv change would
-       churn its hash. (It's unfree, so hydra never caches it either way --
-       but it's a trivial npm-tarball repack, seconds to build.) */
-    nixpkgs-claude.url = "github:NixOS/nixpkgs/nixos-unstable";
-
     /* webkitgtk_4_1 only: Emacs xwidgets configure requires webkit2gtk-4.1 < 2.41.92; unstable is newer.
        Do not `follows` nixpkgs — we want an independent lock (currently nixos-22.11 → webkit 2.38.x). */
     nixpkgs-emacs-webkit.url = "github:NixOS/nixpkgs/nixos-22.11";

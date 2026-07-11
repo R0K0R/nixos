@@ -1,13 +1,9 @@
-{ pkgs, inputs, ... }:
+{ pkgs, ... }:
 
 let
-  # Same pinned claude-code as modules/nixos/packages/common.nix -- without
-  # this, ${claude-code} resolves to the fork's package set and gets built
-  # from source with the patched stdenv instead of substituted.
-  claude-code = (import inputs.nixpkgs-claude {
-    system = pkgs.stdenv.hostPlatform.system;
-    config.allowUnfree = true;
-  }).claude-code;
+  # Same pinned claude-code as modules/nixos/packages/common.nix (vendored
+  # package over Anthropic's release channel, version in its manifest.json).
+  claude-code = pkgs.callPackage ../../../../nixos/packages/claude-code/package.nix { };
 in
 with pkgs; [
   (writeScriptBin "gemma-claude" ''
