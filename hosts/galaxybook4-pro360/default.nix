@@ -81,6 +81,16 @@ in
               # Tools for asahi/panfrost, drivers this machine doesn't build.
               "-Dtools="
             ];
+            # The spirv2dxil binary/libs only get built with the d3d12/dozen
+            # drivers (trimmed away), and moveToOutput silently no-ops on
+            # missing sources -- leaving the declared $spirv2dxil output
+            # never created, which Nix rejects ("failed to produce output
+            # path"). Same hazard for $cross_tools (pco_clc belongs to the
+            # trimmed PowerVR driver). Empty outputs are valid; guarantee
+            # they exist.
+            postInstall = (old.postInstall or "") + ''
+              mkdir -p $spirv2dxil $cross_tools
+            '';
           });
     })
 
