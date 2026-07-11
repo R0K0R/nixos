@@ -1,13 +1,11 @@
-# Vendored from nixpkgs' pkgs/by-name/cl/claude-code (trimmed to Linux), so
-# the version is OUR choice, not nixpkgs' packaging cadence: Anthropic's
-# native release channel (downloads.claude.ai) carries every version the
-# moment it ships. Pin lives in ./manifest.json; bump with ./update.sh
-# (optionally passing an explicit version).
+# Vendored from nixpkgs' pkgs/by-name/cl/claude-code (trimmed to Linux).
+# The binary comes from the claude-code-bin flake input (Anthropic's release
+# channel, hash-pinned in flake.lock) so the pin lives in the standard flake
+# machinery. The version string here must match the input URL's version --
+# ./update.sh rewrites both and relocks.
 {
   lib,
   stdenvNoCC,
-  fetchurl,
-  installShellFiles,
   makeBinaryWrapper,
   autoPatchelfHook,
   alsa-lib,
@@ -17,22 +15,14 @@
   socat,
   versionCheckHook,
   writableTmpDirAsHomeHook,
+  # the claude-code-bin flake input (a raw binary file in the store)
+  src,
 }:
-let
-  stdenv = stdenvNoCC;
-  baseUrl = "https://downloads.claude.ai/claude-code-releases";
-  manifest = lib.importJSON ./manifest.json;
-  platformKey = "${stdenv.hostPlatform.node.platform}-${stdenv.hostPlatform.node.arch}";
-  platformManifestEntry = manifest.platforms.${platformKey};
-in
-stdenv.mkDerivation (finalAttrs: {
+stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "claude-code";
-  inherit (manifest) version;
+  version = "2.1.207";
 
-  src = fetchurl {
-    url = "${baseUrl}/${finalAttrs.version}/${platformKey}/claude";
-    sha256 = platformManifestEntry.checksum;
-  };
+  inherit src;
 
   dontUnpack = true;
   dontBuild = true;
@@ -40,7 +30,6 @@ stdenv.mkDerivation (finalAttrs: {
   dontStrip = true;
 
   nativeBuildInputs = [
-    installShellFiles
     makeBinaryWrapper
     autoPatchelfHook
   ];
@@ -50,7 +39,7 @@ stdenv.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
-    installBin $src
+    install -Dm755 $src $out/bin/claude
 
     wrapProgram $out/bin/claude \
       --set DISABLE_AUTOUPDATER 1 \
@@ -86,7 +75,7 @@ stdenv.mkDerivation (finalAttrs: {
     changelog = "https://github.com/anthropics/claude-code/blob/v${finalAttrs.version}/CHANGELOG.md";
     license = lib.licenses.unfree;
     sourceProvenance = with lib.sourceTypes; [ binaryNativeCode ];
-    platforms = [ "x86_64-linux" "aarch64-linux" ];
+    platforms = [ "x86_64-linux" ];
     mainProgram = "claude";
   };
 })

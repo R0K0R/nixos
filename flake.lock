@@ -1,5 +1,17 @@
 {
   "nodes": {
+    "claude-code-bin": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-bMc30zc3xtdYbSvWAm8PxunN1nHXumQAeohF9WgDCUI=",
+        "type": "file",
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.207/linux-x64/claude"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.207/linux-x64/claude"
+      }
+    },
     "dms": {
       "inputs": {
         "flake-compat": "flake-compat",
@@ -260,6 +272,7 @@
     },
     "root": {
       "inputs": {
+        "claude-code-bin": "claude-code-bin",
         "dms": "dms",
         "dms-plugin-registry": "dms-plugin-registry",
         "doom-emacs": "doom-emacs",

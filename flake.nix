@@ -17,6 +17,15 @@
     # No public `nixpkgs` flake input — do not wire `follows` (flakes warns otherwise).
     nixos-hardware.url = "github:NixOS/nixos-hardware";
 
+    /* claude-code binary from Anthropic's release channel, hash-pinned in
+       flake.lock. The channel has no version-less "latest" binary URL, so the
+       version lives in this URL (and in the package's version attr) -- bump
+       both + relock with modules/nixos/packages/claude-code/update.sh. */
+    claude-code-bin = {
+      url = "file+https://downloads.claude.ai/claude-code-releases/2.1.207/linux-x64/claude";
+      flake = false;
+    };
+
     /* webkitgtk_4_1 only: Emacs xwidgets configure requires webkit2gtk-4.1 < 2.41.92; unstable is newer.
        Do not `follows` nixpkgs — we want an independent lock (currently nixos-22.11 → webkit 2.38.x). */
     nixpkgs-emacs-webkit.url = "github:NixOS/nixpkgs/nixos-22.11";
