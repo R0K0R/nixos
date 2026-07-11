@@ -106,6 +106,13 @@ in
           vibrancy = 0.17;
           ignore_opacity = true;
           popups = true;
+          # Frost texture: over dark/flat backdrops (e.g. the wallpaper strip
+          # behind the bar's exclusive zone -- windows never go under it),
+          # plain blur is invisible. Noise + slight brightness lift make the
+          # glass read as glass regardless of what's behind it.
+          noise = 0.02;
+          brightness = 1.1;
+          contrast = 1.0;
         };
       };
 
