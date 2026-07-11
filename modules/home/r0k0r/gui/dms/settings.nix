@@ -61,7 +61,11 @@
   popoutElevationEnabled = true;
   barElevationEnabled = false;
   blurEnabled = true;
-  blurForegroundLayers = true;
+  # false: this is DMS's own fake blur -- it blurs the BACKGROUND when
+  # overlays open (observed as "spotlight blurs background, not itself")
+  # and fights Hyprland's real per-surface blur (the layerrules in
+  # wayland/hyprland.nix). Real blur frosts the panel itself.
+  blurForegroundLayers = false;
   blurLayerOutlineOpacity = 0.12;
   blurBorderColor = "outline";
   blurBorderCustomColor = "#ffffff";
