@@ -110,8 +110,26 @@ in
       kdePackages = prev.kdePackages.overrideScope (kf: kp: {
         # mkKdeDerivation is an attrset with __functor (it also carries
         # kf6HostTooling); wrap the call while preserving the other attrs.
+        #
+        # hasPythonBindings = false alone is not enough: the frameworks'
+        # own CMakeLists default BUILD_PYTHON_BINDINGS to ON (nixpkgs never
+        # passes the flag -- setting hasPythonBindings merely supplies
+        # shiboken6/pyside6 so the REQUIRED find_packages succeed). Removing
+        # the deps without flipping the option fails configure with
+        # "Could not find ... Shiboken6". Pass OFF explicitly for packages
+        # that had bindings enabled.
         mkKdeDerivation = kp.mkKdeDerivation // {
-          __functor = _self: args: kp.mkKdeDerivation (args // { hasPythonBindings = false; });
+          __functor =
+            _self: args:
+            kp.mkKdeDerivation (
+              args
+              // {
+                hasPythonBindings = false;
+              }
+              // lib.optionalAttrs (args.hasPythonBindings or false) {
+                extraCmakeFlags = (args.extraCmakeFlags or [ ]) ++ [ "-DBUILD_PYTHON_BINDINGS=OFF" ];
+              }
+            );
         };
       });
     })
