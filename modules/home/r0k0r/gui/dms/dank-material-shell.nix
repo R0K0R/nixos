@@ -1,7 +1,6 @@
 { lib, ... }:
 
 let
-  dmsDefaultMainBar = import ./bar-spec.nix;
   aiOllamaHost = "yulee";
   /* Must match `ollama list`; adjust if yours differs e.g. `gemma3:27b`. */
   aiOllamaModel = "gemma4-31b";
@@ -10,47 +9,20 @@ in
   programs.dank-material-shell = {
     enable = true;
 
-    settings = {
+    /* Full DMS config lives in ./settings-base.json -- a complete, editable
+       snapshot of the runtime config (schema v11), so every knob is a
+       placeholder ready to tweak. To adopt changes made in DMS's own settings
+       UI: export/copy the live config over settings-base.json and rebuild.
+       Deliberate nix-side overrides go in the attrset below (recursiveUpdate:
+       attrsets merge deep, lists replace whole).
+
+       Glassmorphism note: schema v11 has no global transparency key -- the
+       real knobs are barConfigs[*].transparency/widgetTransparency (0.6/0.65
+       in the base) plus popupTransparency/dockTransparency. The frosted look
+       itself comes from Hyprland's blur layerrules (wayland/hyprland.nix). */
+    settings = lib.recursiveUpdate (lib.importJSON ./settings-base.json) {
       theme = "dark";
       dynamicTheming = true;
-      /* Glassmorphism: shell surfaces go translucent; the frosted-glass look
-         behind them comes from two places depending on compositor --
-         Hyprland: true backdrop blur via decoration:blur + the ^(dms)$
-         layerrules (wayland/hyprland.nix). niri: no compositor blur exists,
-         so blurEnabled uses DMS's own pre-blurred wallpaper layer behind
-         panels (blurs wallpaper only, not windows -- graceful fallback).
-         Tune to taste: 1.0 = opaque, lower = clearer glass. */
-      transparency = 0.85;
-      widgetTransparency = 0.9;
-      popupTransparency = 0.88;
-      dockTransparency = 0.85;
-      blurEnabled = true;
-      currentThemeName = "monochrome";
-      niriLayoutRadiusOverride = 16;
-      cursorSettings = {
-        size = 12;
-        theme = "Adwaita";
-        niri = {
-          hideWhenTyping = false;
-        };
-      };
-      monoFontFamily = "JetBrainsMono Nerd Font Mono";
-      showWorkspaceIndex = true;
-      showWorkspacePadding = true;
-      showWorkspaceApps = true;
-      maxWorkspaceIcons = 1;
-      barConfigs = [
-        (lib.recursiveUpdate dmsDefaultMainBar {
-          rightWidgets = dmsDefaultMainBar.rightWidgets ++ [
-            {
-              id = "dankKDEConnect";
-              enabled = true;
-            }
-          ];
-        })
-      ];
-      useAutoLocation = true;
-      greeterEnableFprint = true;
     };
 
     systemd = {
