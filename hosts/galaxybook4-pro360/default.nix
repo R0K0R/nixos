@@ -60,10 +60,28 @@ in
     # test derivation uses mesa.llvmpipeHook, so keep that one rather than
     # dropping software rendering entirely).
     (final: prev: {
-      mesa = prev.mesa.override {
-        galliumDrivers = [ "iris" "llvmpipe" ];
-        vulkanDrivers = [ "intel" "swrast" ];
-      };
+      mesa =
+        (prev.mesa.override {
+          galliumDrivers = [ "iris" "llvmpipe" ];
+          vulkanDrivers = [ "intel" "swrast" ];
+        }).overrideAttrs
+          (old: {
+            # nixpkgs' mesa flags assume the full default driver list; with the
+            # trim above, three of them break or turn into dead weight (meson
+            # takes the LAST occurrence of a -D flag, so appending overrides):
+            mesonFlags = (old.mesonFlags or [ ]) ++ [
+              # -Dauto_features=enabled force-enables the VA-API state tracker,
+              # whose meson require() only accepts r600/radeonsi/nouveau/d3d12/
+              # virgl -- hard configure error with iris-only. Intel VA-API is
+              # provided by intel-media-driver, not mesa, so nothing is lost.
+              "-Dgallium-va=disabled"
+              # TFLite delegate hard-links the etnaviv/rocket/ethosu NPU
+              # drivers (src/gallium/targets/teflon), all trimmed away.
+              "-Dteflon=false"
+              # Tools for asahi/panfrost, drivers this machine doesn't build.
+              "-Dtools="
+            ];
+          });
     })
 
     # Eight KF6 frameworks (kcoreaddons, knotifications, kxmlgui, ...) set
