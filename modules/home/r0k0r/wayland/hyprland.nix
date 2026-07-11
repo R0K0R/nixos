@@ -94,7 +94,20 @@ in
         "col.border_locked_inactive" = "rgb(929092)";
       };
 
-      decoration.rounding = 16;
+      decoration = {
+        rounding = 16;
+        # Glassmorphism: true backdrop blur behind translucent surfaces
+        # (DMS panels get alpha < 1 via its transparency settings; the
+        # layerrule below opts the dms namespace into this blur).
+        blur = {
+          enabled = true;
+          size = 8;
+          passes = 3;
+          vibrancy = 0.17;
+          ignore_opacity = true;
+          popups = true;
+        };
+      };
 
       # DMS's cursorSettings plumbing is niri-only (cursorSettings.niri.hideWhenTyping);
       # Hyprland never gets these applied, so it falls back to its own built-in
@@ -145,6 +158,11 @@ in
       # not the old bare-keyword form ("noanim" alone errors: "missing a value").
       layerrule = [
         "no_anim on, match:namespace ^(dms)$"
+        # Glassmorphism for DMS layer surfaces. ignore_alpha skips
+        # near-fully-transparent pixels (the empty regions of the bar
+        # surface) so they don't render as a hazy smear.
+        "blur on, match:namespace ^(dms)$"
+        "ignore_alpha 0.05, match:namespace ^(dms)$"
       ];
 
       /*

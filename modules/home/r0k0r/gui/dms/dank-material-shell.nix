@@ -13,6 +13,18 @@ in
     settings = {
       theme = "dark";
       dynamicTheming = true;
+      /* Glassmorphism: shell surfaces go translucent; the frosted-glass look
+         behind them comes from two places depending on compositor --
+         Hyprland: true backdrop blur via decoration:blur + the ^(dms)$
+         layerrules (wayland/hyprland.nix). niri: no compositor blur exists,
+         so blurEnabled uses DMS's own pre-blurred wallpaper layer behind
+         panels (blurs wallpaper only, not windows -- graceful fallback).
+         Tune to taste: 1.0 = opaque, lower = clearer glass. */
+      transparency = 0.85;
+      widgetTransparency = 0.9;
+      popupTransparency = 0.88;
+      dockTransparency = 0.85;
+      blurEnabled = true;
       currentThemeName = "monochrome";
       niriLayoutRadiusOverride = 16;
       cursorSettings = {
