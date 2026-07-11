@@ -132,8 +132,12 @@ in
       # iio-hyprland: reads iio-sensor-proxy orientation over D-Bus, rotates the
       # eDP-1 output and touch input transform automatically (accel_3d + hinge
       # sensors confirmed present via /sys/bus/iio/devices; enabled in hardware.nix).
+      # NO "dms run" here: systemd already starts dms.service via
+      # graphical-session.target (uwsm activates it) -- an exec-once copy runs
+      # a second, unmanaged instance (observed: two bars, hyprland-parented
+      # `dms run` without --session alongside dms.service's `dms run --session`).
+      # Same reasoning as the niri side's spawn-at-startup comment.
       exec-once = [
-        "dms run"
         "iio-hyprland eDP-1"
       ];
 
