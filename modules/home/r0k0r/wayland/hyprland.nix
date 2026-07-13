@@ -127,6 +127,11 @@ in
         "XCURSOR_SIZE,24"
         "HYPRCURSOR_THEME,Adwaita"
         "HYPRCURSOR_SIZE,24"
+        # Qt apps outside Plasma (dolphin, kdenlive, ...) have no platform
+        # theme and fall back to a broken mixed palette (black-on-black text).
+        # qt6ct is installed and DMS's matugen already generates its palette
+        # (~/.config/qt6ct -> DankMatugen.colors) -- this activates it.
+        "QT_QPA_PLATFORMTHEME,qt6ct"
       ];
 
       # eDP-1 auto-scale differs between compositors (Hyprland picked 2.0 for this
@@ -316,6 +321,10 @@ in
       windowrule = [
         "maximize on, match:class ^(emacs)$"
         "maximize on, match:class ^(org.gnu.emacs)$"
+        # Glassmorphism: translucent dolphin; backdrop blur applies to
+        # translucent windows automatically (decoration:blur). 0.9 focused,
+        # 0.85 unfocused.
+        "opacity 0.9 0.85, match:class ^(org\\.kde\\.dolphin)$"
       ];
     };
   };
