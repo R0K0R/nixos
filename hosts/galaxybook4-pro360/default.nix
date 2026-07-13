@@ -47,6 +47,9 @@ in
     "L /root/.claude - - - - /home/r0k0r/.claude"
   ];
 
+  # Serial access for arduino-cli/arduino-ide (/dev/ttyACM*, /dev/ttyUSB*).
+  users.users.r0k0r.extraGroups = [ "dialout" ];
+
   nixpkgs.overlays = [
     inputs.niri.overlays.niri
     (import ../../modules/nixos/nix/o3-overlay.nix { inherit hostRuntimeClassifier; })
