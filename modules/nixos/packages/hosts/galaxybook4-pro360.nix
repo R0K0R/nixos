@@ -62,6 +62,8 @@ with pkgs; [
       "$@"
   '')
 
+  libreoffice
+
   ffmpeg-full
   rnote
   siril
@@ -89,7 +91,6 @@ with pkgs; [
   # Arduino development (serial access needs the dialout group --
   # granted in hosts/galaxybook4-pro360/default.nix)
   arduino-cli
-  arduino-ide
 
   # GPU / VA-API diagnostics
   libva-utils
