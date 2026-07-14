@@ -27,7 +27,7 @@ let
     "ffmpeg-full" "rnote" "siril" "blender" "easyeffects" "moonlight-qt"
     "adwaita-icon-theme" "google-chrome" "opencode" "opencode-claude-auth" "zoom"
     "libva-utils" "powertop" "s-tui" "arduino-cli" "libreoffice"
-    "bibata-cursors-translucent"
+    "bibata-cursors"
     # packages/accounts/hosts/galaxybook4-pro360.nix
     "nixfmt" "biber"
     # hosts/victus-15/packages.nix
