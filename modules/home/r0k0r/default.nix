@@ -17,6 +17,7 @@
     ./terminals/starship.nix
     ./terminals/fish.nix
     ./terminals/kitty.nix
+    ./gui/qt-theming.nix
     ./gui/dms/dank-material-shell.nix
     ./gui/dms/session-lock-hooks.nix
   ];

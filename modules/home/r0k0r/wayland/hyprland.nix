@@ -131,16 +131,12 @@ in
         # theme and fall back to a broken mixed palette (black-on-black text).
         # qt6ct is installed and DMS's matugen already generates its palette
         # (~/.config/qt6ct -> DankMatugen.colors) -- this activates it.
+        # This alone is NOT sufficient -- plugin discovery, qt6ct.conf
+        # contents, and KDE apps' KColorSchemeManager each needed their own
+        # fix. See modules/nixos/desktop/qt-theming.nix (QT_PLUGIN_PATH +
+        # the full debugging story) and modules/home/r0k0r/gui/
+        # qt-theming.nix (kdeglobals + qt6ct.conf enforcement).
         "QT_QPA_PLATFORMTHEME,qt6ct"
-        # Regression from the line above: qt6ct.conf's [Appearance] has no
-        # icon_theme= (matugen's qt6ct template only writes the color
-        # scheme), so an active qt6ct platform theme hands Qt6 apps an EMPTY
-        # icon theme -- broke StatusNotifier name-based icon lookups
-        # (fcitx5's tray asks for "input-keyboard-symbolic" by name; became
-        # the magenta/black missing-icon checkerboard). QT_ICON_THEME is
-        # read directly by Qt, independent of qt6ct.conf, so it survives
-        # matugen regenerating that file on every theme change.
-        "QT_ICON_THEME,breeze"
       ];
 
       # eDP-1 auto-scale differs between compositors (Hyprland picked 2.0 for this
@@ -330,10 +326,11 @@ in
       windowrule = [
         "maximize on, match:class ^(emacs)$"
         "maximize on, match:class ^(org.gnu.emacs)$"
-        # Glassmorphism: translucent dolphin; backdrop blur applies to
-        # translucent windows automatically (decoration:blur). 0.9 focused,
-        # 0.85 unfocused.
-        "opacity 0.9 0.85, match:class ^(org\\.kde\\.dolphin)$"
+        # Glassmorphism: translucent KDE apps; backdrop blur applies to
+        # translucent windows automatically (decoration:blur). kdeconnect
+        # covers all its windows (.app, .sms, -indicator, ...).
+        "opacity 0.65 0.65, match:class ^(org\\.kde\\.dolphin)$"
+        "opacity 0.65 0.65, match:class ^(org\\.kde\\.kdeconnect.*)$"
       ];
     };
   };
