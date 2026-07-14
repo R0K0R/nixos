@@ -26,9 +26,12 @@
   nix.distributedBuilds = true;
 
   # Make the builder SSH key readable by r0k0r so `ssh yulee` / `ssh victus-15`
-  # works interactively without a separate key.
+  # works interactively without a separate key. Group must be `users` --
+  # there is no `r0k0r` group, and systemd-tmpfiles skips the whole line on
+  # an unresolvable group ("Failed to resolve group 'r0k0r'"), silently
+  # leaving the key root-owned.
   systemd.tmpfiles.rules = [
-    "z /etc/nix/remote-builder/ssh_key 0600 r0k0r r0k0r -"
+    "z /etc/nix/remote-builder/ssh_key 0600 r0k0r users -"
   ];
 
   nix.buildMachines = [
