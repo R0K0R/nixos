@@ -118,14 +118,16 @@ in
 
       # DMS's cursorSettings plumbing is niri-only (cursorSettings.niri.hideWhenTyping);
       # Hyprland never gets these applied, so it falls back to its own built-in
-      # hyprcursor theme instead of the system Adwaita cursor niri was showing.
-      # Set both XCURSOR_* (X/Wayland apps) and HYPRCURSOR_* (Hyprland's native
-      # cursor renderer) so it's consistent everywhere. adwaita-icon-theme is
-      # already a system package (modules/nixos/packages/common.nix).
+      # hyprcursor theme. Set both XCURSOR_* (X/Wayland apps) and HYPRCURSOR_*
+      # (Hyprland's native cursor renderer) so it's consistent everywhere.
+      # Bibata_Ghost = translucent-black Bibata (bibata-cursors-translucent,
+      # galaxybook packages) -- the glass cursor. No hyprcursor manifest in
+      # that package; Hyprland falls back to the XCursor theme of the same
+      # name, which is exactly what we want.
       env = [
-        "XCURSOR_THEME,Adwaita"
+        "XCURSOR_THEME,Bibata_Ghost"
         "XCURSOR_SIZE,24"
-        "HYPRCURSOR_THEME,Adwaita"
+        "HYPRCURSOR_THEME,Bibata_Ghost"
         "HYPRCURSOR_SIZE,24"
         # Qt apps outside Plasma (dolphin, kdenlive, ...) have no platform
         # theme and fall back to a broken mixed palette (black-on-black text).
