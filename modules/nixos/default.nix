@@ -14,6 +14,7 @@
     ./desktop/hyprland.nix
     ./desktop/greetd.nix
     ./desktop/session-services.nix
+    ./desktop/qt-theming.nix
     ./desktop/dms-greeter.nix
     ./desktop/audio-pipewire.nix
     ./desktop/libinput.nix
