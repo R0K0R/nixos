@@ -16,6 +16,7 @@ let
   genBlackScheme = pkgs.writeShellScript "gen-dankmatugen-black" ''
     src="$HOME/.local/share/color-schemes/DankMatugen.colors"
     dst="$HOME/.local/share/color-schemes/DankMatugenBlack.colors"
+    kdeglobals="$HOME/.config/kdeglobals"
     [ -f "$src" ] || exit 0
     ${pkgs.gawk}/bin/awk '
       /^\[/ { sect = $0 }
@@ -29,6 +30,17 @@ let
       /^Name=/ { print "Name=Dank Shell (matugen, black bg)"; next }
       { print }
     ' "$src" > "$dst"
+    # kdeglobals gets the FULL color groups, like Plasma writes when a
+    # scheme is applied: Kirigami/QML apps (kdeconnect-app, ...) read
+    # [Colors:*] straight from kdeglobals and never consult
+    # [UiSettings]/KColorSchemeManager, so the pointer alone leaves them
+    # on the default light palette.
+    {
+      printf '%s\n' '[UiSettings]' 'ColorScheme=DankMatugenBlack' \
+        "" '[Icons]' 'Theme=breeze' ""
+      cat "$dst"
+    } > "$kdeglobals".tmp
+    mv "$kdeglobals".tmp "$kdeglobals"
   '';
 in
 
@@ -36,35 +48,29 @@ in
   KDE-app half of Qt theming outside Plasma (system half + full debugging
   story: modules/nixos/desktop/qt-theming.nix).
 
-  KDE Frameworks apps (dolphin, kdenlive, ...) run KColorSchemeManager,
-  which outside Plasma ignores the platform theme's palette and re-applies
-  its own scheme choice -- default light, hence dolphin staying white even
-  with qt6ct's dark palette confirmed loaded. [UiSettings] ColorScheme= is
-  the one knob it honors: at app startup it loads that scheme by name from
-  ~/.local/share/color-schemes/ (where DMS's matugen writes
-  DankMatugen.colors on every theme change) and applies the palette from
-  the FILE, so colors stay in sync with the wallpaper without copying
-  [Colors:*] groups here (a static copy would go stale and fight it).
+  Two distinct consumers of KDE color config, both light-by-default
+  outside Plasma:
+    - KXmlGui widget apps (dolphin, kdenlive): KColorSchemeManager
+      re-applies its own scheme choice OVER the platform theme's palette;
+      only kdeglobals [UiSettings] ColorScheme= steers it (loads the
+      scheme by name from ~/.local/share/color-schemes/).
+    - Kirigami/QML apps (kdeconnect-app): no KColorSchemeManager; they
+      read the [Colors:*] groups directly from kdeglobals, so kdeglobals
+      must contain the full groups (exactly what Plasma writes on scheme
+      apply).
+  The generator script therefore rewrites BOTH the derived scheme file
+  and a full kdeglobals from it -- kdeglobals is generated, not an HM
+  store symlink, so the path-unit refresh keeps Kirigami apps in sync
+  with wallpaper changes too.
 
   [Icons] Theme= covers KIconLoader lookups (file/folder icons inside KDE
   apps); the tray's name-based lookups are covered by qt6ct.conf's
   icon_theme= instead.
 */
 {
-  xdg.configFile."kdeglobals" = {
-    force = true;
-    text = ''
-      [UiSettings]
-      ColorScheme=DankMatugenBlack
-
-      [Icons]
-      Theme=breeze
-    '';
-  };
-
-  # Regenerate the black-background scheme whenever matugen rewrites the
-  # source scheme (theme/wallpaper change), and once at login for the
-  # initial copy.
+  # Regenerate scheme + kdeglobals whenever matugen rewrites the source
+  # scheme (theme/wallpaper change), once at login, and once per HM
+  # activation (initial seed).
   systemd.user.services.dankmatugen-black = {
     Unit.Description = "Derive DankMatugenBlack.colors from DankMatugen.colors";
     Service = {
@@ -94,6 +100,10 @@ in
     Also rewrites from scratch if the file is missing or corrupted by
     qt.sh's broken printf (literal backslash-n, no real newlines).
   */
+  home.activation.kdeglobalsSeed = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    run ${genBlackScheme}
+  '';
+
   home.activation.qt6ctConf = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     conf="${config.xdg.configHome}/qt6ct/qt6ct.conf"
     scheme="${config.xdg.configHome}/qt6ct/colors/matugen.conf"
