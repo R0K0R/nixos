@@ -30,6 +30,9 @@ in
       bold_italic_font = "auto";
       font_size = 11;
 
+      dynamic_background_opacity = true;
+      background_opacity = "0.65";
+
       cursor_shape = "beam";
       cursor_beam_thickness = 2;
       cursor_trail = 1;
@@ -53,7 +56,7 @@ in
       detect_urls = "yes";
 
       foreground = "#cdd6f4";
-      background = "#1e1e2e";
+      background = "#000000";
 
       /*
         Gray "[> command X]" strip = Kitty’s own tab/title bar (shell integration

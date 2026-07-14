@@ -17,8 +17,8 @@
   matugenContrast = 0;
   runUserMatugenTemplates = true;
   matugenTargetMonitor = "";
-  popupTransparency = 0.65;
-  dockTransparency = 0.6;
+  popupTransparency = 0.35;
+  dockTransparency = 0.3;
   widgetBackgroundColor = "sch";
   widgetColorMode = "default";
   controlCenterTileColorMode = "primary";
@@ -230,7 +230,7 @@
   greeterRememberLastUser = true;
   greeterEnableFprint = true;
   greeterEnableU2f = false;
-  greeterWallpaperPath = "";
+  greeterWallpaperPath = "~/Pictures/Wallpaper.jpg";
   greeterUse24HourClock = true;
   greeterShowSeconds = false;
   greeterPadHours12Hour = false;
@@ -290,7 +290,7 @@
   notepadFontSize = 14;
   notepadShowLineNumbers = false;
   notepadTransparencyOverride = -1;
-  notepadLastCustomTransparency = 0.7;
+  notepadLastCustomTransparency = 0.35;
   soundsEnabled = true;
   useSystemSoundTheme = false;
   soundLogin = false;
@@ -365,8 +365,8 @@
     };
   };
   matugenTemplateNeovimSetBackground = true;
-  showDock = false;
-  dockAutoHide = false;
+  showDock = true;
+  dockAutoHide = true;
   dockSmartAutoHide = false;
   dockUseOverlayLayer = false;
   dockGroupByApp = false;
@@ -409,7 +409,7 @@
   lockScreenShowMediaPlayer = true;
   lockScreenPowerOffMonitorsOnLock = false;
   lockAtStartup = false;
-  enableFprint = false;
+  enableFprint = true;
   maxFprintTries = 15;
   enableU2f = false;
   u2fMode = "or";
@@ -550,19 +550,19 @@
       showOnWindowsOpen = false;
       spacing = 4;
       squareCorners = false;
-      transparency = 0.6;
+      transparency = 0.3;
       visible = true;
       widgetOutlineColor = "primary";
       widgetOutlineEnabled = false;
       widgetOutlineOpacity = 1;
       widgetOutlineThickness = 1;
       widgetPadding = 8;
-      widgetTransparency = 0.65;
+      widgetTransparency = 0.45;
     }
   ];
   desktopClockEnabled = false;
   desktopClockStyle = "analog";
-  desktopClockTransparency = 0.8;
+  desktopClockTransparency = 0.35;
   desktopClockColorMode = "primary";
   desktopClockCustomColor = {
     r = 1;
@@ -589,7 +589,7 @@
   ];
   systemMonitorEnabled = false;
   systemMonitorShowHeader = true;
-  systemMonitorTransparency = 0.8;
+  systemMonitorTransparency = 0.4;
   systemMonitorColorMode = "primary";
   systemMonitorCustomColor = {
     r = 1;
