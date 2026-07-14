@@ -2,7 +2,7 @@
 
 let
   # Match the glass system (dolphin/kitty windows sit at 0.65).
-  alpha = "0.65";
+  alpha = "0.35";
 
   /*
     "Glass" Bibata: Bibata-Modern-Classic (the Mint 21.1 look) with every
@@ -59,10 +59,31 @@ in
     for the compositor renderer and everything it spawns.
   */
   home.pointerCursor = {
+    enable = true;
     package = bibata-glass;
     name = "Bibata-Modern-Classic-Glass";
     size = 24;
     gtk.enable = true;
     x11.enable = true;
+  };
+
+  /*
+    pointerCursor.gtk.enable alone is a no-op here: it only sets
+    gtk.cursorTheme, which generates nothing while the HM gtk module is
+    disabled (DMS owns the gtk.css files), and this HM version never
+    touches dconf. GTK under Wayland resolves the cursor from the
+    org.gnome.desktop.interface gsettings keys, so without these, pgtk
+    apps (emacs daemon) fell back to Adwaita.
+  */
+  dconf.settings."org/gnome/desktop/interface" = {
+    cursor-theme = "Bibata-Modern-Classic-Glass";
+    cursor-size = 24;
+  };
+
+  # systemd user services (emacs daemon, etc.) don't inherit the Hyprland
+  # env block or hm-session-vars; give them the XCursor vars directly.
+  systemd.user.sessionVariables = {
+    XCURSOR_THEME = "Bibata-Modern-Classic-Glass";
+    XCURSOR_SIZE = "24";
   };
 }
