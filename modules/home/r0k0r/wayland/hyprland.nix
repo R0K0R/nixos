@@ -132,6 +132,15 @@ in
         # qt6ct is installed and DMS's matugen already generates its palette
         # (~/.config/qt6ct -> DankMatugen.colors) -- this activates it.
         "QT_QPA_PLATFORMTHEME,qt6ct"
+        # Regression from the line above: qt6ct.conf's [Appearance] has no
+        # icon_theme= (matugen's qt6ct template only writes the color
+        # scheme), so an active qt6ct platform theme hands Qt6 apps an EMPTY
+        # icon theme -- broke StatusNotifier name-based icon lookups
+        # (fcitx5's tray asks for "input-keyboard-symbolic" by name; became
+        # the magenta/black missing-icon checkerboard). QT_ICON_THEME is
+        # read directly by Qt, independent of qt6ct.conf, so it survives
+        # matugen regenerating that file on every theme change.
+        "QT_ICON_THEME,breeze"
       ];
 
       # eDP-1 auto-scale differs between compositors (Hyprland picked 2.0 for this
