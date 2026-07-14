@@ -120,14 +120,15 @@ in
       # Hyprland never gets these applied, so it falls back to its own built-in
       # hyprcursor theme. Set both XCURSOR_* (X/Wayland apps) and HYPRCURSOR_*
       # (Hyprland's native cursor renderer) so it's consistent everywhere.
-      # Bibata_Ghost = translucent-black Bibata (bibata-cursors-translucent,
-      # galaxybook packages) -- the glass cursor. No hyprcursor manifest in
-      # that package; Hyprland falls back to the XCursor theme of the same
-      # name, which is exactly what we want.
+      # Bibata-Modern-Classic-Glass = Bibata-Modern-Classic with alpha
+      # multiplied down, generated in gui/cursor.nix (home.pointerCursor
+      # there also enforces it via dconf + ~/.icons/default so apps can't
+      # resolve a different theme). No hyprcursor manifest; Hyprland falls
+      # back to the XCursor theme of the same name, which is intended.
       env = [
-        "XCURSOR_THEME,Bibata_Ghost"
+        "XCURSOR_THEME,Bibata-Modern-Classic-Glass"
         "XCURSOR_SIZE,24"
-        "HYPRCURSOR_THEME,Bibata_Ghost"
+        "HYPRCURSOR_THEME,Bibata-Modern-Classic-Glass"
         "HYPRCURSOR_SIZE,24"
         # Qt apps outside Plasma (dolphin, kdenlive, ...) have no platform
         # theme and fall back to a broken mixed palette (black-on-black text).

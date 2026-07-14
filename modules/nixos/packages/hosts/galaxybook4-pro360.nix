@@ -82,9 +82,9 @@ with pkgs; [
   */
   kdePackages.breeze-icons
   adwaita-icon-theme
-  # Bibata_Ghost: translucent-black Bibata (glass cursor to match the
-  # glassmorphism setup); selected via XCURSOR_THEME in hyprland.nix.
-  bibata-cursors-translucent
+  # Base for Bibata-Modern-Classic-Glass (translucent variant built in
+  # modules/home/r0k0r/gui/cursor.nix); also provides the solid variants.
+  bibata-cursors
   google-chrome
 
   opencode
