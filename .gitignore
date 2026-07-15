@@ -8,6 +8,7 @@ secrets/
 # Local notes and findings
 galaxybook-thermal-findings.md
 victus-thermal-findings.md
+claude-desktop-blackening-findings.md
 
 # Personal Claude Code permission allowlist (session-specific store paths, IPs) — not shared
 .claude/settings.local.json

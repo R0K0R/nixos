@@ -26,6 +26,15 @@
       flake = false;
     };
 
+    /* claude-desktop .deb from Anthropic's apt repo (official Linux beta since
+       2026-06-30; not in nixpkgs). Same pattern as claude-code-bin: the
+       version lives in this URL and the package's version attr -- bump both +
+       relock with modules/nixos/packages/claude-desktop/update.sh. */
+    claude-desktop-bin = {
+      url = "file+https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.20186.9_amd64.deb";
+      flake = false;
+    };
+
     /* webkitgtk_4_1 only: Emacs xwidgets configure requires webkit2gtk-4.1 < 2.41.92; unstable is newer.
        Do not `follows` nixpkgs — we want an independent lock (currently nixos-22.11 → webkit 2.38.x). */
     nixpkgs-emacs-webkit.url = "github:NixOS/nixpkgs/nixos-22.11";
