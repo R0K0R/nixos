@@ -59,7 +59,7 @@ in
       general = {
         "col.active_border" = "rgb(ffffff)";
         "col.inactive_border" = "rgb(929092)";
-        gaps_in = 4;
+        gaps_in = 2;
         gaps_out = 4;
         border_size = 0;
         layout = "scrolling";
@@ -334,6 +334,12 @@ in
         # covers all its windows (.app, .sms, -indicator, ...).
         "opacity 0.65 0.65, match:class ^(org\\.kde\\.dolphin)$"
         "opacity 0.65 0.65, match:class ^(org\\.kde\\.kdeconnect.*)$"
+        # Claude Desktop: app_id from the deb's desktop-file StartupWMClass
+        # (Chromium derives it from package.json desktopName). Same 0.65 as
+        # the KDE apps -- the package forces its dark backgrounds to #000
+        # (see packages/claude-desktop/package.nix), so it composites
+        # identically to kitty/dolphin.
+        "opacity 0.65 0.65, match:class ^(com\\.anthropic\\.Claude)$"
       ];
     };
   };

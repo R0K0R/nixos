@@ -1,6 +1,11 @@
-{ pkgs, ... }:
+{ pkgs, inputs, ... }:
 
 with pkgs; [
+  # claude-desktop, hash-pinned via the claude-desktop-bin flake input (see
+  # flake.nix). Bump: modules/nixos/packages/claude-desktop/update.sh
+  # [version], then rebuild.
+  (callPackage ../claude-desktop/package.nix { src = inputs.claude-desktop-bin; })
+
   (writeScriptBin "nixos-rebuild-local" ''
     #! /bin/sh
     exec nixos-rebuild \

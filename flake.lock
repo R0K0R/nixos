@@ -12,6 +12,18 @@
         "url": "https://downloads.claude.ai/claude-code-releases/2.1.207/linux-x64/claude"
       }
     },
+    "claude-desktop-bin": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-MKMa0HoxVBU234W2pFr9JqlioFZuv/0gqqrEb6a08hg=",
+        "type": "file",
+        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.20186.9_amd64.deb"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.20186.9_amd64.deb"
+      }
+    },
     "dms": {
       "inputs": {
         "flake-compat": "flake-compat",
@@ -256,11 +268,11 @@
     },
     "nixpkgs-upstream": {
       "locked": {
-        "lastModified": 1783522502,
-        "narHash": "sha256-iffAls3iaNTyJC2faYcUXSI+Gp02cDjYl+MygxKl2GI=",
+        "lastModified": 1784007870,
+        "narHash": "sha256-djcLt/JJphyNt4eDY9XTly+/WbCK5lqWq9lSgCmJkkQ=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "0bb7ec54c8483066ec9d7720e780a5caa71f8612",
+        "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
         "type": "github"
       },
       "original": {
@@ -273,6 +285,7 @@
     "root": {
       "inputs": {
         "claude-code-bin": "claude-code-bin",
+        "claude-desktop-bin": "claude-desktop-bin",
         "dms": "dms",
         "dms-plugin-registry": "dms-plugin-registry",
         "doom-emacs": "doom-emacs",

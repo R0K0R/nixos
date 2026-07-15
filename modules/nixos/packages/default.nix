@@ -2,7 +2,8 @@
 
 let
   hostSysFile = ./hosts/${hostName}.nix;
-  hostSysPkgs = if builtins.pathExists hostSysFile then import hostSysFile { inherit pkgs; } else [ ];
+  hostSysPkgs =
+    if builtins.pathExists hostSysFile then import hostSysFile { inherit pkgs inputs; } else [ ];
 
   accountCommon = import ./accounts/r0k0r.nix { inherit pkgs; };
 
