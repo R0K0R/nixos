@@ -12,7 +12,17 @@ final: prev:
 # name contains "bootstrap" (e.g. "bootstrap-stage1-stdenv-linux") -- skip
 # the whole overlay during those stages rather than trying to guess which
 # specific packages might get pulled into bootstrap construction.
-if builtins.match ".*bootstrap.*" (prev.stdenv.name or "") != null then
+#
+# Platform guard: only tune the march'd HOST package set. Overlays apply to
+# *every* splice, so without this the LTO attributes also replace pkgsBuildHost's
+# -- the BUILD platform, whose output never runs on this machine, so tuning it
+# buys nothing. Worse, it makes every build-platform derivation differ from
+# upstream and lose cache.nixos.org substitutability; measured, build-platform is
+# ~91% of the toplevel closure (17444 of 19045 drvs).
+if
+  builtins.match ".*bootstrap.*" (prev.stdenv.name or "") != null
+  || ((prev.stdenv.hostPlatform.gcc or { }).arch or "") == ""
+then
   { }
 else
 let
@@ -144,14 +154,14 @@ let
   # host-runtime = false: leave the top-level attribute untouched (protects
   # every nativeBuildInputs consumer -- e.g. the bootstrap-stage m4 failure --
   # from blast radius that provides zero benefit, since nothing runs this on
-  # host anyway) and expose only a "<name>-tuned" variant, available to
-  # install explicitly if this ever becomes something run directly.
+  # host anyway) and emit nothing else.
+  #
+  # A "<name>-tuned" variant used to be emitted here for that case. It was dead
+  # by construction -- a build-only package has no runtime consumer, so nothing
+  # could ever legitimately reference the variant, and nothing in the tree did.
+  # Removed: it changed no derivation, it only inflated apparent coverage.
   hostRuntimeNames = builtins.filter hostRuntimeClassifier.isHostRuntime existingPackages;
-  buildOnlyNames = builtins.filter (n: !(hostRuntimeClassifier.isHostRuntime n)) existingPackages;
 in
-(builtins.listToAttrs (
+builtins.listToAttrs (
   map (name: { inherit name; value = addFlags prev.${name}; }) hostRuntimeNames
-))
-// (builtins.listToAttrs (
-  map (name: { name = name + "-tuned"; value = addFlags prev.${name}; }) buildOnlyNames
-))
+)

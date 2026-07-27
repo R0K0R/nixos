@@ -180,56 +180,11 @@ in
         # NOTE: musl/glibc/libgcc fixNoLibcLD workarounds removed — testing upstream
         # bintools-wrapper fix (bare-ld symlink for pseudo-cross) via --override-input.
 
-        # gfortran/gccgo: nixpkgs opts langFortran and langGo out of --disable-bootstrap
-        # so they get a full 3-stage GCC bootstrap. In pseudo-cross, GCC sees
-        # --target==--host (same config string) and runs stage2 sub-configures that
-        # inherit PATH from the outer build environment, where depsBuildBuild gcc shadows
-        # the cross wrapper. Fix: force --disable-bootstrap for pseudo-cross builds
-        # (single-stage build using the nixpkgs cross wrapper directly).
-        # Upstream fix: configure-flags.nix disableBootstrap' should not exempt langFortran
-        # or langGo when targetPlatform.config == hostPlatform.config.
-        gfortran =
-          let
-            isPseudoCross =
-              prev.stdenv.hostPlatform.config == prev.stdenv.targetPlatform.config
-              && !lib.systems.equals prev.stdenv.hostPlatform prev.stdenv.targetPlatform;
-          in
-          if !isPseudoCross then
-            prev.gfortran
-          else
-            prev.wrapCC (
-              (prev.gcc.cc.override {
-                name = "gfortran";
-                langFortran = true;
-                langCC = false;
-                langC = false;
-                profiledCompiler = false;
-              }).overrideAttrs (old: {
-                configureFlags = old.configureFlags ++ [ "--disable-bootstrap" ];
-              })
-            );
-
-        gccgo =
-          let
-            isPseudoCross =
-              prev.stdenv.hostPlatform.config == prev.stdenv.targetPlatform.config
-              && !lib.systems.equals prev.stdenv.hostPlatform prev.stdenv.targetPlatform;
-          in
-          if !isPseudoCross then
-            prev.gccgo
-          else
-            prev.wrapCC (
-              (prev.gcc.cc.override {
-                name = "gccgo";
-                langCC = true;
-                langC = true;
-                langGo = true;
-                langJit = true;
-                profiledCompiler = false;
-              }).overrideAttrs (old: {
-                configureFlags = old.configureFlags ++ [ "--disable-bootstrap" ];
-              })
-            );
+        # (The gfortran/gccgo pseudo-cross --disable-bootstrap overrides that
+        # used to live here were removed -- fixed at the root in the fork's
+        # gcc/common/configure-flags.nix, where disableBootstrap' now honours
+        # --disable-bootstrap for langFortran/langGo when
+        # hostPlatform.config == targetPlatform.config. Candidate upstream PR.)
 
       # snobol4's hand-rolled configure only accepts --prefix/--bindir/--mandir/--snolibdir/
       # --with-tcl/--with(out)-docs. Cross stdenv injects --sbindir/--includedir/--libdir/
@@ -257,9 +212,43 @@ in
       stdenv = prev.stdenv.override {
         preHook =
           (prev.stdenv.preHook or "")
-          + ''
-            export NIX_CFLAGS_COMPILE="''${NIX_CFLAGS_COMPILE:-} -Wno-error=maybe-uninitialized"
-            export NIX_CXXFLAGS_COMPILE="''${NIX_CXXFLAGS_COMPILE:-} -Wno-error=maybe-uninitialized"
+          # -Wmaybe-uninitialized is GCC-only. Gate on the compiler rather than
+          # eval-time prev.stdenv.cc.isGNU: the latter is always true (base
+          # stdenv is GCC) and bakes the flag into the preHook string, which the
+          # clang stdenvs that `overrideCC` produces (libc++, compiler-rt, ...)
+          # inherit verbatim -- clang then warns "unknown warning option", which
+          # matches CMake's FAIL_REGEX "unknown .*option"
+          # (CMakeCheckCompilerFlagCommonPatterns.cmake) and fails *every*
+          # check_compiler_flag despite exit 0, including
+          # CXX_SUPPORTS_NOSTDINCXX_FLAG -- so libc++ drops -nostdinc++ and
+          # gcc's libstdc++ headers leak into the libc++ build.
+          #
+          # The test must use only bash builtins on variables set *earlier in
+          # this same file*: preHook is spliced into the top of setup.sh, which
+          # runs long before PATH is populated (`PATH=` is ~line 626,
+          # `runHook preHook` ~line 652). A `"$CC" --version | grep` test there
+          # finds neither $CC (a bare name) nor grep, exits 127, and `!` turns
+          # that into an unconditional export -- the exact leak this guards.
+          # $defaultNativeBuildInputs is set a few lines above and ends in the
+          # cc-wrapper (...-gcc-wrapper-15.3.0 vs ...-clang-wrapper-21.1.8).
+          #
+          # Platform guard: only the meteorlake HOST stdenv gets this. Overlays
+          # apply to *every* splice, so without the guard this string also lands
+          # in pkgsBuildHost's stdenv -- the BUILD platform, which has no gcc.arch
+          # and never hits -Wmaybe-uninitialized from -march. That made every
+          # build-platform derivation differ from upstream and lose
+          # cache.nixos.org substitutability; measured, build-platform is ~91% of
+          # the toplevel closure (17444 of 19045 drvs), so the whole cache win
+          # hinges on this one predicate. Same guard the LIBRARY_PATH/CPATH block
+          # below already uses.
+          + lib.optionalString ((prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake") ''
+            case "''${defaultNativeBuildInputs:-}" in
+              *-clang-wrapper-*) ;;
+              *)
+                export NIX_CFLAGS_COMPILE="''${NIX_CFLAGS_COMPILE:-} -Wno-error=maybe-uninitialized"
+                export NIX_CXXFLAGS_COMPILE="''${NIX_CXXFLAGS_COMPILE:-} -Wno-error=maybe-uninitialized"
+                ;;
+            esac
           ''
           # Pseudo-cross root fix: raw cross gcc invocations (Go's bootstrap, GCC's
           # internal stage2-bubble, anything that bypasses the nixpkgs cc-wrapper) lack
