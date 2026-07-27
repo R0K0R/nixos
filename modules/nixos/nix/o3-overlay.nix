@@ -6,7 +6,17 @@ final: prev:
 # bootstrap toolchain is the same class of risk LTO already demonstrated
 # (see gentoo-lto-overlay.nix's comment for the m4 build failure this guards
 # against).
-if builtins.match ".*bootstrap.*" (prev.stdenv.name or "") != null then
+#
+# Platform guard: only tune the march'd HOST package set. Overlays apply to
+# *every* splice, so without this the O3 attributes also replace pkgsBuildHost's
+# -- the BUILD platform, whose output never runs on this machine, so tuning it
+# buys nothing. Worse, it makes every build-platform derivation differ from
+# upstream and lose cache.nixos.org substitutability; measured, build-platform is
+# ~91% of the toplevel closure (17444 of 19045 drvs).
+if
+  builtins.match ".*bootstrap.*" (prev.stdenv.name or "") != null
+  || ((prev.stdenv.hostPlatform.gcc or { }).arch or "") == ""
+then
   { }
 else
 let
@@ -78,16 +88,16 @@ let
   # means something actually installed (environment.systemPackages /
   # home.packages) transitively references this package via buildInputs /
   # propagatedBuildInputs -- a genuine runtime dependency, so tuning the
-  # shared top-level attribute directly is safe and beneficial. host-runtime
-  # = false means it's only ever pulled in as a nativeBuildInputs (build-time
-  # tool) -- tune only a separate "<name>-tuned" variant instead, leaving the
-  # shared attribute untouched to protect its build-time consumers.
+  # shared top-level attribute directly is safe and beneficial.
+  #
+  # host-runtime = false means the package only ever runs on a builder, so it
+  # gets nothing. There used to be a "<name>-tuned" variant emitted here for
+  # that case, but it was dead by construction: a build-only package has no
+  # runtime consumer, so nothing could ever legitimately reference the variant
+  # (confirmed -- zero references anywhere in the tree). It only made coverage
+  # look larger than it was.
   hostRuntimeNames = builtins.filter hostRuntimeClassifier.isHostRuntime existingPackages;
-  buildOnlyNames = builtins.filter (n: !(hostRuntimeClassifier.isHostRuntime n)) existingPackages;
 in
-(builtins.listToAttrs (
+builtins.listToAttrs (
   map (name: { inherit name; value = o3 prev.${name}; }) hostRuntimeNames
-))
-// (builtins.listToAttrs (
-  map (name: { name = name + "-tuned"; value = o3 prev.${name}; }) buildOnlyNames
-))
+)

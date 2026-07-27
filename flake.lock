@@ -3,25 +3,25 @@
     "claude-code-bin": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-bMc30zc3xtdYbSvWAm8PxunN1nHXumQAeohF9WgDCUI=",
+        "narHash": "sha256-5EBAz0xgUJZYgqcmjEVE5XG/6TIdIDnwpje2GIDL4qo=",
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-code-releases/2.1.207/linux-x64/claude"
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.219/linux-x64/claude"
       },
       "original": {
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-code-releases/2.1.207/linux-x64/claude"
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.219/linux-x64/claude"
       }
     },
     "claude-desktop-bin": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-MKMa0HoxVBU234W2pFr9JqlioFZuv/0gqqrEb6a08hg=",
+        "narHash": "sha256-H7/7J0WTVcU/m6TXLku+Sp7xmQYh51HRuXOlWfJZgdA=",
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.20186.9_amd64.deb"
+        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.24012.9_amd64.deb"
       },
       "original": {
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.20186.9_amd64.deb"
+        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.24012.9_amd64.deb"
       }
     },
     "dms": {
@@ -84,11 +84,11 @@
     "doom-private": {
       "flake": false,
       "locked": {
-        "lastModified": 1783955709,
-        "narHash": "sha256-dnXJZrd1Yxfk1aVHjgX9Bu+CufiD34Cc76b6/8e/7PM=",
+        "lastModified": 1784135209,
+        "narHash": "sha256-DDkvdVwmbamh0ZOVMeIJVqdrj/OsCVgsUBGnbdtvovw=",
         "owner": "R0K0R",
         "repo": "doom-emacs",
-        "rev": "38b72ca1295f61c9b2805826e5eebe0afd85db1c",
+        "rev": "1c0cc731ce6146f755a6967394023daa8b103484",
         "type": "github"
       },
       "original": {
@@ -220,11 +220,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1783969411,
-        "narHash": "sha256-6pN5AeCYG+jjT8uBU8GbSF9tfQdtj8yWXtyEA3WyHSQ=",
+        "lastModified": 1785176345,
+        "narHash": "sha256-35vrOVbBD5vcgA9K/ovAGwluHSHYnVGwbI8tZv60drY=",
         "owner": "R0K0R",
         "repo": "nixpkgs",
-        "rev": "b01996c6417a15af9d2d5d4358417d5c16613207",
+        "rev": "e4aaab760a30dd2e25f67c8984ae4daba14cc42d",
         "type": "github"
       },
       "original": {
@@ -268,11 +268,11 @@
     },
     "nixpkgs-upstream": {
       "locked": {
-        "lastModified": 1784007870,
-        "narHash": "sha256-djcLt/JJphyNt4eDY9XTly+/WbCK5lqWq9lSgCmJkkQ=",
+        "lastModified": 1784796856,
+        "narHash": "sha256-wWFrV5/Qbm+lyt5x20E/bSbfJiGKMo4RCxZV8cl/WZI=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "18b9261cb3294b6d2a06d03f96872827b8fe2698",
+        "rev": "e2587caef70cea85dd97d7daab492899902dbf5d",
         "type": "github"
       },
       "original": {
