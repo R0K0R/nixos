@@ -86,6 +86,18 @@
     "emulatorhook"
     "wrapper"
   ],
+  /*
+    Prefix matches, lowercased. Deliberately over-inclusive: a wrongly excluded
+    package merely builds from the fork instead of substituting, whereas a
+    wrongly included one breaks the toolchain. So "mold" also catches molden,
+    and "lld" also catches lldb/lldap/lldpd -- accepted.
+
+    The linker entries (mold, lld) are here for the same reason as bintools:
+    these packages ship TARGET-PREFIXED binaries. Upstream's native build has
+    only bare `ld.mold`, so aliasing it left the cross bintools-wrapper
+    symlinking x86_64-unknown-linux-gnu-ld.mold at a file that does not exist:
+      ERROR: noBrokenSymlinks: ... points to a missing target
+  */
   excludePrefixes ? [
     "bintools"
     "gcc"
@@ -94,6 +106,10 @@
     "llvm"
     "libgcc"
     "glibc"
+    "mold"
+    "lld"
+    "libbfd"
+    "libopcodes"
   ],
 }:
 

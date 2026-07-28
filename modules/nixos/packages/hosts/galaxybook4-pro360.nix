@@ -1,6 +1,18 @@
 { pkgs, inputs, ... }:
 
-with pkgs; [
+let
+  # Unpatched upstream nixpkgs, imported with allowUnfree so its prebuilt
+  # (Hydra-cached) packages can be pulled in verbatim -- bypassing this
+  # fork's pseudo-cross stdenv for things we don't want rebuilt from source.
+  # legacyPackages.<pkg> would ignore this system's allowUnfree, so import
+  # explicitly here.
+  upstream = import inputs.nixpkgs-upstream {
+    system = "x86_64-linux";
+    config.allowUnfree = true;
+  };
+in
+with pkgs;
+[
   # claude-desktop, hash-pinned via the claude-desktop-bin flake input (see
   # flake.nix). Bump: modules/nixos/packages/claude-desktop/update.sh
   # [version], then rebuild.
@@ -21,22 +33,27 @@ with pkgs; [
     exec nixos-rebuild \
       --flake /home/r0k0r/flakes/nixos#galaxybook4-pro360 \
       --option max-jobs 0 \
-      --builders "ssh://r0k0r@yulee x86_64-linux /etc/nix/remote-builder/ssh_key 10 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
+      --builders "ssh://r0k0r@yulee x86_64-linux /etc/nix/remote-builder/ssh_key 3 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
       --option substituters "https://cache.nixos.org ssh://r0k0r@yulee" \
       "$@"
   '')
 
   (writeScriptBin "nixos-rebuild-victus-15" ''
     #! /bin/sh
-    # cache.nixos.org dropped: confirmed it never has anything for this
-    # patched fork, even for architecturally-untainted build tools.
+    # No substituters override: cache.nixos.org used to be useless here because
+    # the fork patched setup.sh and the cc/bintools wrappers unconditionally, so
+    # every hash in the tree diverged from upstream -- even plain native `hello`
+    # was absent from the binary cache. Those changes are now confined to the
+    # stdenvs that need them, so BUILD-platform derivations are byte-identical
+    # to upstream again and the cache genuinely serves them. Leaving the system
+    # substituter list alone keeps cache.nixos.org in play; overriding it here
+    # would forfeit that.
     # maxJobs 3 (third field after the key): 5 parallel builds drove victus
     # deep into swap -- LTO link steps in particular are memory-hungry.
     exec nixos-rebuild \
       --flake /home/r0k0r/flakes/nixos#galaxybook4-pro360 \
       --option max-jobs 0 \
       --builders "ssh://r0k0r@victus-15 x86_64-linux /etc/nix/remote-builder/ssh_key 3 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
-      --option substituters "ssh-ng://r0k0r@victus-15" \
       "$@"
   '')
 
@@ -53,7 +70,7 @@ with pkgs; [
     #! /bin/sh
     exec nix-shell \
       --option max-jobs 0 \
-      --option builders "ssh://r0k0r@yulee x86_64-linux /etc/nix/remote-builder/ssh_key 10 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
+      --option builders "ssh://r0k0r@yulee x86_64-linux /etc/nix/remote-builder/ssh_key 3 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
       --option substituters "https://cache.nixos.org ssh://r0k0r@yulee" \
       "$@"
   '')
@@ -94,14 +111,20 @@ with pkgs; [
 
   opencode
   opencode-claude-auth
-  zoom
+  zoom-us
 
   # Arduino development (serial access needs the dialout group --
   # granted in hosts/galaxybook4-pro360/default.nix)
   arduino-cli
 
+  discord
+
   # GPU / VA-API diagnostics
   libva-utils
+
+  openjdk25_headless
+
+  upstream.qemu
 
   # CPU / power monitoring
   powertop
