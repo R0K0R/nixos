@@ -50,7 +50,14 @@ in
   # Serial access for arduino-cli/arduino-ide (/dev/ttyACM*, /dev/ttyUSB*).
   users.users.r0k0r.extraGroups = [ "dialout" ];
 
-  nixpkgs.overlays = [
+  nixpkgs.overlays = lib.mkMerge [
+    (lib.mkOrder 1600 [
+      (import ../../modules/nixos/nix/upstream-tools-overlay.nix {
+        inherit lib inputs;
+      })
+    ])
+
+    [
     inputs.niri.overlays.niri
     (import ../../modules/nixos/nix/o3-overlay.nix { inherit hostRuntimeClassifier; })
     (import ../../modules/nixos/nix/gentoo-lto-overlay.nix { inherit hostRuntimeClassifier; })
@@ -605,5 +612,6 @@ in
           config = prev.config;
         };
       })
+    ]
   ];
 }
