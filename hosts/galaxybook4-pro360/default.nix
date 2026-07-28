@@ -1,4 +1,4 @@
-{ inputs, lib, pkgs, ... }:
+{ inputs, lib, ... }:
 
 let
   # Computed once and shared between o3-overlay.nix and gentoo-lto-overlay.nix
@@ -28,33 +28,6 @@ in
 
   services.tailscale.enable = true;
 
-  # The TP-Link router's built-in OpenVPN pushes its 10.8.0.0/24 subnet to
-  # every LAN client, so a peer connected to it over OpenVPN (yulee, 10.8.0.22)
-  # advertises a 10.8 endpoint that Tailscale then picks as a "direct" path --
-  # routed the slow way through the router's OpenVPN, slower than DERP.
-  # Tailscale has no CIDR endpoint-exclude, but it marks its own underlay
-  # (WireGuard) sends with fwmark 0x80000 (its bypass mark -- see `ip rule`).
-  # This policy rule makes ONLY those marked sends to 10.8.0.0/24 unreachable,
-  # so Tailscale drops that endpoint and falls back to DERP, while unmarked
-  # traffic (deliberate OpenVPN use as a Tailscale-down fallback, ssh, ping,
-  # ...) still reaches 10.8 normally. `yulee` resolves to its Tailscale IP, so
-  # the ssh remote-builder is unaffected.
-  systemd.services.tailscale-no-ovpn-path = {
-    description = "Keep Tailscale off the router's OpenVPN 10.8.0.0/24 direct path (10.8 stays usable otherwise)";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "tailscaled.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      # add if not already present (idempotent across restarts)
-      ExecStart = pkgs.writeShellScript "tailscale-no-ovpn-path" ''
-        ${pkgs.iproute2}/bin/ip rule list | ${pkgs.gnugrep}/bin/grep -q "10.8.0.0/24.*0x80000" \
-          || ${pkgs.iproute2}/bin/ip rule add priority 5200 to 10.8.0.0/24 fwmark 0x80000/0xff0000 unreachable
-      '';
-      ExecStop = "-${pkgs.iproute2}/bin/ip rule del priority 5200 to 10.8.0.0/24 fwmark 0x80000/0xff0000 unreachable";
-    };
-  };
-
   wm.compositor = "hyprland";
 
   networking.hostName = "galaxybook4-pro360";
@@ -77,19 +50,7 @@ in
   # Serial access for arduino-cli/arduino-ide (/dev/ttyACM*, /dev/ttyUSB*).
   users.users.r0k0r.extraGroups = [ "dialout" ];
 
-  # mkOrder 1600 puts this after pkgs-config.nix's mkAfter (1500) block: this
-  # overlay must have the last word on the BUILD platform, otherwise a later
-  # overlay re-patches an attribute we just pointed at upstream and the
-  # derivation diverges from cache.nixos.org again. It is a no-op on the HOST
-  # platform, so it cannot disturb the march'd/O3/LTO package set.
-  nixpkgs.overlays = lib.mkMerge [
-    (lib.mkOrder 1600 [
-      (import ../../modules/nixos/nix/upstream-tools-overlay.nix {
-        inherit lib inputs;
-      })
-    ])
-
-    [
+  nixpkgs.overlays = [
     inputs.niri.overlays.niri
     (import ../../modules/nixos/nix/o3-overlay.nix { inherit hostRuntimeClassifier; })
     (import ../../modules/nixos/nix/gentoo-lto-overlay.nix { inherit hostRuntimeClassifier; })
@@ -644,6 +605,5 @@ in
           config = prev.config;
         };
       })
-    ]
   ];
 }
