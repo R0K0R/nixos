@@ -43,9 +43,8 @@
   inputs,
   system ? "x86_64-linux",
   /*
-    Attributes that encode platform identity, and therefore cannot be imported
-    from a package set built for a different platform. Each entry was found by
-    bisection or by the error it produced -- none are guesses:
+    Two exclusions the target-awareness test below cannot express, because they
+    are not packages that target a platform -- they ARE platform machinery:
 
       *stdenv*        a foreign stdenv is an entire alternate fixpoint. This was
                       the sole cause of the "infinite recursion encountered"
@@ -54,12 +53,17 @@
       *EmulatorHook*  asserts on canExecute, which pseudo-cross inverts:
                       "mesonEmulatorHook may only be added to nativeBuildInputs
                       when the target binaries can't be executed".
-      toolchain       gcc/clang/binutils/llvm/glibc and the *-wrapper family are
-                      platform-checked: "Refusing to evaluate package
-                      'gcc-wrapper' ... not available on the requested
-                      hostPlatform".
-      initialPath     coreutils, bash, gnumake, ... feed stdenv construction;
-                      swapping them perturbs the bootstrap itself.
+  */
+  excludePatterns ? [
+    "stdenv"
+    "emulatorhook"
+  ],
+  /*
+    stdenv's initialPath. Not target-aware, so not caught below, and in practice
+    aliasing them is a no-op (the fork does not patch them, so its build-platform
+    copies are already upstream-identical). Kept as cheap insurance: these feed
+    stdenv construction, and nixpkgs re-evaluates the overlay list per bootstrap
+    stage.
   */
   excludeNames ? [
     "coreutils"
@@ -77,39 +81,6 @@
     "xz"
     "file"
     "patchelf"
-    "glibc"
-    "gcc"
-    "binutils"
-  ],
-  excludePatterns ? [
-    "stdenv"
-    "emulatorhook"
-    "wrapper"
-  ],
-  /*
-    Prefix matches, lowercased. Deliberately over-inclusive: a wrongly excluded
-    package merely builds from the fork instead of substituting, whereas a
-    wrongly included one breaks the toolchain. So "mold" also catches molden,
-    and "lld" also catches lldb/lldap/lldpd -- accepted.
-
-    The linker entries (mold, lld) are here for the same reason as bintools:
-    these packages ship TARGET-PREFIXED binaries. Upstream's native build has
-    only bare `ld.mold`, so aliasing it left the cross bintools-wrapper
-    symlinking x86_64-unknown-linux-gnu-ld.mold at a file that does not exist:
-      ERROR: noBrokenSymlinks: ... points to a missing target
-  */
-  excludePrefixes ? [
-    "bintools"
-    "gcc"
-    "clang"
-    "binutils"
-    "llvm"
-    "libgcc"
-    "glibc"
-    "mold"
-    "lld"
-    "libbfd"
-    "libopcodes"
   ],
 }:
 
@@ -138,13 +109,48 @@ let
 
   lower = lib.toLower;
 
+  /*
+    Target-awareness test -- the derived rule, replacing a hand-written list of
+    name prefixes that had to be extended five times, each time by something
+    breaking mid-build (stdenv, EmulatorHook, the wrappers, bintools, mold).
+
+    A package must not be imported from another package set if it is a *tool that
+    targets a platform*, because its binaries are named for that target. From
+    pkgs/build-support/{cc,bintools,pkg-config}-wrapper/default.nix:
+
+      targetPrefix = optionalString (targetPlatform != hostPlatform)
+                       (targetPlatform.config + "-");
+      pname = targetPrefix + ...;
+
+    So a cross toolchain ships x86_64-unknown-linux-gnu-ld.mold while upstream's
+    native build ships only bare ld.mold -- which is precisely how aliasing mold
+    left the cross bintools-wrapper pointing at a file that does not exist. The
+    same wrappers publish targetPrefix in passthru, so the property is directly
+    queryable rather than inferred from the name.
+
+    Catches 63 attributes: the whole toolchain (bintools*, binutils*, gcc*,
+    clang*, gccgo*, gfortran*, gnat*, flang*, ghc, mold, mold-wrapped,
+    pkg-config, pkgconf, cctools, emscripten, arocc, wild, ccacheWrapper,
+    distccWrapper, ...). Both packages that broke builds are in it. It does NOT
+    catch molden, lldb, lldap or lldpd, which the "mold"/"lld" prefix guesses
+    wrongly swept up.
+
+    Costs nothing extra: `fork` is already imported for the derivation check.
+  */
+  isTargetAware =
+    n:
+    let
+      r = builtins.tryEval ((fork.${n}.targetPrefix or null) != null);
+    in
+    r.success && r.value;
+
   keepable =
     n:
     !(builtins.elem n excludeNames)
     && !(lib.any (p: lib.hasInfix p (lower n)) excludePatterns)
-    && !(lib.any (p: lib.hasPrefix p (lower n)) excludePrefixes)
     && isDrvIn fork n
-    && isDrvIn upstream n;
+    && isDrvIn upstream n
+    && !(isTargetAware n);
 
   aliasNames = builtins.filter keepable (builtins.attrNames fork);
 in
