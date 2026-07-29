@@ -57,8 +57,11 @@ let
   # (passthru only), so this is the same interpreter either way.
   stubTk = prev.perl5.pkgs.Tk.overrideAttrs (old: {
     buildPhase = "true";
+    # buildPerlPackage declares outputs = [ "out" "devdoc" ], and nix fails the
+    # build if a declared output directory is never created -- so $devdoc has to
+    # be made even though it stays empty.
     installPhase = ''
-      mkdir -p $out/${prev.perl5.libPrefix}
+      mkdir -p $out/${prev.perl5.libPrefix} $devdoc
       echo "package Tk; 1;" > $out/${prev.perl5.libPrefix}/Tk.pm
     '';
     doCheck = false;
