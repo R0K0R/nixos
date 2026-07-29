@@ -1,4 +1,9 @@
-{ inputs, lib, ... }:
+{
+  inputs,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # Computed once and shared between o3-overlay.nix and gentoo-lto-overlay.nix
@@ -45,6 +50,36 @@ in
 
   systemd.tmpfiles.rules = [
     "L /root/.claude - - - - /home/r0k0r/.claude"
+
+    /*
+      Claude Desktop's Cowork ("dispatch") microVM refuses to start with
+      "Cowork requires QEMU" even though QEMU is installed. The message is
+      misleading: the gate is
+
+        !qemuPath || !firmwarePath || !virtiofsdPath
+
+      and all three report the same string. qemu-system-x86_64 is resolved by
+      walking $PATH so it is found; virtiofsd and the guest image ship inside
+      the .deb. The one that fails is firmwarePath, probed at hardcoded Debian
+      absolute paths -- ["/usr/share/OVMF/OVMF_CODE_4M.fd",
+      "/usr/share/OVMF/OVMF_CODE.fd"] -- and /usr/share does not exist here.
+
+      The variables store is not probed separately; the app derives it from
+      whichever CODE path matched, by literal substitution:
+
+        e.replace("OVMF_CODE","OVMF_VARS")
+
+      so CODE and VARS must sit beside each other under the same name stem, and
+      must be a matched pair (pflash sizes have to agree) -- hence both links
+      into the same OVMF build rather than two independently-resolved paths.
+
+      Symlinking rather than patching app.asar: blacken.py can only do
+      same-length byte replacements, and a /nix/store path is far longer than
+      the Debian one. This also survives Claude Desktop updates.
+    */
+    "d /usr/share/OVMF 0755 root root -"
+    "L+ /usr/share/OVMF/OVMF_CODE.fd - - - - ${pkgs.OVMF.firmware}"
+    "L+ /usr/share/OVMF/OVMF_VARS.fd - - - - ${pkgs.OVMF.variables}"
   ];
 
   # Serial access for arduino-cli/arduino-ide (/dev/ttyACM*, /dev/ttyUSB*).
