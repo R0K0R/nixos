@@ -1,16 +1,5 @@
 { pkgs, inputs, ... }:
 
-let
-  # Unpatched upstream nixpkgs, imported with allowUnfree so its prebuilt
-  # (Hydra-cached) packages can be pulled in verbatim -- bypassing this
-  # fork's pseudo-cross stdenv for things we don't want rebuilt from source.
-  # legacyPackages.<pkg> would ignore this system's allowUnfree, so import
-  # explicitly here.
-  upstream = import inputs.nixpkgs-upstream {
-    system = "x86_64-linux";
-    config.allowUnfree = true;
-  };
-in
 with pkgs;
 [
   # claude-desktop, hash-pinned via the claude-desktop-bin flake input (see
@@ -124,7 +113,12 @@ with pkgs;
 
   openjdk25_headless
 
-  upstream.qemu
+  # Was `upstream.qemu` (unpatched nixpkgs, prebuilt from Hydra). Audited against
+  # the runtime closure: that single reference dragged in 151 untuned packages --
+  # its own private glibc, systemd, gtk4 and pipewire among them -- which was 74%
+  # of every upstream-identical package in the system closure. Building it here
+  # instead costs one large build but removes all 151.
+  qemu
 
   # CPU / power monitoring
   powertop
