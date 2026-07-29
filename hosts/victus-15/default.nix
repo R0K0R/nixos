@@ -53,6 +53,24 @@ in
     [
       (import ../../modules/nixos/nix/o3-overlay.nix { inherit hostRuntimeClassifier; })
       (import ../../modules/nixos/nix/gentoo-lto-overlay.nix { inherit hostRuntimeClassifier; })
+
+      # F8 (ported from galaxybook4-pro360): fresh native i686 stdenv, bypassing
+      # the pseudo-cross overlay. Pattern D.
+      # Without this, pkgsi686Linux inherits the znver3 hostPlatform overlay →
+      # triple-cross (BUILD=x86_64 → HOST=i686 → TARGET=i686 pseudo-cross) which
+      # breaks 32-bit compat packages (mesa i686, libgcrypt i686, etc.) -- a
+      # real, pre-existing nixpkgs defect in genuine x86_64->i686 cross builds,
+      # confirmed reproducible on plain unpatched upstream nixpkgs too. Only
+      # surfaced here because enable32Bit + the buildPlatform split together
+      # first exercise a genuine (rather than native-reimport) pkgsi686Linux.
+      (final: prev:
+        let isZnver3Host = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "znver3";
+        in lib.optionalAttrs isZnver3Host {
+          pkgsi686Linux = import inputs.nixpkgs {
+            localSystem = { system = "i686-linux"; };
+            config = prev.config;
+          };
+        })
     ]
   ];
 
