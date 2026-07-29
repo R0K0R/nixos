@@ -8,7 +8,7 @@
 
 let
   emacsEnv = import ./env.nix { inherit pkgs inputs; };
-  inherit (emacsEnv) emacsVtermModulePkg;
+  inherit (emacsEnv) vtermInstallScript;
 in
 {
   home.activation.syncDoomEmacsFramework = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
@@ -37,24 +37,6 @@ in
   home.activation.installNixEmacsVtermIntoStraight =
     lib.hm.dag.entryAfter [ "syncDoomEmacsFramework" ]
       ''
-        set -euo pipefail
-        shopt -s nullglob
-        vf=( ${emacsVtermModulePkg}/share/emacs/site-lisp/elpa/vterm-*/vterm-module.so )
-        if [[ ''${#vf[@]} -eq 0 ]]; then
-          echo "home-manager: no vterm-module.so under ${emacsVtermModulePkg}" >&2
-          exit 0
-        fi
-        so="''${vf[0]}"
-        straight="${config.home.homeDirectory}/.emacs.d/.local/straight"
-        repo="$straight/repos/emacs-libvterm"
-        if [[ -d "$repo" ]]; then
-          install -Dm444 "$so" "$repo/vterm-module.so"
-        fi
-        if [[ -d "$straight" ]]; then
-          for d in "$straight"/build-*/vterm; do
-            [[ -d "$d" ]] || continue
-            install -Dm444 "$so" "$d/vterm-module.so"
-          done
-        fi
+        ${vtermInstallScript} "${config.home.homeDirectory}/.emacs.d"
       '';
 }
