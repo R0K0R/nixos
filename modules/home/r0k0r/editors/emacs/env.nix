@@ -28,7 +28,41 @@ let
   emacsVtermModulePkg = (pkgs.emacsPackagesFor emacsPgtkBase).vterm;
 
   emacsRolling = emacsPgtkBase;
+
+  /*
+    Shared by activation.nix and the doom-sync service. `doom sync` rebuilds
+    Straight's build-<ver>/ trees, which discards the vterm-module.so placed
+    there on activation -- so the sync has to re-run this afterwards, and both
+    call sites need the same logic. Takes ~/.emacs.d as $1.
+  */
+  vtermInstallScript = pkgs.writeShellScript "install-nix-vterm-into-straight" ''
+    set -uo pipefail
+    shopt -s nullglob
+    emacsd="''${1:?usage: $0 <emacs.d>}"
+    vf=( ${emacsVtermModulePkg}/share/emacs/site-lisp/elpa/vterm-*/vterm-module.so )
+    if [[ ''${#vf[@]} -eq 0 ]]; then
+      echo "no vterm-module.so under ${emacsVtermModulePkg}" >&2
+      exit 0
+    fi
+    so="''${vf[0]}"
+    straight="$emacsd/.local/straight"
+    repo="$straight/repos/emacs-libvterm"
+    if [[ -d "$repo" ]]; then
+      install -Dm444 "$so" "$repo/vterm-module.so"
+    fi
+    if [[ -d "$straight" ]]; then
+      for d in "$straight"/build-*/vterm; do
+        [[ -d "$d" ]] || continue
+        install -Dm444 "$so" "$d/vterm-module.so"
+      done
+    fi
+  '';
 in
 {
-  inherit emacsPgtkBase emacsVtermModulePkg emacsRolling;
+  inherit
+    emacsPgtkBase
+    emacsVtermModulePkg
+    emacsRolling
+    vtermInstallScript
+    ;
 }
