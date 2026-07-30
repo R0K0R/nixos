@@ -98,6 +98,44 @@ let
 
   bb = final.pkgsBuildBuild.qt6;
 
+  # Second, independent instance of the same bug, in qmake rather than cmake.
+  # qtbase-setup-hook.sh:42 registers its QMAKEPATH collector by writing
+  # straight into the accumulator:
+  #
+  #     envBuildHostHooks+=(qmakePathHook)
+  #
+  # which is pkgsBuildHost only -- nativeBuildInputs. The Qt modules whose
+  # mkspecs qmake needs are buildInputs, so they never get collected. moonlight-qt
+  # showed it as:
+  #
+  #     QMAKEPATH=<buildPlatform qtbase>-dev:<buildPlatform qtbase>
+  #     Project ERROR: Unknown module(s) in QT: quick quickcontrols2 svg
+  #
+  # -- only the buildPlatform qtbase, and qtbase alone ships none of those
+  # modules. Same duct tape: register an equivalent collector at $targetOffset
+  # from wrapQtAppsHook, which is a nativeBuildInput and so gets sourced.
+  #
+  # Appended after wrap-qt-apps-hook.sh's own `if [[ -z "$__nix_wrapQtAppsHook" ]]`
+  # once-guard closes, hence its own guard here: a setup-hook can be sourced more
+  # than once, and a second addEnvHooks would duplicate every QMAKEPATH entry.
+  qmakePathSnippet = prev.writeText "qt-cross-qmake-path-hook.sh" ''
+
+    if [[ -z "''${__nix_qtCrossQmakePath-}" ]]; then
+        __nix_qtCrossQmakePath=1
+        declare -Ag qtCrossQmakePathSeen=()
+        qtCrossQmakePathHook() {
+            if [ -n "''${qtCrossQmakePathSeen[$1]-}" ]; then return; fi
+            qtCrossQmakePathSeen[$1]=1
+            if [ -d "$1/mkspecs" ]; then
+                QMAKEMODULES="''${QMAKEMODULES-}''${QMAKEMODULES:+:}/mkspecs"
+                QMAKEPATH="''${QMAKEPATH-}''${QMAKEPATH:+:}$1"
+                export QMAKEMODULES QMAKEPATH
+            fi
+        }
+        addEnvHooks "$targetOffset" qtCrossQmakePathHook
+    fi
+  '';
+
   crossHelperFlags = [
     "-DQt6CoreTools_DIR=${bb.qtbase}/lib/cmake/Qt6CoreTools"
     "-DQt6QmlTools_DIR=${bb.qtdeclarative}/lib/cmake/Qt6QmlTools"
@@ -127,6 +165,10 @@ in
                 mkdir -p "$out/nix-support"
                 printf '%s\n' ${lib.escapeShellArgs crossHelperFlags} \
                   > "$out/nix-support/cmake-cross-helper-flags"
+
+                # cp'd out of the store by makeSetupHook, so read-only.
+                chmod +w "$out/nix-support/setup-hook"
+                cat ${qmakePathSnippet} >> "$out/nix-support/setup-hook"
               '';
           });
         }
