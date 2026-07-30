@@ -97,6 +97,7 @@ in
     (import ../../modules/nixos/nix/o3-overlay.nix { inherit hostRuntimeClassifier; })
     (import ../../modules/nixos/nix/gentoo-lto-overlay.nix { inherit hostRuntimeClassifier; })
     (import ../../modules/nixos/nix/perl-tk-stub-overlay.nix)
+    (import ../../modules/nixos/nix/qt-cross-tools-ducttape.nix)
 
     # Meteor Lake-P integrated graphics (Intel Arc Graphics, PCI 8086:7d55)
     # is the only GPU on this laptop — no discrete AMD/NVIDIA to support.
