@@ -26,6 +26,7 @@ in
     ./webcam.nix
     ./flamenco.nix
     ./sshfs-yulee.nix
+    ./flatpak.nix
     inputs.niri.nixosModules.niri
     ../../modules/nixos
     ../../modules/nixos/nix/remote-builder-client.nix
