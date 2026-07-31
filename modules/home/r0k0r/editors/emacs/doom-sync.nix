@@ -112,7 +112,17 @@ let
 
     # try-restart, not restart: does nothing if the daemon was never running,
     # which is the case on a switch from a tty with no graphical session.
-    ${lib.getExe' pkgs.systemd "systemctl"} --user try-restart emacs.service || true
+    #
+    # --no-block is load-bearing, not an optimization: emacs.service has
+    # Before=emacs.service on THIS unit (see below), so systemd will not
+    # dispatch emacs.service's restart job until doom-sync.service's own job
+    # finishes. A blocking try-restart called from inside that job waits on a
+    # job that is itself waiting on this call to return -- a self-deadlock.
+    # Observed 2026-07-31: stuck "activating" for 2+ hours after a switch that
+    # rebuilt emacs-pgtk, with the daemon already dead and no way to reach it
+    # short of killing this call by hand. The stamp write above already
+    # completed by the time we get here, so there is nothing left to block on.
+    ${lib.getExe' pkgs.systemd "systemctl"} --user try-restart --no-block emacs.service || true
   '';
 in
 {
