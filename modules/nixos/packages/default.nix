@@ -1,17 +1,19 @@
 { pkgs, inputs, hostName, ... }:
 
 let
+  up = import ./user-packages.nix { inherit pkgs; };
+  commonComplexPkgs = import ./common.nix { inherit pkgs inputs; };
+
   hostSysFile = ./hosts/${hostName}.nix;
   hostSysPkgs =
     if builtins.pathExists hostSysFile then import hostSysFile { inherit pkgs inputs; } else [ ];
-
-  accountCommon = import ./accounts/r0k0r.nix { inherit pkgs; };
 
   hostAccountFile = ./accounts/hosts/${hostName}.nix;
   hostAccountPkgs =
     if builtins.pathExists hostAccountFile then import hostAccountFile { inherit pkgs; } else [ ];
 in
 {
-  environment.systemPackages = (import ./common.nix { inherit pkgs inputs; }) ++ hostSysPkgs;
-  users.users.r0k0r.packages = accountCommon ++ hostAccountPkgs;
+  environment.systemPackages =
+    up.system.common ++ (up.system.${hostName} or [ ]) ++ hostSysPkgs ++ commonComplexPkgs;
+  users.users.r0k0r.packages = up.account.common ++ (up.account.${hostName} or [ ]) ++ hostAccountPkgs;
 }

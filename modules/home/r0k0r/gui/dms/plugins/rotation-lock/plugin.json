@@ -1,0 +1,12 @@
+{
+    "id": "rotationLock",
+    "name": "Rotation Lock",
+    "description": "Lock screen orientation, pausing accelerometer-based autorotate",
+    "version": "1.0.0",
+    "author": "r0k0r",
+    "type": "widget",
+    "capabilities": ["control-center"],
+    "component": "./RotationLock.qml",
+    "icon": "screen_lock_rotation",
+    "permissions": ["settings_read"]
+}

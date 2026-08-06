@@ -1,0 +1,12 @@
+{
+    "id": "noSleep",
+    "name": "No Sleep",
+    "description": "Block idle, suspend, and lid-close suspend while enabled",
+    "version": "1.0.0",
+    "author": "r0k0r",
+    "type": "widget",
+    "capabilities": ["control-center"],
+    "component": "./NoSleep.qml",
+    "icon": "coffee",
+    "permissions": []
+}
