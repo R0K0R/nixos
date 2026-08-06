@@ -60,7 +60,7 @@
   modalElevationEnabled = true;
   popoutElevationEnabled = true;
   barElevationEnabled = false;
-  blurEnabled = true;
+  blurEnabled = false;
   # false: this is DMS's own fake blur -- it blurs the BACKGROUND when
   # overlays open (observed as "spotlight blurs background, not itself")
   # and fights Hyprland's real per-surface blur (the layerrules in
@@ -148,6 +148,20 @@
     }
     {
       id = "darkMode";
+      enabled = true;
+      width = 50;
+    }
+    {
+      # "plugin_" prefix (not the bare plugin id) is what routes this to
+      # PluginService.pluginWidgetComponents in DMS's DragDropGrid.qml --
+      # otherwise it falls through to the builtin-only switch and renders
+      # as an "Unknown" placeholder tile.
+      id = "plugin_noSleep";
+      enabled = true;
+      width = 50;
+    }
+    {
+      id = "plugin_rotationLock";
       enabled = true;
       width = 50;
     }
@@ -534,6 +548,10 @@
         {
           enabled = true;
           id = "dankKDEConnect";
+        }
+        {
+          enabled = true;
+          id = "oskToggle";
         }
       ];
       screenPreferences = [

@@ -1,8 +1,9 @@
-{ lib, pkgs, inputs, ... }:
+{ lib, pkgs, inputs, hostName, ... }:
 
 let
   hostRuntimeClassifier = import ../../modules/nixos/nix/host-runtime-classifier.nix {
     inherit inputs;
+    host = hostName;
     system = "x86_64-linux";
   };
 in
@@ -46,7 +47,7 @@ in
   nixpkgs.overlays = lib.mkMerge [
     (lib.mkOrder 1600 [
       (import ../../modules/nixos/nix/upstream-tools-overlay.nix {
-        inherit lib inputs;
+        inherit lib inputs hostRuntimeClassifier;
       })
     ])
 

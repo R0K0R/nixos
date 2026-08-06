@@ -2,6 +2,7 @@
   inputs,
   lib,
   pkgs,
+  hostName,
   ...
 }:
 
@@ -12,6 +13,7 @@ let
   # need the identical result.
   hostRuntimeClassifier = import ../../modules/nixos/nix/host-runtime-classifier.nix {
     inherit inputs;
+    host = hostName;
     system = "x86_64-linux";
   };
 in
@@ -89,7 +91,7 @@ in
   nixpkgs.overlays = lib.mkMerge [
     (lib.mkOrder 1600 [
       (import ../../modules/nixos/nix/upstream-tools-overlay.nix {
-        inherit lib inputs;
+        inherit lib inputs hostRuntimeClassifier;
       })
     ])
 
@@ -356,63 +358,13 @@ in
       });
     })
 
-    # Pseudo-cross Qt6 native-tool fixes.  Several HOST Qt modules need native
-    # (build-platform) tool executables during their own build phase.  Qt cmake
-    # doesn't find them in a pseudo-cross setup because NIXPKGS_CMAKE_PREFIX_PATH
-    # only includes HOST packages; native tool cmake dirs are never added.
-    # Pattern: add nativePkg to nativeBuildInputs (so Nix copies it into the
-    # sandbox) and point cmake directly at the tools package via -D.
-    # See cross-debug/45, cross-debug/46, cross-debug/48.
-    (final: prev:
-      let
-        isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
-        nativeBuildQt = attr: final.pkgsBuildBuild.qt6.${attr};
-        addQtNativeTool = nativePkg: toolsPkg: pkg:
-          pkg.overrideAttrs (old: {
-            nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ nativePkg ];
-            cmakeFlags = (old.cmakeFlags or [ ]) ++ [
-              "-D${toolsPkg}_DIR=${nativePkg}/lib/cmake/${toolsPkg}"
-            ];
-          });
-        nativeQtShaderTools = nativeBuildQt "qtshadertools";
-        # Native qtdeclarative has Qt6QuickTools (svgtoqml) and Qt6QmlTools.
-        # nixpkgs already adds Qt6QmlTools_DIR via its own setup hooks; we only
-        # need to add the Quick tools dir (new in Qt 6.8+, not yet in nixpkgs cross logic).
-        nativeQtDeclarative = nativeBuildQt "qtdeclarative";
-
-      in
-      # Guard: only apply to the HOST (meteorlake) package set.  Without this the
-      # overlay would also mutate pkgsBuildBuild.qt6, causing the native qtdeclarative
-      # to gain a (harmless but drv-invalidating) extra nativeBuildInput.
-      lib.optionalAttrs isMeteorLakeHost {
-        # overrideScope returns a plain scope without the makeOverridable `.override`
-        # attribute that callPackage added.  python-packages.nix calls
-        # `pkgs.qt6.override { python3 = self.python; }` which would break without
-        # it.  Restore it from prev so python3Packages can still build its Qt6 scope.
-        qt6 = (prev.qt6.overrideScope (_qfinal: qprev: {
-          # Quick is entirely absent from the HOST build without the native qsb
-          # tool (qtshadertools).  All Qt Quick-dependent packages fail downstream.
-          # Qt6QuickTools (svgtoqml) also lives only in native qtdeclarative.
-          qtdeclarative = qprev.qtdeclarative.overrideAttrs (old: {
-            nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
-              nativeQtShaderTools
-              nativeQtDeclarative
-            ];
-            cmakeFlags = (old.cmakeFlags or [ ]) ++ [
-              "-DQt6ShaderToolsTools_DIR=${nativeQtShaderTools}/lib/cmake/Qt6ShaderToolsTools"
-              "-DQt6QuickTools_DIR=${nativeQtDeclarative}/lib/cmake/Qt6QuickTools"
-            ];
-          });
-          # qscxmlc is only in the native qtscxml; HOST qtscxml can't find it
-          # via cmake's default search, so the HOST build fails to configure.
-          qtscxml = addQtNativeTool
-            (nativeBuildQt "qtscxml") "Qt6ScxmlTools" qprev.qtscxml;
-          # repc (remote object compiler) is only in native qtremoteobjects.
-          qtremoteobjects = addQtNativeTool
-            (nativeBuildQt "qtremoteobjects") "Qt6RemoteObjectsTools" qprev.qtremoteobjects;
-        })) // { inherit (prev.qt6) override; };
-      }
-    )
+    # Pseudo-cross Qt6 native-tool fixes -- REMOVED to test whether they're
+    # redundant with nixpkgs-contrib's own general fix (qtModule.nix's
+    # QT_HOST_PATH + cmake-cross-helper-flags, which already writes
+    # Qt6QuickTools_DIR/Qt6ShaderToolsTools_DIR/Qt6ScxmlTools_DIR/
+    # Qt6RemoteObjectsTools_DIR/Qt6Quick3DTools_DIR for exactly this pattern).
+    # If a rebuild breaks on qtdeclarative/qtscxml/qtremoteobjects, restore
+    # this block from git history.
 
     # nixfmt is Haskell; cross-compiling it drags in iserv-proxy → network (C-FFI)
     # which fails configure with the cross GCC.  Use BUILD-platform binary instead.
@@ -548,30 +500,14 @@ in
       }
     )
 
-    # Issue B: depsBuildBuild's native gcc also installs `${triple}-gcc` (since
-    # for it x86_64-linux-gnu IS the target). setup-hooks append depsBuildBuild
-    # bins to PATH, so the native gcc can shadow the cross cc-wrapper for
-    # prefixed name lookups. The setup-hook below pushes $NIX_CC/bin to the
-    # front of PATH just before each phase so the cross wrapper always wins.
-    # (Issue A — bare `ld` — is handled by F3 in nixpkgs-contrib bintools-wrapper.)
-    (final: prev:
-      let isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
-      in lib.optionalAttrs isMeteorLakeHost {
-        stdenv = prev.stdenv.override (old: {
-          extraNativeBuildInputs = (old.extraNativeBuildInputs or [ ]) ++ [
-            (prev.buildPackages.runCommand "cross-cc-priority-hook" { } ''
-              mkdir -p $out/nix-support
-              cat > $out/nix-support/setup-hook <<'EOF'
-              _crossCcFront() { export PATH=$NIX_CC/bin:$PATH; }
-              preConfigureHooks+=(_crossCcFront)
-              preBuildHooks+=(_crossCcFront)
-              preCheckHooks+=(_crossCcFront)
-              preInstallHooks+=(_crossCcFront)
-              EOF
-            '')
-          ];
-        });
-      })
+    # Issue B (depsBuildBuild's raw gcc self-aliasing and shadowing the cross
+    # cc-wrapper via PATH order) used to be worked around here with a
+    # per-host stdenv.override setup-hook -- removed, superseded by a general
+    # fix in nixpkgs-contrib itself (cc-wrapper/setup-hook.sh, commit
+    # 85b6fb8dc813), which applies universally rather than only on
+    # galaxybook. alsa-firmware's own per-package CC= override (also a
+    # workaround for the same bug) is likewise superseded but left in place
+    # for now since it's harmless alongside the general fix.
 
     # kdePackages.breeze (v6) builds a Qt5 Breeze style plugin by referencing
     # libsForQt5.__internalKF5.kirigami2, which pulls in the KDE5 framework chain

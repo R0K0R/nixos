@@ -1,0 +1,12 @@
+{
+    "id": "oskToggle",
+    "name": "On-Screen Keyboard",
+    "description": "Toggle the wvkbd on-screen keyboard from the bar",
+    "version": "1.0.0",
+    "author": "r0k0r",
+    "type": "widget",
+    "capabilities": ["dankbar-widget"],
+    "component": "./OskToggle.qml",
+    "icon": "keyboard",
+    "permissions": []
+}

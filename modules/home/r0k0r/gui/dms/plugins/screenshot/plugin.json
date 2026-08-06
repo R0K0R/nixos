@@ -1,0 +1,12 @@
+{
+    "id": "screenshot",
+    "name": "Grimblast Screenshot",
+    "description": "initiate grimblast screenshot when clicked",
+    "version": "1.0.0",
+    "author": "r0k0r",
+    "type": "widget",
+    "capabilities": ["dankbar-widget"],
+    "component": "./Screenshot.qml",
+    "icon": "camera",
+    "permissions": []
+}

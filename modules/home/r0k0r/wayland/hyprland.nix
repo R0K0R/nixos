@@ -20,6 +20,56 @@ let
       fcitx5-remote -o
     fi
   '';
+
+  /*
+    iio-hyprland only ever sends hyprctl a *partial* monitor rule --
+    "keyword monitor eDP-1,transform,N" -- which patches the transform
+    field without Hyprland recomputing the transformed (width/height
+    swapped) box. Verified live: bar/dock/background stayed at landscape
+    geometry after a bare transform,1, and only snapped to portrait once
+    resolution/position/scale were restated alongside it in the same
+    keyword command.
+
+    This shim sits in front of the real hyprctl (PATH-shadowed for
+    iio-hyprland only, below) and rewrites just that one command: look up
+    the monitor's current mode via `hyprctl monitors -j` (same call
+    iio-hyprland already makes for its own monitor-id lookup), then
+    reissue the batch with a full rule instead of the bare transform.
+    Anything else passes through untouched.
+  */
+  hyprctlTransformShim = pkgs.writeShellScriptBin "hyprctl" ''
+    real=${pkgs.hyprland}/bin/hyprctl
+    if [ "$1" = "--batch" ] && [[ "$2" == *"keyword monitor "*",transform,"* ]]; then
+      if [[ "$2" =~ keyword\ monitor\ ([^,]+),transform,([0-9]+) ]]; then
+        mon="''${BASH_REMATCH[1]}"
+        xform="''${BASH_REMATCH[2]}"
+        if [ "$xform" = "0" ]; then
+          # Returning to transform 0 is its own separate bug: even the full
+          # monitor rule below leaves layer-shell clients stuck at the
+          # rotated geometry here, though hyprctl monitors correctly
+          # reports transform:0 -- verified live. `reload` reliably forces
+          # the resync, and since the static config has no transform
+          # override, it also lands exactly on the landscape state wanted.
+          exec "$real" reload
+        fi
+        read -r w h r x y scale < <("$real" monitors -j | ${pkgs.jq}/bin/jq -r --arg m "$mon" \
+          '.[] | select(.name == $m) | "\(.width) \(.height) \(.refreshRate) \(.x) \(.y) \(.scale)"')
+        if [ -n "''${w:-}" ]; then
+          full="monitor $mon,''${w}x''${h}@''${r},''${x}x''${y},''${scale},transform,$xform"
+          patched="''${2/keyword monitor $mon,transform,$xform/keyword $full}"
+          exec "$real" --batch "$patched"
+        fi
+      fi
+    fi
+    exec "$real" "$@"
+  '';
+
+  # Only iio-hyprland's own hyprctl calls go through the shim -- everything
+  # else in the session (DMS, terminal, keybinds) keeps using the real one.
+  iioHyprlandWithTransformFix = pkgs.writeShellScriptBin "iio-hyprland" ''
+    export PATH="${hyprctlTransformShim}/bin:$PATH"
+    exec ${pkgs.iio-hyprland}/bin/iio-hyprland "$@"
+  '';
 in
 {
   /*
@@ -29,7 +79,7 @@ in
   */
   home.packages = lib.mkIf (osConfig.wm.compositor == "hyprland") [
     pkgs.grimblast
-    pkgs.iio-hyprland
+    iioHyprlandWithTransformFix
     # iio-hyprland shells out to `hyprctl -j monitors | jq` internally; without
     # jq in PATH it fails immediately and aborts uncleanly (dbus_disconnect
     # crash) instead of just erroring on the missing monitor lookup.
@@ -183,6 +233,11 @@ in
         # surface) so they don't render as a hazy smear.
         "blur on, match:namespace ^(dms.*)$"
         "ignore_alpha 0.05, match:namespace ^(dms.*)$"
+        # Same glass treatment for the OSK (gui/dms/plugins/osk-toggle):
+        # wvkbd's own --alpha only sets its drawn pixels' transparency, the
+        # actual frosted backdrop still needs Hyprland's blur behind it.
+        "blur on, match:namespace ^(wvkbd)$"
+        "ignore_alpha 0.05, match:namespace ^(wvkbd)$"
       ];
 
       /*

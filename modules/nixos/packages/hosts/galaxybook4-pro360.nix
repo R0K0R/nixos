@@ -13,6 +13,7 @@ with pkgs;
       --flake /home/r0k0r/flakes/nixos#galaxybook4-pro360 \
       --builders "" \
       --option max-jobs 4 \
+      --option cores 6 \
       --option substituters "https://cache.nixos.org" \
       "$@"
   '')
@@ -22,9 +23,40 @@ with pkgs;
     exec nixos-rebuild \
       --flake /home/r0k0r/flakes/nixos#galaxybook4-pro360 \
       --option max-jobs 0 \
-      --builders "ssh://r0k0r@yulee x86_64-linux /etc/nix/remote-builder/ssh_key 3 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
+      --builders "ssh://r0k0r@yulee x86_64-linux /etc/nix/remote-builder/ssh_key 7 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
       --option substituters "https://cache.nixos.org ssh://r0k0r@yulee" \
       "$@"
+  '')
+
+  (writeScriptBin "runtime-cache-refresh" ''
+    #! /bin/sh
+    # Refreshes every runtime-cache tier -- the aliasable-names cache
+    # (upstream-tools-overlay.nix's expensive attribute walk, host-independent),
+    # Tier 2 (eval heuristic) for both hosts, and Tier 1 (live system closure)
+    # for this host only, since that one requires actually being on the
+    # target machine. No rebuild. `git add`s the cache dir afterward: these
+    # are new,
+    # untracked-by-default paths, and a dirty git tree's flake evaluation
+    # (what nixos-rebuild actually uses, no --impure) only sees git-tracked
+    # files -- an untracked cache file is invisible to it, silently falling
+    # through to Tier 3 with zero error. Hit exactly this once already:
+    # isHostRuntime "mesa" was already correctly true, but a real rebuild
+    # used none of it because the cache files it needed didn't exist as far
+    # as the evaluated (tracked-only) tree was concerned.
+    set -eu
+    CACHE_DIR=/home/r0k0r/flakes/nixos/modules/nixos/nix/runtime-cache
+
+    echo "refreshing aliasable-names cache (host-independent)..."
+    "$CACHE_DIR/refresh-aliasable.sh"
+
+    echo "refreshing tier2 cache (both hosts)..."
+    "$CACHE_DIR/refresh-tier2.sh" all
+
+    echo "refreshing tier1 cache (this host)..."
+    "$CACHE_DIR/refresh-tier1.sh" galaxybook4-pro360
+
+    git -C /home/r0k0r/flakes/nixos add "$CACHE_DIR"
+    echo "cache refreshed and staged -- commit modules/nixos/nix/runtime-cache if you want this to persist"
   '')
 
   (writeScriptBin "nixos-rebuild-victus-15" ''
@@ -42,7 +74,7 @@ with pkgs;
     exec nixos-rebuild \
       --flake /home/r0k0r/flakes/nixos#galaxybook4-pro360 \
       --option max-jobs 0 \
-      --builders "ssh://r0k0r@victus-15 x86_64-linux /etc/nix/remote-builder/ssh_key 3 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
+      --builders "ssh://r0k0r@victus-15 x86_64-linux /etc/nix/remote-builder/ssh_key 5 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
       "$@"
   '')
 
@@ -51,6 +83,7 @@ with pkgs;
     exec nix-shell \
       --option builders "" \
       --option max-jobs 4 \
+      --option cores 6 \
       --option substituters "https://cache.nixos.org" \
       "$@"
   '')
@@ -59,7 +92,7 @@ with pkgs;
     #! /bin/sh
     exec nix-shell \
       --option max-jobs 0 \
-      --option builders "ssh://r0k0r@yulee x86_64-linux /etc/nix/remote-builder/ssh_key 3 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
+      --option builders "ssh://r0k0r@yulee x86_64-linux /etc/nix/remote-builder/ssh_key 7 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
       --option substituters "https://cache.nixos.org ssh://r0k0r@yulee" \
       "$@"
   '')
@@ -68,61 +101,17 @@ with pkgs;
     #! /bin/sh
     exec nix-shell \
       --option max-jobs 0 \
-      --option builders "ssh://r0k0r@victus-15 x86_64-linux /etc/nix/remote-builder/ssh_key 3 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
+      --option builders "ssh://r0k0r@victus-15 x86_64-linux /etc/nix/remote-builder/ssh_key 5 10 benchmark,big-parallel,kvm,nixos-test,gccarch-meteorlake" \
       --option substituters "https://cache.nixos.org ssh://r0k0r@victus-15" \
       "$@"
   '')
 
-  libreoffice
+  buildPackages.kdePackages.qtdeclarative.dev
 
-  ffmpeg-full
-  rnote
-  siril
-  blender
-  easyeffects
-  moonlight-qt
+  (writeShellScriptBin "qmlls" ''
+    exec ${buildPackages.kdePackages.qtdeclarative}/bin/qmlls "$@"
+  '')
 
-  kdePackages.dolphin
-  kdePackages.kdeconnect-kde
-  kdePackages.qt6ct
-
-  /*
-    fcitx5 tray (Classic UI StatusNotifier): requests Icon `input-keyboard-symbolic` (see dbus
-    `:…/StatusNotifierItem` IconName). That lives in KDE/GNOME themes, not in hicolor-only trees,
-    otherwise QuickShell shows the magenta fallback tile.
-  */
-  kdePackages.breeze-icons
-  adwaita-icon-theme
-  # Base for Bibata-Modern-Classic-Glass (translucent variant built in
-  # modules/home/r0k0r/gui/cursor.nix); also provides the solid variants.
-  bibata-cursors
-  google-chrome
-
-  opencode
-  opencode-claude-auth
-  zoom-us
-
-  # Arduino development (serial access needs the dialout group --
-  # granted in hosts/galaxybook4-pro360/default.nix)
-  arduino-cli
-
-  discord
-
-  # GPU / VA-API diagnostics
-  libva-utils
-
-  openjdk25_headless
-
-  # Was `upstream.qemu` (unpatched nixpkgs, prebuilt from Hydra). Audited against
-  # the runtime closure: that single reference dragged in 151 untuned packages --
-  # its own private glibc, systemd, gtk4 and pipewire among them -- which was 74%
-  # of every upstream-identical package in the system closure. Building it here
-  # instead costs one large build but removes all 151.
-  qemu
-
-  # CPU / power monitoring
-  powertop
-  s-tui
   (kdePackages.kdenlive.overrideAttrs (prev: {
     nativeBuildInputs = (prev.nativeBuildInputs or [ ]) ++ [ makeBinaryWrapper ];
     postInstall = (prev.postInstall or "") + ''
