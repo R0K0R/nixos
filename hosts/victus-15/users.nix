@@ -8,7 +8,10 @@
       isNormalUser = true;
       description = "Joy H.J. Lee";
       extraGroups = [ "networkmanager" "wheel" ];
-      hashedPassword = "REDACTED-HASHED-PASSWORD";
+      # Not tracked in git -- see secrets/ in .gitignore. Must exist at this
+      # exact path on victus-15 itself; read by the activation script at
+      # switch time, never embedded into the Nix store.
+      hashedPasswordFile = "/etc/nixos/secrets/victus-15-hashed-password-r0k0r";
       packages = with pkgs; [ (btop.override { cudaSupport = true; }) ];
       shell = pkgs.fish;
     };
@@ -16,10 +19,10 @@
       isNormalUser = true;
       description = "Benjamin S.H. Lee";
       extraGroups = [ "networkmanager" "wheel" ];
-      hashedPassword = "REDACTED-HASHED-PASSWORD";
+      hashedPasswordFile = "/etc/nixos/secrets/victus-15-hashed-password-benjamin";
       packages = [ ];
     };
-    root.hashedPassword = "REDACTED-HASHED-PASSWORD";
+    root.hashedPasswordFile = "/etc/nixos/secrets/victus-15-hashed-password-r0k0r";
   };
 
   programs.fish.enable = true;
