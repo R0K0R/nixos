@@ -60,7 +60,7 @@
   modalElevationEnabled = true;
   popoutElevationEnabled = true;
   barElevationEnabled = false;
-  blurEnabled = false;
+  blurEnabled = true;
   # false: this is DMS's own fake blur -- it blurs the BACKGROUND when
   # overlays open (observed as "spotlight blurs background, not itself")
   # and fights Hyprland's real per-surface blur (the layerrules in
@@ -508,9 +508,17 @@
       borderThickness = 1;
       bottomGap = 0;
       centerWidgets = [
+        {
+          enabled = true;
+          id = "oskToggle";
+        }
         "music"
         "clock"
         "weather"
+        {
+          enabled = true;
+          id = "screenshot";
+        }
       ];
       clickThrough = false;
       enabled = true;
@@ -548,10 +556,6 @@
         {
           enabled = true;
           id = "dankKDEConnect";
-        }
-        {
-          enabled = true;
-          id = "oskToggle";
         }
       ];
       screenPreferences = [

@@ -358,13 +358,14 @@ in
       });
     })
 
-    # Pseudo-cross Qt6 native-tool fixes -- REMOVED to test whether they're
-    # redundant with nixpkgs-contrib's own general fix (qtModule.nix's
-    # QT_HOST_PATH + cmake-cross-helper-flags, which already writes
-    # Qt6QuickTools_DIR/Qt6ShaderToolsTools_DIR/Qt6ScxmlTools_DIR/
-    # Qt6RemoteObjectsTools_DIR/Qt6Quick3DTools_DIR for exactly this pattern).
-    # If a rebuild breaks on qtdeclarative/qtscxml/qtremoteobjects, restore
-    # this block from git history.
+    # Pseudo-cross Qt6 native-tool fixes (qtdeclarative needing native
+    # qtshadertools+qtdeclarative for Quick's qsb/svgtoqml; qtscxml/
+    # qtremoteobjects needing their own native qscxmlc/repc) used to be
+    # worked around here -- superseded by a general fix in nixpkgs-contrib's
+    # own qtModule.nix, which now adds the pkgsBuildBuild.qt6.* packages the
+    # existing *Tools_DIR cmake flags already reference to each module's own
+    # nativeBuildInputs, gated per-pname the same way the file's existing
+    # cmake-cross-helper-flags block already is.
 
     # nixfmt is Haskell; cross-compiling it drags in iserv-proxy → network (C-FFI)
     # which fails configure with the cross GCC.  Use BUILD-platform binary instead.
@@ -379,25 +380,11 @@ in
       }
     )
 
-    # python-packages.nix creates python3Packages.qt6 via
-    # `pkgs.qt6.override { python3 = self.python; }`.  Because we restored
-    # prev.qt6.override (the un-fixed override), that scope gets the OLD
-    # qtdeclarative and pulls the stale qtquicktimeline drv into the closure via
-    # pyside6 → qtgraphs → qtquicktimeline.  Override python3Packages.qt6 directly
-    # to the already-fixed final.qt6 so all C++ Qt modules are shared.
-    # The python3 arg passed in the original override only matters for qt packages
-    # that carry python3 as a build dep (none in the pyside6→qtgraphs chain).
-    (final: prev:
-      let
-        isMeteorLakeHost = (prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake";
-      in
-      lib.optionalAttrs isMeteorLakeHost {
-        python3Packages = prev.python3Packages // {
-          qt6 = final.qt6;
-        };
-      }
-    )
-
+    # python3Packages.qt6 used to need overriding to final.qt6 here because
+    # prev.qt6.qtdeclarative was stale (built without Quick). Now that the
+    # qtdeclarative fix lives in nixpkgs-contrib itself, prev.qt6.qtdeclarative
+    # is already correct and python-packages.nix's own
+    # `pkgs.qt6.override { python3 = self.python; }` needs no help.
 
     # qcoro calls find_package(Qt6 COMPONENTS Quick) which makes Qt6Config.cmake
     # validate each component at qtbase's prefix. nixpkgs puts qtdeclarative in a
@@ -442,14 +429,12 @@ in
         # JUCE_WEB_BROWSER=0 so JUCE compiles without the web view backend.
         rnnoise-plugin = prev.rnnoise-plugin.overrideAttrs (old: {
           buildInputs = builtins.filter (d: d != prev.webkitgtk_4_1) (old.buildInputs or [ ]);
-          # JUCE spawns a subprocess cmake to build 'juceaide' (its native code-gen
-          # tool) and that subprocess searches PATH for plain 'cc'/'gcc'.  The cross
-          # cc-wrapper only provides triple-prefixed names ('x86_64-unknown-linux-
-          # gnu-gcc'), so cmake reports "No CMAKE_C_COMPILER could be found".
-          # Adding pkgsBuildBuild.stdenv.cc puts plain gcc/cc in PATH for juceaide.
-          nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
-            final.pkgsBuildBuild.stdenv.cc
-          ];
+          # juceaide's missing bare cc/gcc on PATH used to be worked around
+          # here with a pkgsBuildBuild.stdenv.cc nativeBuildInput --
+          # superseded by a general fix in nixpkgs-contrib's own
+          # rnnoise-plugin package.nix (commit 8de9e0f2c075), which does the
+          # same thing unconditionally whenever hostPlatform != buildPlatform.
+          #
           # LV2 requires juce_lv2_helper, a HOST-compiled post-processor that cmake
           # runs on the BUILD machine (yulee/znver5).  In pseudo-cross, the binary
           # is -march=meteorlake-tuned and SIGILLs on yulee.  We only need LADSPA
@@ -471,32 +456,12 @@ in
           env = (old.env or { }) // { NIX_CFLAGS_COMPILE = "-DJUCE_WEB_BROWSER=0"; };
         });
 
-        # kdsoap-ws-discovery-client lives in kdePackages.  It runs the HOST
-        # KDSoap::kdwsdl2cpp cmake imported target (from kdePackages.kdsoap)
-        # at build time to generate WSDL headers.  On meteorlake the binary is
-        # compiled with -march=meteorlake (waitpkg), so it SIGILLs on yulee
-        # (AMD znver5).  Build a patched copy of the kdsoap cmake config that
-        # points kdwsdl2cpp-qt6 to the BUILD-platform binary, then override
-        # KDSoap-qt6_DIR so cmake uses it instead of the HOST cmake config.
-        kdePackages = prev.kdePackages.overrideScope (_kfinal: kprev: {
-          kdsoap-ws-discovery-client = kprev.kdsoap-ws-discovery-client.overrideAttrs (old:
-            let
-              nativeKdsoap = final.pkgsBuildBuild.kdePackages.kdsoap;
-              patchedKdsoapCmake = prev.runCommand "kdsoap-ws-native-cmake" { } ''
-                mkdir -p $out
-                cp -rT "${kprev.kdsoap.dev}/lib/cmake/KDSoap-qt6" $out
-                substituteInPlace "$out/KDSoapTargets-release.cmake" \
-                  --replace-fail \
-                    "${kprev.kdsoap.dev}/bin/kdwsdl2cpp-qt6" \
-                    "${nativeKdsoap.dev}/bin/kdwsdl2cpp-qt6"
-              '';
-            in {
-              nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ nativeKdsoap.dev ];
-              cmakeFlags = (old.cmakeFlags or [ ]) ++ [
-                "-DKDSoap-qt6_DIR=${patchedKdsoapCmake}"
-              ];
-            });
-        });
+        # kdsoap-ws-discovery-client's own workaround for the HOST-vs-BUILD
+        # kdwsdl2cpp SIGILL (kdsoap's exported cmake target used to point at
+        # the meteorlake-tuned HOST binary) is gone -- superseded by a
+        # general fix in nixpkgs-contrib itself (kdsoap's own postInstall,
+        # commit e93f223c8259), which patches KDSoapTargets-release.cmake at
+        # the source (kdsoap) rather than in every consumer downstream.
       }
     )
 
@@ -533,32 +498,16 @@ in
         #      in qtbase or qtgraphs. Without this the PATHS are empty in the nested
         #      scope and Quick/Qml are not found.
         #
-        #   3. *Tools_DIR cache vars — Qt6Quick needs Qt6QuickTools and Qt6Qml needs
-        #      Qt6QmlTools (native build-time tools). They live in pkgsBuildBuild
-        #      qtdeclarative (vyayar14…), not the HOST qtdeclarative. Qt6Quick3D
-        #      needs Qt6Quick3DTools from pkgsBuildBuild qtquick3d. cmake only
-        #      searches under CMAKE_CURRENT_LIST_DIR/.. (= HOST prefix), so the
-        #      native tool cmake dirs must be pointed at explicitly via _DIR vars.
-        easyeffects = prev.easyeffects.overrideAttrs (old:
-          let
-            nativeKconfig = final.pkgsBuildBuild.kdePackages.kconfig;
-          in {
+        # *Tools_DIR / KF6Config_DIR cache vars (Qt6QmlTools, Qt6QuickTools,
+        # Qt6Quick3DTools, KF6Config) used to be pointed at pkgsBuildBuild
+        # here -- superseded by a general fix in nixpkgs-contrib's own
+        # easyeffects package.nix (commit 677e141342c5), which does the same
+        # thing unconditionally whenever hostPlatform != buildPlatform.
+        easyeffects = prev.easyeffects.overrideAttrs (old: {
           buildInputs = lib.filter (p: (p.pname or "") != "breeze") (old.buildInputs or [ ]);
-          nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
-            final.pkgsBuildBuild.qt6.qtdeclarative
-            final.pkgsBuildBuild.qt6.qtquick3d
-            nativeKconfig
-          ];
           cmakeFlags = (old.cmakeFlags or [ ]) ++ [
             "-DQT_ADDITIONAL_PACKAGES_PREFIX_PATH=${final.qt6.qtgraphs};${final.qt6.qtdeclarative};${final.qt6.qtquick3d}"
             "-D_qt_additional_packages_prefix_paths=${final.qt6.qtgraphs}/lib/cmake;${final.qt6.qtdeclarative}/lib/cmake;${final.qt6.qtquick3d}/lib/cmake"
-            "-DQt6QmlTools_DIR=${final.pkgsBuildBuild.qt6.qtdeclarative}/lib/cmake/Qt6QmlTools"
-            "-DQt6QuickTools_DIR=${final.pkgsBuildBuild.qt6.qtdeclarative}/lib/cmake/Qt6QuickTools"
-            "-DQt6Quick3DTools_DIR=${final.pkgsBuildBuild.qt6.qtquick3d}/lib/cmake/Qt6Quick3DTools"
-            # BUILD kconfig cmake already references BUILD binaries — point directly at it
-            # instead of patching the HOST cmake files (kf6HostTooling covers KDE packages;
-            # easyeffects is not built with mkKdeDerivation so needs an explicit flag).
-            "-DKF6Config_DIR=${nativeKconfig.dev}/lib/cmake/KF6Config"
           ];
         });
 

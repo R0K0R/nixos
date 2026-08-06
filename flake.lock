@@ -3,25 +3,25 @@
     "claude-code-bin": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-5EBAz0xgUJZYgqcmjEVE5XG/6TIdIDnwpje2GIDL4qo=",
+        "narHash": "sha256-Mhh06RGbTUQr2knOsLW/aS5Ze1yT/Q7QfJbX+0fSdFo=",
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-code-releases/2.1.219/linux-x64/claude"
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.223/linux-x64/claude"
       },
       "original": {
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-code-releases/2.1.219/linux-x64/claude"
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.223/linux-x64/claude"
       }
     },
     "claude-desktop-bin": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-H7/7J0WTVcU/m6TXLku+Sp7xmQYh51HRuXOlWfJZgdA=",
+        "narHash": "sha256-09tPKHFqqOyRhQMyDNUpYcRW8WHz88a7YFcXa81Pc6g=",
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.24012.9_amd64.deb"
+        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.24012.11_amd64.deb"
       },
       "original": {
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.24012.9_amd64.deb"
+        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.24012.11_amd64.deb"
       }
     },
     "dms": {
@@ -220,11 +220,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1785944931,
-        "narHash": "sha256-j9zgc0/2CuKqBcIwsrkrhyA+61Vf4rVecuWr32/oAEM=",
+        "lastModified": 1785984057,
+        "narHash": "sha256-WWCwobJ/uN7lr/3vGFDEyOu4X5ftO54EWi4BhfEWw3E=",
         "owner": "R0K0R",
         "repo": "nixpkgs",
-        "rev": "85b6fb8dc813c902b962f78b90c04bb634cf8b60",
+        "rev": "54ddc912ce3967d3e5a28e1192beaf496776cdea",
         "type": "github"
       },
       "original": {

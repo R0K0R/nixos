@@ -70,6 +70,38 @@ let
     export PATH="${hyprctlTransformShim}/bin:$PATH"
     exec ${pkgs.iio-hyprland}/bin/iio-hyprland "$@"
   '';
+
+  /*
+    DMS's No Sleep plugin (gui/dms/plugins/no-sleep) inhibits
+    idle:sleep:handle-lid-switch, which blocks logind from taking ANY
+    action on lid close -- including its normal screen-off -- leaving the
+    display lit and unlocked inside a closed lid for as long as the
+    inhibitor holds. Rather than have the plugin manage its own lock/DPMS
+    watcher (a long-running process, with all the QML-lifetime pitfalls
+    that hit rotation-lock's respawn), let Hyprland handle the lid switch
+    directly: it reads the raw libinput switch event itself, independent of
+    logind entirely, via a static keybind that's never spawned/torn down
+    by any widget.
+
+    Both scripts gate on whether the plugin's inhibitor is actually held
+    (pgrep on its --who= tag -- the plugin's only externally-visible
+    marker) so they only act while No Sleep is on; otherwise they no-op and
+    logind's normal suspend flow (already locked via
+    session-lock-hooks.nix's sleep.target hook) proceeds untouched.
+  */
+
+  lidClose = pkgs.writeShellScript "dms-lid-close" ''
+    if ${pkgs.procps}/bin/pgrep -f -- "--who=DMS No Sleep plugin" >/dev/null; then
+      dms ipc call lock lock
+      hyprctl dispatch dpms off
+    fi
+  '';
+  lidOpen = pkgs.writeShellScript "dms-lid-open" ''
+    if ${pkgs.procps}/bin/pgrep -f -- "--who=DMS No Sleep plugin" >/dev/null; then
+      hyprctl dispatch dpms on
+    fi
+  '';
+
 in
 {
   /*
@@ -377,6 +409,10 @@ in
       bindl = [
         ", XF86AudioMute, exec, dms ipc call audio mute"
         ", XF86AudioMicMute, exec, dms ipc call audio micmute"
+        # "l" flag (bindl) so these still fire once already locked -- lid
+        # can close after a manual lock, not just trigger one.
+        ", switch:on:Lid Switch, exec, ${lidClose}"
+        ", switch:off:Lid Switch, exec, ${lidOpen}"
       ];
 
       # windowrulev2 is deprecated/removed (0.55+); plain windowrule now carries the

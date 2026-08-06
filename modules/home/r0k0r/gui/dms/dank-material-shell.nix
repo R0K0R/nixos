@@ -45,7 +45,7 @@ in
         enable = true;
         settings = {
           provider = "custom";
-          baseUrl = "http://${aiOllamaHost}:8000/v1";
+          baseUrl = "http://${aiOllamaHost}:8002/v1";
           model = aiOllamaModel;
           saveApiKey = false;
         };

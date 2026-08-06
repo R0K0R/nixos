@@ -1,13 +1,15 @@
-{ pkgs, osConfig, ... }:
+ { pkgs, osConfig, ... }:
 
 let
   /*
     wvkbd upstream has no way to make the panel narrower than the full
     output width: the layer-shell anchor (BOTTOM | LEFT | RIGHT) is a
     compile-time constant with no CLI flag, so "not full width" is only
-    reachable by patching. Also swaps the main "Full" layer's Compose key
-    for Super -- Super otherwise only exists on the "Special" layer,
-    reachable via the next-layer button, not on the primary typing layer.
+    reachable by patching. Also swaps the Compose key for Super on both
+    default primary layers (portrait "Full" and landscape "Landscape" --
+    wvkbd picks between them by aspect ratio, see the layout.mobintl.h edit
+    below) -- Super otherwise only exists on the "Special" layer, reachable
+    via the next-layer button, not on either primary typing layer.
 
     Both edits are pinned to exact upstream line numbers rather than
     context blocks: the surrounding code (esp. the Compose key line) is
@@ -61,10 +63,17 @@ let
       sed -i '64a\
       static uint32_t surface_width = 0; /* 0 = fill horizontally; --width overrides */' main.c
 
-      # keys_full (the default primary layer) only -- keys_full_wide has an
-      # identical Compose-key line at a different address, deliberately
-      # left alone.
+      # main.c:494 picks the active layer set by aspect ratio, not a fixed
+      # default: `keyboard.landscape = available_width > available_height`.
+      # Portrait (width < height) uses layers[] -> Full -> keys_full (line
+      # 237, below). Landscape (width > height, our laptop's normal state)
+      # uses landscape_layers[] -> Landscape -> keys_landscape (line 1153) --
+      # a third, separate array, NOT keys_full_wide (that one maps to the
+      # unused FullWide id and isn't in either default cycle list). Missing
+      # this is exactly why an earlier version of this patch only showed
+      # Super when the panel was rotated vertical.
       sed -i '237s/.*/  {"Sup", "Sup", 1.0, Mod, Super, .scheme = 1},/' layout.mobintl.h
+      sed -i '1153s/.*/  {"Sup", "Sup", 1.0, Mod, Super, .scheme = 1},/' layout.mobintl.h
     '';
   });
 in
@@ -77,6 +86,11 @@ in
     oskToggle = {
       enable = true;
       src = ./plugins/osk-toggle;
+    };
+
+    screenshot = {
+      enable = true;
+      src = ./plugins/screenshot;
     };
 
     noSleep = {
