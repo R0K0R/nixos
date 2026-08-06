@@ -61,7 +61,7 @@
 }:
 stdenv.mkDerivation {
   pname = "claude-desktop";
-  version = "1.20186.9";
+  version = "1.24012.11";
 
   inherit src;
 
@@ -116,6 +116,28 @@ stdenv.mkDerivation {
 
   nativeBuildInputs = [
     dpkg
+    # Supplies GSETTINGS_SCHEMAS_PATH for the makeWrapper call below, by way of
+    # glib's setup hook scanning our buildInputs for share/gsettings-schemas/*.
+    #
+    # It has to be here rather than in buildInputs: that hook registers itself
+    # with `addEnvHooks "$targetOffset"`, and the offsets a dependency is
+    # activated at come from the accumulator it lands in. buildInputs is
+    # pkgsHostTarget, i.e. (hostOffset 0, targetOffset 1), so glib arriving that
+    # way registers into envTargetTargetHooks -- which run over depsTargetTarget,
+    # empty for this package. nativeBuildInputs is pkgsBuildHost, (-1, 0), so the
+    # hook lands in envHostTargetHooks, and those are the ones that scan
+    # buildInputs, where gtk3 is. Same idiom as nixpkgs' own baobab/gedit.
+    #
+    # gtk3 alone is not enough even though it propagates glib, because the
+    # propagated copy inherits gtk3's offsets. Before the intra-ISA strictDeps
+    # relaxation was dropped this still worked by accident: _addToEnv's
+    # non-strict branch ran every hook over all six accumulators, so the
+    # misfiled registration swept up gtk3 anyway.
+    #
+    # Left unquoted at the use site on purpose -- an empty value then eats the
+    # following flag and makeWrapper aborts, rather than silently emitting a
+    # wrapper with no schema path and failing at runtime instead.
+    glib
     makeWrapper
     python3
   ];

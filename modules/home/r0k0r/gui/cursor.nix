@@ -2,7 +2,7 @@
 
 let
   # Match the glass system (dolphin/kitty windows sit at 0.65).
-  alpha = "0.5";
+  alpha = "1";
 
   /*
     "Glass" Bibata: Bibata-Modern-Classic (the Mint 21.1 look) with every

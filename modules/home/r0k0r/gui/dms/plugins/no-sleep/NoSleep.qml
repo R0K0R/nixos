@@ -5,50 +5,64 @@ import qs.Common
 import qs.Services
 import qs.Modules.Plugins
 
-/*
-  Holding a blocking systemd-inhibit lock for the process lifetime, rather
-  than toggling logind settings, keeps this reversible by construction: DMS
-  restarting or crashing just drops the child process and the inhibitor
-  along with it, instead of leaving the machine stuck non-suspending.
-
-  handle-lid-switch is the part that actually satisfies "even with the lid
-  closed" -- logind's default LidSwitchIgnoreInhibited=yes means an active
-  handle-lid-switch inhibitor makes it skip the configured lid action
-  (session-services.nix: HandleLidSwitch=suspend) entirely.
-
-  That also means logind takes no action at all on lid close while this is
-  on -- no lock, no screen-off, just a lit unlocked display inside a closed
-  lid. wayland/hyprland.nix's switch:off/on:"Lid Switch" bindl entries cover
-  that: Hyprland reads the raw libinput switch event directly (independent
-  of logind), and gate on this inhibitor's --who= tag being held to lock +
-  DPMS-off on close and DPMS-on on open, without suspending.
-*/
 PluginComponent {
     id: root
 
-    readonly property bool active: inhibitProcess.running
+    property bool active: false
+    property bool known: false
 
+    // 1. 현재 systemd-inhibit이 떠있는지 pgrep으로 확인
     Process {
-        id: inhibitProcess
+        id: statusProcess
+        // --who에 지정했던 이름으로 검색
+        command: ["pgrep", "-f", "DMS No Sleep plugin"]
+        running: false
+        onExited: (exitCode) => {
+            root.active = (exitCode === 0)
+            root.known = true
+        }
+    }
+
+    // 2. 켜기: sh + setsid + disown으로 완전히 백그라운드로 떼어내서 실행
+    Process {
+        id: startProcess
         command: [
+            "sh", "-c",
+            "setsid \"$@\" </dev/null >/dev/null 2>&1 & disown; exit 0",
+            "sh",
             "systemd-inhibit",
             "--what=idle:sleep:handle-lid-switch",
             "--who=DMS No Sleep plugin",
             "--why=User requested",
             "--mode=block",
-            "sleep",
-            "infinity"
+            "sleep", "infinity"
         ]
+        running: false
+    }
+
+    // 3. 끄기: pkill로 떼어놓았던 백그라운드 프로세스 찾아 죽이기
+    Process {
+        id: stopProcess
+        command: ["pkill", "-f", "DMS No Sleep plugin"]
         running: false
     }
 
     ccWidgetIcon: "coffee"
     ccWidgetPrimaryText: "No Sleep"
-    ccWidgetSecondaryText: active ? "Suspend blocked" : "Off"
+    ccWidgetSecondaryText: !known ? "..." : (active ? "Suspend blocked" : "Off")
     ccWidgetIsActive: active
 
     onCcWidgetToggled: {
-        inhibitProcess.running = !inhibitProcess.running
-        ToastService.showInfo("No Sleep", inhibitProcess.running ? "Suspend blocked -- lid close will lock + blank the screen instead" : "Suspend re-enabled")
+        active = !active
+        if (active) {
+            startProcess.running = true
+        } else {
+            stopProcess.running = true
+        }
+        ToastService.showInfo("No Sleep", active ? "Suspend blocked" : "Suspend re-enabled")
+    }
+
+    Component.onCompleted: {
+        statusProcess.running = true
     }
 }

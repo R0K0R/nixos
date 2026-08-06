@@ -39,7 +39,7 @@
       hostName = "yulee";
       systems = [ "x86_64-linux" "i686-linux" ];
       protocol = "ssh";
-      maxJobs = 10;
+      maxJobs = 7;
       speedFactor = 10;
       sshUser = "r0k0r";
       sshKey = "/etc/nix/remote-builder/ssh_key";
@@ -55,10 +55,7 @@
       hostName = "victus-15";
       systems = [ "x86_64-linux" "i686-linux" ];
       protocol = "ssh";
-      # 5 parallel builds drove victus deep into swap (LTO link steps are
-      # memory-hungry); keep in sync with the nixos-rebuild-victus-15 /
-      # nix-shell-victus-15 scripts' builder strings.
-      maxJobs = 3;
+      maxJobs = 5;
       speedFactor = 4;
       sshUser = "r0k0r";
       sshKey = "/etc/nix/remote-builder/ssh_key";

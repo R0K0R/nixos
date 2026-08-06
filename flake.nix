@@ -22,7 +22,7 @@
        version lives in this URL (and in the package's version attr) -- bump
        both + relock with modules/nixos/packages/claude-code/update.sh. */
     claude-code-bin = {
-      url = "file+https://downloads.claude.ai/claude-code-releases/2.1.207/linux-x64/claude";
+      url = "file+https://downloads.claude.ai/claude-code-releases/2.1.223/linux-x64/claude";
       flake = false;
     };
 
@@ -31,7 +31,7 @@
        version lives in this URL and the package's version attr -- bump both +
        relock with modules/nixos/packages/claude-desktop/update.sh. */
     claude-desktop-bin = {
-      url = "file+https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.20186.9_amd64.deb";
+      url = "file+https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.24012.11_amd64.deb";
       flake = false;
     };
 

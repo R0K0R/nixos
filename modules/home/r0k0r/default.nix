@@ -22,5 +22,6 @@
     ./gui/cursor.nix
     ./gui/dms/dank-material-shell.nix
     ./gui/dms/session-lock-hooks.nix
+    ./gui/dms/plugins.nix
   ];
 }

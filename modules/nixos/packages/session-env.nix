@@ -10,5 +10,11 @@
     QT_IM_MODULE = "fcitx";
     XMODIFIERS = "@im=fcitx";
     MOZ_ENABLE_WAYLAND = "1";
+    # Electron/Chromium (Discord, Chrome, VS Code, ...) go native Wayland
+    # instead of XWayland. Without this they render at 1x under XWayland and
+    # the compositor bitmap-upscales to the 1.5 monitor scale -> blurry text.
+    # nixpkgs' Electron wrappers gate their --ozone-platform=wayland flags on
+    # this var (+ WAYLAND_DISPLAY). Verified live on Discord: blurry -> crisp.
+    NIXOS_OZONE_WL = "1";
   };
 }
