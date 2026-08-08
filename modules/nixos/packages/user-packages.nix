@@ -31,6 +31,7 @@
       wget
       openvpn
       upower
+      jq
     ];
 
     galaxybook4-pro360 = with pkgs; [

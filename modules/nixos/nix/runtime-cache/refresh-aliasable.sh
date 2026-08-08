@@ -15,8 +15,18 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 FLAKE_ROOT="$(git rev-parse --show-toplevel)"
 
-NIXPKGS_REV="$(jq -r '.nodes.nixpkgs.locked.rev' "$FLAKE_ROOT/flake.lock")"
-NIXPKGS_NARHASH="$(jq -r '.nodes.nixpkgs.locked.narHash' "$FLAKE_ROOT/flake.lock")"
+# Resolved via builtins.getFlake's own .inputs.nixpkgs, not a raw jq lookup of
+# flake.lock's "nixpkgs" JSON key -- see refresh-tier1.sh for why that key is
+# no longer reliable (nix-doom-emacs-unstraightened's own "nixpkgs" input
+# collides with this repo's node name once locked).
+NIXPKGS_INFO="$(
+  nix eval --impure --json --expr "
+    let f = builtins.getFlake \"$FLAKE_ROOT\";
+    in { inherit (f.inputs.nixpkgs) rev narHash; }
+  "
+)"
+NIXPKGS_REV="$(jq -r '.rev' <<<"$NIXPKGS_INFO")"
+NIXPKGS_NARHASH="$(jq -r '.narHash' <<<"$NIXPKGS_INFO")"
 CAPTURED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 OUT="$FLAKE_ROOT/modules/nixos/nix/runtime-cache/aliasable.nix"
