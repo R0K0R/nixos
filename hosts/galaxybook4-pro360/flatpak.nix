@@ -24,9 +24,21 @@
   systemd.services.flatpak-add-flathub-repo = {
     description = "Add the Flathub Flatpak repository";
     wantedBy = [ "multi-user.target" ];
-    after = [ "flatpak-system-helper.service" ];
-    serviceConfig.Type = "oneshot";
-    # --if-not-exists: safe to run on every boot.
+    # Was only ordered after flatpak-system-helper.service, so it ran as
+    # soon as multi-user.target was reached -- frequently before
+    # NetworkManager had DNS up, failing with "Could not resolve hostname".
+    # network-online.target actually blocks on connectivity being ready.
+    after = [ "flatpak-system-helper.service" "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      # --if-not-exists: safe to run on every boot. Retry a few times in
+      # case network-online.target fires slightly ahead of actual DNS
+      # resolvability (e.g. right after a VPN/DHCP renegotiation).
+      Restart = "on-failure";
+      RestartSec = 5;
+      StartLimitBurst = 3;
+    };
     script = ''
       ${pkgs.flatpak}/bin/flatpak remote-add --if-not-exists flathub \
         https://flathub.org/repo/flathub.flatpakrepo

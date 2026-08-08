@@ -78,7 +78,31 @@ in
   dconf.settings."org/gnome/desktop/interface" = {
     cursor-theme = "Bibata-Modern-Classic-Glass";
     cursor-size = 24;
+    # DMS's own `theme = "dark"` (settings.nix) only drives its QML shell and,
+    # via qt-theming.nix, Qt/KDE apps -- it never touches this key. GTK apps
+    # (Firefox included, via the XDG desktop portal under Wayland) check this
+    # gsetting specifically to decide prefers-color-scheme; left unset, GTK's
+    # own default is light regardless of what DMS is set to.
+    color-scheme = "prefer-dark";
   };
+
+  /*
+    xdg-desktop-portal-gtk added at the NixOS level (session-services.nix,
+    xdg.portal.extraPortals) lands in /run/current-system/sw/share -- but
+    confirmed by running xdg-desktop-portal manually with verbose logging
+    (`XDP: load portals from /etc/profiles/per-user/r0k0r/share/xdg-desktop-portal/portals`,
+    only hyprland.portal loaded, then `XDP: Requested gtk.portal is
+    unrecognized` despite portals.conf correctly saying `default=gtk`): it
+    only ever loads portals from ONE directory, the home-manager profile
+    (/etc/profiles/per-user/r0k0r/share), not the system one. hyprland.portal
+    ends up there because `hyprland` itself (propagating
+    xdg-desktop-portal-hyprland) is present in that profile's closure --
+    confirmed via `nix-store -q --requisites` on the profile derivation.
+    gtk.portal needs to be installed the same way, via home.packages, to
+    land in the profile that's actually searched -- the NixOS-level
+    extraPortals addition is not wrong, just insufficient on its own.
+  */
+  home.packages = [ pkgs.xdg-desktop-portal-gtk ];
 
   # systemd user services (emacs daemon, etc.) don't inherit the Hyprland
   # env block or hm-session-vars; give them the XCursor vars directly.

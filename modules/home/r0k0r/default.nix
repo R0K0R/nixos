@@ -10,11 +10,8 @@
     ./i18n/fcitx.nix
     ./ssh/default.nix
     ./editors/opencode.nix
-    ./editors/emacs/packages.nix
     ./editors/emacs/doom-config.nix
     ./editors/emacs/systemd-user.nix
-    ./editors/emacs/activation.nix
-    ./editors/emacs/doom-sync.nix
     ./terminals/starship.nix
     ./terminals/fish.nix
     ./terminals/kitty.nix

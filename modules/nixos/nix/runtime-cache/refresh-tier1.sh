@@ -51,8 +51,21 @@ NAMES_FILE="$(mktemp)"
 trap 'rm -f "$NAMES_FILE"' EXIT
 printf '%s\n' "$PNAMES" > "$NAMES_FILE"
 
-NIXPKGS_REV="$(jq -r '.nodes.nixpkgs.locked.rev' "$FLAKE_ROOT/flake.lock")"
-NIXPKGS_NARHASH="$(jq -r '.nodes.nixpkgs.locked.narHash' "$FLAKE_ROOT/flake.lock")"
+# Resolved via builtins.getFlake's own .inputs.nixpkgs, not a raw jq lookup of
+# flake.lock's "nixpkgs" JSON key: nix-doom-emacs-unstraightened declares its
+# own input literally named "nixpkgs" (a flake-registry fallback), which
+# collides with this repo's node name once locked, silently renaming this
+# repo's actual nixpkgs fork to "nixpkgs_2" in the lock file. getFlake's
+# .inputs is keyed by this flake's own declared input names, immune to that
+# JSON-level collision.
+NIXPKGS_INFO="$(
+  FLAKE_ROOT="$FLAKE_ROOT" nix eval --impure --json --expr '
+    let f = builtins.getFlake (builtins.getEnv "FLAKE_ROOT");
+    in { inherit (f.inputs.nixpkgs) rev narHash; }
+  '
+)"
+NIXPKGS_REV="$(jq -r '.rev' <<<"$NIXPKGS_INFO")"
+NIXPKGS_NARHASH="$(jq -r '.narHash' <<<"$NIXPKGS_INFO")"
 CAPTURED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 export TIER1_FLAKE_ROOT="$FLAKE_ROOT"

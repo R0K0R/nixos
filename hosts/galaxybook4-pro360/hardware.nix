@@ -23,6 +23,46 @@
   boot.blacklistedKernelModules = [ "xe" ];
   boot.extraModprobeConfig = "options i915 force_probe=7d55";
 
+  /*
+    Two firmware ACPI bugs on this exact BIOS (NT960QGK, P14RHB.460.250425.04),
+    confirmed by dumping/disassembling the live tables (2026-08-07):
+
+    1. `\_SB.PC00.LPCB.FAN0._FST` does `Local1 = FANT[Local0]` then
+       `Local1 += 0x0A` -- FANT[Local0] is a package-element Reference, not
+       the Integer it looks like, so the addition throws
+       AE_AML_OPERAND_TYPE and _FST aborts every boot ("acpi-fan
+       PNP0C0B:00: Error retrieving current fan status: -5"). Fixed by
+       wrapping in DerefOf(); shipped as a brand-new SSDT (unique OEM
+       ID/Table ID, so the kernel *appends* it) that reopens the FAN0
+       scope and redefines _FST -- the later-loaded definition wins in the
+       ACPI namespace.
+
+    2. `\_SB.IETM._ART` (in the DPTF SSDT, OEM ID "DptfTb"/"DptfTabl")
+       unconditionally checks `\_SB.IETM.SEN3.CTYP`, but SEN3 (a third
+       thermal sensor) is declared External and never actually defined by
+       any loaded table on this model -- unlike the other optional objects
+       in the same method, which are all properly guarded with
+       CondRefOf(). Aborts _ART with AE_NOT_FOUND every boot. Fixed by
+       adding the same CondRefOf() guard, shipped as a full replacement of
+       that SSDT with a bumped OEM Revision (0x1000 -> 0x1001; the initrd
+       table-upgrade mechanism only replaces a matching table if the
+       incoming OEM Revision is strictly higher).
+
+    Both are reporting-only bugs -- the EC still drives the fan curve in
+    hardware regardless of what Linux can read -- but they spam dmesg/
+    journal every boot, so worth silencing. See acpi/*.dsl for the full
+    patched source and rebuild instructions, and
+    ../../galaxybook-thermal-findings.md for the investigation writeup.
+
+    Requires CONFIG_ACPI_TABLE_UPGRADE (on by default), and requires
+    systemd stage-1 initrd (boot.initrd.systemd.contents is not read by
+    the legacy initrd builder).
+  */
+  boot.initrd.systemd.contents = {
+    "/kernel/firmware/acpi/fan-fst-fix.aml".source = ./acpi/fan-fst-fix.aml;
+    "/kernel/firmware/acpi/dptf-art-fix.aml".source = ./acpi/dptf-art-fix.aml;
+  };
+
   # Fast compressed-RAM swap. Cold anonymous pages compress into zram (higher
   # priority) instead of faulting off the disk /swapfile; that swapfile
   # (modules/nixos/system/swapfile-btrfs.nix) stays as low-priority overflow
