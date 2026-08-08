@@ -115,7 +115,6 @@ in
     # iio-hyprland shells out to `hyprctl -j monitors | jq` internally; without
     # jq in PATH it fails immediately and aborts uncleanly (dbus_disconnect
     # crash) instead of just erroring on the missing monitor lookup.
-    pkgs.jq
   ];
 
   wayland.windowManager.hyprland = {
