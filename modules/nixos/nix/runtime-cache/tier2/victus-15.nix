@@ -1,5 +1,5 @@
 {
-  anchorCount = 149;
+  anchorCount = 151;
   buildOnly = [
     "ccache"
     "mold"
@@ -21,6 +21,7 @@
     "wget"
     "openvpn"
     "upower"
+    "jq"
     "vim"
     "git"
     "tailscale"
@@ -28,6 +29,7 @@
     "ryzenadj"
     "gh"
     "claude-code"
+    "runtime-cache-refresh"
     "nixos-version"
     "nixos-rebuild-ng"
     "nixos-option"
@@ -127,6 +129,7 @@
     "python3-x86_64-unknown-linux-gnu-3.14.6-env"
     "libimobiledevice"
     "glib"
+    "oniguruma"
     "zlib-ng"
     "expat"
     "lua"
@@ -540,7 +543,7 @@
     "gssdp"
     "libsoup"
   ];
-  capturedAt = "2026-08-08T15:58:55Z";
+  capturedAt = "2026-08-08T19:24:01Z";
   host = "victus-15";
   nixpkgsNarHash = "sha256-WWCwobJ/uN7lr/3vGFDEyOu4X5ftO54EWi4BhfEWw3E=";
   nixpkgsRev = "54ddc912ce3967d3e5a28e1192beaf496776cdea";
@@ -548,6 +551,7 @@
     "wget"
     "openvpn"
     "upower"
+    "jq"
     "vim"
     "git"
     "tailscale"
@@ -555,6 +559,7 @@
     "ryzenadj"
     "gh"
     "claude-code"
+    "runtime-cache-refresh"
     "nixos-version"
     "nixos-rebuild-ng"
     "nixos-option"
@@ -654,6 +659,7 @@
     "python3-x86_64-unknown-linux-gnu-3.14.6-env"
     "libimobiledevice"
     "glib"
+    "oniguruma"
     "zlib-ng"
     "expat"
     "lua"
