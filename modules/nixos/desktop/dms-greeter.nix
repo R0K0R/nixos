@@ -4,9 +4,10 @@ let
   primaryLogin = "r0k0r";
 in
 {
-  imports = [ inputs.dms.nixosModules.greeter ];
+  # The greeter moved out of dms itself into its own repo/module.
+  imports = [ inputs.dank-greeter.nixosModules.default ];
 
-  programs.dank-material-shell.greeter = {
+  programs.dms-greeter = {
     enable = true;
     compositor.name = config.wm.compositor;
 

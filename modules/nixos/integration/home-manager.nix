@@ -8,6 +8,7 @@
     backupFileExtension = "hm-backup";
     /* Allow replacing an existing *.hm-backup when backing up again (avoids activation crash). */
     overwriteBackup = true;
+    sharedModules = [ inputs.nix-doom-emacs-unstraightened.homeModule ];
     users.r0k0r = import ../../../home-r0k0r.nix;
   };
 }

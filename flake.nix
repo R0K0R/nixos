@@ -53,6 +53,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # The greeter split out of dms itself (see modules/nixos/desktop/dms-greeter.nix).
+    dank-greeter = {
+      url = "github:AvengeMedia/dank-greeter";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     dms-plugin-registry = {
       url = "github:AvengeMedia/dms-plugin-registry";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -65,16 +71,19 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Doom framework (pinned in flake.lock). Writable bits live in ~/.emacs.d/.local after `doom sync`.
-    doom-emacs = {
-      url = "github:doomemacs/doomemacs";
-      flake = false;
-    };
-
     # Former ~/.doom.d (https://github.com/R0K0R/doom-emacs); pin with flake.lock.
     doom-private = {
       url = "github:R0K0R/doom-emacs";
       flake = false;
+    };
+
+    # Builds Doom Emacs as real Nix derivations instead of straight.el's
+    # imperative git-clone/pull -- see modules/home/r0k0r/editors/emacs/.
+    # Its own doomemacs/doomemacs-modules sub-inputs are left un-.follows'd
+    # on purpose: ride the framework version it's actually tested against.
+    nix-doom-emacs-unstraightened = {
+      url = "github:marienz/nix-doom-emacs-unstraightened";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
     # Pinned tag in URL (flake = false inputs do not accept ref/rev attributes).

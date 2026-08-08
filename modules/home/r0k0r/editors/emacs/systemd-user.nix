@@ -1,43 +1,15 @@
-{
-  pkgs,
-  inputs,
-  lib,
-  ...
-}:
+{ ... }:
 
-let
-  emacsEnv = import ./env.nix { inherit pkgs inputs; };
-  inherit (emacsEnv) emacsRolling;
-  emacsBin = lib.getExe emacsRolling;
-  emacsclientBin = lib.getExe' emacsRolling "emacsclient";
-in
 {
   /*
-    User systemd unit → install with `home-manager switch`, then e.g.
-      systemctl --user status emacs.service
-
-    `--fg-daemon` keeps the daemon in the foreground so systemd can supervise it.
-    Plain `emacs --daemon` forks and exits immediately (wrong for Type=simple).
+    programs.doom-emacs (doom-config.nix) wires services.emacs.package to its
+    built emacsWithDoom automatically once provideEmacs is left at its
+    default (true) -- this just needs to be turned on. home-manager's own
+    unit (Type=notify, SuccessExitStatus=15, login-shell ExecStart) replaces
+    the hand-rolled one this file used to define.
   */
-  systemd.user.services.emacs = {
-    Unit = {
-      Description = "Emacs user daemon (Doom)";
-      After = [ "graphical-session.target" ];
-      PartOf = [ "graphical-session.target" ];
-    };
-
-    Service = {
-      Type = "simple";
-      ExecStart = "${emacsBin} --fg-daemon";
-      # Leading "-" ignores failure when daemon already stopped.
-      ExecStop = "-${emacsclientBin} -q --eval \"(kill-emacs)\"";
-      Restart = "on-failure";
-      RestartSec = "3";
-      Slice = "session.slice";
-    };
-
-    Install = {
-      WantedBy = [ "graphical-session.target" ];
-    };
+  services.emacs = {
+    enable = true;
+    startWithUserSession = "graphical";
   };
 }

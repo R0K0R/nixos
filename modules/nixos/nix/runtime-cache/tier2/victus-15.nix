@@ -540,7 +540,7 @@
     "gssdp"
     "libsoup"
   ];
-  capturedAt = "2026-08-06T06:18:22Z";
+  capturedAt = "2026-08-08T15:58:55Z";
   host = "victus-15";
   nixpkgsNarHash = "sha256-WWCwobJ/uN7lr/3vGFDEyOu4X5ftO54EWi4BhfEWw3E=";
   nixpkgsRev = "54ddc912ce3967d3e5a28e1192beaf496776cdea";
