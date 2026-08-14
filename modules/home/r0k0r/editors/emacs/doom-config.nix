@@ -2,12 +2,21 @@
   config,
   pkgs,
   inputs,
+  hostName,
   ...
 }:
 
 let
   emacsEnv = import ./env.nix { inherit pkgs inputs; };
-  inherit (emacsEnv) emacsRolling;
+
+  /*
+    victus-15 is headless (no display manager, no compositor -- see
+    hosts/victus-15/) and is reached over ssh, so it gets the terminal-only
+    build rather than the pgtk/webkit/xwidgets one. Everything else about the
+    Doom setup is identical on both hosts.
+  */
+  headless = hostName == "victus-15";
+  emacsPackage = if headless then emacsEnv.emacsNox else emacsEnv.emacsRolling;
 
   # Prebuilt tree-sitter grammar .so files (nixpkgs ships every language Doom
   # needs, typst included). Read via TREESIT_GRAMMAR_DIR below instead of
@@ -25,7 +34,7 @@ in
     enable = true;
     doomDir = inputs.doom-private;
     doomLocalDir = "${config.xdg.dataHome}/doom";
-    emacs = emacsRolling;
+    emacs = emacsPackage;
     # Nix >2.18 breaks fetchGit's revision resolution for Unstraightened's
     # per-package fetches; fetchTree does not have that problem.
     experimentalFetchTree = true;

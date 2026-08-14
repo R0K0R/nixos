@@ -23,10 +23,27 @@ let
   # nix-doom-emacs-unstraightened builds every Doom package (vterm included)
   # via `emacsPackagesFor emacsRolling`, matched to this exact Emacs build.
   emacsRolling = emacsPgtkBase;
+
+  /*
+    Terminal-only Emacs for headless hosts (victus-15 has no display manager or
+    compositor -- its nvidia driver is there for CUDA). emacsPgtkBase would
+    still *run* under `-nw`, but it drags GTK, WebKit 2.38 and xwidgets into
+    the closure of a machine that can never display them, and that machine also
+    builds. Native compilation and tree-sitter are kept: both are useful in a
+    terminal, and TREESIT_GRAMMAR_DIR (doom-config.nix) feeds the same
+    Nix-provided grammars either way.
+  */
+  emacsNox = (
+    pkgs.emacs-nox.override {
+      withNativeCompilation = true;
+      withTreeSitter = true;
+    }
+  );
 in
 {
   inherit
     emacsPgtkBase
     emacsRolling
+    emacsNox
     ;
 }

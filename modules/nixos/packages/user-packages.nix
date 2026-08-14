@@ -78,6 +78,8 @@
       # CPU / power monitoring
       powertop
       s-tui
+
+      poppler-utils
     ];
 
     "victus-15" = with pkgs; [

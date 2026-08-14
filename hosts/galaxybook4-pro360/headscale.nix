@@ -4,7 +4,7 @@
 #   EOF
 {
   services.headscaleClient = {
-    enable = true;
+    enable = false;
     hostname = "galaxybook4-pro360";
     loginServer = "http://airbow.kro.kr:8080";
   };

@@ -10,6 +10,10 @@
     settings."victus-15" = {
       IdentityFile = "/etc/nix/remote-builder/ssh_key";
     };
+    settings."note10" = {
+      IdentityFile = "/etc/nix/remote-builder/ssh_key";
+      Port = 8022;
+    };
     settings."*" = {
       ForwardAgent = false;
       AddKeysToAgent = "no";
