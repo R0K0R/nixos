@@ -16,6 +16,9 @@ refresh_one() {
   fi
 
   local OUT="$FLAKE_ROOT/modules/nixos/nix/runtime-cache/tier2/$HOST.nix"
+  # The cache files are gitignored (generated), so this directory does not exist
+  # in a fresh checkout -- git does not track empty directories.
+  mkdir -p "$(dirname "$OUT")"
   local CAPTURED_AT
   CAPTURED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
