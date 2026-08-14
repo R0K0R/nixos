@@ -13,10 +13,10 @@ claude-desktop-blackening-findings.md
 # Personal Claude Code permission allowlist (session-specific store paths, IPs) — not shared
 .claude/settings.local.json
 
-# Runtime-cache: generated, regenerated on demand by runtime-cache-refresh.sh.
-# Kept out of routine `git add -A`/status noise; the refresh script re-adds
-# these explicitly (with -f) after writing them so a dirty-tree, non-impure
-# eval still sees the freshest cache instead of falling through to Tier 3.
-modules/nixos/nix/runtime-cache/aliasable.nix
-modules/nixos/nix/runtime-cache/tier1/*.nix
-modules/nixos/nix/runtime-cache/tier2/*.nix
+# NOTE: modules/nixos/nix/runtime-cache/{aliasable,tier1/*,tier2/*}.nix are
+# deliberately NOT ignored. They are generated, but nixos-rebuild evaluates the
+# flake through git and only sees tracked files -- an ignored cache file is
+# written successfully, reported as written, and then silently ignored by the
+# rebuild, which falls through to Tier 3 with no error. Ignoring them required
+# `git add -f` on every host after every refresh; one forgotten flag silently
+# degraded the classifier. Tracking them costs diff noise and nothing else.
