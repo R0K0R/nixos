@@ -1,4 +1,4 @@
-{ ... }:
+{ hostName, ... }:
 
 {
   /*
@@ -10,6 +10,14 @@
   */
   services.emacs = {
     enable = true;
-    startWithUserSession = "graphical";
+
+    /*
+      "graphical" binds the unit to graphical-session.target, which only ever
+      gets started by a compositor. victus-15 is headless (no display manager,
+      no compositor), so there the daemon must hang off default.target instead
+      or it would simply never start -- and it is reached with
+      `emacsclient -nw` over ssh, where that is what you want anyway.
+    */
+    startWithUserSession = if hostName == "victus-15" then true else "graphical";
   };
 }

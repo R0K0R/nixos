@@ -19,6 +19,16 @@ in
     ./services.nix
     ./nix-cache.nix
     ./packages.nix
+
+    /*
+      Home-manager for r0k0r. Imported directly rather than via
+      ../../modules/nixos, which would also pull in the desktop stack (greetd,
+      hyprland, niri, DMS, portals) onto a headless box. The integration module
+      selects home-r0k0r-headless.nix for this host: Emacs only, terminal
+      build, daemon on default.target.
+    */
+    ../../modules/nixos/integration/home-manager.nix
+    ./emacs.nix
   ];
 
   networking.hostName = "victus-15";
