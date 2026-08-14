@@ -76,6 +76,9 @@ export TIER1_NIXPKGS_NARHASH="$NIXPKGS_NARHASH"
 export TIER1_CAPTURED_AT="$CAPTURED_AT"
 
 OUT="$FLAKE_ROOT/modules/nixos/nix/runtime-cache/tier1/$HOST.nix"
+# The cache files are gitignored (generated), so this directory does not exist
+# in a fresh checkout -- git does not track empty directories.
+mkdir -p "$(dirname "$OUT")"
 
 # Bare `nix eval` (no --json/--raw) on a plain data attrset pretty-prints
 # valid, re-importable Nix syntax directly -- pnames are already correct by
