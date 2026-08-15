@@ -12,11 +12,23 @@
   eval-time heuristic, closes the gap for packages added but not yet
   switched-to.
 
-  Tier 3: live fallback, full recompute -- confirmed empirically cheap
+  Tier 3: live fallback, full recompute. The classifier walk ITSELF is cheap
   (2.458s for the full ~30-40 anchor set / 1070-package closure, dominated by
   a roughly-fixed nixpkgs-import cost rather than scaling meaningfully with
-  anchor count), so no diff/scoping logic; a cache miss just redoes the whole
-  walk. Same anchor source (user-packages.nix) and fresh-independent-import
+  anchor count), so no diff/scoping logic; a cache miss just redoes the walk.
+
+  But do not read that as "a cold cache is cheap" -- measured on a fresh host
+  with no tier1/tier2 file, a full `nix eval` of system.build.toplevel took
+  OVER 20 MINUTES, versus 30 SECONDS for the same host once a tier2 file
+  existed. The walk is not what costs; `hasWarmCache` being false ALSO stops
+  upstream-tools-overlay from aliasing anything to upstream (see its own
+  comment on why it refuses to act on Tier 3 evidence), so the entire package
+  set evaluates fork-built with no upstream shortcuts.
+
+  Practical consequence for a NEW host: seed the cache before the first real
+  eval, either by running refresh-tier2.sh for it or -- if it is a clone of an
+  existing host -- by copying that host's tier2 file and changing the `host`
+  field. Otherwise every eval pays the 20-minute path. Same anchor source (user-packages.nix) and fresh-independent-import
   technique host-runtime-classifier.nix already used, to avoid the fixpoint
   infinite recursion nixpkgs hits internally (by-name-overlay.nix,
   aliases.nix) once this walks hundreds of packages.
@@ -126,7 +138,7 @@ let
   # Tier 3, computed lazily -- only actually forced if isHostRuntime/
   # runtimeNames genuinely need it (a name absent from both caches).
   freshPkgs = import inputs.nixpkgs { inherit system; };
-  up = import ../../packages/user-packages.nix { pkgs = freshPkgs; };
+  up = import ../../modules/nixos/packages/user-packages.nix { pkgs = freshPkgs; };
   tier3Anchors =
     up.system.common
     ++ up.system.galaxybook4-pro360

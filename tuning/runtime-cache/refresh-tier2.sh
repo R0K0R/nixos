@@ -15,7 +15,7 @@ refresh_one() {
     exit 1
   fi
 
-  local OUT="$FLAKE_ROOT/modules/nixos/nix/runtime-cache/tier2/$HOST.nix"
+  local OUT="$FLAKE_ROOT/tuning/runtime-cache/tier2/$HOST.nix"
   # The cache files are gitignored (generated), so this directory does not exist
   # in a fresh checkout -- git does not track empty directories.
   mkdir -p "$(dirname "$OUT")"
@@ -25,7 +25,7 @@ refresh_one() {
   echo "evaluating tier2 for $HOST (constructs a throwaway NixOS+home-manager config, ~15-20s)..."
   nix eval --impure --expr "
     let
-      r = import $FLAKE_ROOT/modules/nixos/nix/runtime-cache/tier2-eval.nix { host = \"$HOST\"; };
+      r = import $FLAKE_ROOT/tuning/runtime-cache/tier2-eval.nix { host = \"$HOST\"; };
     in
     r // { capturedAt = \"$CAPTURED_AT\"; }
   " > "$OUT.tmp"

@@ -29,7 +29,7 @@ NIXPKGS_REV="$(jq -r '.rev' <<<"$NIXPKGS_INFO")"
 NIXPKGS_NARHASH="$(jq -r '.narHash' <<<"$NIXPKGS_INFO")"
 CAPTURED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-OUT="$FLAKE_ROOT/modules/nixos/nix/runtime-cache/aliasable.nix"
+OUT="$FLAKE_ROOT/tuning/runtime-cache/aliasable.nix"
 
 echo "computing structurally-aliasable package names (fork+upstream imports, full attribute walk, ~30-45s)..."
 nix eval --impure --expr "

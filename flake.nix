@@ -141,6 +141,11 @@
           modules = [
             home-manager.nixosModules.home-manager
             nixosFeatures
+            # Machine-bound tuning backend: march/pseudo-cross platform split,
+            # the overlays, and the runtime-cache classifier. Not a feature --
+            # it is tied to this nixpkgs fork and to per-host generated data, so
+            # it cannot be handed to anyone else the way a feature can.
+            ./tuning
             /*
               home-manager integration. Wiring, not a feature, so it lives here
               rather than in a module every host has to remember to import --

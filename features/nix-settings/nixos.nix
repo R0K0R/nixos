@@ -7,6 +7,16 @@ in
   options.my.nix-settings = {
     enable = lib.mkEnableOption "flakes, the upstream-pinned registry, and GC policy";
 
+    allowUnfree = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Allow unfree packages. Policy, not tuning -- it used to live inside
+        tuning/pkgs-config.nix, a file full of meteorlake qtbase patching, so a
+        host that did not want those patches silently lost unfree as well.
+      '';
+    };
+
     substituters = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ "https://cache.nixos.org" ];
@@ -50,6 +60,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    nixpkgs.config.allowUnfree = cfg.allowUnfree;
+
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
     # Point nix-shell / nix run / the flake registry at the unpatched upstream

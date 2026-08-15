@@ -266,7 +266,7 @@ let
   # aliasability doesn't depend on live/runtime state, only on this exact
   # nixpkgs revision -- so falling back to live computation is always safe,
   # just slower. No lib.warn needed for that reason.
-  aliasableCachePath = ./runtime-cache/aliasable.nix;
+  aliasableCachePath = ../runtime-cache/aliasable.nix;
   aliasableCache = if builtins.pathExists aliasableCachePath then import aliasableCachePath else null;
   aliasableCacheValid = aliasableCache != null && aliasableCache.nixpkgsNarHash == inputs.nixpkgs.narHash;
 
