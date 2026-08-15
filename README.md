@@ -134,11 +134,30 @@ nothing.
 glibc, systemd, gtk4 and pipewire, measured at 74% of every upstream-identical
 package in the system. It is opt-in and deliberately not implied by `enable`.
 
-**A new host evaluates through Tier 3 and is slow.** With no
-`runtime-cache/tier{1,2}/<host>.nix`, the classifier recomputes live and
-`upstream-tools` refuses to substitute at all (it will not act on Tier 3's weaker
-evidence for something destructive). Run `runtime-cache-refresh` on the new host
-first.
+**Seed the runtime cache before evaluating a new host.** Not because Tier 3 is
+slow — it isn't. Measured:
+
+| | |
+|---|---|
+| cold cache, IFD disabled (pure eval) | 12.8s |
+| warm Tier 2 copied from a sibling | 30s |
+| cold cache, IFD on, builder unreachable | >20 min, never completed |
+
+With no `tier{1,2}/<host>.nix`, `hasWarmCache` is false, so `upstream-tools`
+refuses to alias anything to upstream. The package set then differs from every
+existing host — a different Emacs, so a different `doom-intermediates`, so
+Unstraightened's import-from-derivation has to **build** it during eval. If a
+remote builder is down, that hangs in SSH `SYN-SENT` while `nix` sits at ~2% CPU
+blocked on the daemon socket. It looks like a slow evaluation and is not one.
+
+Copy a sibling host's tier2 file and change the `host` field: an identical
+package set means the IFD output is already in the store.
+
+**Diagnosing a "slow" eval.** Check CPU first. If `nix` is near-idle it is
+blocked on the network, not computing — `ps -o stat,%cpu,wchan -p <pid>` and
+`ss -tnp | grep :22`. `--option allow-import-from-derivation false` cleanly
+separates evaluation cost from build cost, and `--builders ''` keeps a dead
+builder out of the picture.
 
 **nixd needs IFD disabled.** Pointing it at `nixosConfigurations.<host>.options`
 otherwise lets nix-doom-emacs-unstraightened's import-from-derivation trigger a
