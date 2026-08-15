@@ -5,7 +5,7 @@
 { inputs, config, lib, pkgs, ... }:
 
 let
-  fixes = inputs.samsung-galaxy-book-linux-fixes;
+  fixes = inputs.feat-samsung-galaxybook.fixes;
   kernelPackages = config.boot.kernelPackages;
   kernel = kernelPackages.kernel;
   kernelUsesClang = kernel.stdenv.cc.isClang or false;

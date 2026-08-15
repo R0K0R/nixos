@@ -1,11 +1,8 @@
 { inputs, ... }:
 
 {
-  imports = [
-    inputs.dms.homeModules.dank-material-shell
-    inputs.dms.homeModules.niri
-    # dms-plugin-registry split its single `modules` output into homeModules/nixosModules.
-    inputs.dms-plugin-registry.homeModules.default
-    # niri-flake: NixOS module injects home-manager sharedModules (config); do not import homeModules.niri here.
-  ];
+  # Upstream DMS home modules, owned by this feature's own flake rather than a
+  # global third-party imports file -- so deleting features/dms/ takes its whole
+  # dependency surface with it.
+  imports = inputs.feat-dms.homeModules;
 }

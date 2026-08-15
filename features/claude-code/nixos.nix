@@ -11,7 +11,7 @@ let
 
     Bump: features/claude-code/update.sh [version], then rebuild.
   */
-  claude-code = pkgs.callPackage ./package.nix { src = inputs.claude-code-bin; };
+  claude-code = pkgs.callPackage ./package.nix { src = inputs.feat-claude-code.src; };
 in
 {
   options.my.claude-code = {

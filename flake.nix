@@ -14,30 +14,32 @@
     # evaluate against unpatched nixpkgs and hit the Hydra binary cache.
     nixpkgs-upstream.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    # No public `nixpkgs` flake input — do not wire `follows` (flakes warns otherwise).
-    nixos-hardware.url = "github:NixOS/nixos-hardware";
+    /*
+      Per-feature sub-flakes. Each owns the external inputs only IT consumes, so
+      `rm -r features/<name>` takes that feature's whole dependency surface with
+      it and the root flake stops carrying pins for things it does not use.
+    */
+    feat-claude-code.url = "path:./features/claude-code";
+    feat-claude-desktop.url = "path:./features/claude-desktop";
+    feat-samsung-galaxybook.url = "path:./features/samsung-galaxybook";
+    feat-easyeffects.url = "path:./features/easyeffects";
 
-    /* claude-code binary from Anthropic's release channel, hash-pinned in
-       flake.lock. The channel has no version-less "latest" binary URL, so the
-       version lives in this URL (and in the package's version attr) -- bump
-       both + relock with features/claude-code/update.sh. */
-    claude-code-bin = {
-      url = "file+https://downloads.claude.ai/claude-code-releases/2.1.223/linux-x64/claude";
-      flake = false;
+    # Module/overlay-providing sub-flakes need the second half of the two-level
+    # follows -- see each sub-flake's own header for why both are required.
+    feat-niri = {
+      url = "path:./features/niri";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    /* claude-desktop .deb from Anthropic's apt repo (official Linux beta since
-       2026-06-30; not in nixpkgs). Same pattern as claude-code-bin: the
-       version lives in this URL and the package's version attr -- bump both +
-       relock with features/claude-desktop/update.sh. */
-    claude-desktop-bin = {
-      url = "file+https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.24012.11_amd64.deb";
-      flake = false;
+    feat-dms = {
+      url = "path:./features/dms";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    /* webkitgtk_4_1 only: Emacs xwidgets configure requires webkit2gtk-4.1 < 2.41.92; unstable is newer.
-       Do not `follows` nixpkgs — we want an independent lock (currently nixos-22.11 → webkit 2.38.x). */
-    nixpkgs-emacs-webkit.url = "github:NixOS/nixpkgs/nixos-22.11";
+    feat-emacs = {
+      url = "path:./features/emacs";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
     home-manager = {
       # master, not a release branch: nixpkgs here tracks unstable (26.11), and
@@ -46,54 +48,6 @@
       # *-fish-completions derivation. master is the pairing for nixpkgs unstable.
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    dms = {
-      url = "github:AvengeMedia/DankMaterialShell";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    # The greeter split out of dms itself (see features/dms/nixos.nix).
-    dank-greeter = {
-      url = "github:AvengeMedia/dank-greeter";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    dms-plugin-registry = {
-      url = "github:AvengeMedia/dms-plugin-registry";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    niri = {
-      # Local copy patched to use nativeBuildInputs in validated-config-for so
-      # the niri validate binary is in PATH under strictDeps / pseudo-cross.
-      url = "path:./niri-flake-patch";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    # Former ~/.doom.d (https://github.com/R0K0R/doom-emacs); pin with flake.lock.
-    doom-private = {
-      url = "github:R0K0R/doom-emacs";
-      flake = false;
-    };
-
-    # Builds Doom Emacs as real Nix derivations instead of straight.el's
-    # imperative git-clone/pull -- see features/emacs/.
-    # Its own doomemacs/doomemacs-modules sub-inputs are left un-.follows'd
-    # on purpose: ride the framework version it's actually tested against.
-    nix-doom-emacs-unstraightened = {
-      url = "github:marienz/nix-doom-emacs-unstraightened";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    # Pinned tag in URL (flake = false inputs do not accept ref/rev attributes).
-    samsung-galaxy-book-linux-fixes.url =
-      "github:Andycodeman/samsung-galaxy-book-linux-fixes/v0.3.50";
-    samsung-galaxy-book-linux-fixes.flake = false;
-
-    easyeffects-presets = {
-      url = "github:JackHack96/EasyEffects-Presets";
-      flake = false;
     };
 
   };
@@ -167,7 +121,7 @@
                 overwriteBackup = true;
                 sharedModules = [
                   homeFeatures
-                  inputs.nix-doom-emacs-unstraightened.homeModule
+                  inputs.feat-emacs.homeModule
                 ];
                 /*
                   Nothing left to import: every home module is a feature half,

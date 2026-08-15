@@ -13,7 +13,7 @@
     my.samsung-galaxybook.enable.
 
     This is the most portable feature in the repo: between them these files
-    reference exactly one external -- inputs.samsung-galaxy-book-linux-fixes --
+    reference exactly one external -- inputs.feat-samsung-galaxybook.fixes --
     plus the stock config.boot.kernelPackages. No dependency on any other
     feature, so the directory can be handed to another Galaxy Book owner as-is.
   */
