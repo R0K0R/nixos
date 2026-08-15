@@ -47,7 +47,7 @@ in
 
 /*
   KDE-app half of Qt theming outside Plasma (system half + full debugging
-  story: modules/nixos/desktop/qt-theming.nix).
+  story: features/qt-theming/nixos.nix).
 
   Two distinct consumers of KDE color config, both light-by-default
   outside Plasma:
