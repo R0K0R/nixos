@@ -100,37 +100,12 @@
             # it is tied to this nixpkgs fork and to per-host generated data, so
             # it cannot be handed to anyone else the way a feature can.
             ./tuning
-            /*
-              home-manager integration. Wiring, not a feature, so it lives here
-              rather than in a module every host has to remember to import --
-              which is exactly what victus-15 used to do, reaching past the
-              aggregator for this one file.
-
-              Feature home halves go into sharedModules (rather than a per-user
-              config) so one `my.<feature>.enable = true` in the host file drives
-              both halves; the home side gates on osConfig.my.*.
-            */
-            {
-              home-manager = {
-                useGlobalPkgs = true;
-                useUserPackages = true;
-                extraSpecialArgs = { inherit inputs hostName; };
-                backupFileExtension = "hm-backup";
-                # Allow replacing an existing *.hm-backup when backing up again
-                # (avoids an activation crash on the second run).
-                overwriteBackup = true;
-                sharedModules = [
-                  homeFeatures
-                  inputs.feat-emacs.homeModule
-                ];
-                /*
-                  Nothing left to import: every home module is a feature half,
-                  arriving via sharedModules above. home-r0k0r.nix existed only
-                  to point at modules/home/r0k0r, which is gone.
-                */
-                users.r0k0r = { };
-              };
-            }
+            # home-manager wiring, shared with tier2-eval so the classifier sees
+            # the same home packages this host does. See lib/home-manager.nix.
+            (import ./lib/home-manager.nix {
+              homeModules = [ homeFeatures ];
+              inherit inputs hostName;
+            })
             ./hosts/${hostName}
             # Phase-1 bootstrap: pin nixos-rebuild to unpatched upstream so it
             # hits cache.nixos.org and doesn't need to be built from our patched stdenv.

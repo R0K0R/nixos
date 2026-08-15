@@ -105,6 +105,15 @@ let
       flake.nixosModules.default
       (flakeRoot + "/tuning")
 
+      # Same home-manager wiring mkHost uses. Without it this eval has no
+      # home-manager users, and every home.packages entry silently drops out of
+      # the anchor set.
+      (import (flakeRoot + "/lib/home-manager.nix") {
+        homeModules = [ flake.homeModules.default ];
+        inherit inputs;
+        hostName = host;
+      })
+
       (flakeRoot + "/hosts/${host}")
       { nixpkgs.overlays = lib.mkForce [ ]; }
     ];
