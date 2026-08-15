@@ -5,7 +5,7 @@ let
 
   # Same pinned claude-code the NixOS half installs (vendored package; binary
   # hash-pinned via the claude-code-bin flake input).
-  claude-code = pkgs.callPackage ./package.nix { src = inputs.claude-code-bin; };
+  claude-code = pkgs.callPackage ./package.nix { src = inputs.feat-claude-code.src; };
 
   gemma-claude = pkgs.writeScriptBin "gemma-claude" ''
     #! /bin/sh

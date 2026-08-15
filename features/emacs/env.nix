@@ -6,7 +6,7 @@ let
     Pin from flake input `nixpkgs-emacs-webkit` — use `.legacyPackages` here, not `import … { config = pkgs.config }`,
     or NixOS’s nixpkgs options leak into 22.11 and blow up (`replaceStdenv` / stdenv mismatch).
   */
-  pkgsWebkit = inputs.nixpkgs-emacs-webkit.legacyPackages.${pkgs.stdenv.hostPlatform.system};
+  pkgsWebkit = inputs.feat-emacs.webkitPkgs.${pkgs.stdenv.hostPlatform.system};
 
   # Unstable `emacs-pgtk` (e.g. 30.x) + xwidgets, but linked against the older WebKit above.
   emacsPgtkBase = (

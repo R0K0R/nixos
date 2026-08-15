@@ -179,7 +179,7 @@
   */
   my.tuning.extraOverlays = [
     # niri's own package set, needed wherever the niri compositor is selected.
-    inputs.niri.overlays.niri
+    inputs.feat-niri.overlay
 
     # Meteor Lake-P integrated graphics (Intel Arc Graphics, PCI 8086:7d55)
     # is the only GPU on this laptop — no discrete AMD/NVIDIA to support.

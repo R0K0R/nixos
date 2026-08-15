@@ -28,6 +28,7 @@
       "inputs": {
         "dank-qml-common": "dank-qml-common",
         "nixpkgs": [
+          "feat-dms",
           "nixpkgs"
         ]
       },
@@ -82,6 +83,7 @@
         "dank-qml-common": "dank-qml-common_2",
         "flake-compat": "flake-compat",
         "nixpkgs": [
+          "feat-dms",
           "nixpkgs"
         ]
       },
@@ -102,6 +104,7 @@
     "dms-plugin-registry": {
       "inputs": {
         "nixpkgs": [
+          "feat-dms",
           "nixpkgs"
         ]
       },
@@ -203,9 +206,11 @@
     "emacs-overlay": {
       "inputs": {
         "nixpkgs": [
+          "feat-emacs",
           "nix-doom-emacs-unstraightened"
         ],
         "nixpkgs-stable": [
+          "feat-emacs",
           "nix-doom-emacs-unstraightened"
         ]
       },
@@ -222,6 +227,117 @@
         "repo": "emacs-overlay",
         "type": "github"
       }
+    },
+    "feat-claude-code": {
+      "inputs": {
+        "claude-code-bin": "claude-code-bin"
+      },
+      "locked": {
+        "path": "./features/claude-code",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/claude-code",
+        "type": "path"
+      },
+      "parent": []
+    },
+    "feat-claude-desktop": {
+      "inputs": {
+        "claude-desktop-bin": "claude-desktop-bin"
+      },
+      "locked": {
+        "path": "./features/claude-desktop",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/claude-desktop",
+        "type": "path"
+      },
+      "parent": []
+    },
+    "feat-dms": {
+      "inputs": {
+        "dank-greeter": "dank-greeter",
+        "dms": "dms",
+        "dms-plugin-registry": "dms-plugin-registry",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "path": "./features/dms",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/dms",
+        "type": "path"
+      },
+      "parent": []
+    },
+    "feat-easyeffects": {
+      "inputs": {
+        "easyeffects-presets": "easyeffects-presets"
+      },
+      "locked": {
+        "path": "./features/easyeffects",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/easyeffects",
+        "type": "path"
+      },
+      "parent": []
+    },
+    "feat-emacs": {
+      "inputs": {
+        "doom-private": "doom-private",
+        "nix-doom-emacs-unstraightened": "nix-doom-emacs-unstraightened",
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "nixpkgs-emacs-webkit": "nixpkgs-emacs-webkit"
+      },
+      "locked": {
+        "path": "./features/emacs",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/emacs",
+        "type": "path"
+      },
+      "parent": []
+    },
+    "feat-niri": {
+      "inputs": {
+        "niri": "niri",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "path": "./features/niri",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/niri",
+        "type": "path"
+      },
+      "parent": []
+    },
+    "feat-samsung-galaxybook": {
+      "inputs": {
+        "samsung-galaxy-book-linux-fixes": "samsung-galaxy-book-linux-fixes"
+      },
+      "locked": {
+        "path": "./features/samsung-galaxybook",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/samsung-galaxybook",
+        "type": "path"
+      },
+      "parent": []
     },
     "flake-compat": {
       "flake": false,
@@ -264,6 +380,7 @@
         "niri-stable": "niri-stable",
         "niri-unstable": "niri-unstable",
         "nixpkgs": [
+          "feat-niri",
           "nixpkgs"
         ],
         "nixpkgs-stable": "nixpkgs-stable",
@@ -278,7 +395,9 @@
         "path": "./niri-flake-patch",
         "type": "path"
       },
-      "parent": []
+      "parent": [
+        "feat-niri"
+      ]
     },
     "niri-stable": {
       "flake": false,
@@ -320,6 +439,7 @@
         "doomemacs-modules": "doomemacs-modules",
         "emacs-overlay": "emacs-overlay",
         "nixpkgs": [
+          "feat-emacs",
           "nixpkgs"
         ],
         "systems": "systems"
@@ -338,35 +458,20 @@
         "type": "github"
       }
     },
-    "nixos-hardware": {
-      "inputs": {
-        "nixpkgs": "nixpkgs"
-      },
-      "locked": {
-        "lastModified": 1785232496,
-        "narHash": "sha256-65EQYIRRpTdpH8lUiB6Mvo5uBkG60aBIzAJuALfx+O0=",
-        "owner": "NixOS",
-        "repo": "nixos-hardware",
-        "rev": "2e790b0a6be8ec2b76174ac0931b8ff11919ec98",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "repo": "nixos-hardware",
-        "type": "github"
-      }
-    },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1767892417,
-        "narHash": "sha256-8bW3q88CEg2u4hSP66Vf4lpbLonHz7hqDNBMcCY7E9U=",
-        "rev": "3497aa5c9457a9d88d71fa93a4a8368816fbeeba",
-        "type": "tarball",
-        "url": "https://releases.nixos.org/nixos/unstable/nixos-26.05pre924538.3497aa5c9457/nixexprs.tar.xz"
+        "lastModified": 1785984057,
+        "narHash": "sha256-WWCwobJ/uN7lr/3vGFDEyOu4X5ftO54EWi4BhfEWw3E=",
+        "owner": "R0K0R",
+        "repo": "nixpkgs",
+        "rev": "54ddc912ce3967d3e5a28e1192beaf496776cdea",
+        "type": "github"
       },
       "original": {
-        "type": "tarball",
-        "url": "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz"
+        "owner": "R0K0R",
+        "ref": "combined-fundamental",
+        "repo": "nixpkgs",
+        "type": "github"
       }
     },
     "nixpkgs-emacs-webkit": {
@@ -417,39 +522,18 @@
         "type": "github"
       }
     },
-    "nixpkgs_2": {
-      "locked": {
-        "lastModified": 1785984057,
-        "narHash": "sha256-WWCwobJ/uN7lr/3vGFDEyOu4X5ftO54EWi4BhfEWw3E=",
-        "owner": "R0K0R",
-        "repo": "nixpkgs",
-        "rev": "54ddc912ce3967d3e5a28e1192beaf496776cdea",
-        "type": "github"
-      },
-      "original": {
-        "owner": "R0K0R",
-        "ref": "combined-fundamental",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
     "root": {
       "inputs": {
-        "claude-code-bin": "claude-code-bin",
-        "claude-desktop-bin": "claude-desktop-bin",
-        "dank-greeter": "dank-greeter",
-        "dms": "dms",
-        "dms-plugin-registry": "dms-plugin-registry",
-        "doom-private": "doom-private",
-        "easyeffects-presets": "easyeffects-presets",
+        "feat-claude-code": "feat-claude-code",
+        "feat-claude-desktop": "feat-claude-desktop",
+        "feat-dms": "feat-dms",
+        "feat-easyeffects": "feat-easyeffects",
+        "feat-emacs": "feat-emacs",
+        "feat-niri": "feat-niri",
+        "feat-samsung-galaxybook": "feat-samsung-galaxybook",
         "home-manager": "home-manager",
-        "niri": "niri",
-        "nix-doom-emacs-unstraightened": "nix-doom-emacs-unstraightened",
-        "nixos-hardware": "nixos-hardware",
-        "nixpkgs": "nixpkgs_2",
-        "nixpkgs-emacs-webkit": "nixpkgs-emacs-webkit",
-        "nixpkgs-upstream": "nixpkgs-upstream",
-        "samsung-galaxy-book-linux-fixes": "samsung-galaxy-book-linux-fixes"
+        "nixpkgs": "nixpkgs",
+        "nixpkgs-upstream": "nixpkgs-upstream"
       }
     },
     "samsung-galaxy-book-linux-fixes": {

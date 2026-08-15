@@ -7,7 +7,7 @@ in
   # The greeter moved out of dms itself into its own repo/module. Imported
   # unconditionally: `imports` cannot be gated, and an unenabled module costs
   # only its option declarations.
-  imports = [ inputs.dank-greeter.nixosModules.default ];
+  imports = [ inputs.feat-dms.greeterModule ];
 
   options.my.dms = {
     enable = lib.mkEnableOption ''

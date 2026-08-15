@@ -64,6 +64,31 @@ tuning/            march, overlays, runtime-cache classifier
 modules/           what has not been converted yet
 ```
 
+Features that own external inputs carry their own `flake.nix`, consumed by the
+root as a `path:` input named `feat-<name>`. The root then keeps only what is
+genuinely cross-cutting — `nixpkgs`, `nixpkgs-upstream`, `home-manager` — and
+`rm -r features/dms` takes DMS, its greeter, its plugin registry and their pins
+with it.
+
+Two hazards live here, both hit during the extraction:
+
+**`follows` must chain through two levels.** The sub-flake declares its own
+`nixpkgs` so the wrapped input has something to follow, and the root points that
+at the fork. Miss either half and you get a second package set — its own glibc
+and systemd — not a cosmetic lock rename. Check with:
+
+```sh
+nix eval --json .#nixosConfigurations.galaxybook4-pro360._module.args.inputs \
+  --apply 'i: builtins.mapAttrs (_: v: v.rev or null) i'
+```
+
+**Moving an input between flakes silently upgrades it.** There is no prior entry
+to reuse, so `nix flake lock` resolves it fresh at HEAD. During this refactor
+that bumped DMS from 2026-08-06 to 08-14 unnoticed. When relocating an input,
+pin it to the rev from the old lock (`nix flake lock ./features/<n>
+--override-input <x> github:owner/repo/<rev>`), then `nix flake update
+feat-<n>` so the root re-reads it.
+
 `flake.nix` finds features with a `readDir` walk, so there is no import list to
 maintain and no way to leave one out by accident. The corollary is that a file's
 mere presence activates it — **nothing may live under `features/` that is not a

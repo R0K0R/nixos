@@ -28,7 +28,7 @@ lib.mkIf cfg.enable {
 
   programs.doom-emacs = {
     enable = true;
-    doomDir = inputs.doom-private;
+    doomDir = inputs.feat-emacs.doomDir;
     doomLocalDir = "${config.xdg.dataHome}/doom";
     emacs = emacsPackage;
     # Nix >2.18 breaks fetchGit's revision resolution for Unstraightened's

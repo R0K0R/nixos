@@ -5,7 +5,7 @@ let
 
   # Repackaged from the .deb in Anthropic's apt repo; hash-pinned via the
   # claude-desktop-bin flake input. Bump: features/claude-desktop/update.sh.
-  claude-desktop = pkgs.callPackage ./package.nix { src = inputs.claude-desktop-bin; };
+  claude-desktop = pkgs.callPackage ./package.nix { src = inputs.feat-claude-desktop.src; };
 in
 {
   options.my.claude-desktop = {

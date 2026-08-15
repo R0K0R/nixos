@@ -9,7 +9,7 @@
     option must be the thing that brings that option into existence, or it
     breaks on every host that does not happen to import the module itself.
   */
-  imports = [ inputs.niri.nixosModules.niri ];
+  imports = [ inputs.feat-niri.nixosModule ];
 
   # Wayland compositor (niri) + graphical login.
   config = lib.mkIf (config.my.desktop.compositor == "niri") {
