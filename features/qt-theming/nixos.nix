@@ -38,7 +38,7 @@
      outside Plasma picks its own scheme (default: light) and re-applies
      it OVER the platform-theme palette. Only kdeglobals
      [UiSettings] ColorScheme= steers it -- managed in home-manager
-     (modules/home/r0k0r/gui/qt-theming.nix).
+     (features/qt-theming/home.nix).
 */
 {
   options.my.qt-theming.enable = lib.mkEnableOption ''

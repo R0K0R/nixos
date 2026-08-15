@@ -65,7 +65,7 @@ lib.mkIf config.my.samsung-galaxybook.enable {
 
   # Fast compressed-RAM swap. Cold anonymous pages compress into zram (higher
   # priority) instead of faulting off the disk /swapfile; that swapfile
-  # (modules/nixos/system/swapfile-btrfs.nix) stays as low-priority overflow
+  # (features/swapfile/nixos.nix) stays as low-priority overflow
   # for the memory-hungry LTO builds. zram only uses RAM proportional to what's
   # actually stored, so it's free when memory is idle.
   zramSwap.enable = true;

@@ -42,7 +42,14 @@
     kitty.enable = true;
     starship.enable = true;
     cursor-theme.enable = true;
-    ssh.enable = true;
+    ssh = {
+      enable = true;
+      hosts = {
+        yulee = { };
+        victus-15 = { };
+        note10.Port = 8022;
+      };
+    };
     opencode.enable = true;
     nix-settings.enable = true;
     emacs.enable = true;

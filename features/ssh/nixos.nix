@@ -11,13 +11,27 @@ in
       type = lib.types.str;
       default = "/etc/nix/remote-builder/ssh_key";
       description = ''
-        Identity used for the remote-builder peers. Read from outside the store
-        at connect time; the remote-builder feature is what installs it.
+        Default identity for the hosts below. Read from outside the store at
+        connect time; the remote-builder feature is what installs it.
+      '';
+    };
+
+    hosts = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);
+      default = { };
+      example = lib.literalExpression ''{ yulee = { }; note10 = { Port = 8022; }; }'';
+      description = ''
+        Per-host ssh_config blocks, keyed by Host pattern. `IdentityFile`
+        defaults to builderKeyFile and can be overridden per entry.
+
+        An option rather than a constant because these name specific machines on
+        one person's network -- a cloned host must not inherit them. They were
+        hardcoded here until the grep gate caught it.
       '';
     };
   };
 
-  # NixOS side declares options only. Everything this feature does lives in the
-  # home half, which reads osConfig.my.ssh.
+  # Home-only feature: the NixOS side exists to declare the switches that
+  # features/ssh/home.nix gates on via osConfig.
   config = lib.mkIf cfg.enable { };
 }

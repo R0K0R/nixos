@@ -217,8 +217,8 @@ in
         # (~/.config/qt6ct -> DankMatugen.colors) -- this activates it.
         # This alone is NOT sufficient -- plugin discovery, qt6ct.conf
         # contents, and KDE apps' KColorSchemeManager each needed their own
-        # fix. See modules/nixos/desktop/qt-theming.nix (QT_PLUGIN_PATH +
-        # the full debugging story) and modules/home/r0k0r/gui/
+        # fix. See features/qt-theming/nixos.nix (QT_PLUGIN_PATH +
+        # the full debugging story) and features/qt-theming/
         # qt-theming.nix (kdeglobals + qt6ct.conf enforcement).
         "QT_QPA_PLATFORMTHEME,qt6ct"
       ];
