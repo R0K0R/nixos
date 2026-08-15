@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ config, lib, ... }:
 
 {
   /*
@@ -61,4 +61,13 @@
       left to auto-detection, and it belongs to the machine, not the compositor.
     '';
   };
+
+  /*
+    Registers itself so features that depend on a compositor can assert on it.
+    A feature that is DEPENDED UPON must declare an entry even when it has no
+    dependencies of its own -- otherwise _meta cannot tell "not enabled" from
+    "does not exist" and reports the wrong one.
+  */
+  config.my.internal.features.compositor.enabledBy =
+    config.my.desktop.compositor != null;
 }

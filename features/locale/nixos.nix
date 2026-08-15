@@ -56,7 +56,26 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = lib.mkMerge [
+    {
+      /*
+        automatic-timezoned gets its location fix from geoclue2, which only the
+        session-services feature turns on. Enabled without it, the service runs
+        and silently never resolves a zone.
+
+        This is not hypothetical: the refactor plan's own verification step said
+        to "confirm automatic-timezoned is enabled on victus-15", and doing that
+        would have produced exactly this broken state -- victus-15 is headless
+        and enables no session services. The assertion is what makes the
+        requirement visible instead of something you rediscover.
+      */
+      my.internal.features."locale.automatic" = {
+        requires = [ "session-services" ];
+        enabledBy = cfg.enable && cfg.automatic;
+      };
+    }
+
+    (lib.mkIf cfg.enable {
     /*
       automatic-timezoned sets time.timeZone = null at NORMAL priority once
       enabled, so the fallback below must stay mkDefault (lower priority) --
@@ -73,5 +92,6 @@ in
       layout = cfg.xkbLayout;
       variant = cfg.xkbVariant;
     };
-  };
+    })
+  ];
 }

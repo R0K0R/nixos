@@ -73,7 +73,24 @@ in
     };
   };
 
-  config = lib.mkIf cfg.greeter.enable {
+  config = lib.mkMerge [
+    {
+      my.internal.features.dms = {
+        # The shell reads my.desktop.compositor for its workspace and bar
+        # integration; with no compositor selected it has nothing to attach to.
+        requires = [ "compositor" ];
+        enabledBy = cfg.enable;
+      };
+
+      my.internal.features."dms.greeter" = {
+        # The greeter IS a greetd session. Without greetd it is built, installed,
+        # and never launched -- no error anywhere.
+        requires = [ "greetd" ];
+        enabledBy = cfg.greeter.enable;
+      };
+    }
+
+    (lib.mkIf cfg.greeter.enable {
     programs.dms-greeter = {
       enable = true;
       # The greeter has to launch the same compositor the session uses, so it
@@ -89,5 +106,6 @@ in
 
       quickshell.package = pkgs.quickshell;
     };
-  };
+    })
+  ];
 }

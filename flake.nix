@@ -192,5 +192,18 @@
       */
       nixosModules.default = nixosFeatures;
       homeModules.default = homeFeatures;
+
+      /*
+        `nix flake check` as the one-command gate. Forcing each host's toplevel
+        is what evaluates its assertions -- including features/_meta's dependency
+        checks, which otherwise only fire when someone happens to build.
+
+        Note this triggers nix-doom-emacs-unstraightened's import-from-derivation
+        on any change that moves the package set, so run it with a reachable
+        builder or `--builders ''`.
+      */
+      checks.x86_64-linux = lib.mapAttrs (
+        _: cfg: cfg.config.system.build.toplevel
+      ) self.nixosConfigurations;
     };
 }

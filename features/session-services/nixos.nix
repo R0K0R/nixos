@@ -44,7 +44,11 @@ in
     needs because no desktopManager provides them
   '';
 
-  config = lib.mkIf config.my.session-services.enable {
+  config = lib.mkMerge [
+    # Depended upon by locale-automatic (geoclue2); see features/_meta.
+    { my.internal.features.session-services.enabledBy = config.my.session-services.enable; }
+
+    (lib.mkIf config.my.session-services.enable {
   /* DMS’s NixOS module turns these on with mkDefault only when HM sets
      programs.dank-material-shell on the *system* module — HM-only setups miss them.
      They are referenced by KDE Connect, GNOME-ish power UI tooling, portals, etc. */
@@ -115,5 +119,6 @@ in
     Needed so we can invoke DMS lock before sleep below.
   */
   services.systemd-lock-handler.enable = true;
-  };
+    })
+  ];
 }
