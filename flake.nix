@@ -20,7 +20,7 @@
     /* claude-code binary from Anthropic's release channel, hash-pinned in
        flake.lock. The channel has no version-less "latest" binary URL, so the
        version lives in this URL (and in the package's version attr) -- bump
-       both + relock with modules/nixos/packages/claude-code/update.sh. */
+       both + relock with features/claude-code/update.sh. */
     claude-code-bin = {
       url = "file+https://downloads.claude.ai/claude-code-releases/2.1.223/linux-x64/claude";
       flake = false;
@@ -29,7 +29,7 @@
     /* claude-desktop .deb from Anthropic's apt repo (official Linux beta since
        2026-06-30; not in nixpkgs). Same pattern as claude-code-bin: the
        version lives in this URL and the package's version attr -- bump both +
-       relock with modules/nixos/packages/claude-desktop/update.sh. */
+       relock with features/claude-desktop/update.sh. */
     claude-desktop-bin = {
       url = "file+https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.24012.11_amd64.deb";
       flake = false;
@@ -53,7 +53,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # The greeter split out of dms itself (see modules/nixos/desktop/dms-greeter.nix).
+    # The greeter split out of dms itself (see features/dms/nixos.nix).
     dank-greeter = {
       url = "github:AvengeMedia/dank-greeter";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -78,7 +78,7 @@
     };
 
     # Builds Doom Emacs as real Nix derivations instead of straight.el's
-    # imperative git-clone/pull -- see modules/home/r0k0r/editors/emacs/.
+    # imperative git-clone/pull -- see features/emacs/.
     # Its own doomemacs/doomemacs-modules sub-inputs are left un-.follows'd
     # on purpose: ride the framework version it's actually tested against.
     nix-doom-emacs-unstraightened = {
@@ -106,6 +106,33 @@
     }:
     let
       lib = nixpkgs.lib;
+
+      /*
+        Feature registration. Every directory under features/ is imported on
+        EVERY host, unconditionally; `my.<feature>.enable` decides whether it
+        does anything. `imports` is never used as a switch -- that conflation is
+        what made modules/nixos/default.nix all-or-nothing and forced headless
+        victus-15 to hand-roll duplicates of locale/users/nix-settings.
+        A disabled feature costs an option declaration and an unforced mkIf.
+
+        Discovery is a readDir walk, so there is no import list to maintain and
+        no way for a feature to be silently left out. The corollary is that a
+        file's mere presence activates it: modules/nixos/boot/{kernel,sysrq}.nix
+        were dead and broken (one did not even parse) precisely because the old
+        hand-written list never referenced them. Nothing may live under
+        features/ that is not a real module.
+      */
+      featureNames = builtins.attrNames (builtins.readDir ./features);
+      collect =
+        layer:
+        {
+          imports = builtins.filter builtins.pathExists (
+            map (n: ./features + "/${n}/${layer}") featureNames
+          );
+        };
+      nixosFeatures = collect "nixos.nix";
+      homeFeatures = collect "home.nix";
+
       mkHost =
         hostName:
         nixpkgs.lib.nixosSystem {
@@ -113,6 +140,33 @@
           specialArgs = { inherit inputs hostName; };
           modules = [
             home-manager.nixosModules.home-manager
+            nixosFeatures
+            /*
+              home-manager integration. Wiring, not a feature, so it lives here
+              rather than in a module every host has to remember to import --
+              which is exactly what victus-15 used to do, reaching past the
+              aggregator for this one file.
+
+              Feature home halves go into sharedModules (rather than a per-user
+              config) so one `my.<feature>.enable = true` in the host file drives
+              both halves; the home side gates on osConfig.my.*.
+            */
+            {
+              home-manager = {
+                useGlobalPkgs = true;
+                useUserPackages = true;
+                extraSpecialArgs = { inherit inputs hostName; };
+                backupFileExtension = "hm-backup";
+                # Allow replacing an existing *.hm-backup when backing up again
+                # (avoids an activation crash on the second run).
+                overwriteBackup = true;
+                sharedModules = [
+                  homeFeatures
+                  inputs.nix-doom-emacs-unstraightened.homeModule
+                ];
+                users.r0k0r = import ./home-r0k0r.nix;
+              };
+            }
             ./hosts/${hostName}
             # Phase-1 bootstrap: pin nixos-rebuild to unpatched upstream so it
             # hits cache.nixos.org and doesn't need to be built from our patched stdenv.
@@ -124,5 +178,14 @@
     {
       nixosConfigurations.victus-15 = mkHost "victus-15";
       nixosConfigurations.galaxybook4-pro360 = mkHost "galaxybook4-pro360";
+
+      /*
+        Exposed so a feature set can be consumed from outside this repo, and so
+        an individual feature stays extractable later without touching any host
+        file. mkHost uses the `let` bindings directly rather than these, to keep
+        nixosConfigurations from depending on the flake's own output fixpoint.
+      */
+      nixosModules.default = nixosFeatures;
+      homeModules.default = homeFeatures;
     };
 }

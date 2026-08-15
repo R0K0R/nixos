@@ -67,13 +67,6 @@
 
       openjdk25_headless
 
-      # Was `upstream.qemu` (unpatched nixpkgs, prebuilt from Hydra). Audited
-      # against the runtime closure: that single reference dragged in 151
-      # untuned packages -- its own private glibc, systemd, gtk4 and pipewire
-      # among them -- which was 74% of every upstream-identical package in
-      # the system closure. Building it here instead costs one large build
-      # but removes all 151.
-      qemu
 
       # CPU / power monitoring
       powertop

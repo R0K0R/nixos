@@ -8,13 +8,6 @@
 
 with pkgs;
 [
-  # claude-code, hash-pinned via the claude-code-bin flake input (Anthropic's
-  # release channel carries every published version immediately -- no nixpkgs
-  # packaging lag). Pinned in flake.lock, rolls back with generations, no
-  # network needed at activation time.
-  # Bump: modules/nixos/packages/claude-code/update.sh [version], then rebuild.
-  (callPackage ./claude-code/package.nix { src = inputs.claude-code-bin; })
-
   (writeScriptBin "runtime-cache-refresh" ''
     #! /bin/sh
     # Refreshes the runtime-cache for THIS host: the aliasable-names cache
