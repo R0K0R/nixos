@@ -35,8 +35,28 @@ let
     lib.optional p.useAsSubstituter
       ''--option substituters "https://cache.nixos.org ssh://${p.sshUser}@${name}"'';
 
+  /*
+    `--option builders`, NOT the bare `--builders` flag, and the difference is
+    not cosmetic.
+
+    nixos-rebuild-ng sorts its arguments into groups. `--builders` sits in
+    common_build_flags, which reaches the BUILD step only. `--option` sits in
+    common_flags, which reaches evaluation as well.
+
+    That matters here because nix-doom-emacs-unstraightened uses
+    import-from-derivation: doom-intermediates has to be BUILT during
+    evaluation. With bare `--builders`, that build is dispatched before the flag
+    applies, so it falls back to nix.conf's `builders = @/etc/nix/machines` --
+    the full peer list, in speedFactor order. `nixos-rebuild-victus-15` would
+    then try yulee first and hang on it, which is the exact opposite of what the
+    name promises.
+
+    The hand-written wrappers this replaces had it both ways: nix-shell-<peer>
+    used `--option builders` and was right, nixos-rebuild-<peer> used
+    `--builders` and was not.
+  */
   rebuildFor = name: p: mkScript "nixos-rebuild-${name}" (
-    [ "nixos-rebuild" "--flake ${flakeRef}" "--option max-jobs 0" ''--builders "${builderSpec name p}"'' ]
+    [ "nixos-rebuild" "--flake ${flakeRef}" "--option max-jobs 0" ''--option builders "${builderSpec name p}"'' ]
     ++ substituterArgs name p
   );
 
@@ -52,7 +72,9 @@ let
   ];
 
   localRebuild = mkScript "nixos-rebuild-local" (
-    [ "nixos-rebuild" "--flake ${flakeRef}" ''--builders ""'' ] ++ localArgs
+    # Same --option reasoning as rebuildFor: an empty builder list has to apply
+    # during evaluation too, or an IFD build escapes to /etc/nix/machines.
+    [ "nixos-rebuild" "--flake ${flakeRef}" ''--option builders ""'' ] ++ localArgs
   );
 
   localShell = mkScript "nix-shell-local" (
