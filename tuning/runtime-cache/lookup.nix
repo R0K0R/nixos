@@ -17,21 +17,26 @@
   a roughly-fixed nixpkgs-import cost rather than scaling meaningfully with
   anchor count), so no diff/scoping logic; a cache miss just redoes the walk.
 
-  But do not read that as "a cold cache is cheap" -- measured on a fresh host
-  with no tier1/tier2 file, a full `nix eval` of system.build.toplevel took
-  OVER 20 MINUTES, versus 30 SECONDS for the same host once a tier2 file
-  existed. The walk is not what costs; `hasWarmCache` being false ALSO stops
-  upstream-tools-overlay from aliasing anything to upstream (see its own
-  comment on why it refuses to act on Tier 3 evidence), so the entire package
-  set evaluates fork-built with no upstream shortcuts.
+  A cold cache is nonetheless worth avoiding on a NEW host, for a reason that
+  is NOT evaluation cost -- measured, so it is not a guess:
 
-  Practical consequence for a NEW host: seed the cache before the first real
-  eval, either by running refresh-tier2.sh for it or -- if it is a clone of an
-  existing host -- by copying that host's tier2 file and changing the `host`
-  field. Otherwise every eval pays the 20-minute path. Same anchor source (user-packages.nix) and fresh-independent-import
-  technique host-runtime-classifier.nix already used, to avoid the fixpoint
-  infinite recursion nixpkgs hits internally (by-name-overlay.nix,
-  aliases.nix) once this walks hundreds of packages.
+      cold cache, IFD disabled (pure eval)        12.8s
+      warm tier2 copied from a sibling host       30s
+      cold cache, IFD enabled, builder down       >20min, never completed
+
+  The walk really is cheap. What is expensive is the knock-on: `hasWarmCache`
+  false stops upstream-tools-overlay aliasing to upstream (see its own comment
+  on refusing to act on Tier 3 evidence), so the package set differs from every
+  existing host -- which means a DIFFERENT emacs, hence a different
+  doom-intermediates, hence nix-doom-emacs-unstraightened's import-from-
+  derivation has to BUILD it during eval. With a remote builder unreachable
+  that build hangs in SSH SYN-SENT, not in evaluation: the nix process sits at
+  ~2% CPU blocked on the daemon socket while ssh retries.
+
+  So for a new host: seed the cache first, either with refresh-tier2.sh or --
+  if it is a clone of an existing host -- by copying that host's tier2 file and
+  changing the `host` field. An identical package set means the IFD output is
+  already in the store and nothing needs building.
 
   Both cache tiers are monotonic positive evidence only: absence never
   asserts "not host-runtime," only "not yet known here" -- Tier 1 can't know
