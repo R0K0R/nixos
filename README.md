@@ -61,7 +61,6 @@ features/<name>/
   packages.nix     { pkgs }: { system = [...]; user = [...]; home = [...]; }
   README.md        for features meant to be handed to someone else
 tuning/            march, overlays, runtime-cache classifier
-modules/           what has not been converted yet
 ```
 
 Features that own external inputs carry their own `flake.nix`, consumed by the
