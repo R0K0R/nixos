@@ -75,7 +75,7 @@ export TIER1_NIXPKGS_REV="$NIXPKGS_REV"
 export TIER1_NIXPKGS_NARHASH="$NIXPKGS_NARHASH"
 export TIER1_CAPTURED_AT="$CAPTURED_AT"
 
-OUT="$FLAKE_ROOT/modules/nixos/nix/runtime-cache/tier1/$HOST.nix"
+OUT="$FLAKE_ROOT/tuning/runtime-cache/tier1/$HOST.nix"
 # The cache files are gitignored (generated), so this directory does not exist
 # in a fresh checkout -- git does not track empty directories.
 mkdir -p "$(dirname "$OUT")"

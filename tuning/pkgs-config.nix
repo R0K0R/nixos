@@ -1,4 +1,4 @@
-{ inputs, pkgs, lib, ... }:
+{ config, inputs, pkgs, lib, ... }:
 
 let
   # Same nixpkgs pin, but without host gcc.arch — so nix substitutes from cache.nixos.org.
@@ -64,8 +64,7 @@ let
         pkg
     ) super;
 in
-{
-  nixpkgs.config.allowUnfree = true;
+lib.mkIf config.my.tuning.qtPatches.enable {
 
   # Transitive eval of python2/pypy stack; blocked by CVE-2025-47273 in current nixpkgs.
   nixpkgs.config.permittedInsecurePackages = [

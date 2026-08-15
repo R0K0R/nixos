@@ -24,7 +24,7 @@ with pkgs;
     # briefly listed in .gitignore (which also made plain `git add` a no-op).
     # They are deliberately tracked now -- see the note in .gitignore.
     set -eu
-    CACHE_DIR=/home/r0k0r/flakes/nixos/modules/nixos/nix/runtime-cache
+    CACHE_DIR=/home/r0k0r/flakes/nixos/tuning/runtime-cache
 
     echo "refreshing aliasable-names cache (host-independent)..."
     "$CACHE_DIR/refresh-aliasable.sh"
@@ -47,6 +47,6 @@ with pkgs;
     "$CACHE_DIR/refresh-tier1.sh" "$(hostname)"
 
     git -C /home/r0k0r/flakes/nixos add "$CACHE_DIR"
-    echo "cache refreshed and staged -- commit modules/nixos/nix/runtime-cache if you want this to persist"
+    echo "cache refreshed and staged -- commit tuning/runtime-cache if you want this to persist"
   '')
 ]
