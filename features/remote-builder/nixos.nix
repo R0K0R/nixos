@@ -23,8 +23,33 @@
 let
   cfg = config.my.remote-builder.client;
 
+  # Parked peers vanish from /etc/nix/machines entirely.
+  activePeers = lib.filterAttrs (_: p: p.enable) cfg.peers;
+
   peerModule = { name, ... }: {
     options = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Whether this peer is currently usable. Set false to PARK a machine
+          that is down, without deleting its definition.
+
+          This is not a convenience. nix.conf sets `max-jobs = 0` -- nothing
+          builds locally, by design -- and `builders = @/etc/nix/machines`, which
+          the DAEMON reads. An unreachable peer in that file is tried first if
+          its speedFactor is higher, and hangs in SSH until it times out, for
+          every derivation.
+
+          It cannot be worked around with a command-line flag.
+          nixos-rebuild-ng composes `flake_eval_flags` from its own argument
+          group ONLY (models.py:183), so neither `--builders` nor
+          `--option builders` reaches the `nix eval` step -- and that step is
+          where import-from-derivation builds happen, which for this config
+          means doom-intermediates. The peer list is the only lever.
+        '';
+      };
+
       sshUser = lib.mkOption {
         type = lib.types.str;
         default = "r0k0r";
@@ -155,7 +180,7 @@ in
         lib.filter (f: !(lib.hasPrefix "galaxybook-" f)) config.nix.settings.system-features
         ++ [ "gccarch-meteorlake" ]
       );
-    }) cfg.peers;
+    }) activePeers;
 
     nix.settings = {
       # NixOS emits `builders =` (empty) by default, which disables Nix's built-in
