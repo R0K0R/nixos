@@ -143,15 +143,119 @@ let
   # Tier 3, computed lazily -- only actually forced if isHostRuntime/
   # runtimeNames genuinely need it (a name absent from both caches).
   freshPkgs = import inputs.nixpkgs { inherit system; };
-  up = import ../../modules/nixos/packages/user-packages.nix { pkgs = freshPkgs; };
-  tier3Anchors =
-    up.system.common
-    ++ up.system.galaxybook4-pro360
-    ++ up.system."victus-15"
-    ++ up.account.common
-    ++ up.account.galaxybook4-pro360
-    ++ up.homeManager.common
-    ++ [ freshPkgs.kdePackages.kdenlive ];
+
+  /*
+    Anchors: the union of EVERY feature's packages.nix, plus this host's own
+    my.packages.extra. Not the enabled subset -- over-inclusion is the safe
+    direction here (see buildOnly's rationale above: an unlisted build tool
+    merely gets needlessly tuned, while a dropped runtime dependency causes real
+    bugs), and computing the enabled set would need the module fixpoint this
+    file exists to avoid.
+
+    Replaces a hand-maintained union that named both hosts explicitly and had a
+    bolted-on `kdePackages.kdenlive` anchor for a package no list mentioned.
+    Neither survives: features register themselves by existing.
+
+    A feature's packages.nix must reference only plain-nixpkgs attributes --
+    freshPkgs is an overlay-free import, deliberately, to dodge the fixpoint
+    recursion nixpkgs hits internally once this walks hundreds of packages.
+    Anything overlay-provided is wired in the feature's nixos.nix instead.
+  */
+  featureDir = ../../features;
+  featureNames = builtins.attrNames (builtins.readDir featureDir);
+  hostsDir = ../../hosts;
+
+  /*
+    Read each host's declarations by RAW FUNCTION APPLICATION rather than through
+    the module system: the host file is evaluated a second time against an
+    independent fixpoint, the same fresh-independent-import technique freshPkgs
+    uses to dodge the recursion nixpkgs hits internally. Laziness means only the
+    attributes touched below are forced, which is why `config` can be a throw.
+  */
+  hostMyOf =
+    h:
+    let
+      f = hostsDir + "/${h}/default.nix";
+      raw =
+        if builtins.pathExists f then
+          import f {
+            pkgs = freshPkgs;
+            inherit lib inputs;
+            hostName = h;
+            config = throw "lookup.nix: a host file's `my` block must not read `config`";
+          }
+        else
+          { };
+    in
+    raw.my or { };
+
+  /*
+    ANCHOR SCOPE: the union across EVERY host of the features it enables, plus
+    every host's my.packages.extra. Host-independent on purpose.
+
+    This reproduces what the hand-written anchor list did -- it named both hosts'
+    package lists explicitly -- without keying anything on a hostname. A host
+    added tomorrow contributes its own anchors by existing.
+
+    Scope matters more than it looks. Two wrong versions were measured against
+    victus-15 (baseline 8417 derivations):
+
+      every feature, enabled or not     8922   (+505: a whole Haskell/pandoc
+                                                toolchain)
+      only THIS host's features         8861   (churn in both directions)
+
+    The mechanism is indirect and worth stating, because the fail-open reasoning
+    that governs `buildOnly` does NOT apply here. That reasoning is about
+    TUNING: needlessly tuning a build tool wastes build time and nothing else.
+    This signal also drives SUBSTITUTION -- upstream-tools-overlay declines to
+    alias anything it believes is host-runtime -- so an over-broad anchor set
+    turns a prebuilt download into a from-source compile.
+  */
+  hostNames = builtins.attrNames (builtins.readDir hostsDir);
+  allHostMy = map hostMyOf hostNames;
+
+  enabledIn = my: builtins.filter (n: (my.${n}.enable or false) == true) featureNames;
+  enabledFeatures = lib.unique (lib.concatMap enabledIn allHostMy);
+
+  featurePackageSets = builtins.filter (x: x != null) (
+    map (
+      name:
+      let f = featureDir + "/${name}/packages.nix";
+      in if builtins.pathExists f then import f { pkgs = freshPkgs; } else null
+    ) enabledFeatures
+  );
+  fromFeatures = lib.concatMap (
+    ps: (ps.system or [ ]) ++ (ps.user or [ ]) ++ (ps.home or [ ])
+  ) featurePackageSets;
+
+  extrasOf =
+    my:
+    let
+      e = my.packages.extra or { };
+    in
+    # Reject property-list wrappers EXPLICITLY. A bare `e.system or []` turns
+    # mkIf/mkMerge into an EMPTY anchor set with no error at all -- the exact
+    # silent blind spot this mechanism exists to close. Measured: wrapping a
+    # leaf fails loudly, wrapping the parent returns [] silently.
+    if e ? _type then
+      throw ''
+        lookup.nix: a host file wraps my.packages.extra in ${e._type}
+        (mkIf/mkMerge). It must be a literal attrset -- Tier 3 reads it without a
+        module evaluation and cannot resolve property lists.''
+    else
+      lib.concatLists (
+        lib.mapAttrsToList (
+          n: v:
+          if builtins.isList v then
+            v
+          else
+            throw "lookup.nix: my.packages.extra.${n} must be a literal list, got ${v._type or builtins.typeOf v}"
+        ) e
+      );
+
+  fromHosts = lib.concatMap extrasOf allHostMy;
+
+  tier3Anchors = fromFeatures ++ fromHosts;
   keyOf = pkg: pkg.pname or pkg.name or "unknown";
   tier3Closure = builtins.genericClosure {
     startSet = map (pkg: {

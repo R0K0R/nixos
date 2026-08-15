@@ -59,6 +59,12 @@ in
       exclusions. Meteorlake-specific -- a differently-tuned host wants its own
     '';
 
+    flakePath = lib.mkOption {
+      type = lib.types.str;
+      default = "/home/r0k0r/flakes/nixos";
+      description = "Where this flake lives on disk, baked into runtime-cache-refresh.";
+    };
+
     extraOverlays = lib.mkOption {
       type = lib.types.listOf (lib.types.functionTo (lib.types.functionTo lib.types.attrs));
       default = [ ];
@@ -70,7 +76,10 @@ in
     };
   };
 
-  imports = [ ./pkgs-config.nix ];
+  imports = [
+    ./pkgs-config.nix
+    ./runtime-cache-refresh.nix
+  ];
 
   config = lib.mkIf (cfg.march != null) {
     nixpkgs.buildPlatform = "x86_64-linux";

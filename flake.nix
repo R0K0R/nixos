@@ -169,7 +169,12 @@
                   homeFeatures
                   inputs.nix-doom-emacs-unstraightened.homeModule
                 ];
-                users.r0k0r = import ./home-r0k0r.nix;
+                /*
+                  Nothing left to import: every home module is a feature half,
+                  arriving via sharedModules above. home-r0k0r.nix existed only
+                  to point at modules/home/r0k0r, which is gone.
+                */
+                users.r0k0r = { };
               };
             }
             ./hosts/${hostName}

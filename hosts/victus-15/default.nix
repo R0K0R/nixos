@@ -6,7 +6,6 @@
     ./hardware.nix
     ./fan-and-power.nix
     ./filesystems.nix
-    ./packages.nix
   ];
 
   networking.hostName = "victus-15";
@@ -69,6 +68,20 @@
 
     network.enable = true;
     boot.enable = true;
+    base.enable = true;
+
+    /*
+      One-offs that do not justify a feature. Literal list -- see
+      my.packages.extra's own docs on why lookup.nix cannot read a mkIf here.
+    */
+    packages.extra.system = with pkgs; [
+      vim
+      git
+      gh
+      tailscale
+      nbfc-linux   # fan control, driven by fan-and-power.nix
+      ryzenadj     # power limits, same
+    ];
 
     /*
       Same intra-ISA pseudo-cross arrangement as galaxybook4-pro360, only the
@@ -86,6 +99,7 @@
       o3.enable = true;
       lto.enable = true;
       upstreamTools.enable = true;
+      refreshTool.enable = true;
     };
   };
 
