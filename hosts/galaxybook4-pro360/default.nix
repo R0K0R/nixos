@@ -94,9 +94,6 @@
           maxJobs = 5;
           speedFactor = 4;
           features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "gccarch-meteorlake" ];
-          # See useAsSubstituter's own docs: BUILD-platform derivations here are
-          # byte-identical to upstream again, so cache.nixos.org serves them.
-          useAsSubstituter = false;
         };
       };
     };

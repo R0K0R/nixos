@@ -74,23 +74,6 @@ let
         default = [ "benchmark" "big-parallel" "kvm" "nixos-test" ];
         description = "system-features the peer advertises, for the generated wrapper scripts.";
       };
-      useAsSubstituter = lib.mkOption {
-        type = lib.types.bool;
-        default = true;
-        description = ''
-          Whether the generated wrappers override `substituters` to include this
-          peer's store.
-
-          False for a peer whose builds are byte-identical to upstream:
-          cache.nixos.org used to be useless here because the fork patched
-          setup.sh and the cc/bintools wrappers unconditionally, so every hash
-          in the tree diverged -- even plain native `hello` was absent from the
-          binary cache. Those changes are now confined to the stdenvs that need
-          them, so BUILD-platform derivations match upstream again and the cache
-          genuinely serves them. Leaving the system substituter list alone keeps
-          cache.nixos.org in play; overriding it would forfeit that.
-        '';
-      };
     };
   };
 in
@@ -110,7 +93,13 @@ in
     wrappers.enable = lib.mkEnableOption ''
       generated `nixos-rebuild-<peer>` / `nix-shell-<peer>` scripts, plus
       `-local` variants. Generated from this host's own name, so a cloned host
-      rebuilds itself rather than the machine it was copied from
+      rebuilds itself rather than the machine it was copied from.
+
+      A PARKED peer still gets a wrapper. Parking only removes it from
+      /etc/nix/machines; the wrapper names that peer as the sole builder and
+      substituter, so running it is how you check whether the machine is back,
+      and it fails fast against that one host rather than hanging on a mixed
+      list
     '';
 
     flakePath = lib.mkOption {
