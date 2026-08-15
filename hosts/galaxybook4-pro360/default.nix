@@ -20,23 +20,138 @@ in
 {
   imports = [
     ./hardware-configuration.nix
-    ./boot.nix
-    ./home.nix
-    ./hardware.nix
-    ./power.nix
-    ./samsung-fixes.nix
-    ./webcam.nix
-    ./flamenco.nix
-    ./sshfs-yulee.nix
-    ./flatpak.nix
-    inputs.niri.nixosModules.niri
     ../../modules/nixos
-    ../../modules/nixos/nix/remote-builder-client.nix
   ];
 
   services.tailscale.enable = true;
 
-  wm.compositor = "hyprland";
+  system.stateVersion = "26.05";
+
+  # Kernel choice stays in the host file: it is a property of this machine's
+  # hardware, not of any feature.
+  boot.kernelPackages = pkgs.linuxPackages_7_1;
+
+  my = {
+    user-r0k0r.enable = true;
+    upower.enable = true;
+    fonts.enable = true;
+    keyd.enable = true;
+    pipewire.enable = true;
+    libinput.enable = true;
+    swapfile.enable = true;
+    discovery.enable = true;
+    locale.enable = true;
+    firefox.enable = true;
+    fcitx.enable = true;
+    openvpn.enable = true;
+    waydroid.enable = true;
+    session-env.enable = true;
+    fish.enable = true;
+    kitty.enable = true;
+    starship.enable = true;
+    cursor-theme.enable = true;
+    ssh.enable = true;
+    opencode.enable = true;
+    nix-settings.enable = true;
+    emacs.enable = true;
+    packages.homeManager.enable = true;
+
+    claude-code = {
+      enable = true;
+      shareWithRoot = true;
+      gemma.enable = true;
+    };
+
+    claude-desktop = {
+      enable = true;
+      cowork.enable = true;
+    };
+
+    remote-builder.client = {
+      enable = true;
+      wrappers.enable = true;
+      substituters = [ "ssh://r0k0r@yulee" "ssh://r0k0r@victus-15" ];
+      trustedPublicKeys = [
+        "yulee-1:KgdwkCN5m+hewJTk+A05PjwI3BbnZAE9NW2n634N7vM="
+        "victus-15-1:W5OP8VVbu7Q7z2o5grHJ5Zp+ynm536+QVv+b8fBQJlQ="
+      ];
+      peers = {
+        yulee = {
+          maxJobs = 7;
+          speedFactor = 10;
+          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "gccarch-meteorlake" ];
+        };
+        victus-15 = {
+          maxJobs = 5;
+          speedFactor = 4;
+          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "gccarch-meteorlake" ];
+          # See useAsSubstituter's own docs: BUILD-platform derivations here are
+          # byte-identical to upstream again, so cache.nixos.org serves them.
+          useAsSubstituter = false;
+        };
+      };
+    };
+    samsung-galaxybook.enable = true;
+    power.enable = true;
+    flatpak.enable = true;
+    flamenco.enable = true;
+    easyeffects.enable = true;
+
+    boot = {
+      enable = true;
+      extraEntries = {
+        "windows.conf" = ''
+          title Windows
+          efi /EFI/Microsoft/Boot/bootmgfw.efi
+          sort-key o_windows
+        '';
+        "netboot.conf" = ''
+          title Netboot
+          efi /EFI/netboot/netboot.xyz.efi
+          sort-key o_netboot
+        '';
+        "asclepius.conf" = ''
+          title Asclepius
+          efi /EFI/Asclepius/bootx64.efi
+          sort-key o_asclepius
+        '';
+      };
+    };
+
+    emacs.machineLocalElisp = ''
+      ;;; -*- lexical-binding: t; -*-
+      ;;; Loaded by Doom `config.el` from ~/.config/home-manager/doom-machine-local.el
+
+      (defun my/machine-local-reset-fonts-h ()
+        (setq doom-font (font-spec :family "JetBrainsMonoNL Nerd Font" :size 13 :weight 'semi-light)
+              doom-variable-pitch-font (font-spec :family "JetBrainsMonoNL Nerd Font" :size 13))
+        (when (fboundp 'doom-init-fonts-h)
+          (doom-init-fonts-h 'reload)))
+
+      (add-hook 'emacs-startup-hook #'my/machine-local-reset-fonts-h)
+    '';
+
+    greetd.enable = true;
+    qt-theming.enable = true;
+    session-services.enable = true;
+
+    desktop = {
+      compositor = "hyprland";
+      # 2880x1800 internal panel.
+      primaryOutput = "eDP-1";
+      primaryOutputScale = "1.5";
+    };
+
+    dms = {
+      enable = true;
+      greeter.enable = true;
+    };
+
+    network = {
+      enable = true;
+      kdeconnect.enable = true;
+    };
+  };
 
   networking.hostName = "galaxybook4-pro360";
 
@@ -50,40 +165,6 @@ in
     system = "x86_64-linux";
     gcc.arch = "meteorlake";
   };
-
-  systemd.tmpfiles.rules = [
-    "L /root/.claude - - - - /home/r0k0r/.claude"
-
-    /*
-      Claude Desktop's Cowork ("dispatch") microVM refuses to start with
-      "Cowork requires QEMU" even though QEMU is installed. The message is
-      misleading: the gate is
-
-        !qemuPath || !firmwarePath || !virtiofsdPath
-
-      and all three report the same string. qemu-system-x86_64 is resolved by
-      walking $PATH so it is found; virtiofsd and the guest image ship inside
-      the .deb. The one that fails is firmwarePath, probed at hardcoded Debian
-      absolute paths -- ["/usr/share/OVMF/OVMF_CODE_4M.fd",
-      "/usr/share/OVMF/OVMF_CODE.fd"] -- and /usr/share does not exist here.
-
-      The variables store is not probed separately; the app derives it from
-      whichever CODE path matched, by literal substitution:
-
-        e.replace("OVMF_CODE","OVMF_VARS")
-
-      so CODE and VARS must sit beside each other under the same name stem, and
-      must be a matched pair (pflash sizes have to agree) -- hence both links
-      into the same OVMF build rather than two independently-resolved paths.
-
-      Symlinking rather than patching app.asar: blacken.py can only do
-      same-length byte replacements, and a /nix/store path is far longer than
-      the Debian one. This also survives Claude Desktop updates.
-    */
-    "d /usr/share/OVMF 0755 root root -"
-    "L+ /usr/share/OVMF/OVMF_CODE.fd - - - - ${pkgs.OVMF.firmware}"
-    "L+ /usr/share/OVMF/OVMF_VARS.fd - - - - ${pkgs.OVMF.variables}"
-  ];
 
   # Serial access for arduino-cli/arduino-ide (/dev/ttyACM*, /dev/ttyUSB*).
   users.users.r0k0r.extraGroups = [ "dialout" ];

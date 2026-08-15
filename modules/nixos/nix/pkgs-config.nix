@@ -74,7 +74,7 @@ in
   ];
 
   # emacs-pgtk 30.x is flagged broken upstream but the override in
-  # modules/home/r0k0r/editors/emacs/env.nix patches around it. Downgrade to a warning.
+  # features/emacs/env.nix patches around it. Downgrade to a warning.
   nixpkgs.config.problems.handlers = {
     emacs-pgtk-x86_64-unknown-linux-gnu-with-doom.broken = "warn";
     emacs-pgtk.broken = "warn";

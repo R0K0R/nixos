@@ -2,23 +2,6 @@
 
 {
   imports = [
-    ./imports/third-party.nix
-    ./core/account.nix
     ./packages
-    ./wayland/niri.nix
-    ./wayland/hyprland.nix
-    ./i18n/fcitx.nix
-    ./ssh/default.nix
-    ./editors/opencode.nix
-    ./editors/emacs/doom-config.nix
-    ./editors/emacs/systemd-user.nix
-    ./terminals/starship.nix
-    ./terminals/fish.nix
-    ./terminals/kitty.nix
-    ./gui/qt-theming.nix
-    ./gui/cursor.nix
-    ./gui/dms/dank-material-shell.nix
-    ./gui/dms/session-lock-hooks.nix
-    ./gui/dms/plugins.nix
   ];
 }
