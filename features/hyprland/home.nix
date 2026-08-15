@@ -156,6 +156,27 @@ in
       # (workspaces animation style below must also be "slidevert" — the swipe's
       # up/down vs left/right behavior is derived from the animation style, not
       # just this direction setting).
+      /*
+        Hyprland's only touchscreen gesture: a single-finger swipe from the
+        screen EDGE, switching workspaces. Complements the lisgd daemon
+        (features/touch-gestures) rather than replacing it -- that handles
+        multi-finger swipes anywhere on the panel.
+
+        The activation strip is (gaps_out + border_size) / screen_height, so
+        with gaps_out = 4 and border_size = 0 it is four pixels. Enabled because
+        it costs nothing and is occasionally hit by accident-turned-habit, but
+        it is not the mechanism to rely on. Widening it means widening the gaps,
+        which is not worth it.
+
+        The axis follows the workspaces animation style, not this setting:
+        "slidevert" below makes it top/bottom edges, matching the touchpad's
+        `4, vertical, workspace`.
+      */
+      gestures = {
+        workspace_swipe_touch = true;
+        workspace_swipe_touch_invert = false;
+      };
+
       gesture = [
         "3, swipe, move"
         "4, vertical, workspace"
