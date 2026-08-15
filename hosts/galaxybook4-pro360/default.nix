@@ -104,6 +104,15 @@
         };
       };
     };
+    /*
+      Goodix GXTP7936 panel. by-path, not eventN: event numbers are assigned in
+      probe order and move between boots.
+    */
+    touch-gestures = {
+      enable = true;
+      device = "/dev/input/by-path/pci-0000:00:15.1-platform-i2c_designware.1-event";
+    };
+
     samsung-galaxybook.enable = true;
     power.enable = true;
     flatpak.enable = true;
