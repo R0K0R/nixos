@@ -43,7 +43,13 @@
 */
 {
   host,
-  flakeRoot ? ../../../..,
+  # Two levels: this file is at tuning/runtime-cache/. It was ../../../.. while
+  # it lived at modules/nixos/nix/runtime-cache/, and the move left it pointing
+  # at /home/r0k0r -- so getFlake tried to ingest the whole home directory and
+  # died on the first socket it met ("file '~/.cache/emacs/tramp.<hash>' has an
+  # unsupported type"). A default that only fires when the caller omits it, and
+  # refresh-tier2.sh omits it.
+  flakeRoot ? ../..,
 }:
 let
   flake = builtins.getFlake (toString flakeRoot);
@@ -84,6 +90,21 @@ let
     };
     modules = [
       inputs.home-manager.nixosModules.home-manager
+
+      /*
+        The feature modules and the tuning backend, exactly as mkHost supplies
+        them. Without these the host file's `my.*` lines have no options to
+        attach to and the whole eval dies with "The option `my' does not exist".
+
+        This used to come for free because the host file imported
+        modules/nixos itself; features now arrive from mkHost, which this
+        throwaway eval deliberately bypasses. flake.nixosModules.default is
+        exposed for exactly this -- reuse it rather than re-walking features/,
+        so the two can never drift.
+      */
+      flake.nixosModules.default
+      (flakeRoot + "/tuning")
+
       (flakeRoot + "/hosts/${host}")
       { nixpkgs.overlays = lib.mkForce [ ]; }
     ];
