@@ -1,7 +1,9 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   cfg = config.my.opencode;
+  # Its own packages, read here so the feature is self-contained.
+  pkgSet = import ./packages.nix { inherit pkgs; };
 in
 {
   options.my.opencode = {
@@ -18,5 +20,7 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable { };
+  config = lib.mkIf cfg.enable {
+    environment.systemPackages = pkgSet.system;
+  };
 }

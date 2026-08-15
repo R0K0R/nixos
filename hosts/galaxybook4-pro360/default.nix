@@ -3,7 +3,6 @@
 {
   imports = [
     ./hardware-configuration.nix
-    ../../modules/nixos
   ];
 
   services.tailscale.enable = true;
@@ -22,6 +21,7 @@
       lto.enable = true;
       upstreamTools.enable = true;
       qtPatches.enable = true;
+      refreshTool.enable = true;
     };
 
     user-r0k0r.enable = true;
@@ -46,7 +46,17 @@
     opencode.enable = true;
     nix-settings.enable = true;
     emacs.enable = true;
-    packages.homeManager.enable = true;
+    # Package sets, each owning its own list (features/<name>/packages.nix).
+    base.enable = true;
+    eza.enable = true;
+    dev-toolchain.enable = true;
+    latex.enable = true;
+    media.enable = true;
+    astro.enable = true;
+    desktop-apps.enable = true;
+    arduino.enable = true;
+    diagnostics.enable = true;
+    qt-dev.enable = true;
 
     claude-code = {
       enable = true;
