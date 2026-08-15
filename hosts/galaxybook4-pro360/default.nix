@@ -72,13 +72,20 @@
     remote-builder.client = {
       enable = true;
       wrappers.enable = true;
-      substituters = [ "ssh://r0k0r@yulee" "ssh://r0k0r@victus-15" ];
+      # yulee omitted while parked -- an unreachable substituter costs a
+      # timeout on every lookup.
+      substituters = [ "ssh://r0k0r@victus-15" ];
       trustedPublicKeys = [
         "yulee-1:KgdwkCN5m+hewJTk+A05PjwI3BbnZAE9NW2n634N7vM="
         "victus-15-1:W5OP8VVbu7Q7z2o5grHJ5Zp+ynm536+QVv+b8fBQJlQ="
       ];
       peers = {
         yulee = {
+          # PARKED: unreachable since 2026-08. Left declared rather than
+          # deleted so it comes back with one word. While false it is absent
+          # from /etc/nix/machines, which is the only thing that actually stops
+          # the daemon dispatching eval-time IFD builds to it.
+          enable = false;
           maxJobs = 7;
           speedFactor = 10;
           features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "gccarch-meteorlake" ];

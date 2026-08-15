@@ -36,24 +36,24 @@ let
       ''--option substituters "https://cache.nixos.org ssh://${p.sshUser}@${name}"'';
 
   /*
-    `--option builders`, NOT the bare `--builders` flag, and the difference is
-    not cosmetic.
+    `--option builders` rather than the bare `--builders` flag: it reaches both
+    the build step and (for nix-shell) the evaluation, and it matches what the
+    nix-shell wrappers always used.
 
-    nixos-rebuild-ng sorts its arguments into groups. `--builders` sits in
-    common_build_flags, which reaches the BUILD step only. `--option` sits in
-    common_flags, which reaches evaluation as well.
+    IT DOES NOT MAKE THE NAME TRUE, and an earlier version of this comment
+    wrongly claimed it did. nixos-rebuild-ng composes flake_eval_flags from its
+    own argument group ONLY -- models.py:183, `vars(args_groups["flake_eval_flags"])`,
+    with no `common_flags |` -- so no flag of any kind reaches the `nix eval`
+    invocation in build_flake. That invocation is where import-from-derivation
+    builds happen, and with nix-doom-emacs-unstraightened that means
+    doom-intermediates. Such a build is dispatched by the daemon via nix.conf's
+    `builders = @/etc/nix/machines`: the whole peer list, in speedFactor order,
+    regardless of what this script says.
 
-    That matters here because nix-doom-emacs-unstraightened uses
-    import-from-derivation: doom-intermediates has to be BUILT during
-    evaluation. With bare `--builders`, that build is dispatched before the flag
-    applies, so it falls back to nix.conf's `builders = @/etc/nix/machines` --
-    the full peer list, in speedFactor order. `nixos-rebuild-victus-15` would
-    then try yulee first and hang on it, which is the exact opposite of what the
-    name promises.
-
-    The hand-written wrappers this replaces had it both ways: nix-shell-<peer>
-    used `--option builders` and was right, nixos-rebuild-<peer> used
-    `--builders` and was not.
+    So `nixos-rebuild-victus-15` restricts the BUILD phase to victus-15 and
+    cannot restrict the EVAL phase at all. To genuinely exclude a peer, park it
+    with `my.remote-builder.client.peers.<name>.enable = false`, which removes it
+    from /etc/nix/machines.
   */
   rebuildFor = name: p: mkScript "nixos-rebuild-${name}" (
     [ "nixos-rebuild" "--flake ${flakeRef}" "--option max-jobs 0" ''--option builders "${builderSpec name p}"'' ]
