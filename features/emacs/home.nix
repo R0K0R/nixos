@@ -47,10 +47,26 @@ lib.mkIf cfg.enable {
       # systemd user service does not inherit the login shell's PATH, which is
       # the same reason git/ripgrep/gcc are here.
       #
-      # Substitutes prebuilt from cache.nixos.org rather than dragging in a
-      # Haskell toolchain -- it is not host-runtime by the classifier, so
-      # upstream-tools aliases it. Adding it costs 18 derivations, all of them
-      # re-wrapping Emacs and home-manager glue.
+      # COST NOTE, because the obvious measurement is misleading. Adding this
+      # currently costs 18 derivations, all Emacs re-wrapping and home-manager
+      # glue, with pandoc-cli substituting prebuilt from cache.nixos.org. That
+      # is not because pandoc is judged non-runtime -- it plainly is runtime --
+      # but because nothing has told the classifier yet: Tier 1 is the live
+      # system closure and pandoc is not installed, Tier 2's cache predates this
+      # line, and Tier 3 anchors on features/*/packages.nix plus
+      # my.packages.extra, neither of which sees extraBinPackages.
+      #
+      # extraBinPackages is wired through makeWrapper --prefix PATH, so pandoc's
+      # store path ends up inside the wrapper script: a real runtime reference.
+      # Once this is switched to and runtime-cache-refresh runs, Tier 1 picks it
+      # up, isHostRuntime flips true, and the O3/LTO overlays claim it -- at
+      # which point it is rebuilt from source and pulls a GHC toolchain.
+      #
+      # Left tuned rather than excluded: that is the classifier working as
+      # designed. If the Haskell build is not worth it, the lever is buildOnly
+      # in tuning/runtime-cache/lookup.nix, the same way ccache and cmake are
+      # kept out -- GHC does not autovectorize, so the tuning buys close to
+      # nothing here (see the nixfmt note in tuning/overlays/pseudo-cross.nix).
       pandoc
     ];
   };
