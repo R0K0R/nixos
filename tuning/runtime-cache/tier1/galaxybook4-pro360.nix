@@ -1,5 +1,5 @@
 {
-  capturedAt = "2026-08-16T09:18:07Z";
+  capturedAt = "2026-08-16T12:50:40Z";
   host = "galaxybook4-pro360";
   nixpkgsNarHash = "sha256-WWCwobJ/uN7lr/3vGFDEyOu4X5ftO54EWi4BhfEWw3E=";
   nixpkgsRev = "54ddc912ce3967d3e5a28e1192beaf496776cdea";
