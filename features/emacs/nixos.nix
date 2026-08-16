@@ -40,7 +40,7 @@ in
     };
   };
 
-  config = lib.mkIf (cfg.enable && cfg.headless) {
+  config = lib.mkIf cfg.enable {
     /*
       `withNativeCompilation` flips emacs' `meta.broken` in this nixpkgs fork.
       Isolated by evaluating each flag on the host's pkgs:
@@ -49,20 +49,37 @@ in
         emacs-nox +withTreeSitter    broken = false
         emacs-nox +withNativeComp    broken = TRUE
 
-      The pgtk build gets the equivalent downgrade from tuning/pkgs-config.nix,
-      which lists emacs-pgtk there for the same reason. A headless host does not
-      import that file -- it is meteorlake-specific qtbase patching and
-      yulee-sandbox test exclusions, none of which applies elsewhere -- so
-      downgrade just the names this build needs.
+      ONE KEY PER WRAPPING STAGE, because the flag is re-checked at each. The
+      list is not guessable and was grown twice by being bitten:
 
-      Three keys because the value is checked at each wrapping stage: the bare
-      package, its pseudo-cross spliced form, and Unstraightened's emacsWithDoom
-      around it (the last is what the eval error actually named).
+        <pkg>                                the bare package
+        <pkg>-x86_64-unknown-linux-gnu       its pseudo-cross spliced form
+        <pkg>-...-with-packages              emacsWithPackages, which
+                                             Unstraightened builds via
+                                             emacsPackagesFor
+        <pkg>-...-with-doom                  emacsWithDoom on top
+
+      -with-packages surfaced only once the classifier fix stopped aliasing
+      emacs-pgtk to an unbroken upstream build; before that the stage existed
+      but was never evaluated against the fork's broken flag.
+
+      Both builds are listed whenever the feature is on, not gated on
+      `headless`: these are inert handler entries, and gating them means the
+      list is wrong the moment a host flips. The pgtk keys used to live in
+      tuning/pkgs-config.nix, which is gated on qtPatches.enable -- unrelated to
+      Emacs, and the reason a desktop host could lose them by turning off Qt
+      patching.
     */
     nixpkgs.config.problems.handlers = {
       emacs-nox.broken = "warn";
       emacs-nox-x86_64-unknown-linux-gnu.broken = "warn";
+      emacs-nox-x86_64-unknown-linux-gnu-with-packages.broken = "warn";
       emacs-nox-x86_64-unknown-linux-gnu-with-doom.broken = "warn";
+
+      emacs-pgtk.broken = "warn";
+      emacs-pgtk-x86_64-unknown-linux-gnu.broken = "warn";
+      emacs-pgtk-x86_64-unknown-linux-gnu-with-packages.broken = "warn";
+      emacs-pgtk-x86_64-unknown-linux-gnu-with-doom.broken = "warn";
     };
   };
 }

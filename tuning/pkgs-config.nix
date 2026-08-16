@@ -72,11 +72,9 @@ lib.mkIf config.my.tuning.qtPatches.enable {
     "pypy2.7-pip-20.3.4"
   ];
 
-  # emacs-pgtk 30.x is flagged broken upstream but the override in
-  # features/emacs/env.nix patches around it. Downgrade to a warning.
+  # The emacs-pgtk broken handlers moved to features/emacs/nixos.nix, which owns
+  # that package and is not gated on qtPatches.enable the way this file is.
   nixpkgs.config.problems.handlers = {
-    emacs-pgtk-x86_64-unknown-linux-gnu-with-doom.broken = "warn";
-    emacs-pgtk.broken = "warn";
     zoom.broken = "warn";
   };
 
