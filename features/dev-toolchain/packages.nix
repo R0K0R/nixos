@@ -18,8 +18,6 @@
     clang-tools # clangd LSP + clang-format/clang-tidy
     gcc
     gdb
-    flutter
-    dart
     tinymist
     typst
   ];
