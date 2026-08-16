@@ -283,12 +283,40 @@ let
   tier2Set = toSet tier2Names;
   tier3Set = toSet tier3Names;
 
+  /*
+    Attribute name -> pname, from the aliasable cache's own attribute walk.
+
+    Every tier records PNAMES -- refresh-tier1.sh reads pname from each store
+    path's deriver, tier2/tier3 key their genericClosure on p.pname -- while
+    every CALLER asks by top-level ATTRIBUTE NAME: upstream-tools.nix walks
+    aliasable `names`, o3.nix and gentoo-lto.nix filter their own lists.
+
+    Where the two differ the classifier held the right answer under a key
+    nothing looked up. `pandoc` is recorded as `pandoc-cli`, so
+    isHostRuntime "pandoc" was false and upstream-tools replaced a genuinely
+    host-runtime package with an untuned upstream build. 490 attributes on this
+    host were affected; the map has 3200 entries in total.
+
+    Falls back to an empty map when the aliasable cache is absent or stale, in
+    which case behaviour is exactly what it was before -- pname-only matching.
+  */
+  aliasablePath = ./aliasable.nix;
+  aliasable = if builtins.pathExists aliasablePath then import aliasablePath else null;
+  attrToPname =
+    if aliasable != null && aliasable.nixpkgsNarHash == currentNarHash then
+      aliasable.pnames or { }
+    else
+      { };
+
   isHostRuntime =
     pkgName:
     let
       n = lib.toLower pkgName;
+      # The caller may hand us either spelling, so try both.
+      alias = lib.toLower (attrToPname.${pkgName} or attrToPname.${n} or n);
+      inAny = k: tier1Set ? ${k} || tier2Set ? ${k} || tier3Set ? ${k};
     in
-    tier1Set ? ${n} || tier2Set ? ${n} || tier3Set ? ${n};
+    inAny n || inAny alias;
 in
 {
   inherit isHostRuntime hasWarmCache;

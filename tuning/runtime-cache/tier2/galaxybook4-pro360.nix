@@ -1,5 +1,5 @@
 {
-  anchorCount = 265;
+  anchorCount = 266;
   buildOnly = [
     "ccache"
     "mold"
@@ -31,6 +31,7 @@
     "nix-shell-yulee"
     "flamenco"
     "wl-clipboard"
+    "lisgd"
     "qtdeclarative"
     "qmlls"
     "opencode"
@@ -224,6 +225,8 @@
     "libjpeg-turbo"
     "wayland"
     "wayland-protocols"
+    "libinput"
+    "libx11"
     "qtlanguageserver"
     "qtshadertools"
     "qtsvg"
@@ -318,7 +321,6 @@
     "libxcb"
     "xevd"
     "xeve"
-    "libx11"
     "libxv"
     "libxext"
     "libxml2"
@@ -628,7 +630,6 @@
     "hyprlang"
     "hyprutils"
     "hyprwire"
-    "libinput"
     "muparser"
     "pango"
     "re2"
@@ -738,6 +739,7 @@
     "libxcb-image"
     "libxcb-render-util"
     "libxcb-cursor"
+    "libwacom"
     "jasper"
     "libmng"
     "ada"
@@ -923,7 +925,6 @@
     "libzip"
     "xcur2png"
     "libspng"
-    "libwacom"
     "gbenchmark"
     "libmd"
     "libev"
@@ -1076,7 +1077,7 @@
     "pycparser"
     "die-hook"
   ];
-  capturedAt = "2026-08-15T15:46:42Z";
+  capturedAt = "2026-08-16T09:17:52Z";
   host = "galaxybook4-pro360";
   nixpkgsNarHash = "sha256-WWCwobJ/uN7lr/3vGFDEyOu4X5ftO54EWi4BhfEWw3E=";
   nixpkgsRev = "54ddc912ce3967d3e5a28e1192beaf496776cdea";
@@ -1094,6 +1095,7 @@
     "nix-shell-yulee"
     "flamenco"
     "wl-clipboard"
+    "lisgd"
     "qtdeclarative"
     "qmlls"
     "opencode"
@@ -1287,6 +1289,8 @@
     "libjpeg-turbo"
     "wayland"
     "wayland-protocols"
+    "libinput"
+    "libx11"
     "qtlanguageserver"
     "qtshadertools"
     "qtsvg"
@@ -1381,7 +1385,6 @@
     "libxcb"
     "xevd"
     "xeve"
-    "libx11"
     "libxv"
     "libxext"
     "libxml2"
@@ -1691,7 +1694,6 @@
     "hyprlang"
     "hyprutils"
     "hyprwire"
-    "libinput"
     "muparser"
     "pango"
     "re2"
@@ -1802,6 +1804,7 @@
     "libxcb-image"
     "libxcb-render-util"
     "libxcb-cursor"
+    "libwacom"
     "jasper"
     "libmng"
     "ada"
@@ -1990,7 +1993,6 @@
     "libzip"
     "xcur2png"
     "libspng"
-    "libwacom"
     "gbenchmark"
     "libmd"
     "libev"

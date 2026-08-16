@@ -61,12 +61,44 @@ nix eval --impure --expr "
       && isDrvIn fork n
       && isDrvIn upstream n
       && !(isTargetAware n);
+
+    keepable = builtins.filter structurallyKeepable (builtins.attrNames fork);
+
+    /*
+      Attribute name -> pname, recorded ONLY where the two differ.
+
+      Every runtime-cache tier records PNAMES: refresh-tier1.sh reads pname from
+      each store path's own deriver (deliberately -- see its own comment), and
+      tier2/tier3 key their genericClosure on p.pname. But every CONSUMER asks
+      by TOP-LEVEL ATTRIBUTE NAME: upstream-tools.nix walks the names list
+      below, o3.nix and gentoo-lto.nix filter their own attribute lists.
+
+      Where the two coincide nobody notices. Where they do not, the classifier
+      holds the right answer under a key nothing ever looks up -- pandoc is
+      recorded as pandoc-cli, so isHostRuntime on the attribute returned false
+      and upstream-tools aliased a genuinely host-runtime package to an untuned
+      upstream build. Measured at 490 such attributes against this host tier1.
+
+      Recorded here rather than in the tier files because this walk already
+      visits every attribute, so it costs nothing extra, and because one map
+      fixes all three tiers at once instead of each having to capture its own.
+    */
+    pnameOf = n:
+      let r = builtins.tryEval (fork.\${n}.pname or null);
+      in if r.success then r.value else null;
   in
   {
     nixpkgsNarHash = \"$NIXPKGS_NARHASH\";
     nixpkgsRev = \"$NIXPKGS_REV\";
     capturedAt = \"$CAPTURED_AT\";
-    names = builtins.filter structurallyKeepable (builtins.attrNames fork);
+    names = keepable;
+    pnames = lib.listToAttrs (
+      builtins.concatMap (
+        n:
+        let pn = pnameOf n;
+        in if pn != null && pn != n then [ (lib.nameValuePair n pn) ] else [ ]
+      ) keepable
+    );
   }
 " > "$OUT.tmp"
 mv "$OUT.tmp" "$OUT"

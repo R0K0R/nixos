@@ -1,5 +1,5 @@
 {
-  capturedAt = "2026-08-15T15:46:57Z";
+  capturedAt = "2026-08-16T09:18:07Z";
   host = "galaxybook4-pro360";
   nixpkgsNarHash = "sha256-WWCwobJ/uN7lr/3vGFDEyOu4X5ftO54EWi4BhfEWw3E=";
   nixpkgsRev = "54ddc912ce3967d3e5a28e1192beaf496776cdea";
@@ -956,6 +956,7 @@
     "linux"
     "linux-headers"
     "linux-pam"
+    "lisgd"
     "lksctp-tools"
     "llama"
     "llhttp"
@@ -1145,6 +1146,7 @@
     "packagekit-qt"
     "packaging"
     "pam_u2f"
+    "pandoc-cli"
     "pango"
     "partio"
     "patch"
