@@ -56,17 +56,23 @@ lib.mkIf cfg.enable {
       # line, and Tier 3 anchors on features/*/packages.nix plus
       # my.packages.extra, neither of which sees extraBinPackages.
       #
-      # extraBinPackages is wired through makeWrapper --prefix PATH, so pandoc's
-      # store path ends up inside the wrapper script: a real runtime reference.
-      # Once this is switched to and runtime-cache-refresh runs, Tier 1 picks it
-      # up, isHostRuntime flips true, and the O3/LTO overlays claim it -- at
-      # which point it is rebuilt from source and pulls a GHC toolchain.
+      # extraBinPackages is wired through makeWrapper `--suffix PATH` (see
+      # build-helpers/build-doom-emacs.sh in Unstraightened), so pandoc's store
+      # path ends up inside the wrapper script: a real runtime reference, and
+      # the daemon finds it too. Once this is switched to and
+      # runtime-cache-refresh runs, Tier 1 picks it up, isHostRuntime flips
+      # true, and the O3/LTO overlays claim it -- at which point it is rebuilt
+      # from source and pulls a GHC toolchain.
       #
-      # Left tuned rather than excluded: that is the classifier working as
-      # designed. If the Haskell build is not worth it, the lever is buildOnly
-      # in tuning/runtime-cache/lookup.nix, the same way ccache and cmake are
-      # kept out -- GHC does not autovectorize, so the tuning buys close to
-      # nothing here (see the nixfmt note in tuning/overlays/pseudo-cross.nix).
+      # DELIBERATELY LEFT TUNED. Adding it to buildOnly in
+      # tuning/runtime-cache/lookup.nix would keep the prebuilt upstream binary
+      # and skip the Haskell build, and there is a real argument for it (GHC
+      # does not autovectorize -- see the nixfmt note in
+      # tuning/overlays/pseudo-cross.nix). Rejected anyway: buildOnly means
+      # "this never runs on the host", and pandoc does. Putting a genuine
+      # runtime package there to dodge a build cost would make that list mean
+      # two different things, and the next person reading it could not tell
+      # which entries are claims about behaviour and which are cost dodges.
       pandoc
     ];
   };
