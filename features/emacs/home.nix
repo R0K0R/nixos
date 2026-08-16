@@ -42,6 +42,16 @@ lib.mkIf cfg.enable {
       gnutar
       gzip
       gcc # native-comp / org-babel C, not tree-sitter grammars (Nix-provided now).
+      # Org export, ox-pandoc, and markdown-mode's markdown-command. In
+      # extraBinPackages rather than home.packages so the DAEMON finds it: a
+      # systemd user service does not inherit the login shell's PATH, which is
+      # the same reason git/ripgrep/gcc are here.
+      #
+      # Substitutes prebuilt from cache.nixos.org rather than dragging in a
+      # Haskell toolchain -- it is not host-runtime by the classifier, so
+      # upstream-tools aliases it. Adding it costs 18 derivations, all of them
+      # re-wrapping Emacs and home-manager glue.
+      pandoc
     ];
   };
 
