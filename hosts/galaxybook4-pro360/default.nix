@@ -113,6 +113,14 @@
       device = "/dev/input/by-path/pci-0000:00:15.1-platform-i2c_designware.1-event";
     };
 
+    /*
+      One-offs that do not justify a feature. Literal list -- see
+      my.packages.extra's own docs on why lookup.nix cannot read a mkIf here.
+    */
+    packages.extra.user = with pkgs; [
+      rquickshare # Google Quick Share client, for phone <-> laptop transfers
+    ];
+
     samsung-galaxybook.enable = true;
     power.enable = true;
     flatpak.enable = true;

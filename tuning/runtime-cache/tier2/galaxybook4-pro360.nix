@@ -1077,10 +1077,10 @@
     "pycparser"
     "die-hook"
   ];
-  capturedAt = "2026-08-16T12:50:24Z";
+  capturedAt = "2026-08-18T23:31:45Z";
   host = "galaxybook4-pro360";
-  nixpkgsNarHash = "sha256-WWCwobJ/uN7lr/3vGFDEyOu4X5ftO54EWi4BhfEWw3E=";
-  nixpkgsRev = "54ddc912ce3967d3e5a28e1192beaf496776cdea";
+  nixpkgsNarHash = "sha256-B559XfYIClgJfqwqy+kRXCXBYjHo5RFu1cmLu7Z9F+U=";
+  nixpkgsRev = "58cac1ba29762b3f2fb358ccd87685d6feca2ab7";
   runtimeNames = [
     "runtime-cache-refresh"
     "camera-relay"
