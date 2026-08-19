@@ -1,5 +1,5 @@
 {
-  capturedAt = "2026-08-18T23:31:02Z";
+  capturedAt = "2026-08-18T23:44:47Z";
   names = [
     "AMB-plugins"
     "ArchiSteamFarm"
