@@ -120,341 +120,427 @@ in
   wayland.windowManager.hyprland = {
     enable = osConfig.my.desktop.compositor == "hyprland";
 
-    # Pin explicitly: home-manager >=26.05 defaults this to "lua" based on
-    # home.stateVersion, which silently mangled our hyprlang bind strings
-    # (e.g. "$mod" = "SUPER" -> invalid `hl.$mod("SUPER")` call) and can't
-    # source DMS's plain-hyprlang colors/layout/outputs.conf files at all.
-    configType = "hyprlang";
+    # Lua, not hyprlang. Verified against this exact build's own source
+    # (0.56.0's src/config/lua/bindings/*.cpp) rather than assumed from docs
+    # of a fast-moving pre-1.0 API -- see extraConfig below for API notes.
+    configType = "lua";
 
     settings = lib.mkIf (osConfig.my.desktop.compositor == "hyprland") {
-      "$mod" = "SUPER";
-
       /*
-        DMS's Hyprland theming (Matugen colors + gaps/rounding) writes Lua snippets
-        (~/.config/hypr/dms/{colors,layout}.lua using hl.config({...})), not the
-        .conf files this module's `source=` used to point at (always empty ->
-        rounding/focus-ring/border-color never applied). hyprlang can't source a
-        .lua file, and DMS has no .conf output mode, so this is a static snapshot
-        of the current DMS-generated values, not live-updating with dynamicTheming.
+        Everything below is ONE hl.config({...}) call: the Lua renderer emits
+        `hl.<name>(...)` per top-level settings key, and `config` is the
+        generic "any hyprlang-equivalent value" sink -- general, decoration,
+        input, gestures, group, animations, scrolling, binds all nest inside
+        it rather than getting their own top-level hl.<category>() call.
       */
-      general = {
-        "col.active_border" = "rgb(ffffff)";
-        "col.inactive_border" = "rgb(929092)";
-        gaps_in = 2;
-        gaps_out = 4;
-        border_size = 0;
-        layout = "scrolling";
-      };
+      config = {
+        general = {
+          gaps_in = 2;
+          gaps_out = 4;
+          border_size = 0;
+          layout = "scrolling";
+          # Ask 2: resize by dragging a window's edge/gap, with mouse or
+          # finger -- both route through the same click-and-drag hit-test,
+          # so enabling this covers touch too (verified against 0.56.0
+          # source: general:resize_on_border, default false).
+          resize_on_border = true;
+          # border_size = 0 above means there is no visible border to grab;
+          # this extends the invisible hitbox around the window edge instead
+          # (general:extend_border_grab_area, px, default 15 -- kept at
+          # default, generous enough for a finger).
+          extend_border_grab_area = 15;
+          hover_icon_on_border = true;
+        };
 
-      # Niri's touchpad block explicitly enables natural-scroll; Hyprland has no
-      # input block at all here, defaulting to non-natural (i.e. inverted relative
-      # to what niri was doing).
-      input.touchpad.natural_scroll = true;
+        /*
+          DMS's Hyprland theming writes two Lua snippets, each its own
+          hl.config call: colors.lua (general.col.*, group.col.*) and
+          layout.lua (gaps_in/gaps_out/border_size/decoration.rounding).
+          hyprlang could never source either -- hence the static snapshot
+          this replaced.
 
-      # 3-finger swipe drags/moves the focused window around; 4-finger swipe
-      # switches workspaces. Vertical to match niri's vertical-workspace model
-      # (workspaces animation style below must also be "slidevert" — the swipe's
-      # up/down vs left/right behavior is derived from the animation style, not
-      # just this direction setting).
-      /*
-        Hyprland's only touchscreen gesture: a single-finger swipe from the
-        screen EDGE, switching workspaces. Complements the lisgd daemon
-        (features/touch-gestures) rather than replacing it -- that handles
-        multi-finger swipes anywhere on the panel.
+          colors.lua is now required live (extraConfig) -- it only touches
+          fields nothing else here sets, so there's nothing to race.
+          layout.lua is deliberately NOT required: it sets border_size = 2,
+          and this config keeps border_size = 0 on purpose (the touchscreen
+          workspace-swipe activation strip below is
+          (gaps_out + border_size) / screen_height -- widening border_size
+          silently widens that strip). gaps_in/gaps_out/rounding stay static
+          snapshots below, same limitation as before, now isolated to just
+          those three values instead of colors too.
+        */
 
-        The activation strip is (gaps_out + border_size) / screen_height, so
-        with gaps_out = 4 and border_size = 0 it is four pixels. Enabled because
-        it costs nothing and is occasionally hit by accident-turned-habit, but
-        it is not the mechanism to rely on. Widening it means widening the gaps,
-        which is not worth it.
+        # Niri's touchpad block explicitly enables natural-scroll; Hyprland
+        # has no input block at all here, defaulting to non-natural (i.e.
+        # inverted relative to what niri was doing).
+        input.touchpad.natural_scroll = true;
 
-        The axis follows the workspaces animation style, not this setting:
-        "slidevert" below makes it top/bottom edges, matching the touchpad's
-        `4, vertical, workspace`.
-      */
-      gestures = {
-        workspace_swipe_touch = true;
-        workspace_swipe_touch_invert = false;
-      };
+        /*
+          Ask 1, root cause (verified against 0.56.0 source, not guessed):
+          Super+H/L (movefocus l/r) direction-queries "is there a window to
+          my left/right?" -- a maximized window fills the screen, so the
+          query finds nothing and the dispatcher silently no-ops. That's
+          binds:movefocus_cycles_fullscreen (default false); enabling it
+          makes movefocus cycle through fullscreen/maximized windows instead
+          of finding no neighbor. src/config/shared/actions/ConfigActions.cpp,
+          Actions::moveFocus: the window-to-change-to is only computed via
+          the fullscreen-aware cycle query when this is true.
 
-      gesture = [
-        "3, swipe, move"
-        "4, vertical, workspace"
-        # scrollMove: purpose-built gesture for the scrolling layout's tape —
-        # live momentum + snap-to-column (gestures:scrolling:* defaults handle it).
-        "4, horizontal, scrollMove"
-      ];
+          Super+J/K (workspace e∓1) and the touchscreen swipe (lisgd ->
+          `hyprctl dispatch workspace e±1`, the SAME dispatcher) are a
+          separate, NOT YET RESOLVED question -- I traced the entire
+          changeWorkspace call chain (resolveWorkspaceForChange ->
+          Actions::changeWorkspace -> CMonitor::changeWorkspace) in 0.56.0
+          source and found no fullscreen/maximize gate anywhere in it: the
+          switch and refocus proceed unconditionally regardless of the
+          outgoing window's fullscreen state. So this setting doesn't touch
+          J/K's problem, and neither should any Hyprland-level fix I could
+          find. Left as a real open item; see the chat for what to check
+          empirically (hyprctl workspaces active ID before/after, whether the
+          emacs `maximize on` windowrule is just re-applying on the
+          destination workspace too) before adding a workaround for a cause
+          that isn't confirmed yet.
+        */
+        binds.movefocus_cycles_fullscreen = true;
 
-      # Real hyprlang keys mix separators: "category:col.field", not
-      # "category:col:field" — a nested `col = {...}` attrset gets serialized
-      # with `:` at every level, which doesn't exist ("does not exist" errors).
-      # Flat string keys with the literal dot preserve the real key exactly.
-      group = {
-        "col.border_active" = "rgb(ffffff)";
-        "col.border_inactive" = "rgb(929092)";
-        "col.border_locked_active" = "rgb(ffb4ab)";
-        "col.border_locked_inactive" = "rgb(929092)";
-      };
+        /*
+          3-finger swipe drags/moves the focused window around; 4-finger
+          swipe switches workspaces. Vertical to match niri's
+          vertical-workspace model (workspaces animation style below must
+          also be "slidevert" -- the swipe's up/down vs left/right behavior
+          is derived from the animation style, not just this setting).
 
-      decoration = {
-        rounding = 16;
-        # Glassmorphism: true backdrop blur behind translucent surfaces
-        # (DMS panels get alpha < 1 via its transparency settings; the
-        # layerrule below opts the dms namespace into this blur).
-        blur = {
+          Hyprland's only touchscreen gesture: a single-finger swipe from the
+          screen EDGE, switching workspaces. Complements the lisgd daemon
+          (features/touch-gestures) rather than replacing it -- that handles
+          multi-finger swipes anywhere on the panel.
+
+          The activation strip is (gaps_out + border_size) / screen_height,
+          so with gaps_out = 4 and border_size = 0 it is four pixels. Enabled
+          because it costs nothing and is occasionally hit by
+          accident-turned-habit, but it is not the mechanism to rely on.
+          Widening it means widening the gaps, which is not worth it.
+
+          The axis follows the workspaces animation style, not this setting:
+          "slidevert" below makes it top/bottom edges, matching the
+          touchpad's 4-finger vertical gesture.
+        */
+        gestures = {
+          workspace_swipe_touch = true;
+          workspace_swipe_touch_invert = false;
+        };
+
+        # group.col.* comes from require("dms.colors") in extraConfig, same
+        # as general's border colors -- DMS's colors.lua sets both in one
+        # hl.config call (verified against its actual generated content), so
+        # setting them here too would just race the same fields against it.
+
+        decoration = {
+          rounding = 16;
+          # Glassmorphism: true backdrop blur behind translucent surfaces
+          # (DMS panels get alpha < 1 via its transparency settings; the
+          # layer_rule in extraConfig below opts the dms namespace into this
+          # blur).
+          blur = {
+            enabled = true;
+            size = 8;
+            passes = 3;
+            vibrancy = 0.17;
+            ignore_opacity = true;
+            popups = true;
+            # Frost texture: over dark/flat backdrops (e.g. the wallpaper
+            # strip behind the bar's exclusive zone -- windows never go
+            # under it), plain blur is invisible. Noise + slight brightness
+            # lift make the glass read as glass regardless of what's behind
+            # it.
+            noise = 0.02;
+            brightness = 1.1;
+            contrast = 1.0;
+          };
+        };
+
+        /*
+          Native scrolling layout (Hyprland >=0.55, src/layout/algorithm/tiled/scrolling) —
+          niri-like columns, no plugin needed. column_width matches niri's
+          layout.default-column-width.proportion = 0.5 from features/niri/home.nix.
+        */
+        scrolling = {
+          column_width = 0.5;
+          fullscreen_on_one_column = true;
+          follow_focus = true;
+        };
+
+        animations = {
+          # Hyprland's stock animation speeds read as sluggish coming from niri.
           enabled = true;
-          size = 8;
-          passes = 3;
-          vibrancy = 0.17;
-          ignore_opacity = true;
-          popups = true;
-          # Frost texture: over dark/flat backdrops (e.g. the wallpaper strip
-          # behind the bar's exclusive zone -- windows never go under it),
-          # plain blur is invisible. Noise + slight brightness lift make the
-          # glass read as glass regardless of what's behind it.
-          noise = 0.02;
-          brightness = 1.1;
-          contrast = 1.0;
+          animation = [
+            "global, 1, 4, default"
+            "windows, 1, 3, default"
+            "border, 1, 3, default"
+            "fade, 1, 3, default"
+            # slidevert: vertical slide, matching niri's vertical workspace
+            # model and the gesture's vertical swipe direction above.
+            "workspaces, 1, 3, default, slidevert"
+          ];
         };
       };
 
-      # DMS's cursorSettings plumbing is niri-only (cursorSettings.niri.hideWhenTyping);
-      # Hyprland never gets these applied, so it falls back to its own built-in
-      # hyprcursor theme. Set both XCURSOR_* (X/Wayland apps) and HYPRCURSOR_*
-      # (Hyprland's native cursor renderer) so it's consistent everywhere.
-      # Bibata-Modern-Classic-Glass = Bibata-Modern-Classic with alpha
-      # multiplied down, generated in features/cursor-theme/home.nix (home.pointerCursor
-      # there also enforces it via dconf + ~/.icons/default so apps can't
-      # resolve a different theme). No hyprcursor manifest; Hyprland falls
-      # back to the XCursor theme of the same name, which is intended.
-      env = [
-        "XCURSOR_THEME,Bibata-Modern-Classic-Glass"
-        "XCURSOR_SIZE,24"
-        "HYPRCURSOR_THEME,Bibata-Modern-Classic-Glass"
-        "HYPRCURSOR_SIZE,24"
-        # Qt apps outside Plasma (dolphin, kdenlive, ...) have no platform
-        # theme and fall back to a broken mixed palette (black-on-black text).
-        # qt6ct is installed and DMS's matugen already generates its palette
-        # (~/.config/qt6ct -> DankMatugen.colors) -- this activates it.
-        # This alone is NOT sufficient -- plugin discovery, qt6ct.conf
-        # contents, and KDE apps' KColorSchemeManager each needed their own
-        # fix. See features/qt-theming/nixos.nix (QT_PLUGIN_PATH +
-        # the full debugging story) and features/qt-theming/
-        # qt-theming.nix (kdeglobals + qt6ct.conf enforcement).
-        "QT_QPA_PLATFORMTHEME,qt6ct"
-      ];
-
-      # Auto-scale differs between compositors (Hyprland picked 2.0 for this
-      # 2880x1800 panel; niri's own auto heuristic apparently picked something
-      # smaller, hence text/buttons looking oversized after switching). Pin
-      # explicitly so it doesn't depend on Hyprland's auto-detection. Output name
-      # and scale both come from the host -- see my.desktop.primaryOutput.
-      monitor = [
-        "${osConfig.my.desktop.primaryOutput}, preferred, auto, ${osConfig.my.desktop.primaryOutputScale}"
-      ];
-
-      # Hyprland's stock animation speeds read as sluggish coming from niri.
-      animations = {
-        enabled = true;
-        animation = [
-          "global, 1, 4, default"
-          "windows, 1, 3, default"
-          "border, 1, 3, default"
-          "fade, 1, 3, default"
-          # slidevert: vertical slide, matching niri's vertical workspace model
-          # and the gesture's vertical swipe direction above.
-          "workspaces, 1, 3, default, slidevert"
-        ];
-      };
-
-      # iio-hyprland: reads iio-sensor-proxy orientation over D-Bus, rotates the
-      # eDP-1 output and touch input transform automatically (accel_3d + hinge
-      # sensors confirmed present via /sys/bus/iio/devices; enabled in hardware.nix).
-      # NO "dms run" here: systemd already starts dms.service via
-      # graphical-session.target (uwsm activates it) -- an exec-once copy runs
-      # a second, unmanaged instance (observed: two bars, hyprland-parented
-      # `dms run` without --session alongside dms.service's `dms run --session`).
-      # Same reasoning as the niri side's spawn-at-startup comment.
-      exec-once = [
-        "iio-hyprland ${osConfig.my.desktop.primaryOutput}"
-      ];
-
-      # New rule syntax (0.55+): each comma-separated element is "key value",
-      # not the old bare-keyword form ("noanim" alone errors: "missing a value").
-      layerrule = [
-        "no_anim on, match:namespace ^(dms.*)$"
-        # Glassmorphism for DMS layer surfaces. ignore_alpha skips
-        # near-fully-transparent pixels (the empty regions of the bar
-        # surface) so they don't render as a hazy smear.
-        "blur on, match:namespace ^(dms.*)$"
-        "ignore_alpha 0.05, match:namespace ^(dms.*)$"
-        # Same glass treatment for the OSK (features/dms/plugins/osk-toggle):
-        # wvkbd's own --alpha only sets its drawn pixels' transparency, the
-        # actual frosted backdrop still needs Hyprland's blur behind it.
-        "blur on, match:namespace ^(wvkbd)$"
-        "ignore_alpha 0.05, match:namespace ^(wvkbd)$"
-      ];
-
       /*
-        Native scrolling layout (Hyprland >=0.55, src/layout/algorithm/tiled/scrolling) —
-        niri-like columns, no plugin needed. column_width matches niri's
-        layout.default-column-width.proportion = 0.5 from features/niri/home.nix.
+        Touchpad multi-finger gestures. hl.gesture({fingers, direction, action}) --
+        one call per list element; direction values verified against
+        TrackpadGestures.cpp's dirForString ("swipe" for the free-drag verb,
+        "vertical"/"horizontal" for axis-locked ones -- NOT the legacy
+        "3, swipe, move" string form, which Lua mode doesn't parse at all).
       */
-      scrolling = {
-        column_width = 0.5;
-        fullscreen_on_one_column = true;
-        follow_focus = true;
-      };
-
-      # DMS's Hangul toggle, mirrored from features/niri/home.nix.
-      bind =
-        [
-          # Custom overrides (same as niri.nix).
-          "$mod, space, exec, dms ipc call spotlight toggle"
-          # niri's Mod+Comma (consume-window-into-column) has no scrolling-layout
-          # equivalent (columns hold exactly one window on the tape); omitted.
-          "$mod, I, exec, dms ipc call settings toggle"
-          "$mod, Return, exec, kitty"
-          "$mod, W, exec, firefox"
-          "$mod, E, exec, emacsclient -c"
-          "$mod, A, exec, dms ipc call plugins toggle aiAssistant"
-
-          # DMS IPC toggles, replicated by hand (single source of truth: DMS's own
-          # niri enableKeybinds module has no hyprland equivalent, see niri.nix).
-          "$mod, N, exec, dms ipc call notifications toggle"
-          "$mod, P, exec, dms ipc call notepad toggle"
-          "$mod, V, exec, dms ipc call clipboard toggle"
-          "$mod, X, exec, dms ipc call powermenu toggle"
-          "$mod, M, exec, dms ipc call processlist toggle"
-          "$mod ALT, N, exec, dms ipc call night toggle"
-          "SUPER ALT, L, exec, dms ipc call lock lock"
-
-          # Window management
-          "$mod, Q, killactive,"
-          "$mod, F, fullscreen, 0"
-          "$mod SHIFT, F, fullscreen, 1"
-          "$mod ALT, space, togglefloating,"
-          # niri's Mod+Shift+V (switch focus between floating/tiling) has no
-          # direct hyprland dispatcher; `togglegroup` is a different concept
-          # (window grouping), so it's dropped rather than mis-mapped.
-
-          # niri's Mod+R (switch-preset-column-width) -> scrolling layout's
-          # colresize +conf, which cycles through scrolling:explicit_column_widths.
-          "$mod, R, layoutmsg, colresize +conf"
-
-          # Focus movement (h/j/k/l + arrows)
-          "$mod, left, movefocus, l"
-          "$mod, down, movefocus, d"
-          "$mod, up, movefocus, u"
-          "$mod, right, movefocus, r"
-          "$mod, H, movefocus, l"
-          "$mod, J, workspace, e-1"
-          "$mod, K, workspace, e+1"
-          "$mod, L, movefocus, r"
-          "$mod, Page_Down, workspace, e-1"
-          "$mod, Page_Up, workspace, e+1"
-          "$mod CTRL, U, movetoworkspace, e-1"
-          "$mod CTRL, I, movetoworkspace, e+1"
-
-          # Move window
-          "$mod CTRL, left, movewindow, l"
-          "$mod CTRL, down, movewindow, d"
-          "$mod CTRL, up, movewindow, u"
-          "$mod CTRL, right, movewindow, r"
-          "$mod CTRL, H, movewindow, l"
-          "$mod CTRL, J, movewindow, d"
-          "$mod CTRL, K, movewindow, u"
-          "$mod CTRL, L, movewindow, r"
-          "$mod CTRL, Page_Down, movetoworkspace, e-1"
-          "$mod CTRL, Page_Up, movetoworkspace, e+1"
-
-          # Resize (niri's Mod+Minus/Equal, Mod+Shift+Minus/Equal)
-          "$mod, minus, resizeactive, -10% 0"
-          "$mod, equal, resizeactive, 10% 0"
-          "$mod SHIFT, minus, resizeactive, 0 -10%"
-          "$mod SHIFT, equal, resizeactive, 0 10%"
-
-          # Monitor focus
-          "$mod SHIFT, left, focusmonitor, l"
-          "$mod SHIFT, down, focusmonitor, d"
-          "$mod SHIFT, up, focusmonitor, u"
-          "$mod SHIFT, right, focusmonitor, r"
-
-          # Move column to monitor (niri's Mod+Shift+Ctrl+...)
-          "$mod SHIFT CTRL, left, movewindow, mon:l"
-          "$mod SHIFT CTRL, down, movewindow, mon:d"
-          "$mod SHIFT CTRL, up, movewindow, mon:u"
-          "$mod SHIFT CTRL, right, movewindow, mon:r"
-          "$mod SHIFT CTRL, H, movewindow, mon:l"
-          "$mod SHIFT CTRL, J, movewindow, mon:d"
-          "$mod SHIFT CTRL, K, movewindow, mon:u"
-          "$mod SHIFT CTRL, L, movewindow, mon:r"
-
-          # Workspaces 1-9
-          "$mod, 1, workspace, 1"
-          "$mod, 2, workspace, 2"
-          "$mod, 3, workspace, 3"
-          "$mod, 4, workspace, 4"
-          "$mod, 5, workspace, 5"
-          "$mod, 6, workspace, 6"
-          "$mod, 7, workspace, 7"
-          "$mod, 8, workspace, 8"
-          "$mod, 9, workspace, 9"
-
-          "$mod CTRL, 1, movetoworkspace, 1"
-          "$mod CTRL, 2, movetoworkspace, 2"
-          "$mod CTRL, 3, movetoworkspace, 3"
-          "$mod CTRL, 4, movetoworkspace, 4"
-          "$mod CTRL, 5, movetoworkspace, 5"
-          "$mod CTRL, 6, movetoworkspace, 6"
-          "$mod CTRL, 7, movetoworkspace, 7"
-          "$mod CTRL, 8, movetoworkspace, 8"
-          "$mod CTRL, 9, movetoworkspace, 9"
-
-          "$mod SHIFT, E, exit,"
-          ", Print, exec, grimblast copy area"
-          "CTRL, Print, exec, grimblast copy screen"
-          "ALT, Print, exec, grimblast copy active"
-          "$mod SHIFT, P, dpms, off"
-        ]
-        ++ [
-          # Compositor-level IME toggle, same logic as niri.nix's Hangul bind.
-          ", Hangul, exec, ${hangulToggle}"
-        ];
-
-      bindel = [
-        ", XF86AudioRaiseVolume, exec, dms ipc call audio increment 3"
-        ", XF86AudioLowerVolume, exec, dms ipc call audio decrement 3"
-        ", XF86MonBrightnessUp, exec, dms ipc call brightness increment 5 \"\""
-        ", XF86MonBrightnessDown, exec, dms ipc call brightness decrement 5 \"\""
-      ];
-
-      bindl = [
-        ", XF86AudioMute, exec, dms ipc call audio mute"
-        ", XF86AudioMicMute, exec, dms ipc call audio micmute"
-        # "l" flag (bindl) so these still fire once already locked -- lid
-        # can close after a manual lock, not just trigger one.
-        ", switch:on:Lid Switch, exec, ${lidClose}"
-        ", switch:off:Lid Switch, exec, ${lidOpen}"
-      ];
-
-      # windowrulev2 is deprecated/removed (0.55+); plain windowrule now carries the
-      # same multi-match syntax, but each element is "key value" (no bare keywords).
-      windowrule = [
-        "maximize on, match:class ^(emacs)$"
-        "maximize on, match:class ^(org.gnu.emacs)$"
-        # Glassmorphism: translucent KDE apps; backdrop blur applies to
-        # translucent windows automatically (decoration:blur). kdeconnect
-        # covers all its windows (.app, .sms, -indicator, ...).
-        "opacity 0.65 0.65, match:class ^(org\\.kde\\.dolphin)$"
-        "opacity 0.65 0.65, match:class ^(org\\.kde\\.kdeconnect.*)$"
-        # Claude Desktop: app_id from the deb's desktop-file StartupWMClass
-        # (Chromium derives it from package.json desktopName). Same 0.65 as
-        # the KDE apps -- the package forces its dark backgrounds to #000
-        # (see packages/claude-desktop/package.nix), so it composites
-        # identically to kitty/dolphin.
-        "opacity 0.65 0.65, match:class ^(com\\.anthropic\\.Claude)$"
+      gesture = [
+        # 3-finger free drag/move of the focused window.
+        {
+          fingers = 3;
+          direction = "swipe";
+          action = "move";
+        }
+        # 4-finger vertical swipe: workspace switch, matching the touchscreen
+        # gesture direction above and the "slidevert" animation style.
+        {
+          fingers = 4;
+          direction = "vertical";
+          action = "workspace";
+        }
+        # scrollMove: purpose-built gesture for the scrolling layout's tape —
+        # live momentum + snap-to-column (gestures:scrolling:* defaults handle it).
+        {
+          fingers = 4;
+          direction = "horizontal";
+          action = "scrollMove";
+        }
       ];
     };
+
+    /*
+      Hand-written Lua rather than the settings-attrset DSL, for everything
+      whose Nix->Lua rendering would need mkLuaInline gymnastics anyway
+      (binds threading a `mod` variable through dispatcher-call expressions).
+      Every hl.* call below is verified against this exact build's own
+      source (0.56.0, src/config/lua/bindings/*.cpp), not assumed from docs
+      of a fast-moving pre-1.0 API:
+        - hl.bind(key_string, dispatcher_call, opts?) -- LuaBindingsToplevel.cpp:132.
+          key_string: "+"-separated tokens, mods first ("SUPER + SHIFT + Q").
+        - hl.dsp.* dispatcher table -- LuaBindingsDispatchers.cpp:1339
+          (registerDispatcherBindings), enumerated exhaustively, not guessed.
+        - hl.env(name, value), hl.monitor({output=...}), hl.window_rule({...}),
+          hl.layer_rule({...}) -- LuaBindingsConfigRules.cpp.
+        - hl.exec_cmd(cmd) at top level (NOT hl.dsp.exec_cmd, which is the
+          bind-dispatcher-factory form) runs immediately as the script loads
+          -- the exec-once equivalent. LuaBindingsToplevel.cpp:321.
+    */
+    extraConfig = ''
+      local mod = "SUPER"
+
+      -- DMS's cursorSettings plumbing is niri-only (cursorSettings.niri.hideWhenTyping);
+      -- Hyprland never gets these applied, so it falls back to its own built-in
+      -- hyprcursor theme. Set both XCURSOR_* (X/Wayland apps) and HYPRCURSOR_*
+      -- (Hyprland's native cursor renderer) so it's consistent everywhere.
+      -- Bibata-Modern-Classic-Glass = Bibata-Modern-Classic with alpha
+      -- multiplied down, generated in features/cursor-theme/home.nix (home.pointerCursor
+      -- there also enforces it via dconf + ~/.icons/default so apps can't
+      -- resolve a different theme). No hyprcursor manifest; Hyprland falls
+      -- back to the XCursor theme of the same name, which is intended.
+      hl.env("XCURSOR_THEME", "Bibata-Modern-Classic-Glass")
+      hl.env("XCURSOR_SIZE", "24")
+      hl.env("HYPRCURSOR_THEME", "Bibata-Modern-Classic-Glass")
+      hl.env("HYPRCURSOR_SIZE", "24")
+      -- Qt apps outside Plasma (dolphin, kdenlive, ...) have no platform
+      -- theme and fall back to a broken mixed palette (black-on-black text).
+      -- qt6ct is installed and DMS's matugen already generates its palette
+      -- (~/.config/qt6ct -> DankMatugen.colors) -- this activates it.
+      -- This alone is NOT sufficient -- plugin discovery, qt6ct.conf
+      -- contents, and KDE apps' KColorSchemeManager each needed their own
+      -- fix. See features/qt-theming/nixos.nix (QT_PLUGIN_PATH +
+      -- the full debugging story) and features/qt-theming/
+      -- qt-theming.nix (kdeglobals + qt6ct.conf enforcement).
+      hl.env("QT_QPA_PLATFORMTHEME", "qt6ct")
+
+      -- DMS's own live colors -- see the "config" table's decoration/general
+      -- comment above for why layout.lua (gaps/border/rounding) is NOT
+      -- required here.
+      do
+        local xdg = os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")
+        package.path = xdg .. "/hypr/?.lua;" .. xdg .. "/hypr/?/init.lua;" .. package.path
+      end
+      require("dms.colors")
+
+      -- Auto-scale differs between compositors (Hyprland picked 2.0 for this
+      -- 2880x1800 panel; niri's own auto heuristic apparently picked something
+      -- smaller, hence text/buttons looking oversized after switching). Pin
+      -- explicitly so it doesn't depend on Hyprland's auto-detection. Output name
+      -- and scale both come from the host -- see my.desktop.primaryOutput.
+      hl.monitor({
+        output = "${osConfig.my.desktop.primaryOutput}",
+        mode = "preferred",
+        position = "auto",
+        scale = "${osConfig.my.desktop.primaryOutputScale}",
+      })
+
+      -- iio-hyprland: reads iio-sensor-proxy orientation over D-Bus, rotates the
+      -- eDP-1 output and touch input transform automatically (accel_3d + hinge
+      -- sensors confirmed present via /sys/bus/iio/devices; enabled in hardware.nix).
+      -- NO "dms run" here: systemd already starts dms.service via
+      -- graphical-session.target (uwsm activates it) -- an exec-once copy runs
+      -- a second, unmanaged instance (observed: two bars, hyprland-parented
+      -- `dms run` without --session alongside dms.service's `dms run --session`).
+      -- Same reasoning as the niri side's spawn-at-startup comment.
+      hl.exec_cmd("iio-hyprland ${osConfig.my.desktop.primaryOutput}")
+
+      -- Glassmorphism for DMS layer surfaces. ignore_alpha skips
+      -- near-fully-transparent pixels (the empty regions of the bar
+      -- surface) so they don't render as a hazy smear.
+      hl.layer_rule({ match = { namespace = "^(dms.*)$" }, no_anim = true, blur = true, ignore_alpha = 0.05 })
+      -- Same glass treatment for the OSK (features/dms/plugins/osk-toggle):
+      -- wvkbd's own --alpha only sets its drawn pixels' transparency, the
+      -- actual frosted backdrop still needs Hyprland's blur behind it.
+      hl.layer_rule({ match = { namespace = "^(wvkbd)$" }, blur = true, ignore_alpha = 0.05 })
+
+      hl.window_rule({ match = { class = "^(emacs)$" }, maximize = true })
+      hl.window_rule({ match = { class = "^(org.gnu.emacs)$" }, maximize = true })
+      -- Glassmorphism: translucent KDE apps; backdrop blur applies to
+      -- translucent windows automatically (decoration.blur). kdeconnect
+      -- covers all its windows (.app, .sms, -indicator, ...).
+      hl.window_rule({ match = { class = "^(org\\.kde\\.dolphin)$" }, opacity = "0.65 0.65" })
+      hl.window_rule({ match = { class = "^(org\\.kde\\.kdeconnect.*)$" }, opacity = "0.65 0.65" })
+      -- Claude Desktop: app_id from the deb's desktop-file StartupWMClass
+      -- (Chromium derives it from package.json desktopName). Same 0.65 as
+      -- the KDE apps -- the package forces its dark backgrounds to #000
+      -- (see packages/claude-desktop/package.nix), so it composites
+      -- identically to kitty/dolphin.
+      hl.window_rule({ match = { class = "^(com\\.anthropic\\.Claude)$" }, opacity = "0.65 0.65" })
+
+      -- ============================================================
+      -- Binds. Key-layout aligned with end-4/dots-hyprland's
+      -- keybinds.lua where it has a real Hyprland-dispatcher
+      -- equivalent; its quickshell:* global-IPC actions (overview,
+      -- sidebars, OSK, cheatsheet -- end-4's own shell's protocol, which
+      -- DMS does not implement) are NOT ported -- see the chat for the
+      -- explicit list of what that leaves out.
+      -- ============================================================
+
+      -- DMS / apps (unchanged from the pre-Lua config)
+      hl.bind(mod .. " + space", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
+      hl.bind(mod .. " + I", hl.dsp.exec_cmd("dms ipc call settings toggle"))
+      hl.bind(mod .. " + Return", hl.dsp.exec_cmd("kitty"))
+      hl.bind(mod .. " + W", hl.dsp.exec_cmd("firefox"))
+      hl.bind(mod .. " + E", hl.dsp.exec_cmd("emacsclient -c"))
+      hl.bind(mod .. " + A", hl.dsp.exec_cmd("dms ipc call plugins toggle aiAssistant"))
+      hl.bind(mod .. " + N", hl.dsp.exec_cmd("dms ipc call notifications toggle"))
+      hl.bind(mod .. " + P", hl.dsp.exec_cmd("dms ipc call notepad toggle"))
+      hl.bind(mod .. " + V", hl.dsp.exec_cmd("dms ipc call clipboard toggle"))
+      hl.bind(mod .. " + X", hl.dsp.exec_cmd("dms ipc call powermenu toggle"))
+      hl.bind(mod .. " + M", hl.dsp.exec_cmd("dms ipc call processlist toggle"))
+      hl.bind(mod .. " + ALT + N", hl.dsp.exec_cmd("dms ipc call night toggle"))
+      hl.bind("SUPER + ALT + L", hl.dsp.exec_cmd("dms ipc call lock lock"))
+      -- Compositor-level IME toggle, same logic as niri.nix's Hangul bind.
+      hl.bind("Hangul", hl.dsp.exec_cmd("${hangulToggle}"))
+
+      -- Window management
+      hl.bind(mod .. " + Q", hl.dsp.window.close())
+      hl.bind(mod .. " + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
+      hl.bind(mod .. " + SHIFT + F", hl.dsp.window.fullscreen({ mode = "maximized" }))
+      -- end-4's own key for the same maximize-toggle action -- additive,
+      -- SHIFT+F above still works too.
+      hl.bind(mod .. " + D", hl.dsp.window.fullscreen({ mode = "maximized" }))
+      hl.bind(mod .. " + ALT + space", hl.dsp.window.float())
+      -- end-4's Mod+P is "pin"; this config's Mod+P is already DMS's
+      -- notepad toggle (see above), so pin goes on Mod+Alt+P instead of
+      -- silently overwriting an existing, deliberately-chosen bind.
+      hl.bind(mod .. " + ALT + P", hl.dsp.window.pin())
+      -- niri's Mod+Shift+V (switch focus between floating/tiling) has no
+      -- direct hyprland dispatcher; `togglegroup` is a different concept
+      -- (window grouping), so it's dropped rather than mis-mapped.
+
+      -- niri's Mod+R (switch-preset-column-width) -> scrolling layout's
+      -- colresize +conf, which cycles through scrolling:explicit_column_widths.
+      hl.bind(mod .. " + R", hl.dsp.layout("colresize +conf"))
+
+      -- Focus movement (h/j/k/l + arrows). hl.dsp.focus is the single
+      -- dispatcher covering movefocus/focusmonitor/focus-workspace by
+      -- which field its table has -- direction here.
+      hl.bind(mod .. " + left", hl.dsp.focus({ direction = "left" }))
+      hl.bind(mod .. " + down", hl.dsp.focus({ direction = "down" }))
+      hl.bind(mod .. " + up", hl.dsp.focus({ direction = "up" }))
+      hl.bind(mod .. " + right", hl.dsp.focus({ direction = "right" }))
+      hl.bind(mod .. " + H", hl.dsp.focus({ direction = "left" }))
+      hl.bind(mod .. " + L", hl.dsp.focus({ direction = "right" }))
+      -- Workspace cycle among EXISTING workspaces ("e±1"), same string
+      -- syntax as the legacy `workspace, e-1` dispatcher -- hl.dsp.focus's
+      -- workspace-selector overload hands it to the identical parser.
+      hl.bind(mod .. " + J", hl.dsp.focus({ workspace = "e-1" }))
+      hl.bind(mod .. " + K", hl.dsp.focus({ workspace = "e+1" }))
+      hl.bind(mod .. " + Page_Down", hl.dsp.focus({ workspace = "e-1" }))
+      hl.bind(mod .. " + Page_Up", hl.dsp.focus({ workspace = "e+1" }))
+      hl.bind(mod .. " + CTRL + U", hl.dsp.window.move({ workspace = "e-1", follow = true }))
+      hl.bind(mod .. " + CTRL + I", hl.dsp.window.move({ workspace = "e+1", follow = true }))
+
+      -- Move window (direction)
+      hl.bind(mod .. " + CTRL + left", hl.dsp.window.move({ direction = "left" }))
+      hl.bind(mod .. " + CTRL + down", hl.dsp.window.move({ direction = "down" }))
+      hl.bind(mod .. " + CTRL + up", hl.dsp.window.move({ direction = "up" }))
+      hl.bind(mod .. " + CTRL + right", hl.dsp.window.move({ direction = "right" }))
+      hl.bind(mod .. " + CTRL + H", hl.dsp.window.move({ direction = "left" }))
+      hl.bind(mod .. " + CTRL + J", hl.dsp.window.move({ direction = "down" }))
+      hl.bind(mod .. " + CTRL + K", hl.dsp.window.move({ direction = "up" }))
+      hl.bind(mod .. " + CTRL + L", hl.dsp.window.move({ direction = "right" }))
+      hl.bind(mod .. " + CTRL + Page_Down", hl.dsp.window.move({ workspace = "e-1", follow = true }))
+      hl.bind(mod .. " + CTRL + Page_Up", hl.dsp.window.move({ workspace = "e+1", follow = true }))
+
+      -- Resize (niri's Mod+Minus/Equal, Mod+Shift+Minus/Equal). BEHAVIOR
+      -- CHANGE from the pre-Lua config: legacy `resizeactive` took
+      -- percentage-of-current-size ("-10% 0"); hl.dsp.window.resize's table
+      -- form only takes pixel x/y (verified against source -- no percentage
+      -- support), so this is now a fixed 160px/90px step regardless of the
+      -- window's current size.
+      hl.bind(mod .. " + minus", hl.dsp.window.resize({ x = -160, y = 0, relative = true }))
+      hl.bind(mod .. " + equal", hl.dsp.window.resize({ x = 160, y = 0, relative = true }))
+      hl.bind(mod .. " + SHIFT + minus", hl.dsp.window.resize({ x = 0, y = -90, relative = true }))
+      hl.bind(mod .. " + SHIFT + equal", hl.dsp.window.resize({ x = 0, y = 90, relative = true }))
+
+      -- Monitor focus
+      hl.bind(mod .. " + SHIFT + left", hl.dsp.focus({ monitor = "l" }))
+      hl.bind(mod .. " + SHIFT + down", hl.dsp.focus({ monitor = "d" }))
+      hl.bind(mod .. " + SHIFT + up", hl.dsp.focus({ monitor = "u" }))
+      hl.bind(mod .. " + SHIFT + right", hl.dsp.focus({ monitor = "r" }))
+
+      -- Move window to monitor (niri's Mod+Shift+Ctrl+...)
+      hl.bind(mod .. " + SHIFT + CTRL + left", hl.dsp.window.move({ monitor = "l" }))
+      hl.bind(mod .. " + SHIFT + CTRL + down", hl.dsp.window.move({ monitor = "d" }))
+      hl.bind(mod .. " + SHIFT + CTRL + up", hl.dsp.window.move({ monitor = "u" }))
+      hl.bind(mod .. " + SHIFT + CTRL + right", hl.dsp.window.move({ monitor = "r" }))
+      hl.bind(mod .. " + SHIFT + CTRL + H", hl.dsp.window.move({ monitor = "l" }))
+      hl.bind(mod .. " + SHIFT + CTRL + J", hl.dsp.window.move({ monitor = "d" }))
+      hl.bind(mod .. " + SHIFT + CTRL + K", hl.dsp.window.move({ monitor = "u" }))
+      hl.bind(mod .. " + SHIFT + CTRL + L", hl.dsp.window.move({ monitor = "r" }))
+
+      -- Workspaces 1-9
+      for i = 1, 9 do
+        hl.bind(mod .. " + " .. tostring(i), hl.dsp.focus({ workspace = i }))
+        hl.bind(mod .. " + CTRL + " .. tostring(i), hl.dsp.window.move({ workspace = i, follow = true }))
+      end
+
+      hl.bind(mod .. " + SHIFT + E", hl.dsp.exit())
+      hl.bind("Print", hl.dsp.exec_cmd("grimblast copy area"))
+      hl.bind("CTRL + Print", hl.dsp.exec_cmd("grimblast copy screen"))
+      hl.bind("ALT + Print", hl.dsp.exec_cmd("grimblast copy active"))
+      hl.bind(mod .. " + SHIFT + P", hl.dsp.dpms({ action = "off" }))
+
+      -- Media/brightness keys: repeating + fires even while locked.
+      hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("dms ipc call audio increment 3"), { locked = true, repeating = true })
+      hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("dms ipc call audio decrement 3"), { locked = true, repeating = true })
+      hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd('dms ipc call brightness increment 5 ""'), { locked = true, repeating = true })
+      hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd('dms ipc call brightness decrement 5 ""'), { locked = true, repeating = true })
+
+      -- Mute/lid: locked (fires once already locked) but not repeating.
+      hl.bind("XF86AudioMute", hl.dsp.exec_cmd("dms ipc call audio mute"), { locked = true })
+      hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("dms ipc call audio micmute"), { locked = true })
+      hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("${lidClose}"), { locked = true })
+      hl.bind("switch:off:Lid Switch", hl.dsp.exec_cmd("${lidOpen}"), { locked = true })
+    '';
   };
 }
