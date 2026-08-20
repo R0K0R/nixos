@@ -274,6 +274,17 @@ in
         # here; the actual curve/speed data does NOT (see extraConfig's
         # hl.animation calls below for why).
         animations.enabled = true;
+
+        # XWayland surfaces on this 1.5-scaled panel get upscaled by the
+        # compositor and look pixelated (first seen on galaxy-buds-client,
+        # an Avalonia/X11 app). force_zero_scaling makes XWayland render at
+        # scale 1 -- crisp, but each X11 app is then responsible for its own
+        # DPI scaling, which for Avalonia the AVALONIA_GLOBAL_SCALE_FACTOR
+        # env below provides. Other-toolkit X11 apps that don't self-scale
+        # will render small until given their own toolkit's scale env
+        # (GDK_SCALE etc.) -- deliberate trade: crisp-but-small beats
+        # blurry, and this host runs almost everything native Wayland.
+        xwayland.force_zero_scaling = true;
       };
 
       /*
@@ -353,6 +364,12 @@ in
       -- the full debugging story) and features/qt-theming/
       -- qt-theming.nix (kdeglobals + qt6ct.conf enforcement).
       hl.env("QT_QPA_PLATFORMTHEME", "qt6ct")
+      -- Pairs with xwayland.force_zero_scaling in the config table above:
+      -- XWayland now renders at scale 1, so Avalonia apps
+      -- (galaxy-buds-client) must scale themselves. Avalonia reads this env
+      -- var and accepts fractional values, unlike GDK_SCALE. Kept in sync
+      -- with the monitor scale via my.desktop.primaryOutputScale.
+      hl.env("AVALONIA_GLOBAL_SCALE_FACTOR", "${osConfig.my.desktop.primaryOutputScale}")
 
       -- DMS's own live colors -- see the "config" table's decoration/general
       -- comment above for why layout.lua (gaps/border/rounding) is NOT
@@ -433,6 +450,15 @@ in
       -- (see packages/claude-desktop/package.nix), so it composites
       -- identically to kitty/dolphin.
       hl.window_rule({ match = { class = "^(com\\.anthropic\\.Claude)$" }, opacity = "0.65 0.65" })
+      -- Galaxy Buds client: small settings-style utility, better floating
+      -- than as a full tape column. Class from the package's own
+      -- makeDesktopItem name (= meta.mainProgram = "GalaxyBudsClient",
+      -- which Avalonia also uses for WM_CLASS). If the rule doesn't bite,
+      -- verify the real class with `hyprctl clients | grep -i buds`.
+      -- Its XWayland pixelation is handled globally above
+      -- (xwayland.force_zero_scaling + AVALONIA_GLOBAL_SCALE_FACTOR), not
+      -- per-window -- force_zero_scaling has no per-window form.
+      hl.window_rule({ match = { class = "^(GalaxyBudsClient)$" }, float = true })
 
       -- ============================================================
       -- Binds. Key-layout aligned with end-4/dots-hyprland's
@@ -463,17 +489,17 @@ in
       -- Window management
       hl.bind(mod .. " + Q", hl.dsp.window.close())
       hl.bind(mod .. " + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
-      -- What maximize-toggle LOOKS like on this layout, so nobody
-      -- rediscovers it as a bug: with scrolling:fullscreen_on_one_column,
-      -- a single-column window is already drawn truly fullscreen (covering
-      -- the bar). Toggling MAXIMIZED switches it to fill-minus-reserved-area
-      -- (bar visible). The window edges don't move -- the only visible
-      -- change is the bar appearing/disappearing. Both this bind and the
-      -- since-removed Mod+D alias were reported as "somehow changes the
-      -- bar" for exactly this reason; the earlier comment here blaming a
-      -- DMS portal-shortcut collision for Mod+D was WRONG -- both keys ran
-      -- this same dispatcher and this is just what it does here.
-      hl.bind(mod .. " + SHIFT + F", hl.dsp.window.fullscreen({ mode = "maximized" }))
+      -- niri's Mod+Shift+F was maximize-COLUMN: full width, gaps and corner
+      -- rounding kept. Hyprland's MAXIMIZED state is not that -- it drops
+      -- gaps and rounding and renders the window flush against the bar
+      -- (screenshots in the chat; earlier comments here misdiagnosed this
+      -- twice, first as a DMS shortcut collision, then as the bar
+      -- hiding/showing -- the bar never changed, the window's decorations
+      -- did). `colresize 1` is the faithful port: the column takes the full
+      -- tape width while remaining a normal tiled window, decorations
+      -- intact. Not a toggle -- Mod+R (colresize +conf) cycles back to the
+      -- preset widths, same as it already does for any other width.
+      hl.bind(mod .. " + SHIFT + F", hl.dsp.layout("colresize 1"))
       hl.bind(mod .. " + ALT + space", hl.dsp.window.float())
       -- end-4's Mod+P is "pin"; this config's Mod+P is already DMS's
       -- notepad toggle (see above), so pin goes on Mod+Alt+P instead of
