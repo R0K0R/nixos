@@ -1,8 +1,8 @@
 {
-  capturedAt = "2026-08-19T13:12:55Z";
+  capturedAt = "2026-08-20T14:44:16Z";
   host = "galaxybook4-pro360";
-  nixpkgsNarHash = "sha256-zFsfYRg0RlkQ219Mk/9GXU569uyBYLNIZyUgwuO081s=";
-  nixpkgsRev = "2a68032086a4a7b32c2cd04fbdbd1a2bda115aa7";
+  nixpkgsNarHash = "sha256-dRTovTKf+X1usU7SXsKDwQ4l1m8Az58iiw1BGb3PpcM=";
+  nixpkgsRev = "e4a4947e0fad9456c3041dbce14dc1cfab1ffbb9";
   runtimeNames = [
     "Algorithm-Diff"
     "B-Hooks-EndOfScope"
@@ -322,6 +322,8 @@
     "doom-themes"
     "dosfstools"
     "dotconf"
+    "dotnet-runtime"
+    "dotnet-runtime-wrapped"
     "double-conversion"
     "draco"
     "dtc"
@@ -429,6 +431,7 @@
     "fstrm"
     "ftgl"
     "fuse"
+    "galaxy-buds-client"
     "game-music-emu"
     "gawk"
     "gbinder-python"

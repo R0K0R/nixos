@@ -213,20 +213,19 @@ in
           Actions::moveFocus: the window-to-change-to is only computed via
           the fullscreen-aware cycle query when this is true.
 
-          Super+J/K (workspace e∓1) and the touchscreen swipe (lisgd ->
-          `hyprctl dispatch workspace e±1`, the SAME dispatcher) are a
-          separate, NOT YET RESOLVED question -- I traced the entire
-          changeWorkspace call chain (resolveWorkspaceForChange ->
-          Actions::changeWorkspace -> CMonitor::changeWorkspace) in 0.56.0
-          source and found no fullscreen/maximize gate anywhere in it: the
-          switch and refocus proceed unconditionally regardless of the
-          outgoing window's fullscreen state. So this setting doesn't touch
-          J/K's problem, and neither should any Hyprland-level fix I could
-          find. Left as a real open item; see the chat for what to check
-          empirically (hyprctl workspaces active ID before/after, whether the
-          emacs `maximize on` windowrule is just re-applying on the
-          destination workspace too) before adding a workaround for a cause
-          that isn't confirmed yet.
+          Super+J/K (workspace e∓1) and the touchscreen swipe (lisgd, the
+          SAME dispatcher) were also reported dead on a maximized window,
+          but that is NOT this setting's doing: the whole changeWorkspace
+          chain (resolveWorkspaceForChange -> Actions::changeWorkspace ->
+          CMonitor::changeWorkspace) has no fullscreen/maximize gate
+          anywhere in 0.56.0 -- the switch and refocus proceed regardless of
+          the outgoing window's state. Two things have since removed the
+          likely real causes without touching workspace code at all: the
+          lisgd commands were legacy-syntax and silently failing under the
+          Lua config (fixed), and emacs -- the window those reports were
+          made against -- no longer opens in a fullscreen state at all (see
+          the scrolling_width rule below, replacing `maximize`). Recheck
+          before assuming a Hyprland-level bug remains here.
         */
         binds.movefocus_cycles_fullscreen = true;
 
@@ -480,8 +479,19 @@ in
       -- actual frosted backdrop still needs Hyprland's blur behind it.
       hl.layer_rule({ match = { namespace = "^(wvkbd)$" }, blur = true, ignore_alpha = 0.05 })
 
-      hl.window_rule({ match = { class = "^(emacs)$" }, maximize = true })
-      hl.window_rule({ match = { class = "^(org.gnu.emacs)$" }, maximize = true })
+      -- Emacs opens as a FULL-WIDTH COLUMN, not maximized. `maximize` is a
+      -- fullscreen STATE: it renders over the reserved area, drops gaps and
+      -- corner rounding, and has to be cleared before any colresize can be
+      -- seen (which is exactly why Mod+D "didn't shrink" emacs). scrolling_width
+      -- is the column-width equivalent of `layoutmsg colresize 1` and applies
+      -- at window-open time -- the scrolling layout reads it in newTarget and
+      -- feeds it to the new column (ScrollingAlgorithm.cpp: add(width), where
+      -- the value is a fraction of the tape in the same units as
+      -- scrolling.column_width, so 1.0 = full width). Result: same footprint,
+      -- but a normal tiled window -- decorations intact, Mod+D toggles it
+      -- straight back to 0.5 with no state to clear first.
+      hl.window_rule({ match = { class = "^(emacs)$" }, scrolling_width = 1.0 })
+      hl.window_rule({ match = { class = "^(org.gnu.emacs)$" }, scrolling_width = 1.0 })
       -- Glassmorphism: translucent KDE apps; backdrop blur applies to
       -- translucent windows automatically (decoration.blur). kdeconnect
       -- covers all its windows (.app, .sms, -indicator, ...).
