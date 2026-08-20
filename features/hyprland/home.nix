@@ -463,14 +463,17 @@ in
       -- Window management
       hl.bind(mod .. " + Q", hl.dsp.window.close())
       hl.bind(mod .. " + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
+      -- What maximize-toggle LOOKS like on this layout, so nobody
+      -- rediscovers it as a bug: with scrolling:fullscreen_on_one_column,
+      -- a single-column window is already drawn truly fullscreen (covering
+      -- the bar). Toggling MAXIMIZED switches it to fill-minus-reserved-area
+      -- (bar visible). The window edges don't move -- the only visible
+      -- change is the bar appearing/disappearing. Both this bind and the
+      -- since-removed Mod+D alias were reported as "somehow changes the
+      -- bar" for exactly this reason; the earlier comment here blaming a
+      -- DMS portal-shortcut collision for Mod+D was WRONG -- both keys ran
+      -- this same dispatcher and this is just what it does here.
       hl.bind(mod .. " + SHIFT + F", hl.dsp.window.fullscreen({ mode = "maximized" }))
-      -- end-4's own key for the same maximize-toggle action was Mod+D, but
-      -- on this system Mod+D already does something DMS-owned to the bar
-      -- (confirmed live: pressing it changed the bar, not the window) --
-      -- almost certainly a portal-registered global shortcut DMS grabs
-      -- independent of Hyprland's own bind table, not a Lua config bug.
-      -- Dropped rather than fight an unidentified collision for a bind that
-      -- was only ever a redundant alias of SHIFT+F above.
       hl.bind(mod .. " + ALT + space", hl.dsp.window.float())
       -- end-4's Mod+P is "pin"; this config's Mod+P is already DMS's
       -- notepad toggle (see above), so pin goes on Mod+Alt+P instead of
@@ -491,8 +494,22 @@ in
       hl.bind(mod .. " + down", hl.dsp.focus({ direction = "down" }))
       hl.bind(mod .. " + up", hl.dsp.focus({ direction = "up" }))
       hl.bind(mod .. " + right", hl.dsp.focus({ direction = "right" }))
-      hl.bind(mod .. " + H", hl.dsp.focus({ direction = "left" }))
-      hl.bind(mod .. " + L", hl.dsp.focus({ direction = "right" }))
+      -- H/L go through the scrolling layout's OWN focus navigation, not
+      -- movefocus. movefocus is geometry-based and the
+      -- movefocus_cycles_fullscreen fallback is explicitly bypassed for
+      -- layout-managed fullscreen (Actions::moveFocus checks
+      -- !layoutManagedFS; the scrolling layout registers its own fullscreen
+      -- handler, so its windows ALWAYS take that bypass) -- which is why
+      -- H/L stayed dead on maximized windows even after enabling that
+      -- setting. `layoutmsg focus l/r` walks the tape's column data
+      -- structure instead of screen geometry (ScrollingAlgorithm.cpp,
+      -- "focus" branch: pure column->prev/next, no fullscreen gate), so it
+      -- works identically maximized or not -- and matches niri's
+      -- focus-column semantics, which is what H/L meant here originally.
+      -- Arrows stay movefocus: layoutmsg only knows tiled tape members, so
+      -- arrows remain the way to reach floating windows.
+      hl.bind(mod .. " + H", hl.dsp.layout("focus l"))
+      hl.bind(mod .. " + L", hl.dsp.layout("focus r"))
       -- Workspace cycle among EXISTING workspaces ("e±1"), same string
       -- syntax as the legacy `workspace, e-1` dispatcher -- hl.dsp.focus's
       -- workspace-selector overload hands it to the identical parser.
