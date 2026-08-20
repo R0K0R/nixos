@@ -270,19 +270,10 @@ in
           follow_focus = true;
         };
 
-        animations = {
-          # Hyprland's stock animation speeds read as sluggish coming from niri.
-          enabled = true;
-          animation = [
-            "global, 1, 4, default"
-            "windows, 1, 3, default"
-            "border, 1, 3, default"
-            "fade, 1, 3, default"
-            # slidevert: vertical slide, matching niri's vertical workspace
-            # model and the gesture's vertical swipe direction above.
-            "workspaces, 1, 3, default, slidevert"
-          ];
-        };
+        # animations.enabled is a real scalar hyprlang value, so it belongs
+        # here; the actual curve/speed data does NOT (see extraConfig's
+        # hl.animation calls below for why).
+        animations.enabled = true;
       };
 
       /*
@@ -306,12 +297,15 @@ in
           direction = "vertical";
           action = "workspace";
         }
-        # scrollMove: purpose-built gesture for the scrolling layout's tape —
-        # live momentum + snap-to-column (gestures:scrolling:* defaults handle it).
+        # scroll_move (snake_case -- verified against source, NOT the legacy
+        # dispatcher's "scrollMove" spelling, which errors here:
+        # "hl.gesture: unknown action \"scrollMove\""): purpose-built gesture
+        # for the scrolling layout's tape -- live momentum + snap-to-column
+        # (gestures:scrolling:* defaults handle it).
         {
           fingers = 4;
           direction = "horizontal";
-          action = "scrollMove";
+          action = "scroll_move";
         }
       ];
     };
@@ -368,6 +362,32 @@ in
         package.path = xdg .. "/hypr/?.lua;" .. xdg .. "/hypr/?/init.lua;" .. package.path
       end
       require("dms.colors")
+
+      -- Hyprland's stock animation speeds read as sluggish coming from
+      -- niri. NOT a field of hl.config's "animations" table: "animation" is
+      -- not a real scalar hyprlang config value (only animations:enabled
+      -- is, hence that staying in the config table above) -- it's a
+      -- repeatable curve/speed RULE, which Lua mode exposes only through
+      -- this dedicated function (verified: putting it inside hl.config did
+      -- not error, it just silently did nothing, leaving Hyprland's default
+      -- animation timings active -- "extremely slow" was this, not a units
+      -- mistake).
+      --
+      -- `enabled` is required on every call despite defaulting to true in
+      -- the C++ parser's own constructor: parseTableField() (Lua bindings
+      -- internal helper) treats ANY missing table field as a hard error
+      -- ("missing required field") before the parser object's constructor
+      -- default is ever consulted -- that default only matters for a value
+      -- parseTableField already found and is parsing, not for whether the
+      -- field may be omitted. Confirmed live: leaving it out errored
+      -- "missing required field \"enabled\"" on all five calls.
+      hl.animation({ leaf = "global", enabled = true, speed = 4, bezier = "default" })
+      hl.animation({ leaf = "windows", enabled = true, speed = 3, bezier = "default" })
+      hl.animation({ leaf = "border", enabled = true, speed = 3, bezier = "default" })
+      hl.animation({ leaf = "fade", enabled = true, speed = 3, bezier = "default" })
+      -- slidevert: vertical slide, matching niri's vertical workspace model
+      -- and the gesture's vertical swipe direction above.
+      hl.animation({ leaf = "workspaces", enabled = true, speed = 3, bezier = "default", style = "slidevert" })
 
       -- Auto-scale differs between compositors (Hyprland picked 2.0 for this
       -- 2880x1800 panel; niri's own auto heuristic apparently picked something
@@ -444,9 +464,13 @@ in
       hl.bind(mod .. " + Q", hl.dsp.window.close())
       hl.bind(mod .. " + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
       hl.bind(mod .. " + SHIFT + F", hl.dsp.window.fullscreen({ mode = "maximized" }))
-      -- end-4's own key for the same maximize-toggle action -- additive,
-      -- SHIFT+F above still works too.
-      hl.bind(mod .. " + D", hl.dsp.window.fullscreen({ mode = "maximized" }))
+      -- end-4's own key for the same maximize-toggle action was Mod+D, but
+      -- on this system Mod+D already does something DMS-owned to the bar
+      -- (confirmed live: pressing it changed the bar, not the window) --
+      -- almost certainly a portal-registered global shortcut DMS grabs
+      -- independent of Hyprland's own bind table, not a Lua config bug.
+      -- Dropped rather than fight an unidentified collision for a bind that
+      -- was only ever a redundant alias of SHIFT+F above.
       hl.bind(mod .. " + ALT + space", hl.dsp.window.float())
       -- end-4's Mod+P is "pin"; this config's Mod+P is already DMS's
       -- notepad toggle (see above), so pin goes on Mod+Alt+P instead of
