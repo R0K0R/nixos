@@ -119,6 +119,7 @@
     */
     packages.extra.user = with pkgs; [
       rquickshare # Google Quick Share client, for phone <-> laptop transfers
+      galaxy-buds-client
     ];
 
     samsung-galaxybook.enable = true;
@@ -198,6 +199,30 @@
 
   # Serial access for arduino-cli/arduino-ide (/dev/ttyACM*, /dev/ttyUSB*).
   users.users.r0k0r.extraGroups = [ "dialout" ];
+
+  /*
+    Galaxy Buds client in the tray from login. /StartMinimized is the app's
+    own flag, read straight out of the shipped GalaxyBudsClient.dll (its
+    settings UI calls it "Start minimized on system boot") -- without it the
+    main window opens on every login. systemd user service on
+    graphical-session.target, same pattern as lisgd and dms.service:
+    compositor-agnostic (uwsm activates the target under both hyprland and
+    niri), unlike an exec-once in one compositor's config. Host file, not a
+    feature: single app, single host, pairs with the packages.extra entry
+    above.
+  */
+  systemd.user.services.galaxy-buds-client = {
+    description = "Galaxy Buds client (tray)";
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    wantedBy = [ "graphical-session.target" ];
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${lib.getExe pkgs.galaxy-buds-client} /StartMinimized";
+      Restart = "on-failure";
+      RestartSec = 5;
+    };
+  };
 
   /*
     Host-specific overlays only. Everything generic -- the pseudo-cross and
