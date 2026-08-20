@@ -89,6 +89,13 @@ in
         # matters, commas would split this lisgd -g spec.
         "${toString cfg.fingers},DU,*,*,hyprctl dispatch 'hl.dsp.focus({ workspace = \"e+1\" })'"
         "${toString cfg.fingers},UD,*,*,hyprctl dispatch 'hl.dsp.focus({ workspace = \"e-1\" })'"
+        # Horizontal swipes walk the scrolling layout's tape, same dispatcher
+        # as the Mod+H/L keybinds (features/hyprland/home.nix) -- column data
+        # structure, not geometry, so it works on maximized windows too.
+        # lisgd is not limited to workspace switching: every gesture is just
+        # a command, so anything hyprctl can dispatch works here.
+        "${toString cfg.fingers},RL,*,*,hyprctl dispatch 'hl.dsp.layout(\"focus r\")'"
+        "${toString cfg.fingers},LR,*,*,hyprctl dispatch 'hl.dsp.layout(\"focus l\")'"
       ];
       defaultText = lib.literalExpression ''vertical workspace switching on `fingers` fingers'';
       description = ''

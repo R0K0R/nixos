@@ -22,20 +22,16 @@ let
   '';
 
   /*
-    iio-hyprland only ever sends hyprctl a *partial* monitor rule --
-    "keyword monitor eDP-1,transform,N" -- which patches the transform
-    field without Hyprland recomputing the transformed (width/height
-    swapped) box. Verified live: bar/dock/background stayed at landscape
-    geometry after a bare transform,1, and only snapped to portrait once
-    resolution/position/scale were restated alongside it in the same
-    keyword command.
-
-    This shim sits in front of the real hyprctl (PATH-shadowed for
-    iio-hyprland only, below) and rewrites just that one command: look up
-    the monitor's current mode via `hyprctl monitors -j` (same call
-    iio-hyprland already makes for its own monitor-id lookup), then
-    reissue the batch with a full rule instead of the bare transform.
-    Anything else passes through untouched.
+    iio-hyprland speaks legacy hyprctl -- a four-command keyword batch per
+    rotation (monitor transform, touchdevice transform, tablet transform,
+    workspace orientation). Under configType = "lua" the keyword parser is
+    gone entirely, so this shim (PATH-shadowed for iio-hyprland only,
+    below) translates the whole batch into one `hyprctl eval` of the
+    equivalent hl.* calls. History worth keeping: the shim originally
+    existed for a different bug -- keyword-era Hyprland applied a bare
+    "monitor X,transform,N" without recomputing the swapped w/h box, so the
+    shim restated the full rule from live monitor state. hl.monitor's
+    merge-with-existing-rule application makes that original problem moot.
   */
   hyprctlTransformShim = pkgs.writeShellScriptBin "hyprctl" ''
     real=${pkgs.hyprland}/bin/hyprctl
@@ -44,24 +40,40 @@ let
         mon="''${BASH_REMATCH[1]}"
         xform="''${BASH_REMATCH[2]}"
         if [ "$xform" = "0" ]; then
-          # Returning to transform 0 is its own separate bug: even the full
-          # monitor rule below leaves layer-shell clients stuck at the
-          # rotated geometry here, though hyprctl monitors correctly
-          # reports transform:0 -- verified live. `reload` reliably forces
-          # the resync, and since the static config has no transform
-          # override, it also lands exactly on the landscape state wanted.
+          # Returning to transform 0 is its own separate bug: even a full
+          # monitor rule leaves layer-shell clients stuck at the rotated
+          # geometry here, though hyprctl monitors correctly reports
+          # transform:0 -- verified live. `reload` reliably forces the
+          # resync; under the Lua config it also re-runs the whole script,
+          # which resets input:touchdevice/tablet transforms to their
+          # config defaults (0) and clears the workspace orientation rule
+          # -- exactly the landscape state wanted, and the same net effect
+          # the pre-Lua reload had.
           exec "$real" reload
         fi
         # configType = "lua" killed `hyprctl keyword` outright ("keyword
-        # can't work with non-legacy parsers. Use eval.") -- so the old
-        # full-rule keyword rewrite is no longer possible at all. hl.monitor
-        # via eval replaces it, and makes the original partial-rule bug moot
-        # in the same stroke: hlMonitor looks up the existing rule for this
-        # output by name and MERGES the given fields into it
-        # (LuaBindingsConfigRules.cpp, hlMonitor: parser.rule() = *existing),
-        # so sending transform alone IS a full-rule application here, no
-        # width/height/scale restating needed.
-        exec "$real" eval "hl.monitor({ output = \"$mon\", transform = $xform })"
+        # can't work with non-legacy parsers. Use eval."), so every part of
+        # iio-hyprland's batch must be translated, not just patched. The
+        # batch is FOUR commands (main.c, system_fmt):
+        #   keyword monitor <out>,transform,N
+        #   keyword input:touchdevice:transform N   <- touch mapping
+        #   keyword input:tablet:transform N        <- pen mapping
+        #   keyword workspace m[ID], layoutopt:orientation:<dir>
+        # An earlier version of this shim translated only the monitor line
+        # and silently dropped the rest -- display rotated, touch/pen
+        # coordinates did not. All four go in one eval now:
+        #   - hl.monitor merges into the output's existing rule
+        #     (hlMonitor: parser.rule() = *existing), which also obsoletes
+        #     the original partial-rule bug this shim was born for
+        #   - input transforms are plain config values
+        #     (input:touchdevice:transform, input:tablet:transform)
+        #   - the orientation keyword maps to hl.workspace_rule's
+        #     layout_opts table
+        lua="hl.monitor({ output = \"$mon\", transform = $xform }) hl.config({ input = { touchdevice = { transform = $xform }, tablet = { transform = $xform } } })"
+        if [[ "$2" =~ workspace\ m\[([^]]+)\],\ layoutopt:orientation:([a-z]+) ]]; then
+          lua="$lua hl.workspace_rule({ workspace = \"m[''${BASH_REMATCH[1]}]\", layout_opts = { orientation = \"''${BASH_REMATCH[2]}\" } })"
+        fi
+        exec "$real" eval "$lua"
       fi
     fi
     exec "$real" "$@"
