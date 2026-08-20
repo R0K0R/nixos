@@ -80,8 +80,15 @@ in
         # nfingers,gesture,edge,distance,command -- DU means down-to-up, i.e.
         # swiping upward. Vertical to match the touchpad's `4, vertical,
         # workspace` binding and the slidevert workspace animation.
-        "${toString cfg.fingers},DU,*,*,hyprctl dispatch workspace e+1"
-        "${toString cfg.fingers},UD,*,*,hyprctl dispatch workspace e-1"
+        # Lua dispatch form: with wayland.windowManager.hyprland.configType =
+        # "lua" (features/hyprland/home.nix), `hyprctl dispatch` no longer
+        # parses legacy dispatcher strings -- "workspace e+1" dies with
+        # "')' expected near 'e'" because the argument is evaluated as Lua
+        # (hyprctl's own hint: "dispatch in lua is a shorthand for
+        # hl.dispatch(...)"). The table has one field, so no commas -- which
+        # matters, commas would split this lisgd -g spec.
+        "${toString cfg.fingers},DU,*,*,hyprctl dispatch 'hl.dsp.focus({ workspace = \"e+1\" })'"
+        "${toString cfg.fingers},UD,*,*,hyprctl dispatch 'hl.dsp.focus({ workspace = \"e-1\" })'"
       ];
       defaultText = lib.literalExpression ''vertical workspace switching on `fingers` fingers'';
       description = ''

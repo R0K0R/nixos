@@ -52,13 +52,16 @@ let
           # override, it also lands exactly on the landscape state wanted.
           exec "$real" reload
         fi
-        read -r w h r x y scale < <("$real" monitors -j | ${pkgs.jq}/bin/jq -r --arg m "$mon" \
-          '.[] | select(.name == $m) | "\(.width) \(.height) \(.refreshRate) \(.x) \(.y) \(.scale)"')
-        if [ -n "''${w:-}" ]; then
-          full="monitor $mon,''${w}x''${h}@''${r},''${x}x''${y},''${scale},transform,$xform"
-          patched="''${2/keyword monitor $mon,transform,$xform/keyword $full}"
-          exec "$real" --batch "$patched"
-        fi
+        # configType = "lua" killed `hyprctl keyword` outright ("keyword
+        # can't work with non-legacy parsers. Use eval.") -- so the old
+        # full-rule keyword rewrite is no longer possible at all. hl.monitor
+        # via eval replaces it, and makes the original partial-rule bug moot
+        # in the same stroke: hlMonitor looks up the existing rule for this
+        # output by name and MERGES the given fields into it
+        # (LuaBindingsConfigRules.cpp, hlMonitor: parser.rule() = *existing),
+        # so sending transform alone IS a full-rule application here, no
+        # width/height/scale restating needed.
+        exec "$real" eval "hl.monitor({ output = \"$mon\", transform = $xform })"
       fi
     fi
     exec "$real" "$@"
@@ -66,9 +69,19 @@ let
 
   # Only iio-hyprland's own hyprctl calls go through the shim -- everything
   # else in the session (DMS, terminal, keybinds) keeps using the real one.
+  #
+  # flock singleton: hard cap of one instance per session, enforced at the
+  # wrapper regardless of who spawns it. This is the second half of the
+  # 4068-process fork bomb fix (see the hl.on("hyprland.start") comment in
+  # extraConfig for the first half): even if some future path re-executes
+  # the spawn, the lock makes the duplicate exit instead of joining a
+  # rotation -> reload -> respawn feedback loop.
   iioHyprlandWithTransformFix = pkgs.writeShellScriptBin "iio-hyprland" ''
-    export PATH="${hyprctlTransformShim}/bin:$PATH"
-    exec ${pkgs.iio-hyprland}/bin/iio-hyprland "$@"
+    exec ${pkgs.util-linux}/bin/flock -n "''${XDG_RUNTIME_DIR:-/tmp}/iio-hyprland.lock" \
+      ${pkgs.writeShellScript "iio-hyprland-locked" ''
+        export PATH="${hyprctlTransformShim}/bin:$PATH"
+        exec ${pkgs.iio-hyprland}/bin/iio-hyprland "$@"
+      ''} "$@"
   '';
 
   /*
@@ -93,12 +106,14 @@ let
   lidClose = pkgs.writeShellScript "dms-lid-close" ''
     if ${pkgs.procps}/bin/pgrep -f -- "--who=DMS No Sleep plugin" >/dev/null; then
       dms ipc call lock lock
-      hyprctl dispatch dpms off
+      # Lua dispatch form -- legacy "dpms off" no longer parses under
+      # configType = "lua", same as the lisgd commands in touch-gestures.
+      hyprctl dispatch 'hl.dsp.dpms({ action = "off" })'
     fi
   '';
   lidOpen = pkgs.writeShellScript "dms-lid-open" ''
     if ${pkgs.procps}/bin/pgrep -f -- "--who=DMS No Sleep plugin" >/dev/null; then
-      hyprctl dispatch dpms on
+      hyprctl dispatch 'hl.dsp.dpms({ action = "on" })'
     fi
   '';
 
@@ -426,7 +441,23 @@ in
       -- a second, unmanaged instance (observed: two bars, hyprland-parented
       -- `dms run` without --session alongside dms.service's `dms run --session`).
       -- Same reasoning as the niri side's spawn-at-startup comment.
-      hl.exec_cmd("iio-hyprland ${osConfig.my.desktop.primaryOutput}")
+      --
+      -- INSIDE hl.on("hyprland.start"), NEVER at top level: a top-level
+      -- hl.exec_cmd runs on EVERY config reload (the whole Lua script
+      -- re-executes; hyprlang's exec-once semantics do not exist here), and
+      -- the rotation shim's transform-0 path calls `hyprctl reload` -- each
+      -- landscape rotation spawned another instance, every instance reacted
+      -- to every subsequent rotation, and the loop compounded to 4068 live
+      -- processes and a load average of 125 before it was caught. The
+      -- start event fires once per compositor lifetime; reloads re-register
+      -- this handler but never re-fire it (ConfigManager clears and
+      -- re-registers event handlers on reload; the event itself is
+      -- startup-only -- same mechanism Unstraightened relies on for its
+      -- own systemd activation block). The wrapper also carries a flock
+      -- singleton as defense in depth.
+      hl.on("hyprland.start", function()
+        hl.exec_cmd("iio-hyprland ${osConfig.my.desktop.primaryOutput}")
+      end)
 
       -- Glassmorphism for DMS layer surfaces. ignore_alpha skips
       -- near-fully-transparent pixels (the empty regions of the bar
@@ -511,6 +542,20 @@ in
       hl.bind(mod .. " + D", function()
         local w = hl.get_active_window()
         if not w or w.floating then return end
+        -- A window in fullscreen STATE (w.fullscreen: 0 none, 1 maximized,
+        -- 2 fullscreen -- the FSMODE enum) renders full-screen regardless
+        -- of its column width, so colresize alone visibly does nothing.
+        -- Emacs is the live case: its `maximize on` windowrule opens it in
+        -- state 1, and the first Mod+D "didn't shrink" because it resized
+        -- the column underneath the state. Clear the state instead; the
+        -- column width it returns to is whatever it had.
+        if w.fullscreen ~= 0 then
+          hl.dispatch(hl.dsp.window.fullscreen({
+            mode = (w.fullscreen == 1) and "maximized" or "fullscreen",
+            action = "unset",
+          }))
+          return
+        end
         local m = w.monitor
         if not m then return end
         local pw = (m.transform % 2 == 1) and m.size.height or m.size.width
