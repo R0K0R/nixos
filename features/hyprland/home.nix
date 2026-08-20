@@ -489,17 +489,39 @@ in
       -- Window management
       hl.bind(mod .. " + Q", hl.dsp.window.close())
       hl.bind(mod .. " + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
-      -- niri's Mod+Shift+F was maximize-COLUMN: full width, gaps and corner
-      -- rounding kept. Hyprland's MAXIMIZED state is not that -- it drops
-      -- gaps and rounding and renders the window flush against the bar
-      -- (screenshots in the chat; earlier comments here misdiagnosed this
-      -- twice, first as a DMS shortcut collision, then as the bar
-      -- hiding/showing -- the bar never changed, the window's decorations
-      -- did). `colresize 1` is the faithful port: the column takes the full
-      -- tape width while remaining a normal tiled window, decorations
-      -- intact. Not a toggle -- Mod+R (colresize +conf) cycles back to the
-      -- preset widths, same as it already does for any other width.
-      hl.bind(mod .. " + SHIFT + F", hl.dsp.layout("colresize 1"))
+      -- niri's maximize-column, now a real TOGGLE on Mod+D (end-4's key for
+      -- it; Mod+D is free now that its earlier weirdness is understood --
+      -- it was never a DMS collision, just Hyprland's MAXIMIZED state
+      -- dropping gaps/rounding, see the git log of this file for the whole
+      -- misdiagnosis saga). `colresize 1` keeps the window a normal tiled
+      -- column -- gaps and rounding intact -- unlike MAXIMIZED.
+      --
+      -- The toggle is STATE-FREE on purpose: no stored flag to go stale
+      -- when Mod+R or a mouse edge-drag changes the width behind its back.
+      -- It reads the focused window's actual laid-out width against the
+      -- monitor's usable logical width and picks the direction each press:
+      --   window object: .size (GEOMETRIC_GOAL layout px), .floating,
+      --   .monitor -- LuaWindow.cpp
+      --   monitor object: .size (PIXEL size -- divide by .scale for
+      --   logical), .transform (odd = rotated 90°: swap w/h -- this is a
+      --   convertible with autorotate, so it matters), .reserved
+      --   (bar exclusive zone) -- LuaMonitor.cpp
+      -- 0.9 threshold: a full column is usable minus 2*gaps_out (8px);
+      -- the next preset down is 0.66, comfortably below.
+      hl.bind(mod .. " + D", function()
+        local w = hl.get_active_window()
+        if not w or w.floating then return end
+        local m = w.monitor
+        if not m then return end
+        local pw = (m.transform % 2 == 1) and m.size.height or m.size.width
+        local usable = pw / m.scale - m.reserved.left - m.reserved.right
+        if w.size.x >= usable * 0.9 then
+          -- 0.5 = scrolling.column_width in the config table above; keep in sync.
+          hl.dispatch(hl.dsp.layout("colresize 0.5"))
+        else
+          hl.dispatch(hl.dsp.layout("colresize 1"))
+        end
+      end)
       hl.bind(mod .. " + ALT + space", hl.dsp.window.float())
       -- end-4's Mod+P is "pin"; this config's Mod+P is already DMS's
       -- notepad toggle (see above), so pin goes on Mod+Alt+P instead of
