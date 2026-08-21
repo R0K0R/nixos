@@ -1,0 +1,10 @@
+Ciphertext lives here: age/<name>.age, created with `agenix -e`.
+
+TRACKED ON PURPOSE, unlike secrets/ (which .gitignore excludes and which
+holds plaintext staging). These files are age ciphertext and are safe to
+commit to a public repo -- that is the entire point of the scheme.
+
+They must also be tracked for a second, mechanical reason: this is a git
+flake, and a git flake copies only TRACKED files into its store source.
+An untracked .age file is invisible to evaluation, exactly as an untracked
+feature directory is.

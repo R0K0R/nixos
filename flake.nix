@@ -36,6 +36,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    feat-agenix = {
+      url = "path:./features/agenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     feat-emacs = {
       url = "path:./features/emacs";
       inputs.nixpkgs.follows = "nixpkgs";

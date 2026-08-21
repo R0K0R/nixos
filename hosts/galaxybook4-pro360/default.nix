@@ -125,6 +125,22 @@
 
     ];
 
+    /*
+      Enabled with NO secrets declared yet -- that is deliberate and harmless
+      (agenix's activation is a no-op while age.secrets is empty). It is
+      enabled first purely to put the `agenix` CLI and `age-keygen` on PATH,
+      which is what the bootstrap below needs:
+
+        umask 077 && sudo mkdir -p /etc/agenix
+        sudo age-keygen -o /etc/agenix/identity.txt   # prints the public key
+        # paste that key into secrets.nix, then create secrets:
+        agenix -e age/authinfo.age
+
+      Until /etc/agenix/identity.txt exists, do not declare any age.secrets --
+      activation would fail with nothing able to decrypt them.
+    */
+    agenix.enable = true;
+
     samsung-galaxybook.enable = true;
 
     power.enable = true;
