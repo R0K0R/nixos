@@ -42,6 +42,21 @@ lib.mkIf cfg.enable {
       gnutar
       gzip
       gcc # native-comp / org-babel C, not tree-sitter grammars (Nix-provided now).
+      # epa/epg call `gpg` by name, and Gnus reaches them through auth-source
+      # for the encrypted authinfo (see doom config's auth-sources). Both go
+      # here rather than home.packages for the usual daemon-PATH reason
+      # documented below -- with gpg absent, `epg-find-configuration` returns
+      # nil and the authinfo lookup fails SILENTLY, indistinguishable from a
+      # missing file.
+      gnupg
+      # gpg-agent needs a pinentry to prompt for the passphrase; without one
+      # it aborts with "problem with the agent: No pinentry". The emacs
+      # flavour draws the prompt inside Emacs itself -- no stray GTK window
+      # to lose behind a Hyprland workspace, and it works over TRAMP/ssh
+      # where a graphical pinentry cannot. Needs
+      # `pinentry-program .../bin/pinentry-emacs` in ~/.gnupg/gpg-agent.conf
+      # (or epa-pinentry-mode 'loopback) to actually be selected.
+      pinentry-emacs
       # Org export, ox-pandoc, and markdown-mode's markdown-command. In
       # extraBinPackages rather than home.packages so the DAEMON finds it: a
       # systemd user service does not inherit the login shell's PATH, which is
@@ -111,5 +126,29 @@ lib.mkIf cfg.enable {
       what you want anyway.
     */
     startWithUserSession = if cfg.headless then true else "graphical";
+  };
+
+  /*
+    gpg-agent, wired to the Emacs pinentry.
+
+    Putting pinentry-emacs on PATH is NOT enough on its own: gpg-agent
+    resolves its pinentry from a compiled-in default path, never from PATH,
+    so without this it still aborts with
+
+      gpg: problem with the agent: No pinentry
+
+    which is what a bare `nix-shell -p gnupg` hits. This option writes
+    `pinentry-program` into gpg-agent.conf, which is the part that actually
+    selects it.
+
+    Enabled alongside Emacs rather than as its own feature because that is
+    what consumes it here -- Gnus reading the encrypted authinfo through
+    auth-source (see the doom config's auth-sources). Anything else wanting
+    gpg gets it for free, which is fine; if a headless host ever needs a
+    different flavour, `pinentry.package` is the one knob to change.
+  */
+  services.gpg-agent = {
+    enable = true;
+    pinentry.package = pkgs.pinentry-emacs;
   };
 }
