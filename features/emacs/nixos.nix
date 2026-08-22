@@ -59,6 +59,9 @@ in
     };
   };
 
+  # Accounts this feature applies to; defaults to the primary user.
+  options.my.emacs.users = import ../../lib/user-scope.nix { inherit lib config; };
+
   config = lib.mkIf cfg.enable {
     my.internal.features."emacs.authinfo" = {
       requires = [ "agenix" ];
@@ -77,7 +80,7 @@ in
     age.secrets = lib.mkIf (cfg.authinfoSecret != null) {
       authinfo = {
         file = cfg.authinfoSecret;
-        owner = "r0k0r";
+        owner = config.my.internal.primaryUser;
         group = "users";
         mode = "0400";
       };

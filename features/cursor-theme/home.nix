@@ -1,5 +1,11 @@
-{ pkgs, lib, osConfig, ... }:
+{ config, pkgs, lib, osConfig, ... }:
 
+
+let
+  # sharedModules are evaluated once per user; this is what makes the
+  # feature apply only to the accounts my.cursor-theme.users names.
+  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "cursor-theme"; };
+in
 let
   # Match the glass system (dolphin/kitty windows sit at 0.65).
   alpha = "1";
@@ -46,7 +52,7 @@ let
           $src/index.theme > $dst/index.theme
       '';
 in
-lib.mkIf osConfig.my.cursor-theme.enable {
+lib.mkIf (osConfig.my.cursor-theme.enable && inScope) {
   /*
     Enforce the cursor across every lookup path an app might use instead
     of the session env (so nothing renders a different theme):

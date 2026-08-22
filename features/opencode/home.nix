@@ -1,9 +1,15 @@
-{ lib, osConfig, ... }:
+{ config, lib, osConfig, ... }:
 
+
+let
+  # sharedModules are evaluated once per user; this is what makes the
+  # feature apply only to the accounts my.opencode.users names.
+  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "opencode"; };
+in
 let
   cfg = osConfig.my.opencode;
 in
-lib.mkIf cfg.enable {
+lib.mkIf (cfg.enable && inScope) {
   xdg.configFile."opencode/config.json".text = builtins.toJSON {
     provider = {
       yulee = {

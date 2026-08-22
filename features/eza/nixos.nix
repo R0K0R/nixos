@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ config, lib, ... }:
 
 {
   /*
@@ -10,4 +10,7 @@
     use for either.
   */
   options.my.eza.enable = lib.mkEnableOption "eza, the ls replacement";
+
+  # Accounts this feature applies to; defaults to the primary user.
+  options.my.eza.users = import ../../lib/user-scope.nix { inherit lib config; };
 }

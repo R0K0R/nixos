@@ -1,5 +1,11 @@
-{ lib, pkgs, inputs, osConfig, ... }:
+{ config, lib, pkgs, inputs, osConfig, ... }:
 
+
+let
+  # sharedModules are evaluated once per user; this is what makes the
+  # feature apply only to the accounts my.claude-code.users names.
+  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "claude-code"; };
+in
 let
   cfg = osConfig.my.claude-code;
 
@@ -19,6 +25,6 @@ let
       ${claude-code}/bin/claude "$@"
   '';
 in
-lib.mkIf (cfg.enable && cfg.gemma.enable) {
+lib.mkIf ((cfg.enable && cfg.gemma.enable) && inScope) {
   home.packages = [ gemma-claude ];
 }

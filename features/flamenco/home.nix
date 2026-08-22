@@ -1,5 +1,11 @@
-{ lib, pkgs, osConfig, ... }:
+{ config, lib, pkgs, osConfig, ... }:
 
+
+let
+  # sharedModules are evaluated once per user; this is what makes the
+  # feature apply only to the accounts my.flamenco.users names.
+  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "flamenco"; };
+in
 let
   flamencoSrc = pkgs.fetchzip {
     url = "https://projects.blender.org/studio/flamenco/archive/v3.9.2.tar.gz";
@@ -23,7 +29,7 @@ let
     cp ${cattrsWheel}/*.whl $out/wheels/
   '';
 in
-lib.mkIf osConfig.my.flamenco.enable {
+lib.mkIf (osConfig.my.flamenco.enable && inScope) {
   # Flamenco Blender addon — installed declaratively from pinned source archive.
   # Blender picks up addons dropped in ~/.config/blender/<major.minor>/scripts/addons/.
   xdg.configFile."blender/${lib.versions.majorMinor pkgs.blender.version}/scripts/addons/flamenco" = {
