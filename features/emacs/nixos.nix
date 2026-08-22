@@ -28,6 +28,25 @@ in
       '';
     };
 
+    authinfoSecret = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      example = lib.literalExpression "../../age/authinfo.age";
+      description = ''
+        agenix-encrypted netrc credentials for auth-source (Gnus IMAP/SMTP),
+        decrypted at activation to /run/agenix/authinfo owned by the user.
+
+        Null leaves auth-source alone -- the doom config's own auth-sources
+        setting then decides, which is what a host without agenix wants.
+
+        Requires my.agenix.enable; features/_meta asserts it rather than
+        auto-enabling, because a declared age.secrets entry on a host where
+        agenix is off produces NO error at all -- it evaluates, builds,
+        switches, and leaves auth-source pointing at a file that was never
+        decrypted. Exactly the silent-breakage class that assertion exists for.
+      '';
+    };
+
     machineLocalElisp = lib.mkOption {
       type = lib.types.lines;
       default = "";
@@ -41,6 +60,29 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    my.internal.features."emacs.authinfo" = {
+      requires = [ "agenix" ];
+      enabledBy = cfg.authinfoSecret != null;
+    };
+
+    /*
+      owner, not the default root:root 0400: this is read by Emacs running as
+      the user, and agenix's default would make auth-source fail the lookup
+      SILENTLY -- indistinguishable from a missing file, the same trap the old
+      /etc/nix/secrets install line documented.
+
+      Path is left at agenix's default (/run/agenix/<name>), which is tmpfs, so
+      the plaintext exists only in RAM and is gone at reboot.
+    */
+    age.secrets = lib.mkIf (cfg.authinfoSecret != null) {
+      authinfo = {
+        file = cfg.authinfoSecret;
+        owner = "r0k0r";
+        group = "users";
+        mode = "0400";
+      };
+    };
+
     /*
       `withNativeCompilation` flips emacs' `meta.broken` in this nixpkgs fork.
       Isolated by evaluating each flag on the host's pkgs:

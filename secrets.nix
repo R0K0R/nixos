@@ -36,7 +36,7 @@ let
   # as obviously-invalid strings on purpose: agenix fails loudly on a
   # malformed recipient, which is far better than silently encrypting to a
   # key nobody holds.
-  galaxybook = "age1REPLACE_ME_WITH_GALAXYBOOK_PUBLIC_KEY";
+  galaxybook = "age1y70qjfcr9thkzk6nt4nd7mt0uj39jj6s2ye57elzej48z6q2ls4qdzs6zy";
   victus15 = "age1REPLACE_ME_WITH_VICTUS15_PUBLIC_KEY";
 
   allHosts = [

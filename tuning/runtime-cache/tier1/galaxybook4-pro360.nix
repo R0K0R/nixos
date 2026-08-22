@@ -1,5 +1,5 @@
 {
-  capturedAt = "2026-08-20T14:44:16Z";
+  capturedAt = "2026-08-21T14:18:02Z";
   host = "galaxybook4-pro360";
   nixpkgsNarHash = "sha256-dRTovTKf+X1usU7SXsKDwQ4l1m8Az58iiw1BGb3PpcM=";
   nixpkgsRev = "e4a4947e0fad9456c3041dbce14dc1cfab1ffbb9";
@@ -1150,6 +1150,7 @@
     "pfuture"
     "picotts"
     "pillow"
+    "pinentry-emacs"
     "pip-requirements"
     "pipenv"
     "pipewire"
