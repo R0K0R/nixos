@@ -13,6 +13,10 @@
   # hardware, not of any feature.
   boot.kernelPackages = pkgs.linuxPackages_7_1;
 
+  nixpkgs.pkgs = import inputs.nixpkgs-upstream {
+    sysem = "x86_64-linux";
+  }
+
   my = {
     tuning = {
       march = null;
@@ -38,7 +42,6 @@
     cursor-theme.enable = true;
     ssh = {
       enable = true;
-      };
     };
     opencode.enable = true;
     nix-settings.enable = true;
@@ -52,10 +55,6 @@
     desktop-apps.enable = true;
     diagnostics.enable = true;
     qt-dev.enable = true;
-    samsung-ecosystem = {
-      enable = true;
-      budsStartUp = true;
-    };
 
     claude-code = {
       enable = true;
@@ -67,7 +66,6 @@
       enable = true;
       cowork.enable = true;
     };
-
 
     /*
       One-offs that do not justify a feature. Literal list -- see
