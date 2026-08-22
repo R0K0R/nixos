@@ -16,7 +16,7 @@ lib.mkIf config.my.remote-builder.client.enable {
       Host victus-15
         HostName victus-15
         User r0k0r
-        IdentityFile /etc/nix/remote-builder/ssh_key
+        IdentityFile ${config.my.remote-builder.client.sshKey}
         ControlMaster auto
         ControlPath /run/nix-victus-15-ssh-%r@%h:%p
         ControlPersist yes
