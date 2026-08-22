@@ -94,6 +94,8 @@
       patching and yulee-sandbox test exclusions, none of which applies here.
     */
     tuning = {
+      # Literal, and it must stay one -- see the note in galaxybook4-pro360.
+      enable = true;
       march = "znver3";
       pseudoCross.enable = true;
       o3.enable = true;

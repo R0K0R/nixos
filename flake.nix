@@ -92,11 +92,64 @@
       nixosFeatures = collect "nixos.nix";
       homeFeatures = collect "home.nix";
 
+      /*
+        WHICH NIXPKGS A HOST GETS, decided before the module system exists.
+
+        `my.tuning.enable = false` hands a host plain upstream nixpkgs so its
+        whole package set substitutes from cache.nixos.org. That cannot be an
+        ordinary option read from `config`: the input has to be chosen to build
+        the fixpoint that `config` lives in. So the literal is read out of the
+        host file by RAW IMPORT -- the same technique
+        tuning/runtime-cache/lookup.nix:185 uses for my.packages.extra, with the
+        same constraint and the same _type rejection, because there is no module
+        evaluation here that could resolve a property list.
+
+        WHY NOT nixpkgs.pkgs, the option that exists for exactly this: the
+        nixpkgs module asserts `nixpkgs.pkgs is defined -> nixpkgs.config == {}`
+        (nixos/modules/misc/nixpkgs.nix:409, unconditional). This config sets
+        nixpkgs.config in two places that have nothing to do with tuning --
+        features/nix-settings (allowUnfree) and features/emacs (problems.handlers)
+        -- so that route needs `nixpkgs.config = mkForce {}` plus a hand-copy of
+        those values into the import, where the next key anyone adds is silently
+        dropped. It also makes nixpkgs.overlays silently ignored, which would
+        quietly delete my.tuning.extraOverlays -- this host's GPU trim and
+        fingerprint fork. Swapping the input keeps config and overlays working
+        normally.
+
+        SAFE because the fork patches only pkgs/ (71 files; nothing under nixos/
+        or lib/, verified by tree diff), so `np.lib.nixosSystem` and the whole
+        NixOS module tree are byte-identical either way. This swaps the package
+        set, not the module system.
+      */
+      tuningEnabledOf =
+        hostName:
+        let
+          raw = import (./hosts + "/${hostName}") {
+            inherit inputs lib hostName;
+            pkgs = throw "flake.nix: hosts/${hostName} -- my.tuning.enable must not read `pkgs`";
+            config = throw "flake.nix: hosts/${hostName} -- my.tuning.enable must not read `config`";
+          };
+          v = raw.my.tuning.enable or false;
+        in
+        if builtins.isBool v then
+          v
+        else
+          throw ''
+            flake.nix: hosts/${hostName}/default.nix wraps my.tuning.enable in ${
+              v._type or builtins.typeOf v
+            }.
+            It must be a literal `true` or `false`. The nixpkgs input is chosen before the
+            module system exists, so nothing here can resolve mkIf/mkMerge.'';
+
       mkHost =
         hostName:
-        nixpkgs.lib.nixosSystem {
+        let
+          tuningEnabledRaw = tuningEnabledOf hostName;
+          np = if tuningEnabledRaw then nixpkgs else inputs.nixpkgs-upstream;
+        in
+        np.lib.nixosSystem {
           system = "x86_64-linux";
-          specialArgs = { inherit inputs hostName; };
+          specialArgs = { inherit inputs hostName tuningEnabledRaw; };
           modules = [
             home-manager.nixosModules.home-manager
             nixosFeatures
