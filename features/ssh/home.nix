@@ -1,9 +1,15 @@
-{ lib, osConfig, ... }:
+{ config, lib, osConfig, ... }:
 
+
+let
+  # sharedModules are evaluated once per user; this is what makes the
+  # feature apply only to the accounts my.ssh.users names.
+  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "ssh"; };
+in
 let
   cfg = osConfig.my.ssh;
 in
-lib.mkIf cfg.enable {
+lib.mkIf (cfg.enable && inScope) {
   programs.ssh = {
     enable = true;
     enableDefaultConfig = false;

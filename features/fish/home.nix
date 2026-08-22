@@ -1,6 +1,12 @@
-{ pkgs, lib, osConfig, ... }:
+{ config, pkgs, lib, osConfig, ... }:
 
-lib.mkIf osConfig.my.fish.enable {
+
+let
+  # sharedModules are evaluated once per user; this is what makes the
+  # feature apply only to the accounts my.fish.users names.
+  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "fish"; };
+in
+lib.mkIf (osConfig.my.fish.enable && inScope) {
   programs.fish = {
     enable = true;
 

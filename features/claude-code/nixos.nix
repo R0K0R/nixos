@@ -29,7 +29,8 @@ in
 
     primaryUser = lib.mkOption {
       type = lib.types.str;
-      default = "r0k0r";
+      default = config.my.internal.primaryUser;
+        defaultText = lib.literalExpression "the primary user";
       description = "Whose ~/.claude the root symlink points at.";
     };
 
@@ -62,6 +63,9 @@ in
       };
     };
   };
+
+  # Accounts this feature applies to; defaults to the primary user.
+  options.my.claude-code.users = import ../../lib/user-scope.nix { inherit lib config; };
 
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ claude-code ];

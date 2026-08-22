@@ -249,7 +249,10 @@ lib.mkIf config.my.samsung-galaxybook.enable {
 
   environment.sessionVariables = libcameraEnv;
 
-  users.users.r0k0r.extraGroups = [ "kvm" ];
+  # Keyed off the primary account rather than a literal: `users.users.<n>.X`
+  # DECLARES the user, so a literal name here creates a stray half-defined
+  # account on any host where that person does not exist.
+  users.users.${config.my.internal.primaryUser}.extraGroups = [ "kvm" ];
 
   programs.firefox.preferences = {
     "media.webrtc.camera.allow-pipewire" = true;

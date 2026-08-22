@@ -52,7 +52,8 @@ let
 
       sshUser = lib.mkOption {
         type = lib.types.str;
-        default = "r0k0r";
+        default = config.my.internal.primaryUser;
+        defaultText = lib.literalExpression "the primary user";
         description = "SSH user on the peer.";
       };
       maxJobs = lib.mkOption {
@@ -191,7 +192,7 @@ in
     # a `z` rule against /run/agenix would either race the activation script or
     # fail outright on a path that does not exist yet.
     systemd.tmpfiles.rules = lib.optionals (cfg.sshKeySecret == null) [
-      "z ${cfg.sshKey} 0600 r0k0r users -"
+      "z ${cfg.sshKey} 0600 ${config.my.internal.primaryUser} users -"
     ];
 
     age.secrets = lib.mkIf (cfg.sshKeySecret != null) {
@@ -200,7 +201,7 @@ in
         # Same ownership the tmpfiles rule established: readable by r0k0r for
         # interactive `ssh <peer>`, and by root (the nix-daemon) via privilege.
         # ssh refuses a private key with group/other bits set, hence 0600.
-        owner = "r0k0r";
+        owner = config.my.internal.primaryUser;
         group = "users";
         mode = "0600";
       };

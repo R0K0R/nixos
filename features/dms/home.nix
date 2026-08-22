@@ -1,5 +1,11 @@
-{ lib, osConfig, ... }:
+{ config, lib, osConfig, ... }:
 
+
+let
+  # sharedModules are evaluated once per user; this is what makes the
+  # feature apply only to the accounts my.dms.users names.
+  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "dms"; };
+in
 let
   aiOllamaHost = "yulee";
   /* Must match `ollama list`; adjust if yours differs e.g. `gemma3:27b`. */
@@ -19,7 +25,7 @@ in
     ./plugins.nix
   ];
 
-  config = lib.mkIf osConfig.my.dms.enable {
+  config = lib.mkIf (osConfig.my.dms.enable && inScope) {
   programs.dank-material-shell = {
     enable = true;
 

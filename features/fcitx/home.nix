@@ -1,5 +1,11 @@
-{ lib, osConfig, ... }:
+{ config, lib, osConfig, ... }:
 
+
+let
+  # sharedModules are evaluated once per user; this is what makes the
+  # feature apply only to the accounts my.fcitx.users names.
+  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "fcitx"; };
+in
 let
   fcitx5Ini = lib.generators.toINI { };
 
@@ -31,7 +37,7 @@ let
     GroupOrder."0" = "Default";
   };
 in
-lib.mkIf osConfig.my.fcitx.enable {
+lib.mkIf (osConfig.my.fcitx.enable && inScope) {
   # Store-backed immutable fcitx5 config; the NixOS half builds fcitx5-with-addons
   # and the patched hangul addon. Global options and the IME profile live here so
   # the user dir is the single source of truth rather than merging /etc vs ~/.config.

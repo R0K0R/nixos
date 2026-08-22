@@ -29,7 +29,9 @@
       refreshTool.enable = true;
     };
 
-    user-r0k0r.enable = true;
+    # The people who use this machine. Declaring an account creates it; the
+    # primary is what every feature's `users` option defaults to.
+    users.r0k0r.primary = true;
     upower.enable = true;
     fonts.enable = true;
     keyd.enable = true;

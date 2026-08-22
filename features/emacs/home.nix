@@ -7,6 +7,12 @@
   ...
 }:
 
+
+let
+  # sharedModules are evaluated once per user; this is what makes the
+  # feature apply only to the accounts my.emacs.users names.
+  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "emacs"; };
+in
 let
   cfg = osConfig.my.emacs;
 
@@ -21,7 +27,7 @@ let
   # under a Nix-managed profile.
   treesitGrammars = pkgs.emacsPackages.treesit-grammars.with-all-grammars;
 in
-lib.mkIf cfg.enable {
+lib.mkIf (cfg.enable && inScope) {
   # Doom owns Emacs startup; skipping this avoids an emacsWithPackages
   # wrapper injecting default.el on top of what programs.doom-emacs builds.
   programs.emacs.enable = false;

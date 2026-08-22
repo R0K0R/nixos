@@ -33,5 +33,8 @@ in
 
   # Home-only feature: the NixOS side exists to declare the switches that
   # features/ssh/home.nix gates on via osConfig.
+  # Accounts this feature applies to; defaults to the primary user.
+  options.my.ssh.users = import ../../lib/user-scope.nix { inherit lib config; };
+
   config = lib.mkIf cfg.enable { };
 }

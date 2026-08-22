@@ -47,7 +47,8 @@ in
 
     user = lib.mkOption {
       type = lib.types.str;
-      default = "r0k0r";
+      default = config.my.internal.primaryUser;
+        defaultText = lib.literalExpression "the primary user";
       description = "User whose session runs the daemon, and who is added to the `input` group.";
     };
 
