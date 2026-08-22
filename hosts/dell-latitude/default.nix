@@ -1,4 +1,4 @@
-{ inputs, lib, pkgs, ... }:
+{ pkgs, ... }:
 
 {
   imports = [
@@ -13,16 +13,44 @@
   # hardware, not of any feature.
   boot.kernelPackages = pkgs.linuxPackages_7_1;
 
-  nixpkgs.pkgs = import inputs.nixpkgs-upstream {
-    sytsem = "x86_64-linux";
-  };
-
   my = {
-    tuning = {
-      march = null;
+    /*
+      This machine builds nothing.
+
+      `enable = false` makes flake.nix hand it plain upstream nixpkgs, so the
+      entire package set substitutes from cache.nixos.org and the only things
+      compiled here are the few hundred config-generated derivations every NixOS
+      system produces (system-path, etc, units) -- symlink and text assembly, no
+      compilers.
+
+      Literal, and it must stay one: flake.nix raw-imports this file to choose
+      the nixpkgs input BEFORE the module system exists, so mkIf/mkMerge here
+      cannot be resolved. It throws rather than guessing, and an assertion in
+      tuning/nixos.nix cross-checks what flake.nix read against what the module
+      system evaluated.
+
+      Do NOT reach for `nixpkgs.pkgs = import inputs.nixpkgs-upstream { ... }`
+      instead. It cannot work in this config: the nixpkgs module asserts
+      `nixpkgs.pkgs is defined -> nixpkgs.config == {}`, and features/nix-settings
+      sets allowUnfree while features/emacs sets problems.handlers. It also makes
+      nixpkgs.overlays silently ignored. And `march = null` on its own does not
+      help either -- the fork patches cc-wrapper's setup-hook.sh, whose bytes are
+      a build input, so stdenv's hash moves and everything rebuilds regardless of
+      the tuning switches.
+    */
+    tuning.enable = false;
+
+    /*
+      The person who uses this machine. Declaring an account creates it, and the
+      primary is what every feature's `users` option defaults to -- so benjamin
+      gets the accounts's packages and the home-manager side of every feature
+      enabled below, with no feature naming him anywhere.
+    */
+    users.benjamin = {
+      primary = true;
+      description = "Benjamin S.H. Lee";
     };
 
-    user-benjamin.enable = true;
     upower.enable = true;
     fonts.enable = true;
     keyd.enable = true;
@@ -40,12 +68,11 @@
     kitty.enable = true;
     starship.enable = true;
     cursor-theme.enable = true;
-    ssh = {
-      enable = true;
-    };
+    ssh.enable = true;
     opencode.enable = true;
     nix-settings.enable = true;
     emacs.enable = true;
+
     # Package sets, each owning its own list (features/<name>/packages.nix).
     base.enable = true;
     eza.enable = true;
@@ -79,9 +106,7 @@
     flatpak.enable = true;
     easyeffects.enable = true;
 
-    boot = {
-      enable = true;
-    };
+    boot.enable = true;
 
     emacs.machineLocalElisp = ''
       ;;; -*- lexical-binding: t; -*-
@@ -102,7 +127,6 @@
 
     desktop = {
       compositor = "hyprland";
-      # 2880x1800 internal panel.
       primaryOutput = "eDP-1";
       primaryOutputScale = "1";
     };
@@ -120,19 +144,12 @@
 
   networking.hostName = "dell-latitude";
 
-  # Declare the local-Qt6 build capability so packages with
-  # requiredSystemFeatures = ["galaxybook-local-qt6"] can build here.
-
-  nixpkgs.buildPlatform = "x86_64-linux";
-
-  nixpkgs.hostPlatform = lib.systems.elaborate {
-    system = "x86_64-linux";
-  };
-
   /*
-    Host-specific overlays only. Everything generic -- the pseudo-cross and
-    build-load fixes, o3/LTO, upstream-tools, the i686 escape hatch -- moved to
-    tuning/, behind the my.tuning.* switches above. What is left is about this
-    machine's hardware and nothing else, which is why it cannot be shared.
+    No nixpkgs.buildPlatform / hostPlatform here. hardware-configuration.nix
+    already sets hostPlatform at mkDefault, and on an untuned host the
+    build != host split must NOT exist -- that split is precisely what
+    tuning/overlays/upstream-tools.nix keys off to tell a build tool from
+    something that runs at runtime. The platform is owned by my.tuning.march and
+    by nothing else.
   */
 }

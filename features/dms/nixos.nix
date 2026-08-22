@@ -64,7 +64,8 @@ in
 
       primaryLogin = lib.mkOption {
         type = lib.types.str;
-        default = "r0k0r";
+        default = config.my.internal.primaryUser;
+        defaultText = lib.literalExpression "the primary user";
         description = ''
           Whose home directory the greeter reads theme state from, so the login
           screen matches the desktop.
@@ -72,6 +73,9 @@ in
       };
     };
   };
+
+  # Accounts this feature applies to; defaults to the primary user.
+  options.my.dms.users = import ../../lib/user-scope.nix { inherit lib config; };
 
   config = lib.mkMerge [
     {

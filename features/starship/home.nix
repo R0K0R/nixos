@@ -1,6 +1,12 @@
-{ lib, osConfig, ... }:
+{ config, lib, osConfig, ... }:
 
-lib.mkIf osConfig.my.starship.enable {
+
+let
+  # sharedModules are evaluated once per user; this is what makes the
+  # feature apply only to the accounts my.starship.users names.
+  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "starship"; };
+in
+lib.mkIf (osConfig.my.starship.enable && inScope) {
   programs.starship = {
     enable = true;
     enableFishIntegration = false;

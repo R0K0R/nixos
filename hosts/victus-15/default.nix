@@ -23,16 +23,41 @@
     # list. Now an explicit feature, so it has to be asked for.
     claude-code.enable = true;
 
-    user-r0k0r = {
-      enable = true;
-      mutableUsers = false;
-      extraGroups = [ "networkmanager" "wheel" ];
-      # Not tracked in git -- see secrets/ in .gitignore. Must exist at this
-      # exact path on this machine; read by the activation script at switch
-      # time, never embedded into the Nix store.
-      hashedPasswordFile = "/etc/nixos/secrets/victus-15-hashed-password-r0k0r";
-      shell = pkgs.fish;
+    /*
+      Both humans on this machine. Declaring an account creates it, and the
+      primary is what every feature's `users` option defaults to -- so benjamin
+      gets an account and a home-manager configuration, but none of the features
+      scoped to the primary unless he is named explicitly.
+
+      hashedPasswordFile paths are not tracked in git (see secrets/ in
+      .gitignore). They must exist at these exact paths on this machine; the
+      activation script reads them at switch time and they are never embedded
+      into the Nix store. users.mutableUsers = false below makes them mandatory,
+      which features/users asserts.
+    */
+    users = {
+      r0k0r = {
+        primary = true;
+        extraGroups = [ "networkmanager" "wheel" ];
+        hashedPasswordFile = "/etc/nixos/secrets/victus-15-hashed-password-r0k0r";
+        shell = pkgs.fish;
+      };
+
+      benjamin = {
+        description = "Benjamin S.H. Lee";
+        extraGroups = [ "networkmanager" "wheel" ];
+        hashedPasswordFile = "/etc/nixos/secrets/victus-15-hashed-password-benjamin";
+      };
     };
+
+    /*
+      btop with CUDA, replacing the plain btop that features/base contributes.
+      Goes through my.packages.extra rather than users.users directly: extra is
+      ordered mkOrder 100, so under buildEnv's ignoreCollisions first-wins it is
+      deterministically the one on PATH, and features/packages emits a warning
+      naming the shadowed package instead of leaving it to module import order.
+    */
+    packages.extra.user = with pkgs; [ (btop.override { cudaSupport = true; }) ];
 
     locale = {
       enable = true;
@@ -62,6 +87,8 @@
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
         "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
       ];
+      # A host file naming its own human is fine -- that is what host files are
+      # for. The invariant this refactor establishes is that FEATURES must not.
       trustedUsers = [ "r0k0r" ];
       secretKeyFiles = [ "/etc/nix/signing-key.pem" ];
     };
@@ -94,6 +121,8 @@
       patching and yulee-sandbox test exclusions, none of which applies here.
     */
     tuning = {
+      # Literal, and it must stay one -- see the note in galaxybook4-pro360.
+      enable = true;
       march = "znver3";
       pseudoCross.enable = true;
       o3.enable = true;
@@ -103,19 +132,14 @@
     };
   };
 
-  # Remaining users are host-specific: a second human account and root's own
-  # hash. r0k0r itself comes from my.user-r0k0r above.
-  users.users = {
-    r0k0r.packages = with pkgs; [ (btop.override { cudaSupport = true; }) ];
-    benjamin = {
-      isNormalUser = true;
-      description = "Benjamin S.H. Lee";
-      extraGroups = [ "networkmanager" "wheel" ];
-      hashedPasswordFile = "/etc/nixos/secrets/victus-15-hashed-password-benjamin";
-      packages = [ ];
-    };
-    root.hashedPasswordFile = "/etc/nixos/secrets/victus-15-hashed-password-r0k0r";
-  };
+  /*
+    Declared accounts are the whole truth here, so every one of them needs a
+    hashedPasswordFile or it becomes unloginnable at the first switch --
+    features/users asserts exactly that. root is not a my.users account (it is
+    not a human), so its hash is set directly.
+  */
+  users.mutableUsers = false;
+  users.users.root.hashedPasswordFile = "/etc/nixos/secrets/victus-15-hashed-password-r0k0r";
 
   programs.fish.enable = true;
 

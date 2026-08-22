@@ -46,6 +46,9 @@
     loadable, plus the home half's qt6ct scheme and kdeglobals management
   '';
 
+  # Accounts this feature applies to; defaults to the primary user.
+  options.my.qt-theming.users = import ../../lib/user-scope.nix { inherit lib config; };
+
   config = lib.mkIf config.my.qt-theming.enable {
     environment.profileRelativeSessionVariables.QT_PLUGIN_PATH = [
       "/${pkgs.qt6.qtbase.qtPluginPrefix}"
