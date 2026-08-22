@@ -1,5 +1,5 @@
 {
-  capturedAt = "2026-08-21T14:18:02Z";
+  capturedAt = "2026-08-22T15:40:40Z";
   host = "galaxybook4-pro360";
   nixpkgsNarHash = "sha256-dRTovTKf+X1usU7SXsKDwQ4l1m8Az58iiw1BGb3PpcM=";
   nixpkgsRev = "e4a4947e0fad9456c3041dbce14dc1cfab1ffbb9";
@@ -138,6 +138,8 @@
     "ada"
     "adaptive-wrap"
     "adwaita-icon-theme"
+    "age"
+    "agenix"
     "aiodns"
     "aiohappyeyeballs"
     "aiohttp"
@@ -1010,6 +1012,7 @@
     "minizip-ng"
     "mjpegtools"
     "mkpasswd"
+    "mktemp"
     "mlt"
     "mobile-broadband-provider-info"
     "modemmanager"
@@ -1322,6 +1325,7 @@
     "squashfuse"
     "sratom"
     "srt"
+    "ssh-to-age"
     "sshfs-fuse"
     "starship"
     "statix"
