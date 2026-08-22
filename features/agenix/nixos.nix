@@ -58,7 +58,17 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = lib.mkMerge [
+    /*
+      Declared UNCONDITIONALLY, outside the mkIf, so features/_meta can see
+      this feature exists even while it is off. `present` there tests the
+      declaration attrset, not the directory -- register nothing and a
+      dependent gets "requires 'agenix', which is not present in features/"
+      even though the directory is right here. Same shape as features/dms.
+    */
+    { my.internal.features.agenix.enabledBy = cfg.enable; }
+
+    (lib.mkIf cfg.enable {
     age.identityPaths = cfg.identityPaths;
 
     environment.systemPackages = [
@@ -70,5 +80,6 @@ in
       pkgs.age
       pkgs.ssh-to-age
     ];
-  };
+    })
+  ];
 }

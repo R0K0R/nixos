@@ -126,18 +126,16 @@
     ];
 
     /*
-      Enabled with NO secrets declared yet -- that is deliberate and harmless
-      (agenix's activation is a no-op while age.secrets is empty). It is
-      enabled first purely to put the `agenix` CLI and `age-keygen` on PATH,
-      which is what the bootstrap below needs:
+      Bootstrap, done: /etc/agenix/identity.txt holds the private age key
+      (root, 0600, outside the flake); its public half is in secrets.nix.
+      Back that file up offline -- lose it and every age/*.age in the repo
+      is permanently undecryptable, by design.
 
-        umask 077 && sudo mkdir -p /etc/agenix
-        sudo age-keygen -o /etc/agenix/identity.txt   # prints the public key
-        # paste that key into secrets.nix, then create secrets:
-        agenix -e age/authinfo.age
-
-      Until /etc/agenix/identity.txt exists, do not declare any age.secrets --
-      activation would fail with nothing able to decrypt them.
+      CLI note: `agenix -d/-e` does NOT read age.identityPaths, so editing an
+      existing secret needs the identity passed explicitly:
+        sudo TMPDIR=/run/user/1000 agenix -e age/foo.age -i /etc/agenix/identity.txt
+      (TMPDIR because agenix stages cleartext via mktemp, and /tmp here is
+      btrfs-on-disk, not tmpfs. Activation itself needs none of this.)
     */
     agenix.enable = true;
 
@@ -168,6 +166,10 @@
         '';
       };
     };
+
+    # Gnus credentials via agenix -> /run/agenix/authinfo (tmpfs, owner r0k0r).
+    # features/_meta asserts my.agenix.enable alongside this.
+    emacs.authinfoSecret = ../../age/authinfo.age;
 
     emacs.machineLocalElisp = ''
       ;;; -*- lexical-binding: t; -*-
