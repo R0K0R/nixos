@@ -122,6 +122,7 @@
     {
       nixosConfigurations.victus-15 = mkHost "victus-15";
       nixosConfigurations.galaxybook4-pro360 = mkHost "galaxybook4-pro360";
+      nixosConfigurations.dell-latitude = mkHost "dell-latitude";
 
       /*
         Exposed so a feature set can be consumed from outside this repo, and so
