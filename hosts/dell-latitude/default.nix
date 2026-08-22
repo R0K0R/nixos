@@ -13,12 +13,26 @@
   # hardware, not of any feature.
   boot.kernelPackages = pkgs.linuxPackages_7_1;
 
-  nixpkgs.pkgs = import inputs.nixpkgs-upstream {
-    sytsem = "x86_64-linux";
-  };
-
   my = {
+    /*
+      This machine builds nothing. `enable = false` makes flake.nix hand it
+      plain upstream nixpkgs, so the whole package set substitutes from
+      cache.nixos.org.
+
+      Literal, and it must stay one: flake.nix raw-imports this file to choose
+      the nixpkgs input before the module system exists, so mkIf/mkMerge here
+      cannot be resolved (it throws rather than guessing).
+
+      This replaces an earlier `nixpkgs.pkgs = import inputs.nixpkgs-upstream`,
+      which could not work: the nixpkgs module asserts nixpkgs.config == {}
+      whenever nixpkgs.pkgs is set, and features/nix-settings sets allowUnfree
+      while features/emacs sets problems.handlers. It also silently ignored
+      nixpkgs.overlays. (That version additionally read `sytsem = ...`, which
+      nixpkgs accepts without complaint because its top-level takes `...` -- the
+      argument was simply dropped and `system` fell back to its default.)
+    */
     tuning = {
+      enable = false;
       march = null;
     };
 
@@ -120,14 +134,13 @@
 
   networking.hostName = "dell-latitude";
 
-  # Declare the local-Qt6 build capability so packages with
-  # requiredSystemFeatures = ["galaxybook-local-qt6"] can build here.
-
-  nixpkgs.buildPlatform = "x86_64-linux";
-
-  nixpkgs.hostPlatform = lib.systems.elaborate {
-    system = "x86_64-linux";
-  };
+  /*
+    No nixpkgs.buildPlatform / hostPlatform here. They were declaring a
+    build == host split with no gcc.arch, which is what nixosSystem already does
+    from `system` -- and on an untuned host the split is exactly what must NOT
+    exist, since it is the thing overlays/upstream-tools.nix keys off. The
+    platform is owned by my.tuning.march (tuning/nixos.nix) and by nothing else.
+  */
 
   /*
     Host-specific overlays only. Everything generic -- the pseudo-cross and

@@ -1,4 +1,4 @@
-{ config, inputs, lib, hostName, ... }:
+{ config, inputs, lib, hostName, tuningEnabledRaw, ... }:
 
 let
   cfg = config.my.tuning;
@@ -17,6 +17,28 @@ let
 in
 {
   options.my.tuning = {
+    enable = lib.mkEnableOption ''
+      this machine-bound tuning backend, and with it the patched nixpkgs fork.
+
+      OFF (the default) is not merely "no -march". It selects a different
+      nixpkgs INPUT for this host -- plain upstream -- so the entire package set
+      substitutes from cache.nixos.org and nothing is compiled locally beyond
+      the few hundred config-generated derivations every NixOS system builds.
+      This is what you want on a machine that is not doing toolchain work.
+
+      Turning march off while staying on the fork does NOT achieve that: the
+      fork patches pkgs/build-support/cc-wrapper/setup-hook.sh, whose bytes are
+      a build input to cc-wrapper, so stdenv's hash moves and every package
+      rebuilds no matter what the tuning switches say.
+
+      Because the choice is an INPUT rather than an option value, it is read out
+      of the host file by raw import in flake.nix -- see the note there. It must
+      therefore be a LITERAL true/false in hosts/<name>/default.nix: no mkIf, no
+      mkMerge, no reference to `config`. The assertion below compares what
+      flake.nix read against what the module system evaluated, so a definition
+      that flake.nix could not see can never pass silently.
+    '';
+
     march = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -81,7 +103,41 @@ in
     ./runtime-cache-refresh.nix
   ];
 
-  config = lib.mkIf (cfg.march != null) {
+  config = lib.mkMerge [
+
+  /*
+    Assertions live OUTSIDE the gate below: `march = "meteorlake"` next to
+    `enable = false` must produce an error naming the missing line, not a
+    silently untuned machine that still reads as configured.
+  */
+  {
+    assertions = [
+      {
+        assertion = cfg.enable == tuningEnabledRaw;
+        message = ''
+          my.tuning.enable evaluated to ${lib.boolToString cfg.enable}, but flake.nix
+          read ${lib.boolToString tuningEnabledRaw} from hosts/${hostName}/default.nix,
+          and has already selected the ${
+            if tuningEnabledRaw then "patched fork" else "plain upstream"
+          } nixpkgs on that basis.
+
+          Set my.tuning.enable as a literal in hosts/${hostName}/default.nix. It cannot
+          be defined from another module or wrapped in mkIf/mkMerge: the nixpkgs input is
+          chosen before the module system exists.
+        '';
+      }
+      {
+        assertion = cfg.march == null || cfg.enable;
+        message =
+          "my.tuning.march is set to ${toString cfg.march} but my.tuning.enable is false. "
+          + "flake.nix has given this host plain upstream nixpkgs, so the pseudo-cross split "
+          + "would rebuild the entire package set against an unpatched tree instead of "
+          + "substituting it from cache.nixos.org. Add my.tuning.enable = true;";
+      }
+    ];
+  }
+
+  (lib.mkIf (cfg.enable && cfg.march != null) {
     nixpkgs.buildPlatform = "x86_64-linux";
 
     nixpkgs.hostPlatform = lib.systems.elaborate {
@@ -111,5 +167,6 @@ in
         ++ cfg.extraOverlays
       )
     ];
-  };
+  })
+  ];
 }

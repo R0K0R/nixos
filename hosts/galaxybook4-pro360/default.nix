@@ -15,6 +15,10 @@
 
   my = {
     tuning = {
+      # Literal, and it must stay one: flake.nix raw-imports this file to pick
+      # between the patched fork and plain upstream nixpkgs before the module
+      # system exists.
+      enable = true;
       march = "meteorlake";
       pseudoCross.enable = true;
       o3.enable = true;
