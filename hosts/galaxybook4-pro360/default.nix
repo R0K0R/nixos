@@ -29,9 +29,19 @@
       refreshTool.enable = true;
     };
 
-    # The people who use this machine. Declaring an account creates it; the
-    # primary is what every feature's `users` option defaults to.
-    users.r0k0r.primary = true;
+    /*
+      The people who use this machine. Declaring an account creates it; the
+      primary is what every feature's `users` option defaults to.
+
+      extraGroups is written out in full, including the option's own defaults,
+      because a definition REPLACES the default rather than merging with it --
+      listing only "dialout" here would silently drop wheel and take sudo with
+      it. dialout is for arduino-cli/arduino-ide (/dev/ttyACM*, /dev/ttyUSB*).
+    */
+    users.r0k0r = {
+      primary = true;
+      extraGroups = [ "wheel" "networkmanager" "video" "audio" "dialout" ];
+    };
     upower.enable = true;
     fonts.enable = true;
     keyd.enable = true;
@@ -234,8 +244,6 @@
     that owns the switch.
   */
 
-  # Serial access for arduino-cli/arduino-ide (/dev/ttyACM*, /dev/ttyUSB*).
-  users.users.r0k0r.extraGroups = [ "dialout" ];
 
 
   /*
