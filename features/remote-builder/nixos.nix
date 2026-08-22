@@ -108,10 +108,44 @@ in
       description = "Flake path baked into the generated wrapper scripts.";
     };
 
+    sshKeySecret = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      example = lib.literalExpression "../../age/remote-builder-ssh-key.age";
+      description = ''
+        agenix-encrypted private key, decrypted at activation instead of
+        provisioned by hand into /etc/nix/remote-builder/.
+
+        Null keeps the hand-installed file and its tmpfiles permission rule,
+        which is the fallback worth keeping: this key is what DISPATCHES
+        remote builds, and on a host with max-jobs = 0 a broken key costs the
+        very rebuild that would fix it. Reverting is setting this back to null
+        -- or booting the previous generation, which still carries the old
+        path.
+
+        Requires my.agenix.enable; features/_meta asserts it.
+      '';
+    };
+
     sshKey = lib.mkOption {
       type = lib.types.str;
-      default = "/etc/nix/remote-builder/ssh_key";
-      description = "Private key used to reach every peer.";
+      default =
+        if cfg.sshKeySecret != null then
+          "/run/agenix/remote-builder-ssh-key"
+        else
+          "/etc/nix/remote-builder/ssh_key";
+      defaultText = lib.literalExpression ''
+        "/run/agenix/remote-builder-ssh-key" when sshKeySecret is set,
+        otherwise "/etc/nix/remote-builder/ssh_key"
+      '';
+      description = ''
+        Private key used to reach every peer. Read at connect time from
+        outside the store, by the nix-daemon (as root) and by the user's own
+        ssh client -- so every consumer must agree on it. peer-*.nix and
+        my.ssh.builderKeyFile both derive from this rather than repeating the
+        literal, which they used to and which would have split the daemon and
+        interactive ssh onto different keys the moment this moved.
+      '';
     };
 
     localJobs = lib.mkOption {
@@ -153,9 +187,32 @@ in
     # `r0k0r` group, and systemd-tmpfiles skips the whole line on an
     # unresolvable group ("Failed to resolve group 'r0k0r'"), silently leaving
     # the key root-owned.
-    systemd.tmpfiles.rules = [
+    # Only for the hand-installed key: agenix sets owner/group/mode itself, and
+    # a `z` rule against /run/agenix would either race the activation script or
+    # fail outright on a path that does not exist yet.
+    systemd.tmpfiles.rules = lib.optionals (cfg.sshKeySecret == null) [
       "z ${cfg.sshKey} 0600 r0k0r users -"
     ];
+
+    age.secrets = lib.mkIf (cfg.sshKeySecret != null) {
+      "remote-builder-ssh-key" = {
+        file = cfg.sshKeySecret;
+        # Same ownership the tmpfiles rule established: readable by r0k0r for
+        # interactive `ssh <peer>`, and by root (the nix-daemon) via privilege.
+        # ssh refuses a private key with group/other bits set, hence 0600.
+        owner = "r0k0r";
+        group = "users";
+        mode = "0600";
+      };
+    };
+
+    # One key, one source of truth -- see the sshKey description.
+    my.ssh.builderKeyFile = lib.mkDefault cfg.sshKey;
+
+    my.internal.features."remote-builder.agenix" = {
+      requires = [ "agenix" ];
+      enabledBy = cfg.sshKeySecret != null;
+    };
 
     nix.buildMachines = lib.mapAttrsToList (name: p: {
       hostName = name;
