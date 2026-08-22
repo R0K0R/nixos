@@ -353,6 +353,20 @@
       },
       "parent": []
     },
+    "feat-hop": {
+      "inputs": {
+        "hop-bin": "hop-bin"
+      },
+      "locked": {
+        "path": "./features/hop",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/hop",
+        "type": "path"
+      },
+      "parent": []
+    },
     "feat-niri": {
       "inputs": {
         "niri": "niri",
@@ -418,6 +432,18 @@
         "owner": "nix-community",
         "repo": "home-manager",
         "type": "github"
+      }
+    },
+    "hop-bin": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-HBt6IP2AcHL+KiQB/6wHCrarSY1eU97Rky9zd+xHvb0=",
+        "type": "file",
+        "url": "https://github.com/golbin/hop/releases/download/v0.4.1/HOP-linux-x64.deb"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/golbin/hop/releases/download/v0.4.1/HOP-linux-x64.deb"
       }
     },
     "niri": {
@@ -575,6 +601,7 @@
         "feat-dms": "feat-dms",
         "feat-easyeffects": "feat-easyeffects",
         "feat-emacs": "feat-emacs",
+        "feat-hop": "feat-hop",
         "feat-niri": "feat-niri",
         "feat-samsung-galaxybook": "feat-samsung-galaxybook",
         "home-manager": "home-manager",

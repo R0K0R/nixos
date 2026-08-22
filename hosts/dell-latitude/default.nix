@@ -53,7 +53,7 @@
 
     upower.enable = true;
     fonts.enable = true;
-    keyd.enable = true;
+    keyd.enable = false;
     pipewire.enable = true;
     libinput.enable = true;
     swapfile.enable = true;
@@ -83,6 +83,8 @@
     diagnostics.enable = true;
     qt-dev.enable = true;
 
+    hop.enable = true;
+
     claude-code = {
       enable = true;
       shareWithRoot = true;
@@ -99,7 +101,7 @@
       my.packages.extra's own docs on why lookup.nix cannot read a mkIf here.
     */
     packages.extra.user = with pkgs; [
-
+        fastfetch
     ];
 
     power.enable = true;

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The application/vnd.hancom.hwpx definition shared-mime-info does not ship.
+
+  As of shared-mime-info 2.4, freedesktop.org.xml defines application/x-hwp
+  (glob *.hwp, alias application/vnd.haansoft-hwp) and nothing whatsoever for
+  hwpx. Verified against this system's generated database, where the only match
+  is the hwp one and a real .hwpx file resolves to application/zip:
+
+    $ grep -i hwp /run/current-system/sw/share/mime/globs2
+    50:application/x-hwp:*.hwp
+    $ xdg-mime query filetype sample.hwpx
+    application/zip
+
+  HOP.desktop lists MimeType=application/vnd.hancom.hwpx, so without this file
+  it advertises a handler for a type no glob can ever produce, and .hwpx never
+  associates with anything.
+
+  Glob only, deliberately no <magic> rule: hwpx is a Zip container, so matching
+  on byte signature would mean outranking application/zip on the PK\003\004
+  header, and that misfires on every other Zip-shaped office format. Left at the
+  default weight 50 so a real upstream definition, if one ever lands, wins on
+  its own merits instead of colliding with this one.
+
+  Note for editors: no double hyphen anywhere in this comment. XML forbids it
+  inside comments, and update-mime-database's only reaction is a bare
+  "Failed to parse" on stderr followed by silently building a database without
+  this type. The house comment style elsewhere in this repo uses a double hyphen
+  as an em dash; that style cannot come here.
+-->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/vnd.hancom.hwpx">
+    <comment>Hancom Office HWPX document</comment>
+    <comment xml:lang="ko">한컴오피스 HWPX 문서</comment>
+    <generic-icon name="x-office-document"/>
+    <sub-class-of type="application/zip"/>
+    <glob pattern="*.hwpx"/>
+  </mime-type>
+</mime-info>
