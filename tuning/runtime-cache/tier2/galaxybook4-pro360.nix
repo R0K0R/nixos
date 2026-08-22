@@ -1259,7 +1259,7 @@
     "pycparser"
     "die-hook"
   ];
-  capturedAt = "2026-08-21T14:17:45Z";
+  capturedAt = "2026-08-22T15:40:23Z";
   host = "galaxybook4-pro360";
   nixpkgsNarHash = "sha256-dRTovTKf+X1usU7SXsKDwQ4l1m8Az58iiw1BGb3PpcM=";
   nixpkgsRev = "e4a4947e0fad9456c3041dbce14dc1cfab1ffbb9";
