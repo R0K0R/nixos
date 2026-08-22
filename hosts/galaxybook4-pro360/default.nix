@@ -15,6 +15,11 @@
 
   my = {
     tuning = {
+      # Literal, and it must stay one: flake.nix raw-imports this file to pick
+      # between the patched fork and plain upstream nixpkgs before the module
+      # system exists. false here would substitute the whole package set from
+      # cache.nixos.org instead of building it.
+      enable = true;
       march = "meteorlake";
       pseudoCross.enable = true;
       o3.enable = true;
@@ -213,12 +218,19 @@
   # requiredSystemFeatures = ["galaxybook-local-qt6"] can build here.
   nix.settings.system-features = [ "galaxybook-local-qt6" ];
 
-  nixpkgs.buildPlatform = "x86_64-linux";
+  /*
+    The buildPlatform/hostPlatform split is NOT declared here. `my.tuning.march`
+    above is its single definition (tuning/nixos.nix) -- these two options used
+    to be set in both places with identical values, which merged only because
+    they agreed.
 
-  nixpkgs.hostPlatform = lib.systems.elaborate {
-    system = "x86_64-linux";
-    gcc.arch = "meteorlake";
-  };
+    Duplicating them is actively unsafe now that tuning is gated: a host-file
+    definition sits OUTSIDE `mkIf my.tuning.enable`, so `enable = false` with
+    `march = null` would leave a gcc.arch-carrying hostPlatform applied to plain
+    upstream nixpkgs -- rebuilding the whole package set with -march while
+    looking, from the host file, entirely untuned. One definition, in the module
+    that owns the switch.
+  */
 
   # Serial access for arduino-cli/arduino-ide (/dev/ttyACM*, /dev/ttyUSB*).
   users.users.r0k0r.extraGroups = [ "dialout" ];
