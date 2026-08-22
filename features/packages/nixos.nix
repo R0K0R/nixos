@@ -51,6 +51,31 @@ let
   '';
 in
 {
+  /*
+    Where every feature's per-account packages land, keyed by username, before
+    features/users turns them into users.users.<n>.packages. Features write
+
+      my.packages.perUser = lib.genAttrs cfg.users (_: pkgSet.user);
+
+    so the same `users` option that scopes the feature's home half also scopes
+    its packages, and the two cannot drift apart.
+
+    A listOf per key rather than a flat list, because scoping is per feature:
+    two features with different `users` lists must not pool their packages.
+  */
+  options.my.packages.perUser = lib.mkOption {
+    type = lib.types.attrsOf (lib.types.listOf lib.types.package);
+    default = { };
+    description = ''
+      Packages per account, merged across all features. Read by features/users,
+      which is the only thing that may turn these into a NixOS user's packages.
+
+      Writing a key here that is not a declared my.users account is an error --
+      packages must never be what creates a user (they silently did, before this
+      existed: `users.users.<n>.packages` declares the account).
+    '';
+  };
+
   options.my.packages.extra = {
     system = lib.mkOption {
       type = lib.types.listOf lib.types.package;
@@ -61,7 +86,7 @@ in
     user = lib.mkOption {
       type = lib.types.listOf lib.types.package;
       default = [ ];
-      description = literalNote "users.users.r0k0r.packages";
+      description = literalNote "the primary user's packages";
     };
 
     home = lib.mkOption {
@@ -79,8 +104,20 @@ in
       environment.systemPackages = lib.mkOrder 100 cfg.extra.system;
     })
 
+    /*
+      Routed through perUser like everything else, so features/users stays the
+      single place a package becomes a person's package. mkOrder 100 survives
+      the trip -- the priority is on this definition of the perUser list, and
+      the fan-out is a plain rename.
+
+      Targets the primary user. A host wanting to give packages to a NON-primary
+      account writes my.packages.perUser.<name> directly; it is a normal option,
+      and the assertion in features/users still requires the account to exist.
+    */
     (lib.mkIf (cfg.extra.user != [ ]) {
-      users.users.r0k0r.packages = lib.mkOrder 100 cfg.extra.user;
+      my.packages.perUser = lib.genAttrs (
+        lib.attrNames (lib.filterAttrs (_: u: u.primary) config.my.users)
+      ) (_: lib.mkOrder 100 cfg.extra.user);
     })
 
     {

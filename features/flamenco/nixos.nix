@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ config, lib, ... }:
 
 {
   /*
@@ -19,4 +19,7 @@
 
   options.my.flamenco.enable =
     lib.mkEnableOption "Flamenco render-farm manager, its SSHFS share access, and the Blender addon";
+
+  # Accounts this feature applies to; defaults to the primary user.
+  options.my.flamenco.users = import ../../lib/user-scope.nix { inherit lib config; };
 }

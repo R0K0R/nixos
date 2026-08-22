@@ -7,6 +7,9 @@ in
   options.my.fcitx.enable =
     lib.mkEnableOption "fcitx5 input method (Hangul), Wayland-native, started as a user service";
 
+  # Accounts this feature applies to; defaults to the primary user.
+  options.my.fcitx.users = import ../../lib/user-scope.nix { inherit lib config; };
+
   config = lib.mkIf cfg.enable {
     i18n.inputMethod = {
       enable = true;

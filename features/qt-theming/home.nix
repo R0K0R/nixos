@@ -6,6 +6,12 @@
   ...
 }:
 
+
+let
+  # sharedModules are evaluated once per user; this is what makes the
+  # feature apply only to the accounts my.qt-theming.users names.
+  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "qt-theming"; };
+in
 let
   /*
     Derived scheme: matugen's accents, but pure-black window/view/header
@@ -68,7 +74,7 @@ in
   apps); the tray's name-based lookups are covered by qt6ct.conf's
   icon_theme= instead.
 */
-lib.mkIf osConfig.my.qt-theming.enable {
+lib.mkIf (osConfig.my.qt-theming.enable && inScope) {
   # Regenerate scheme + kdeglobals whenever matugen rewrites the source
   # scheme (theme/wallpaper change), once at login, and once per HM
   # activation (initial seed).

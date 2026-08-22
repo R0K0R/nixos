@@ -20,6 +20,9 @@ in
     };
   };
 
+  # Accounts this feature applies to; defaults to the primary user.
+  options.my.opencode.users = import ../../lib/user-scope.nix { inherit lib config; };
+
   config = lib.mkIf cfg.enable {
     environment.systemPackages = pkgSet.system;
   };

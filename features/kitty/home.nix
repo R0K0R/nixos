@@ -1,5 +1,11 @@
-{ pkgs, lib, osConfig, ... }:
+{ config, pkgs, lib, osConfig, ... }:
 
+
+let
+  # sharedModules are evaluated once per user; this is what makes the
+  # feature apply only to the accounts my.kitty.users names.
+  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "kitty"; };
+in
 let
   # Kitty kittens from https://github.com/end-4/dots-hyprland (dots/.config/kitty/).
   kittySearchPy = pkgs.fetchurl {
@@ -12,7 +18,7 @@ let
     sha256 = "1a1l7sp2x247da8fr54wwq7ffm987wjal9nw2f38q956v3cfknzi";
   };
 in
-lib.mkIf osConfig.my.kitty.enable {
+lib.mkIf (osConfig.my.kitty.enable && inScope) {
   xdg.configFile."kitty/search.py".source = kittySearchPy;
   xdg.configFile."kitty/scroll_mark.py".source = kittyScrollMarkPy;
 

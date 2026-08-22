@@ -16,6 +16,8 @@
 */
 { homeModules, inputs, hostName }:
 
+{ config, lib, ... }:
+
 {
   home-manager = {
     useGlobalPkgs = true;
@@ -33,7 +35,30 @@
     */
     sharedModules = homeModules ++ [ inputs.feat-emacs.homeModule ];
 
-    # Nothing to import: every home module is a feature half arriving above.
-    users.r0k0r = { };
+    /*
+      Generated from my.users, never hardcoded.
+
+      It used to say `users.r0k0r = { }`, which built an r0k0r home-manager
+      configuration on EVERY host -- including one whose only human was someone
+      else. That is how the two halves of the same bug met: home-manager sets
+      `home.username` from this attribute name, a feature's home half in
+      sharedModules set it again to a different person, and the definitions
+      collided. The host did not evaluate at all.
+
+      THE RULE: anything per-user is generated HERE, into
+      home-manager.users.<name>. sharedModules are evaluated once per user and
+      may only carry what is true of every user, so an identity -- username,
+      home directory, stateVersion -- can never live in one. Features scope
+      themselves per user through lib/in-scope.nix instead, which is a `config`
+      condition rather than an identity.
+
+      `imports` deliberately stays empty: every home module is a feature half
+      arriving via sharedModules above. Filtering THOSE per user is impossible
+      -- imports resolve before the fixpoint, so they cannot read config -- and
+      that impossibility is exactly why the scoping lives inside each module.
+    */
+    users = lib.mapAttrs (username: u: {
+      home.stateVersion = u.stateVersion;
+    }) (lib.filterAttrs (_: u: u.home) config.my.users);
   };
 }
