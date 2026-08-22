@@ -81,6 +81,7 @@
     };
 
     remote-builder.client = {
+      sshKeySecret = ../../age/remote-builder-ssh-key.age;
       enable = true;
       wrappers.enable = true;
       # yulee omitted while parked -- an unreachable substituter costs a
