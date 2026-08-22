@@ -14,7 +14,7 @@
   boot.kernelPackages = pkgs.linuxPackages_7_1;
 
   nixpkgs.pkgs = import inputs.nixpkgs-upstream {
-    sysem = "x86_64-linux";
+    sytsem = "x86_64-linux";
   };
 
   my = {
