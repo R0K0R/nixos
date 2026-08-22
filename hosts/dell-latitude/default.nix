@@ -15,7 +15,7 @@
 
   nixpkgs.pkgs = import inputs.nixpkgs-upstream {
     sysem = "x86_64-linux";
-  }
+  };
 
   my = {
     tuning = {
