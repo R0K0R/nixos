@@ -87,6 +87,8 @@
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
         "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
       ];
+      # A host file naming its own human is fine -- that is what host files are
+      # for. The invariant this refactor establishes is that FEATURES must not.
       trustedUsers = [ "r0k0r" ];
       secretKeyFiles = [ "/etc/nix/signing-key.pem" ];
     };
