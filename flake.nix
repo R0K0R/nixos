@@ -20,6 +20,7 @@
       it and the root flake stops carrying pins for things it does not use.
     */
     feat-claude-code.url = "path:./features/claude-code";
+    feat-hop.url = "path:./features/hop";
     feat-claude-desktop.url = "path:./features/claude-desktop";
     feat-samsung-galaxybook.url = "path:./features/samsung-galaxybook";
     feat-easyeffects.url = "path:./features/easyeffects";

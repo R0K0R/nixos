@@ -1,0 +1,23 @@
+{
+  "nodes": {
+    "hop-bin": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-HBt6IP2AcHL+KiQB/6wHCrarSY1eU97Rky9zd+xHvb0=",
+        "type": "file",
+        "url": "https://github.com/golbin/hop/releases/download/v0.4.1/HOP-linux-x64.deb"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/golbin/hop/releases/download/v0.4.1/HOP-linux-x64.deb"
+      }
+    },
+    "root": {
+      "inputs": {
+        "hop-bin": "hop-bin"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
