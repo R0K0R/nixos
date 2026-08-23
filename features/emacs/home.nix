@@ -63,6 +63,20 @@ lib.mkIf (cfg.enable && inScope) {
       # `pinentry-program .../bin/pinentry-emacs` in ~/.gnupg/gpg-agent.conf
       # (or epa-pinentry-mode 'loopback) to actually be selected.
       pinentry-emacs
+      # Doom's `:tools direnv` module shells out to the `direnv` binary
+      # (`direnv export json`) on every buffer visit under a directory with an
+      # .envrc. Here for the same daemon-PATH reason as everything else in this
+      # list: home-manager's programs.direnv puts direnv in the user PROFILE and
+      # hooks the interactive shells, but the Emacs daemon is a systemd user
+      # service and inherits neither.
+      #
+      # Without it the module degrades quietly rather than erroring -- Emacs
+      # simply never picks up a project's devShell, so compilation and LSP run
+      # against the ambient environment and fail in ways that look like the
+      # project's fault. features/direnv owns the switch; this is its Emacs
+      # half, and the two are deliberately not cross-asserted (Emacs works
+      # without direnv, and direnv works without Emacs).
+      direnv
       # Org export, ox-pandoc, and markdown-mode's markdown-command. In
       # extraBinPackages rather than home.packages so the DAEMON finds it: a
       # systemd user service does not inherit the login shell's PATH, which is
