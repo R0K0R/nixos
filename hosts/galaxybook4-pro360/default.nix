@@ -68,6 +68,7 @@
       };
     };
     opencode.enable = true;
+    direnv.enable = true;
     nix-settings.enable = true;
     emacs.enable = true;
     # Package sets, each owning its own list (features/<name>/packages.nix).
@@ -81,6 +82,10 @@
     arduino.enable = true;
     diagnostics.enable = true;
     qt-dev.enable = true;
+    # HWP/HWPX editor. defaultHandler is left at its default (true), so HOP
+    # takes application/x-hwp from LibreOffice, which features/desktop-apps also
+    # installs -- see the option's own note on why that is a separate decision.
+    hop.enable = true;
     samsung-ecosystem = {
       enable = true;
       budsStartUp = true;
