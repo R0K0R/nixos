@@ -57,7 +57,13 @@
     openvpn.enable = true;
     waydroid.enable = true;
     session-env.enable = true;
-    fish.enable = true;
+    fish = {
+      enable = true;
+      # r0k0r's login shell is fish (above), so the NixOS module goes on too --
+      # it is what links system packages' /share/fish/vendor_* into the profile.
+      # Without it completions from system packages are silently absent.
+      systemIntegration = true;
+    };
     kitty.enable = true;
     starship.enable = true;
     cursor-theme.enable = true;

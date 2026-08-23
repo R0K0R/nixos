@@ -51,6 +51,19 @@
     };
 
     /*
+      systemIntegration only, without my.fish.enable: r0k0r's login shell here
+      is fish, so the NixOS module is wanted (vendor completion paths), but this
+      host has never taken the home-manager half -- the aliases and prompt
+      config -- and turning it on now would be a change of its own rather than
+      part of enabling the system module. They are separate switches precisely
+      so that distinction can be made.
+
+      Replaces a bare `programs.fish.enable = true;` that used to sit further
+      down this file, so the NixOS module now has one source across both hosts.
+    */
+    fish.systemIntegration = true;
+
+    /*
       btop with CUDA, replacing the plain btop that features/base contributes.
       Goes through my.packages.extra rather than users.users directly: extra is
       ordered mkOrder 100, so under buildEnv's ignoreCollisions first-wins it is
@@ -140,8 +153,6 @@
   */
   users.mutableUsers = false;
   users.users.root.hashedPasswordFile = "/etc/nixos/secrets/victus-15-hashed-password-r0k0r";
-
-  programs.fish.enable = true;
 
   networking.firewall.enable = false;
   services.openssh.enable = true;
