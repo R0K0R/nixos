@@ -41,6 +41,8 @@
     users.r0k0r = {
       primary = true;
       extraGroups = [ "wheel" "networkmanager" "video" "audio" "dialout" ];
+      hashedPasswordFile =  "/etc/nixos/secrets/hashed-password-r0k0r";
+      shell = pkgs.fish;
     };
     upower.enable = true;
     fonts.enable = true;
@@ -106,7 +108,7 @@
       sshKeySecret = ../../age/remote-builder-ssh-key.age;
       enable = true;
       wrappers.enable = true;
-      substituters = [ "ssh://r0k0r@yulee" /* "ssh://r0k0r@victus-15" */ ];
+      substituters = [ "ssh://r0k0r@yulee" "ssh://r0k0r@victus-15" ];
       trustedPublicKeys = [
         "yulee-1:KgdwkCN5m+hewJTk+A05PjwI3BbnZAE9NW2n634N7vM="
         "victus-15-1:W5OP8VVbu7Q7z2o5grHJ5Zp+ynm536+QVv+b8fBQJlQ="
@@ -118,7 +120,6 @@
           features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "gccarch-meteorlake" ];
         };
         victus-15 = {
-          enable = false;
           maxJobs = 5;
           speedFactor = 4;
           features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "gccarch-meteorlake" ];
