@@ -35,6 +35,35 @@ let
 in
 lib.mkIf (osConfig.my.easyeffects.enable && inScope) {
   /*
+    Migration guard for a change made IN THIS FEATURE.
+
+    Before the preset-path fix, "easyeffects/output" was a single
+    xdg.configFile entry pointing at a directory inside the home-manager files
+    store path -- and that target never existed, because upstream has no
+    output/ directory. It is now `recursive = true`, i.e. a REAL directory of
+    per-file links.
+
+    home-manager cannot make that transition: it runs `mkdir` for the new
+    directory, hits the leftover symlink, and the whole activation fails with
+
+      mkdir: cannot create directory '.../easyeffects/output': File exists
+      ln: failed to create symbolic link '.../Advanced Auto Gain.json': No such file or directory
+
+    which takes the entire home-manager-r0k0r.service down -- so every
+    subsequent `nixos-rebuild switch` reports failure, not just easyeffects.
+
+    Only a SYMLINK is removed, never a real directory: a user who saved their
+    own presets there must not lose them to a migration.
+  */
+  home.activation.easyeffectsOutputMigration =
+    lib.hm.dag.entryBefore [ "linkGeneration" ] ''
+      _ee_out="''${XDG_CONFIG_HOME:-$HOME/.config}/easyeffects/output"
+      if [ -L "$_ee_out" ]; then
+        run rm -f "$_ee_out"
+      fi
+    '';
+
+  /*
     recursive = true so each preset is its OWN symlink inside a real directory,
     rather than the directory itself being a store symlink. EasyEffects writes
     into this directory when you save a preset, which a read-only store symlink
