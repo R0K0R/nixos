@@ -30,6 +30,9 @@ in
     '';
   };
 
+  # Accounts the KDE Connect daemon runs for; defaults to the primary user.
+  options.my.network.users = import ../../lib/user-scope.nix { inherit lib config; };
+
   config = lib.mkIf cfg.enable {
     networking.networkmanager.enable = true;
 
