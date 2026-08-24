@@ -62,9 +62,9 @@ runtime environment.
 
 **The in-app updater cannot work here.** HOP ships Tauri's updater and checks
 `latest.json` on every launch; its `linux-x86_64-deb` target would download a
-`.deb` and try to install it, which does nothing useful on NixOS. Update with
-`./update.sh` and a rebuild instead. Harmless while pinned and current — the
-check just finds the version it already is.
+`.deb` and try to install it, which does nothing useful on NixOS. Bump the
+pinned tag and rebuild instead. Harmless while pinned and current — the check
+just finds the version it already is.
 
 **`GStreamer element appsink not found`** on every launch. WebKitGTK wants
 GStreamer for HTML5 media inside the webview; a document editor does not reach
@@ -72,12 +72,33 @@ that path. See the comment in `package.nix` for the remedy and its cost.
 
 ## Updating
 
+Edit the tag in `hop-src` and relock:
+
 ```sh
-./update.sh          # newest release
-./update.sh 0.5.0    # a specific version
+# features/hop/flake.nix:  url = "github:golbin/hop/v0.5.0";
+nix flake update --flake ./features/hop
+nix flake update feat-hop            # from the repo root
 ```
 
-Rewrites the pinned URL and the exported `version` in this directory's
-`flake.nix`, then relocks both this flake and the root's view of it. The
-`.desktop` rewrite uses `--replace-fail`, so if upstream renames the `Exec` line
-the build fails loudly rather than shipping a broken association.
+There is no `update.sh` any more, and the reason is worth recording. It existed
+because the old `.deb` pin stated the version *twice* — inside the release URL
+and again as an exported attr — so something had to rewrite both in lockstep or
+they would drift. A git input carries `package.json`, so `version` is read from
+the source and cannot disagree with the pin. Bumping is one tag edit.
+
+Both locks still need updating, because a `path:` input carries no narHash: the
+root keeps serving the old revision until `nix flake update feat-hop` runs, and
+the change never reaches a host.
+
+`nix flake update` alone will not move you to a new release — `hop-src` is
+pinned to a *tag*, and tags do not move. That is deliberate: tracking a branch
+would let an upstream push change a build with no diff in this repo. Pointing
+`hop-src` at a branch is a one-word change if you ever want the opposite.
+
+`rhwp-src` points at our fork rather than `edwardkim/rhwp`; see the comment in
+`flake.nix` for why, and for why that forces a source build rather than a `.deb`
+repack. Bumping HOP without rebasing that branch onto the matching rhwp revision
+will build HOP against the wrong core.
+
+The `.desktop` rewrite uses `--replace-fail`, so if upstream renames the `Exec`
+line the build fails loudly rather than shipping a broken association.

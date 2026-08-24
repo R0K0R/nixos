@@ -3,10 +3,11 @@
 let
   cfg = config.my.hop;
 
-  # Repackaged from the upstream GitHub release .deb; hash-pinned via the
-  # hop-bin flake input. Bump: features/hop/update.sh.
+  # Built from source against our patched rhwp fork -- see package.nix for why
+  # the .deb repack could not carry the patch. Bump: the tag in flake.nix.
   hop = pkgs.callPackage ./package.nix {
-    src = inputs.feat-hop.src;
+    hopSrc = inputs.feat-hop.src;
+    rhwpSrc = inputs.feat-hop.rhwp;
     version = inputs.feat-hop.version;
   };
 in

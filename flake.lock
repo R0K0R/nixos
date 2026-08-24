@@ -355,7 +355,8 @@
     },
     "feat-hop": {
       "inputs": {
-        "hop-bin": "hop-bin"
+        "hop-src": "hop-src",
+        "rhwp-src": "rhwp-src"
       },
       "locked": {
         "path": "./features/hop",
@@ -434,16 +435,21 @@
         "type": "github"
       }
     },
-    "hop-bin": {
+    "hop-src": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-HBt6IP2AcHL+KiQB/6wHCrarSY1eU97Rky9zd+xHvb0=",
-        "type": "file",
-        "url": "https://github.com/golbin/hop/releases/download/v0.4.1/HOP-linux-x64.deb"
+        "lastModified": 1784632868,
+        "narHash": "sha256-Uh+trwdIRMEAiFomApuxm/o06yyRJLQNEmIQS2hqGP4=",
+        "owner": "golbin",
+        "repo": "hop",
+        "rev": "608d54bbc75af4142bc69c2c2b50c0c217b45731",
+        "type": "github"
       },
       "original": {
-        "type": "file",
-        "url": "https://github.com/golbin/hop/releases/download/v0.4.1/HOP-linux-x64.deb"
+        "owner": "golbin",
+        "ref": "v0.4.1",
+        "repo": "hop",
+        "type": "github"
       }
     },
     "niri": {
@@ -590,6 +596,23 @@
         "owner": "NixOS",
         "ref": "nixos-unstable",
         "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "rhwp-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1787541397,
+        "narHash": "sha256-1e1rULnmdWe9lrrlU4duNKFHsn213yRc6kSTOr2xJBA=",
+        "owner": "R0K0R",
+        "repo": "rhwp",
+        "rev": "30a2f7f9ffc88e58f85597a68613dd6ca45a323f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "ref": "perf/font-substitution-caches",
+        "repo": "rhwp",
         "type": "github"
       }
     },
