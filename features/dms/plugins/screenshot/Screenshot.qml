@@ -8,18 +8,24 @@ import qs.Modules.Plugins
 PluginComponent {
     id: root
 
+    // hyprshot, not grimblast: grimblast's `area` always runs slurp in
+    // snap-to-window mode (`slurp -o` with window rects on stdin) and that mode
+    // does not accept touch input. hyprshot's region mode is a plain `slurp -d`,
+    // which does. See the comment in features/hyprland/home.nix for the full
+    // measurement -- including the S Pen, which works in neither.
     Process {
-        id: grimblastProcess
+        id: screenshotProcess
         command: [
-            "grimblast",
-            "copy",
-            "area"
+            "hyprshot",
+            "-m", "region",
+            "--clipboard-only",
+            "--silent"
         ]
         running: false
     }
 
     function toggle() {
-        grimblastProcess.running = !grimblastProcess.running
+        screenshotProcess.running = !screenshotProcess.running
     }
 
     horizontalBarPill: Component {
