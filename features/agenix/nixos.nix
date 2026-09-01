@@ -35,22 +35,30 @@ in
         Never add it to the repo (the flake is public, and a git flake would
         copy it into the world-readable store).
 
-        An ed25519 SSH key, but NOT /etc/ssh/ssh_host_ed25519_key: agenix's
-        default assumes the host runs sshd and therefore has host keys.
-        A standalone key from `ssh-keygen` needs no sshd, and buys what a
-        native age key cannot -- `melt` encodes it as a 24-word seed phrase,
-        so the identity is recoverable from words rather than from a file
-        that must reach the machine before anything decrypts.
-        galaxybook4-pro360 does not (only victus-15 sets
-        services.openssh.enable), so there is nothing to encrypt to. A
-        dedicated age identity avoids running an ssh daemon purely to
-        manufacture a keypair.
+        An ed25519 key either way; which one depends on sshd. The DEFAULT
+        here is the standalone key, because the host that needed this option
+        written is the one without an ssh daemon.
 
-        Generate once per host, as root:
-          umask 077
-          mkdir -p /etc/agenix
-          ${lib.getExe pkgs.age}-keygen -o /etc/agenix/identity.txt
-          # the printed "Public key: age1..." line goes in secrets.nix
+          runs sshd  -> set this to [ "/etc/ssh/ssh_host_ed25519_key" ].
+                        agenix's own documented default; nothing to generate
+                        and nothing to back up. victus-15.
+          no sshd    -> keep the default and generate one, as root:
+                          umask 077
+                          mkdir -p /etc/agenix
+                          ssh-keygen -t ed25519 -N "" -C agenix-identity \
+                            -f /etc/agenix/identity-ed25519
+                        galaxybook4-pro360, which would otherwise have to run
+                        an ssh daemon purely to manufacture a keypair.
+
+        The .pub contents go in secrets.nix as that host's recipient.
+
+        WHY EVER PREFER THE STANDALONE ONE, given it is more work: `melt`
+        encodes an ed25519 key as a 24-word BIP39 phrase, so the identity is
+        recoverable from words rather than from a file that must reach the
+        machine before anything decrypts. A host key has no such escape hatch
+        and does not survive a reinstall, so it suits a host whose secrets are
+        all re-derivable elsewhere and not one holding the only copy of
+        something.
 
         WHAT THIS DOES AND DOES NOT BUY, stated plainly because it is easy to
         overestimate: ciphertext becomes safe to commit to a PUBLIC repo, and

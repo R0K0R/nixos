@@ -290,17 +290,30 @@ in
         /*
           Not a style preference: with mutableUsers = false the declared set is
           the whole truth, and `passwd` cannot repair an account afterwards. An
-          account with no hashedPasswordFile becomes unloginnable at the first
+          account with no password source becomes unloginnable at the first
           switch, and if it is the only sudo-capable one the machine is lost.
+
+          EITHER SOURCE SATISFIES THIS. The check used to name hashedPasswordFile
+          alone, which was written before passwordSecret existed and then made
+          the two mutually exclusive options non-interchangeable: a
+          mutableUsers = false host that moved its accounts to agenix failed
+          eval with "missing on: r0k0r, benjamin" even though every account had
+          a perfectly good password source. passwordSecret sets
+          hashedPasswordFile itself, a few lines above, so what actually has to
+          hold is that at least one of the two is set.
         */
         {
           assertion =
             config.users.mutableUsers
-            || lib.all (u: u.hashedPasswordFile != null) (lib.attrValues cfg);
+            || lib.all (u: u.hashedPasswordFile != null || u.passwordSecret != null) (
+              lib.attrValues cfg
+            );
           message =
-            "users.mutableUsers = false requires a hashedPasswordFile on every my.users entry; missing on: "
+            "users.mutableUsers = false requires hashedPasswordFile or passwordSecret on every my.users entry; missing on: "
             + lib.concatStringsSep ", " (
-              lib.attrNames (lib.filterAttrs (_: u: u.hashedPasswordFile == null) cfg)
+              lib.attrNames (
+                lib.filterAttrs (_: u: u.hashedPasswordFile == null && u.passwordSecret == null) cfg
+              )
             );
         }
 

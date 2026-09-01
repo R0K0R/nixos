@@ -41,6 +41,29 @@ in
       description = ''
         Private signing keys, so this machine's store can be trusted as a
         substituter by its peers. Read from outside the store.
+
+        Prefer signingKeySecret below, which produces one of these paths from
+        an age file instead of from an untracked file placed by hand.
+      '';
+    };
+
+    signingKeySecret = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      example = lib.literalExpression "../../age/nix-signing-key-victus-15.age";
+      description = ''
+        An agenix file holding this machine's binary-cache signing key, of the
+        form produced by `nix-store --generate-binary-cache-key`. Decrypted to
+        /run/agenix/nix-signing-key and appended to secretKeyFiles.
+
+        PER HOST, never shared. The public half is what peers list in
+        trusted-public-keys, so two machines sharing one signing key would be
+        indistinguishable to anything consuming their stores -- the point of
+        the key is to say WHICH store vouched for a path.
+
+        Failure here is recoverable and non-fatal, unlike a password secret:
+        nix simply cannot sign, so peers decline to substitute from this
+        machine and build the path themselves.
       '';
     };
 
@@ -78,6 +101,31 @@ in
     nix.settings.substituters = lib.mkDefault cfg.substituters;
     nix.settings.trusted-public-keys = lib.mkDefault cfg.trustedPublicKeys;
     nix.settings.trusted-users = lib.mkIf (cfg.trustedUsers != [ ]) cfg.trustedUsers;
-    nix.settings.secret-key-files = lib.mkIf (cfg.secretKeyFiles != [ ]) cfg.secretKeyFiles;
+    /*
+      Same shape as features/openvpn's profileSecret: the age.secrets entry is
+      declared only when the option is set, because a declared entry on a host
+      without agenix builds a system whose activation fails on a missing
+      identity.
+    */
+    age.secrets = lib.mkIf (cfg.signingKeySecret != null) {
+      nix-signing-key = {
+        file = cfg.signingKeySecret;
+        # nix-daemon runs as root and reads this lazily, only when signing.
+        mode = "0400";
+      };
+    };
+
+    nix.settings.secret-key-files =
+      let
+        keys = cfg.secretKeyFiles ++ lib.optional (cfg.signingKeySecret != null) "/run/agenix/nix-signing-key";
+      in
+      lib.mkIf (keys != [ ]) keys;
+
+    assertions = [
+      {
+        assertion = cfg.signingKeySecret == null || config.my.agenix.enable;
+        message = "my.nix-settings.signingKeySecret requires my.agenix.enable";
+      }
+    ];
   };
 }

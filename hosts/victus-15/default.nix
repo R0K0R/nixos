@@ -29,25 +29,56 @@
       gets an account and a home-manager configuration, but none of the features
       scoped to the primary unless he is named explicitly.
 
-      hashedPasswordFile paths are not tracked in git (see secrets/ in
-      .gitignore). They must exist at these exact paths on this machine; the
-      activation script reads them at switch time and they are never embedded
-      into the Nix store. users.mutableUsers = false below makes them mandatory,
-      which features/users asserts.
+      Password hashes come from agenix now, not from untracked files under
+      /etc/nixos/secrets that had to be placed on the machine by hand and were
+      invisible to the repo. passwordSecret sets hashedPasswordFile to the
+      decrypted /run/agenix path, so the hash still never enters the store --
+      only the ciphertext is committed.
+
+      users.mutableUsers = false below makes a password source mandatory on
+      every declared account, which features/users asserts. That also makes
+      this the one migration on this host that can lock you out: prove
+      decryption works BEFORE the switch that depends on it,
+
+        sudo age -d -i /etc/ssh/ssh_host_ed25519_key age/hashed-password-r0k0r.age
+
+      and keep the old /etc/nixos/secrets files until you have logged in on the
+      new generation.
+
+      r0k0r's file is SHARED with galaxybook -- one account, one password. If
+      the two machines had drifted, this switch silently adopts galaxybook's
+      hash here. benjamin exists only on this host, so his is victus-15-only.
     */
     users = {
       r0k0r = {
         primary = true;
         extraGroups = [ "networkmanager" "wheel" ];
-        hashedPasswordFile = "/etc/nixos/secrets/victus-15-hashed-password-r0k0r";
+        passwordSecret = ../../age/hashed-password-r0k0r.age;
         shell = pkgs.fish;
       };
 
       benjamin = {
         description = "Benjamin S.H. Lee";
         extraGroups = [ "networkmanager" "wheel" ];
-        hashedPasswordFile = "/etc/nixos/secrets/victus-15-hashed-password-benjamin";
+        passwordSecret = ../../age/hashed-password-benjamin.age;
       };
+    };
+
+    /*
+      Its own ed25519 identity, NOT a copy of galaxybook's -- see the
+      ONE IDENTITY PER HOST note in secrets.nix.
+
+      The ssh HOST key, which is agenix's documented default and exists here
+      only because this host runs sshd. galaxybook has to generate a standalone
+      key precisely because it does not. Nothing to create, nothing to back up:
+      every secret encrypted to this key is re-derivable elsewhere (the
+      password hashes also live on galaxybook, the signing key can be
+      regenerated and re-trusted, the tailscale key reissued), which is the
+      condition that makes a non-recoverable identity acceptable.
+    */
+    agenix = {
+      enable = true;
+      identityPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
     };
 
     /*
@@ -103,7 +134,10 @@
       # A host file naming its own human is fine -- that is what host files are
       # for. The invariant this refactor establishes is that FEATURES must not.
       trustedUsers = [ "r0k0r" ];
-      secretKeyFiles = [ "/etc/nix/signing-key.pem" ];
+      # Was /etc/nix/signing-key.pem, untracked. Per host by definition: the
+      # public half is what galaxybook lists in trusted-public-keys, so the
+      # key's whole job is to say WHICH store vouched for a path.
+      signingKeySecret = ../../age/nix-signing-key-victus-15.age;
     };
 
     network.enable = true;
@@ -152,14 +186,29 @@
     not a human), so its hash is set directly.
   */
   users.mutableUsers = false;
-  users.users.root.hashedPasswordFile = "/etc/nixos/secrets/victus-15-hashed-password-r0k0r";
+  # Same hash as r0k0r, from the same secret -- my.users declares it, so this
+  # only has to name the path it decrypts to. root is not a my.users account
+  # (it is not a human), which is why it is set directly here.
+  users.users.root.hashedPasswordFile = "/run/agenix/hashed-password-r0k0r";
 
   networking.firewall.enable = false;
   services.openssh.enable = true;
 
+  /*
+    Plain Tailscale, not features/headscale -- this talks to Tailscale's own
+    coordination server. The pre-auth key was an untracked
+    /var/lib/tailscale/authkey; declared here rather than behind a feature
+    option because services.tailscale is configured raw here too.
+
+    Lowest-risk of the four secrets on this host: the key is read once by
+    `tailscale up` and is inert while the node stays authenticated, so a
+    failure costs a re-auth rather than access.
+  */
+  age.secrets.tailscale-authkey.file = ../../age/tailscale-authkey-victus-15.age;
+
   services.tailscale = {
     enable = true;
-    authKeyFile = "/var/lib/tailscale/authkey";
+    authKeyFile = "/run/agenix/tailscale-authkey";
   };
 
   # Clamshell mode -- this host runs closed-lid as a remote builder.
