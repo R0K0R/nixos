@@ -180,7 +180,9 @@
       my.packages.extra's own docs on why lookup.nix cannot read a mkIf here.
     */
     packages.extra.user = with pkgs; [
-
+      yt-dlp
+      mpv
+      foliate
     ];
 
     /*
@@ -201,7 +203,7 @@
 
     power.enable = true;
     flatpak.enable = true;
-    flamenco.enable = true;
+    flamenco.enable = false;
     easyeffects.enable = true;
 
     boot = {
