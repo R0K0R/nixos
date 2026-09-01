@@ -112,32 +112,85 @@ let
     esac
   '';
 in
-lib.mkIf config.my.samsung-galaxybook.enable {
-  boot.extraModulePackages = [ max98390-hda ];
+lib.mkIf config.my.samsung-galaxybook.enable (
+  lib.mkMerge [
+    /*
+      IN-TREE: carry PR #5616 as a kernel patch. See the option's description
+      in ./nixos.nix for why this is preferred, and the patch header for what
+      each of the five pieces does.
 
-  boot.kernelModules = [
-    "i2c-dev"
-    "snd-hda-scodec-max98390"
-    "snd-hda-scodec-max98390-i2c"
-  ];
+      MODULAR, not built in -- it cannot be otherwise. The I2C entry selects
+      SND_SOC_MAX98390, which the config phase offers only as N/m, so asking
+      for =y fails outright:
 
-  environment.systemPackages = [ pkgs.i2c-tools ];
+        QUESTION: ... SND_HDA_SCODEC_MAX98390_I2C, ALTS: N/m/?, ANSWER: y
+        error: builder ... failed with exit code 255
 
-  systemd.services.max98390-hda-i2c-setup = {
-    description = "Create I2C devices for MAX98390 HDA speaker amplifiers";
-    after = [ "systemd-modules-load.service" ];
-    before = [ "sound.target" ];
-    wantedBy = [ "sound.target" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = "${i2cSetupScript} start";
-      ExecStop = "${i2cSetupScript} stop";
-    };
-  };
+      Because it is modular, the Kconfig's own note applies -- auto-loading
+      wants SND_HDA=y, which is not the case here -- so the modules are named
+      explicitly below rather than left to udev.
 
-  boot.extraModprobeConfig = lib.mkAfter ''
-    # Galaxy Book4 internal mic (mic-fix)
-    options snd-intel-dspcfg dsp_driver=3
-  '';
-}
+      serial-multi-instantiate still enumerates all four amps by itself once it
+      knows the ACPI ID, which is what makes the hand-rolled I2C sysfs service
+      in the dkms path unnecessary.
+    */
+    (lib.mkIf (config.my.samsung-galaxybook.speakerFix == "kernel") {
+      boot.kernelPatches = [
+        {
+          name = "max98390-hda-scodec";
+          patch = ./max98390-hda.patch;
+          structuredExtraConfig = with lib.kernel; {
+            # The I2C entry selects SND_HDA_SCODEC_MAX98390 and SND_SOC_MAX98390
+            # itself; setting it is enough to pull the whole chain in.
+            SND_HDA_SCODEC_MAX98390_I2C = module;
+          };
+        }
+      ];
+
+      boot.kernelModules = [
+        "snd-hda-scodec-max98390"
+        "snd-hda-scodec-max98390-i2c"
+      ];
+    })
+
+    /*
+      OUT-OF-TREE fallback: the upstream project's DKMS module, plus the
+      systemd unit that creates the three I2C devices ACPI does not enumerate.
+      Kept so a kernel bump that breaks the patch is a one-line change rather
+      than a revert.
+    */
+    (lib.mkIf (config.my.samsung-galaxybook.speakerFix == "dkms") {
+      boot.extraModulePackages = [ max98390-hda ];
+
+      boot.kernelModules = [
+        "i2c-dev"
+        "snd-hda-scodec-max98390"
+        "snd-hda-scodec-max98390-i2c"
+      ];
+
+      environment.systemPackages = [ pkgs.i2c-tools ];
+
+      systemd.services.max98390-hda-i2c-setup = {
+        description = "Create I2C devices for MAX98390 HDA speaker amplifiers";
+        after = [ "systemd-modules-load.service" ];
+        before = [ "sound.target" ];
+        wantedBy = [ "sound.target" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = "${i2cSetupScript} start";
+          ExecStop = "${i2cSetupScript} stop";
+        };
+      };
+    })
+
+    # The internal mic is a separate defect from the speakers and is unaffected
+    # by which of the two paths above is taken.
+    {
+      boot.extraModprobeConfig = lib.mkAfter ''
+        # Galaxy Book4 internal mic (mic-fix)
+        options snd-intel-dspcfg dsp_driver=3
+      '';
+    }
+  ]
+)

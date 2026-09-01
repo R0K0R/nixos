@@ -173,7 +173,10 @@
   showWorkspaceApps = true;
   workspaceDragReorder = true;
   maxWorkspaceIcons = 1;
-  workspaceAppIconSizeOffset = 0;
+  # Shrinks the app glyph, and with it each pill: baseWidth is
+  # max(widgetHeight * 0.7, appIconSize * 1.2) horizontally, so this helps
+  # until it hits that floor -- past roughly -2 nothing more is gained.
+  workspaceAppIconSizeOffset = -2;
   groupWorkspaceApps = true;
   workspaceFollowFocus = false;
   showOccupiedWorkspacesOnly = false;
@@ -195,7 +198,36 @@
   audioScrollMode = "volume";
   audioWheelScrollAmount = 5;
   clockCompactMode = false;
-  focusedWindowCompactMode = false;
+  /*
+    Bar widgets OVERLAP on a narrow screen -- rotate this panel to portrait and
+    the title runs under the centre clock. That is structural in DMS, not a
+    misconfiguration, and no setting turns it off:
+
+      hLeftSection    anchors.left:            parent.left
+      hCenterSection  anchors.horizontalCenter: parent.horizontalCenter
+      hRightSection   anchors.right:           parent.right
+
+    Three independently anchored items with clip: false and no width
+    negotiation between them -- see Modules/DankBar/DankBarContent.qml. Nothing
+    measures the total, so past a certain width they simply draw on top of each
+    other. The only lever is making the content narrower than the screen.
+
+    The budget is tighter than it looks: 2880x1800 at scale 1.5 is 1920x1200
+    logical, so rotated the bar has 1200px, and focusedWindow alone was
+    entitled to 456 of them.
+
+    focusedWindowSize is the biggest single win, and its mapping is
+    counter-intuitive -- 0 is the SMALLEST (288px), not "off"; the unset
+    default of 1 is 456px. (mediaSize uses 0 for hidden, so the two do not
+    agree.) compactMode additionally caps the title text at 80px instead of
+    180px. Together that reclaims ~250px of the 1200.
+
+    Still not a guarantee. If it overlaps again, the next lever is the centre
+    section: oskToggle + music + clock + weather + screenshot is the widest
+    group, and weather/clock are the discretionary two.
+  */
+  focusedWindowSize = 0;
+  focusedWindowCompactMode = true;
   runningAppsCompactMode = true;
   barMaxVisibleApps = 0;
   barMaxVisibleRunningApps = 0;
@@ -501,87 +533,208 @@
   displayShowDisconnected = false;
   displaySnapToEdge = true;
   connectedFrameBarStyleBackups = { };
-  barConfigs = [
-    {
-      autoHide = false;
-      autoHideDelay = 250;
-      autoHideStrict = false;
-      borderColor = "surfaceText";
-      borderEnabled = false;
-      borderOpacity = 1;
-      borderThickness = 1;
-      bottomGap = 0;
-      centerWidgets = [
-        "music"
-        "clock"
-        "weather"
-        {
-          enabled = true;
-          id = "screenshot";
-        }
-      ];
-      clickThrough = false;
-      enabled = true;
-      fontScale = 1;
-      fullscreenDetection = true;
-      gothCornerRadiusOverride = false;
-      gothCornerRadiusValue = 12;
-      gothCornersEnabled = false;
-      iconScale = 1;
-      id = "default";
-      innerPadding = 4;
-      leftWidgets = [
-        "launcherButton"
-        "workspaceSwitcher"
-        "focusedWindow"
-      ];
-      maximizeDetection = true;
-      maximizeWidgetIcons = false;
-      maximizeWidgetText = false;
-      name = "Main Bar";
-      noBackground = false;
-      openOnOverview = false;
-      popupGapsAuto = true;
-      popupGapsManual = 4;
-      position = 0;
-      removeWidgetPadding = false;
-      rightWidgets = [
-        "systemTray"
-        "clipboard"
-        "cpuUsage"
-        "memUsage"
-        "notificationButton"
-        "battery"
-        "controlCenterButton"
-        {
-          enabled = true;
-          id = "dankKDEConnect";
-        }
-      ];
-      screenPreferences = [
-        "all"
-      ];
-      scrollEnabled = true;
-      scrollXBehavior = "column";
-      scrollYBehavior = "workspace";
-      shadowColorMode = "default";
-      shadowCustomColor = "#000000";
-      shadowIntensity = 0;
-      shadowOpacity = 60;
-      showOnLastDisplay = true;
-      showOnWindowsOpen = false;
-      spacing = 4;
-      squareCorners = false;
-      transparency = 0.3;
-      visible = true;
-      widgetOutlineColor = "primary";
-      widgetOutlineEnabled = false;
-      widgetOutlineOpacity = 1;
-      widgetOutlineThickness = 1;
-      widgetPadding = 8;
-      widgetTransparency = 0.45;
-    }
-  ];
+  /*
+    TWO BARS, one per screen orientation, swapped at runtime.
+
+    Rotating this panel takes the bar from 1920px to 1200 -- a 37.5% loss --
+    and DMS anchors its three sections independently with no width negotiation
+    (hLeftSection to the left edge, hCenterSection to horizontalCenter,
+    hRightSection to the right, clip: false). Past a certain total the sections
+    simply draw on top of each other; nothing elides or reflows.
+
+    720px cannot be recovered by shaving padding, and there is no
+    orientation-conditional config: settings.json is a read-only store symlink,
+    so nothing can rewrite it live. Two other runtime routes were tried and
+    rejected, both measured rather than assumed:
+
+      dms ipc call widget hide <id>   -> WIDGET_HIDE_NOT_SUPPORTED for built-in
+                                        widgets; only plugins can be toggled
+      dms ipc call settings set barConfigs <json>
+                                     -> SETTINGS_SET_FAILURE; only scalar
+                                        settings are settable at runtime
+
+    What does work is per-bar visibility: `dms ipc call bar hide id <barId>`
+    returns BAR_HIDE_SUCCESS and `bar status id <barId>` reports it. So both
+    bars are declared here, in full, and the orientation hook in
+    features/hyprland (hyprland-bar-orientation) reveals exactly one.
+
+    compactBar is the main bar with three fields replaced, so every visual
+    setting -- transparency, spacing, colours -- stays in one place and cannot
+    drift between orientations.
+  */
+  barConfigs =
+    let
+      mainBar =
+      {
+        autoHide = false;
+        autoHideDelay = 250;
+        autoHideStrict = false;
+        borderColor = "surfaceText";
+        borderEnabled = false;
+        borderOpacity = 1;
+        borderThickness = 1;
+        bottomGap = 0;
+        centerWidgets = [
+          {
+            enabled = true;
+            id = "oskToggle";
+          }
+          "music"
+          "clock"
+          "weather"
+          {
+            enabled = true;
+            id = "screenshot";
+          }
+        ];
+        clickThrough = false;
+        enabled = true;
+        fontScale = 1;
+        fullscreenDetection = true;
+        gothCornerRadiusOverride = false;
+        gothCornerRadiusValue = 12;
+        gothCornersEnabled = false;
+        iconScale = 1;
+        id = "default";
+        innerPadding = 4;
+        leftWidgets = [
+          "launcherButton"
+          {
+            enabled = true;
+            id = "dankKDEConnect";
+          }
+          # Stock switcher replaced by features/dms/plugins/workspaces: it draws
+          # the index and app icons together (no setting separates them) and
+          # floors its pill width at widgetHeight * 0.7, so neither the
+          # hold-to-peek numbers nor a genuinely compact strip is reachable here.
+          {
+            enabled = true;
+            id = "pagedWorkspaces";
+          }
+          "focusedWindow"
+        ];
+        maximizeDetection = true;
+        maximizeWidgetIcons = false;
+        maximizeWidgetText = false;
+        name = "Main Bar";
+        noBackground = false;
+        openOnOverview = false;
+        popupGapsAuto = true;
+        popupGapsManual = 4;
+        position = 0;
+        removeWidgetPadding = false;
+        rightWidgets = [
+          "systemTray"
+          "cpuUsage"
+          "memUsage"
+          "notificationButton"
+          "controlCenterButton"
+          "battery"
+        ];
+        screenPreferences = [
+          "all"
+        ];
+        scrollEnabled = true;
+        scrollXBehavior = "column";
+        scrollYBehavior = "workspace";
+        shadowColorMode = "default";
+        shadowCustomColor = "#000000";
+        shadowIntensity = 0;
+        shadowOpacity = 60;
+        showOnLastDisplay = true;
+        showOnWindowsOpen = false;
+        spacing = 2;
+        squareCorners = false;
+        transparency = 0.3;
+        visible = true;
+        widgetOutlineColor = "primary";
+        widgetOutlineEnabled = false;
+        widgetOutlineOpacity = 1;
+        widgetOutlineThickness = 1;
+        /*
+          Inner padding, i.e. the gap between a widget's content and its own
+          pill edge. Was cut 8 -> 4 while the single bar was fighting for room
+          in portrait; the clock came out reading "12:00 · Sat 29" with the
+          text hard against both ends.
+
+          The compact bar makes that trim unnecessary: portrait now drops
+          widgets instead of squeezing the ones it keeps, so this can go back
+          to breathing room. 6 rather than the original 8 -- the strip and the
+          paged workspaces are new since then, and 8 costs about 40px across a
+          full bar.
+
+          NOTE this is inherited by compactBar through the // , so portrait
+          gets the same padding on a shorter widget list. If portrait ever
+          overflows again, drop a widget from keepOnly rather than shaving
+          this: cramped text was the complaint that got us here.
+        */
+        widgetPadding = 6;
+        widgetTransparency = 0.45;
+      };
+
+      /*
+        DERIVED FROM mainBar BY FILTERING, never retyped.
+
+        Hand-writing the lists silently reordered them: the main bar ends
+        ... notificationButton, controlCenterButton, battery, and the rewrite
+        put battery before controlCenterButton. Same widgets, different bar --
+        visible immediately on rotation, and exactly the kind of drift a second
+        copy of a list invites.
+
+        Filtering keeps each widget's position AND its entry form (plain string
+        vs { enabled; id; } attrset), and any future reorder of the main bar
+        carries over for free.
+      */
+      idOf = w: if builtins.isString w then w else w.id;
+      keepOnly = ids: builtins.filter (w: builtins.elem (idOf w) ids);
+
+      compactBar = mainBar // {
+        id = "compact";
+        name = "Compact Bar (portrait)";
+
+        /*
+          HIDDEN BY DEFAULT, so landscape is correct with no help.
+
+          Inheriting mainBar's visible = true meant both bars rendered at once
+          from session start until dms-bar-orientation got to hide one -- a
+          guaranteed race, and the reason two bars showed at startup rather
+          than only across a switch.
+
+          Landscape is the resting state, so the bar that needs revealing is
+          this one. `dms ipc call bar reveal id compact` overrides this at
+          runtime; the setting only decides where things start.
+        */
+        visible = false;
+
+        /*
+          What survives 1200px.
+
+          Portrait on this machine means tablet mode, so the on-screen keyboard
+          toggle earns its place. Dropped: focusedWindow on the left, weather in the centre, cpuUsage and memUsage on the right --
+          all either duplicated elsewhere or not worth a tap in tablet mode.
+
+          Nothing is lost in landscape: the full bar still exists, it is simply
+          not the one being shown.
+        */
+        leftWidgets = keepOnly [
+          "launcherButton"
+          "dankKDEConnect"
+          "pagedWorkspaces"
+        ] mainBar.leftWidgets;
+        centerWidgets = keepOnly [ "oskToggle" "music" "clock" "screenshot" ] mainBar.centerWidgets;
+        rightWidgets = keepOnly [
+          "systemTray"
+          "notificationButton"
+          "controlCenterButton"
+          "battery"
+        ] mainBar.rightWidgets;
+      };
+
+    in
+    [
+      mainBar
+      compactBar
+    ];
   desktopClockEnabled = false;
   desktopClockStyle = "analog";
   desktopClockTransparency = 0.35;

@@ -20,7 +20,7 @@
 }:
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "claude-code";
-  version = "2.1.223";
+  version = "2.1.251";
 
   inherit src;
 

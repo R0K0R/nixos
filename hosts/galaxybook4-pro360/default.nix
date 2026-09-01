@@ -41,6 +41,12 @@
     users.r0k0r = {
       primary = true;
       extraGroups = [ "wheel" "networkmanager" "video" "audio" "dialout" ];
+      # Was /etc/nixos/secrets/hashed-password-r0k0r -- an untracked file that
+      # had to exist on the machine before login worked, and in fact did NOT
+      # exist here (mutableUsers = true meant the live shadow entry carried
+      # the password and the missing file went unnoticed).
+      passwordSecret = ../../age/hashed-password-r0k0r.age;
+      shell = pkgs.fish;
     };
     upower.enable = true;
     fonts.enable = true;
@@ -52,10 +58,19 @@
     locale.enable = true;
     firefox.enable = true;
     fcitx.enable = true;
-    openvpn.enable = true;
+    openvpn = {
+      enable = true;
+      profileSecret = ../../age/openvpn-profile.age;
+    };
     waydroid.enable = true;
     session-env.enable = true;
-    fish.enable = true;
+    fish = {
+      enable = true;
+      # r0k0r's login shell is fish (above), so the NixOS module goes on too --
+      # it is what links system packages' /share/fish/vendor_* into the profile.
+      # Without it completions from system packages are silently absent.
+      systemIntegration = true;
+    };
     kitty.enable = true;
     starship.enable = true;
     cursor-theme.enable = true;
@@ -68,6 +83,7 @@
       };
     };
     opencode.enable = true;
+    direnv.enable = true;
     nix-settings.enable = true;
     emacs.enable = true;
     # Package sets, each owning its own list (features/<name>/packages.nix).
@@ -81,6 +97,10 @@
     arduino.enable = true;
     diagnostics.enable = true;
     qt-dev.enable = true;
+    # HWP/HWPX editor. defaultHandler is left at its default (true), so HOP
+    # takes application/x-hwp from LibreOffice, which features/desktop-apps also
+    # installs -- see the option's own note on why that is a separate decision.
+    hop.enable = true;
     samsung-ecosystem = {
       enable = true;
       budsStartUp = true;
@@ -101,28 +121,48 @@
       sshKeySecret = ../../age/remote-builder-ssh-key.age;
       enable = true;
       wrappers.enable = true;
-      # yulee omitted while parked -- an unreachable substituter costs a
-      # timeout on every lookup.
-      substituters = [ "ssh://r0k0r@victus-15" ];
+      substituters = [ "ssh://r0k0r@yulee" "ssh://r0k0r@victus-15" ];
       trustedPublicKeys = [
         "yulee-1:KgdwkCN5m+hewJTk+A05PjwI3BbnZAE9NW2n634N7vM="
         "victus-15-1:W5OP8VVbu7Q7z2o5grHJ5Zp+ynm536+QVv+b8fBQJlQ="
       ];
       peers = {
         yulee = {
-          # PARKED: unreachable since 2026-08. Left declared rather than
-          # deleted so it comes back with one word. While false it is absent
-          # from /etc/nix/machines, which is the only thing that actually stops
-          # the daemon dispatching eval-time IFD builds to it.
-          enable = false;
           maxJobs = 7;
           speedFactor = 10;
-          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "gccarch-meteorlake" ];
+          # No gccarch-meteorlake -- see victus-15 below. Neither peer is an
+          # Intel machine, and neither is asked to EXECUTE meteorlake code:
+          # buildPlatform.canExecute hostPlatform is false here, so build-time
+          # tools come from the untuned pkgsBuildBuild set. A peer only ever
+          # compiles meteorlake code, which any x86_64 can do.
+          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" ];
         };
         victus-15 = {
           maxJobs = 5;
           speedFactor = 4;
-          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "gccarch-meteorlake" ];
+          /*
+            NO gccarch-meteorlake, on either peer, and the reason is worth
+            stating because the feature LOOKS like it should be here.
+
+            Neither peer is Intel: yulee is Zen 5, this one is a Ryzen 5 5600H
+            (Zen 3) missing avxvnni, gfni, movdiri and movdir64b outright. But
+            advertising the feature would not be a white lie about hardware --
+            it would be claiming a capability nothing in this setup needs.
+
+            buildPlatform.canExecute hostPlatform is FALSE here: build and host
+            share a config string but differ in gcc.arch, and nixpkgs treats
+            that as a real cross build. Build-time tools therefore come from
+            the untuned pkgsBuildBuild set and run anywhere. A peer only ever
+            COMPILES meteorlake code, never runs it, and any x86_64 can do
+            that.
+
+            When a build does run tuned code on a peer -- rusty-v8's mksnapshot
+            did, and SIGILLed -- that is a defect in the package's own build
+            system smuggling host flags into a build-time tool, not a missing
+            builder capability. Fix it there (qtbase's -mwaitpkg strip is the
+            precedent), rather than requiring every peer to be an Intel CPU.
+          */
+          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" ];
         };
       };
     };
@@ -140,7 +180,9 @@
       my.packages.extra's own docs on why lookup.nix cannot read a mkIf here.
     */
     packages.extra.user = with pkgs; [
-
+      yt-dlp
+      mpv
+      foliate
     ];
 
     /*
@@ -161,7 +203,7 @@
 
     power.enable = true;
     flatpak.enable = true;
-    flamenco.enable = true;
+    flamenco.enable = false;
     easyeffects.enable = true;
 
     boot = {

@@ -80,6 +80,7 @@ let
           HostKeyAlias is set), so the peer's knownHosts entry must list it.
         '';
       };
+
       maxJobs = lib.mkOption {
         type = lib.types.ints.positive;
         default = 5;
@@ -245,12 +246,31 @@ in
       protocol = "ssh";
       inherit (p) maxJobs speedFactor sshUser;
       sshKey = cfg.sshKey;
-      # Bootstrap tools are generic x86-64 (hit cache.nixos.org); only HOST
-      # outputs need the tuned arch.
-      supportedFeatures = lib.unique (
-        lib.filter (f: !(lib.hasPrefix "galaxybook-" f)) config.nix.settings.system-features
-        ++ [ "gccarch-meteorlake" ]
-      );
+      /*
+        The peer's OWN declared capability list, not a list derived from this
+        machine's system-features.
+
+        This used to take the local system-features, drop the galaxybook-*
+        entries, and append "gccarch-meteorlake" unconditionally -- asserting
+        that EVERY peer can execute meteorlake code. `features` was already a
+        per-peer option, but only wrappers.nix read it, so the host file could
+        state a peer's capabilities and be silently overruled here.
+
+        The claim was false for victus-15 (Zen 3), and nothing needed it to
+        be true. buildPlatform.canExecute hostPlatform is FALSE under
+        pseudo-cross -- build and host share a config string but differ in
+        gcc.arch -- so nixpkgs takes build-time tools from the untuned
+        pkgsBuildBuild set and never asks a peer to execute meteorlake code.
+        A peer only COMPILES it, which any x86_64 can do.
+
+        Where tuned code does get run on a peer, the feature flag is not what
+        would have saved you: rusty-v8's mksnapshot SIGILLed (return code -4)
+        because V8's vendored GN build applies host -march to a build-time
+        tool it then executes, entirely inside the package and invisible to
+        nixpkgs' cross machinery. That is fixed in the package, not by
+        requiring every builder to be an Intel CPU.
+      */
+      supportedFeatures = p.features;
     }) activePeers;
 
     nix.settings = {

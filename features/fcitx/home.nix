@@ -13,7 +13,7 @@ let
     # TriggerKeys: full IME inactive/active; Hangul deliberately omitted (physical RAlt → Hangul via keyd).
     "Hotkey/TriggerKeys" = {
       "0" = "Control+space";
-      "1" = "right_alt";
+      "1" = "Zenkaku_Hankaku";
     };
     # EnumerateForwardKeys intentionally omitted: the Hangul toggle is a niri
     # compositor keybind (features/niri/home.nix) so it fires before any app can steal it.

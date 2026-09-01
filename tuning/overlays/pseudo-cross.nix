@@ -221,6 +221,107 @@
       in
       lib.optionalAttrs isTuned {
         nixfmt = prev.pkgsBuildBuild.nixfmt;
+
+        /*
+          deno, for the same "take the BUILD-platform build" reason, though the
+          failure it avoids is different.
+
+          rusty-v8 builds V8 from source, then LINKS AND RUNS mksnapshot to
+          generate the startup snapshot. mksnapshot is compiled by V8's own GN
+          toolchain, which picks up the ambient -march=meteorlake, and is then
+          executed on the build machine. Neither peer is Intel, so instructions
+          meteorlake has and they lack (avxvnni, gfni, movdiri, movdir64b on
+          Zen 3) trap as SIGILL, surfacing as ninja's opaque
+
+              FAILED: [code=252] gen/v8/embedded.S gen/v8/snapshot.cc
+              Return code is -4
+
+          NOT AN UPSTREAM BUG, unlike the unifont splice defect: stock nixpkgs
+          never injects -march, so this only exists because we tune. It is V8's
+          build system applying target flags to a build-time tool, which is
+          invisible to nixpkgs' cross machinery -- buildPlatform.canExecute
+          hostPlatform is false here, so nixpkgs itself correctly refrains from
+          running host binaries; it just cannot police what a vendored GN build
+          does internally.
+
+          Tuning V8 buys close to nothing anyway: it is a JIT, and the code
+          that matters is generated at runtime behind CPU feature detection,
+          not fixed by the -march its C++ was compiled with. The untuned build
+          is substitutable from cache.nixos.org -- verified -- so this also
+          deletes a ~2400-step V8 compile from every rebuild.
+
+          Reached via yt-dlp -> deno -> rusty-v8; yt-dlp now uses deno to run
+          YouTube's JS challenges.
+        */
+        deno = prev.pkgsBuildBuild.deno;
+
+        /*
+          foliate, for the same "take the BUILD-platform build" reason again,
+          but the failure is a genuine mixed-platform CRASH rather than a build
+          error -- it is the first place the pseudo-cross wrapper-salt collision
+          became visible at runtime.
+
+              GLib-GObject-CRITICAL: g_boxed_type_register_static:
+                assertion 'g_type_from_name (name) == 0' failed
+              Gjs:ERROR:../gi/wrapperutils.h:914: assertion failed:
+                (gtype != G_TYPE_INVALID)
+              Bail out!  (SIGABRT before a window ever appears)
+
+          The chain, measured on the built closure rather than reasoned about:
+
+          1. Tuned gtk4's libgtk-4.so.1 RUNPATH is entirely tuned EXCEPT its
+             first entry, which is the UNTUNED glib-2.88.3. So a tuned GTK app
+             actually loads the untuned libglib/libgobject/libgio.
+
+             Why: gtk4 has gobject-introspection-wrapped in nativeBuildInputs,
+             which under pseudo-cross is the buildPlatform (untuned) one, and
+             it propagates untuned glib. cc-wrapper/bintools-wrapper name their
+             env vars after the platform's `config` string -- and pseudo-cross
+             deliberately makes buildPlatform.config == hostPlatform.config
+             (both x86_64-unknown-linux-gnu), so the BUILD and HOST wrappers
+             share one NIX_LDFLAGS namespace. setup.sh walks hostOffset -1
+             before 0, so the untuned -L is emitted BEFORE the tuned one and
+             wins the link.
+
+          2. GI_TYPELIB_PATH is built by gobject-introspection's env hook over
+             offset-0 packages, i.e. the TUNED glib. nixpkgs' GI carries
+             absolute_shlib_path.patch, so Gio-2.0.typelib records an absolute
+             /nix/store/<TUNED glib>/lib/libgio-2.0.so.0.
+
+          3. gjs dlopens that absolute path. glibc has already mapped the
+             untuned libgio-2.0.so.0 (step 1) from a different store path, and
+             dedups by inode, not by SONAME -- so GIO is now in the process
+             TWICE. The second copy re-runs g_type_register_* for every GIO
+             type, the name is taken, registration returns 0, and GJS aborts.
+
+             cairo hits the same wall from the opposite direction:
+             cairo-1.0.typelib ships only in gobject-introspection, and the
+             copy on the path is the untuned GI's, pointing at untuned cairo
+             while gtk4 has already loaded the tuned one.
+
+          Confirmed by hand-assembling a self-consistent GI_TYPELIB_PATH (tuned
+          GI's typelibs for cairo + untuned glib's typelibs for Gio): foliate
+          then starts normally. That is not a fix, only a proof of the cause --
+          it depends on which glib each dependency happened to link.
+
+          A real fix is one of two things, both wildly out of proportion to an
+          ebook reader:
+            - give buildPlatform a distinct config string, re-salting every
+              wrapper var -- i.e. rebuild the entire pseudo-cross store; or
+            - stop the buildPlatform GI's propagated -L from reaching the host
+              link line, which changes the hash of every package that has
+              gobject-introspection in nativeBuildInputs (all of GNOME/GTK).
+
+          So: take the untuned build, which is internally consistent because
+          nothing in it is spliced. Verified substitutable from cache.nixos.org
+          (5 paths, 88 MiB, zero compiles) and verified to launch.
+
+          NOTE FOR THE NEXT GJS APP. This is not foliate-specific -- any
+          gjs-console application built against tuned GTK will abort the same
+          way. Add it here rather than re-deriving the diagnosis. Tuning buys
+          nothing for foliate anyway: the work happens inside webkitgtk's JIT.
+        */
+        foliate = prev.pkgsBuildBuild.foliate;
       }
     )
 

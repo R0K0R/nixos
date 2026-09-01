@@ -1,0 +1,23 @@
+{
+  "nodes": {
+    "claude-code-bin": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-2199ZWBbDr3j8jk/umkrdQbTxi61f9hQXc7F95KOBng=",
+        "type": "file",
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.251/linux-x64/claude"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.251/linux-x64/claude"
+      }
+    },
+    "root": {
+      "inputs": {
+        "claude-code-bin": "claude-code-bin"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

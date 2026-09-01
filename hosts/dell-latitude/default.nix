@@ -131,14 +131,13 @@
           by hand. The bootstrap script prints the exact steps and will not
           silently proceed without them.
 
-        - `features` is left at its default, which carries no gccarch-*.
-          my.tuning.enable is false here, so nothing this host builds requests
-          one. (nix.buildMachines.supportedFeatures still appends
-          gccarch-meteorlake for every peer -- features/remote-builder
-          hardcodes it -- so /etc/nix/machines advertises a capability this
-          host never asks for. Inert, and left alone rather than touched:
-          galaxybook4-pro360 depends on that line and is verified
-          byte-identical across this change.)
+        - `features` is left at its default (no gccarch-*). my.tuning.enable
+          is false here, so nothing this host builds requests one, and
+          nix.buildMachines.supportedFeatures now reads each peer's own
+          declared `features` rather than assuming every peer can execute
+          meteorlake code (features/remote-builder, upstream commit
+          64f6696) -- so /etc/nix/machines advertises exactly what this
+          peer supports and nothing this host doesn't need.
 
       max-jobs becomes 0 (features/remote-builder sets it whenever the client
       is enabled) -- this host then builds NOTHING locally, including the
@@ -210,10 +209,20 @@
       primaryOutputScale = "1";
     };
 
+    /*
+      Shell is Haku Space, not DMS -- mutually exclusive `provides = ["shell"]`
+      claimants (features/_meta), so dms.enable must be false or the role
+      assertion fires. The greeter is a SEPARATE switch (features/dms/nixos.nix:
+      its config is gated on cfg.greeter.enable alone, not on cfg.enable) --
+      it is DMS's dank-greeter login screen, unrelated to which shell runs once
+      logged in, so it stays on here.
+    */
     dms = {
-      enable = true;
+      enable = false;
       greeter.enable = true;
     };
+
+    hakuspace.enable = true;
 
     network = {
       enable = true;

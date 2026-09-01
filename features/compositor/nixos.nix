@@ -17,6 +17,14 @@
       Which Wayland compositor to enable system- and user-wide, or null for
       none.
 
+      "niri" IS CURRENTLY UNBUILDABLE, as of the 2026-08-31 nixpkgs rebase:
+      niri-flake still references libdisplay-info_0_2, which nixpkgs removed.
+      Selecting it fails with that message rather than anything naming this
+      option -- niri-flake's own module forces the package while assertions are
+      still being collected, so features/niri's assertion cannot win the race
+      and this description is where the warning has to live. The rest of the
+      niri feature is intact and known good; see features/niri/nixos.nix.
+
       Nullable with a null default on purpose. This used to default to "niri",
       which was harmless only while the compositor modules were reachable from
       a single host's import list. Once every feature is registered on every

@@ -1,0 +1,12 @@
+{
+    "id": "pagedWorkspaces",
+    "name": "Paged Workspaces",
+    "description": "Compact workspace strip: icons for occupied, dots for empty, numbers only while Super is held. Indices are page-relative, so Super+1 always means the first slot of the current group of ten.",
+    "version": "1.0.0",
+    "author": "r0k0r",
+    "type": "widget",
+    "capabilities": ["dankbar-widget"],
+    "component": "./PagedWorkspaces.qml",
+    "icon": "view_module",
+    "permissions": []
+}

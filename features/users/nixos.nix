@@ -110,6 +110,30 @@ in
               description = "Groups beyond the account's own. `wheel` is what grants sudo.";
             };
 
+            passwordSecret = lib.mkOption {
+              type = lib.types.nullOr lib.types.path;
+              default = null;
+              example = lib.literalExpression "../../age/hashed-password-r0k0r.age";
+              description = ''
+                An agenix file holding this account's password hash. Sets
+                hashedPasswordFile to the decrypted /run/agenix path, so the
+                hash lives in the repo as ciphertext instead of as an
+                untracked file that has to be placed on every machine by hand.
+
+                Safe with respect to activation ORDER, which is the obvious
+                worry for a password: agenix declares
+
+                  users.deps = [ "agenixInstall" ];   # modules/age.nix:320
+                  # "So user passwords can be encrypted."
+
+                so the secret is decrypted before the users script that reads
+                it, on every boot as well as every switch.
+
+                Mutually exclusive with hashedPasswordFile -- setting both is
+                an error rather than a silent precedence rule.
+              '';
+            };
+
             hashedPasswordFile = lib.mkOption {
               type = lib.types.nullOr lib.types.str;
               default = null;
@@ -183,6 +207,25 @@ in
         feature's own `users` option, and there is exactly one place where it
         becomes a NixOS user.
       */
+      /*
+        One age secret per account with a passwordSecret. Named
+        hashed-password-<user> so the /run/agenix path is derivable from the
+        username alone, which is what lets the users.users merge above set
+        hashedPasswordFile without a second lookup.
+
+        Mode 0400 root:root deliberately -- only the activation script reads
+        it, and it is a password hash rather than something a service needs.
+      */
+      age.secrets = lib.mapAttrs' (
+        username: u:
+        lib.nameValuePair "hashed-password-${username}" {
+          file = u.passwordSecret;
+          mode = "0400";
+          owner = "root";
+          group = "root";
+        }
+      ) (lib.filterAttrs (_: u: u.passwordSecret != null) cfg);
+
       users.users = lib.mkMerge [
         (lib.mapAttrs (
           username: u:
@@ -192,6 +235,9 @@ in
           }
           // lib.optionalAttrs (u.uid != null) { inherit (u) uid; }
           // lib.optionalAttrs (u.hashedPasswordFile != null) { inherit (u) hashedPasswordFile; }
+          // lib.optionalAttrs (u.passwordSecret != null) {
+            hashedPasswordFile = "/run/agenix/hashed-password-${username}";
+          }
           // lib.optionalAttrs (u.shell != null) { inherit (u) shell; }
         ) cfg)
 
@@ -201,6 +247,38 @@ in
 
     {
       assertions = [
+        /*
+          Both set is a configuration error, not a precedence question: the
+          merge above would let passwordSecret silently win, and a password
+          that comes from somewhere other than where the host file says is
+          exactly the kind of thing to find out about at login.
+        */
+        {
+          assertion = !(lib.any (u: u.passwordSecret != null && u.hashedPasswordFile != null) (
+            lib.attrValues cfg
+          ));
+          message =
+            "my.users: passwordSecret and hashedPasswordFile are mutually exclusive; both set on: "
+            + lib.concatStringsSep ", " (
+              lib.attrNames (
+                lib.filterAttrs (_: u: u.passwordSecret != null && u.hashedPasswordFile != null) cfg
+              )
+            );
+        }
+
+        /*
+          A declared age.secrets entry on a host where agenix is off produces
+          no error at all -- it evaluates, builds, switches, and leaves
+          hashedPasswordFile pointing at a path that was never decrypted. With
+          mutableUsers = false that is an unloginnable machine. Same reasoning
+          as features/emacs' authinfoSecret assertion.
+        */
+        {
+          assertion =
+            !(lib.any (u: u.passwordSecret != null) (lib.attrValues cfg)) || config.my.agenix.enable;
+          message = "my.users.<name>.passwordSecret requires my.agenix.enable";
+        }
+
         {
           assertion = cfg == { } || lib.length primaries == 1;
           message =
@@ -212,17 +290,30 @@ in
         /*
           Not a style preference: with mutableUsers = false the declared set is
           the whole truth, and `passwd` cannot repair an account afterwards. An
-          account with no hashedPasswordFile becomes unloginnable at the first
+          account with no password source becomes unloginnable at the first
           switch, and if it is the only sudo-capable one the machine is lost.
+
+          EITHER SOURCE SATISFIES THIS. The check used to name hashedPasswordFile
+          alone, which was written before passwordSecret existed and then made
+          the two mutually exclusive options non-interchangeable: a
+          mutableUsers = false host that moved its accounts to agenix failed
+          eval with "missing on: r0k0r, benjamin" even though every account had
+          a perfectly good password source. passwordSecret sets
+          hashedPasswordFile itself, a few lines above, so what actually has to
+          hold is that at least one of the two is set.
         */
         {
           assertion =
             config.users.mutableUsers
-            || lib.all (u: u.hashedPasswordFile != null) (lib.attrValues cfg);
+            || lib.all (u: u.hashedPasswordFile != null || u.passwordSecret != null) (
+              lib.attrValues cfg
+            );
           message =
-            "users.mutableUsers = false requires a hashedPasswordFile on every my.users entry; missing on: "
+            "users.mutableUsers = false requires hashedPasswordFile or passwordSecret on every my.users entry; missing on: "
             + lib.concatStringsSep ", " (
-              lib.attrNames (lib.filterAttrs (_: u: u.hashedPasswordFile == null) cfg)
+              lib.attrNames (
+                lib.filterAttrs (_: u: u.hashedPasswordFile == null && u.passwordSecret == null) cfg
+              )
             );
         }
 

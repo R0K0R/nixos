@@ -186,6 +186,56 @@
     "easyeffects"
     "zam-plugins"
   ],
+
+  /*
+    Excluded from BOTH splices, unlike knownPatchedNames which guards only the
+    host one.
+
+    wrapGAppsHook* looks like a pure build tool and is one by every structural
+    test, so buildAliasNames -- "no runtime check needed, pkgsBuildHost is
+    never anything but a build tool by construction" -- happily aliases it to
+    upstream. But these hooks PROPAGATE LIBRARIES:
+
+      propagatedBuildInputs      = ... ++ optionals isGraphical [ gtk3 librsvg ];
+      depsTargetTargetPropagated =       optionals isGraphical [ librsvg gtk3 ];
+
+    so aliasing the hook drags upstream's UNTUNED gtk3/gtk4/librsvg, and their
+    whole GObject-introspection closure, into every consumer. The
+    gobject-introspection setup hook adds each lib/girepository-1.0 it sees to
+    GI_TYPELIB_PATH, and wrapGAppsHook bakes that variable into the wrapper
+    verbatim -- so the application ships a search path naming two copies of
+    every introspected library: the tuned one it was built against, and the
+    untuned one the hook brought.
+
+    Measured on foliate: 19 entries, 8 libraries duplicated (glib, gtk4, pango,
+    harfbuzz, graphene, gdk-pixbuf, gsettings-desktop-schemas, librsvg). Latent
+    for C applications; fatal for GJS ones, which abort at startup when the
+    second copy re-registers a type name the first installed:
+
+      g_boxed_type_register_static: assertion 'g_type_from_name (name) == 0' failed
+      Gjs:ERROR ... assertion failed: (gtype != G_TYPE_INVALID)
+
+    NOT THE WHOLE STORY, and this exclusion does not on its own make a GJS app
+    work. A later teardown of that exact foliate crash found a second, deeper
+    source of the same duplication that has nothing to do with aliasing: tuned
+    gtk4 links the UNTUNED glib outright, because pseudo-cross gives the build
+    and host wrappers the same NIX_LDFLAGS variable and the buildPlatform
+    gobject-introspection's propagated -L is emitted first. See the `foliate`
+    entry in tuning/overlays/pseudo-cross.nix for the measurement. Keeping the
+    hooks unaliased is still right -- it removes one of the two sources -- it
+    just is not sufficient.
+
+    NOT excludeNames: that feeds `structurallyKeepable`, which is only
+    consulted when the aliasable cache is COLD. With a warm cache the cached
+    name list is used verbatim, so a name added there is silently ignored until
+    the next refresh -- exactly the kind of quiet no-op this file exists to
+    avoid.
+  */
+  neverAliasNames ? [
+    "wrapGAppsHook3"
+    "wrapGAppsHook4"
+    "wrapGAppsNoGuiHook"
+  ],
 }:
 
 let
@@ -278,13 +328,14 @@ let
 
   # Build splice: every structurally-keepable name. No runtime check needed --
   # pkgsBuildHost is never anything but a build tool by construction.
-  buildAliasNames = structurallyKeepableNames;
+  neverAliasSet = lib.genAttrs neverAliasNames (_: true);
+  buildAliasNames = builtins.filter (n: !(neverAliasSet ? ${n})) structurallyKeepableNames;
 
   # Host splice: same names, minus the hard exclusion list and minus anything
   # genuinely host-runtime.
   knownPatchedSet = lib.genAttrs knownPatchedNames (_: true);
   hostAliasNames = builtins.filter (
-    n: !(knownPatchedSet ? ${n}) && !(hostRuntimeClassifier.isHostRuntime n)
+    n: !(neverAliasSet ? ${n}) && !(knownPatchedSet ? ${n}) && !(hostRuntimeClassifier.isHostRuntime n)
   ) structurallyKeepableNames;
 
   aliasAttrs = names: builtins.listToAttrs (map (name: { inherit name; value = upstream.${name}; }) names);

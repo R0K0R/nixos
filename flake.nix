@@ -20,10 +20,10 @@
       it and the root flake stops carrying pins for things it does not use.
     */
     feat-claude-code.url = "path:./features/claude-code";
+    feat-hop.url = "path:./features/hop";
     feat-claude-desktop.url = "path:./features/claude-desktop";
     feat-samsung-galaxybook.url = "path:./features/samsung-galaxybook";
     feat-easyeffects.url = "path:./features/easyeffects";
-    feat-hop.url = "path:./features/hop";
 
     # Module/overlay-providing sub-flakes need the second half of the two-level
     # follows -- see each sub-flake's own header for why both are required.
@@ -34,6 +34,11 @@
 
     feat-dms = {
       url = "path:./features/dms";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    feat-hakuspace = {
+      url = "path:./features/hakuspace";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

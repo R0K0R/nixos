@@ -22,6 +22,26 @@ let
   '';
 
   /*
+    Run every my.hyprland.rotationHooks entry with the new transform.
+
+    A generated script rather than a loop inlined twice: the shim reaches the
+    real hyprctl through `exec`, which replaces the process, so hooks have to
+    run BEFORE it at both exit paths and there is no "after" to put them in.
+    One script means the two call sites cannot drift.
+
+    Best-effort per hook -- a shell that has not started yet, or has no bar to
+    swap, must not turn a physical rotation into a screen that never rotates.
+  */
+  runRotationHooks = pkgs.writeShellScript "hypr-rotation-hooks" (
+    ''
+      xform="''${1:-0}"
+    ''
+    + lib.concatMapStrings (h: ''
+      ${h} "$xform" >/dev/null 2>&1 || true
+    '') osConfig.my.hyprland.rotationHooks
+  );
+
+  /*
     iio-hyprland speaks legacy hyprctl -- a four-command keyword batch per
     rotation (monitor transform, touchdevice transform, tablet transform,
     workspace orientation). Under configType = "lua" the keyword parser is
@@ -49,6 +69,9 @@ let
           # config defaults (0) and clears the workspace orientation rule
           # -- exactly the landscape state wanted, and the same net effect
           # the pre-Lua reload had.
+          # Back to landscape. Hooks BEFORE exec -- exec replaces this
+          # process, so anything after it never runs.
+          ${runRotationHooks} "$xform"
           exec "$real" reload
         fi
         # configType = "lua" killed `hyprctl keyword` outright ("keyword
@@ -67,12 +90,46 @@ let
         #     the original partial-rule bug this shim was born for
         #   - input transforms are plain config values
         #     (input:touchdevice:transform, input:tablet:transform)
-        #   - the orientation keyword maps to hl.workspace_rule's
-        #     layout_opts table
+        #   - the orientation keyword is NOT forwarded as-is; it names a
+        #     master-layout option this layout ignores, so it is remapped to
+        #     scrolling:direction below
         lua="hl.monitor({ output = \"$mon\", transform = $xform }) hl.config({ input = { touchdevice = { transform = $xform }, tablet = { transform = $xform } } })"
-        if [[ "$2" =~ workspace\ m\[([^]]+)\],\ layoutopt:orientation:([a-z]+) ]]; then
-          lua="$lua hl.workspace_rule({ workspace = \"m[''${BASH_REMATCH[1]}]\", layout_opts = { orientation = \"''${BASH_REMATCH[2]}\" } })"
-        fi
+        # THE LAYOUT AXIS. iio-hyprland's fourth command is
+        #
+        #   keyword workspace m[<ID>], layoutopt:orientation:<left|top|right|bottom>
+        #
+        # which is a MASTER-layout option. general:layout here is "scrolling",
+        # and that algorithm never reads `orientation` -- it reads `direction`:
+        #
+        #   if (WORKSPACERULE->m_layoutopts.contains("direction"))
+        #     -- src/layout/algorithm/tiled/scrolling/ScrollingAlgorithm.cpp:1942
+        #
+        # So the orientation this shim used to forward was translated
+        # faithfully and then silently discarded, which is why rotating left
+        # windows side by side instead of stacking them.
+        #
+        # Derived from $xform rather than from iio's orientation word: the
+        # transform is unambiguous, and it keeps the mapping readable as
+        # "which way is the long axis now".
+        #
+        #   0 normal    -> right  tape runs across the wide axis
+        #   1 90 deg    -> down   long axis is now vertical, so stack
+        #   2 180 deg   -> left   horizontal again, reversed
+        #   3 270 deg   -> up     vertical again, reversed
+        #
+        # Set globally rather than per workspace so it applies to workspaces
+        # that do not exist yet. Returning to landscape needs no counterpart:
+        # the transform-0 branch above execs `reload`, which drops back to the
+        # configured default.
+        case "$xform" in
+          1) _dir=down ;;
+          2) _dir=left ;;
+          3) _dir=up ;;
+          *) _dir=right ;;
+        esac
+        lua="$lua hl.config({ scrolling = { direction = \"$_dir\" } })"
+        # Same reason: hooks before exec, not after.
+        ${runRotationHooks} "$xform"
         exec "$real" eval "$lua"
       fi
     fi
@@ -97,47 +154,71 @@ let
   '';
 
   /*
-    DMS's No Sleep plugin (features/dms/plugins/no-sleep) inhibits
-    idle:sleep:handle-lid-switch, which blocks logind from taking ANY
-    action on lid close -- including its normal screen-off -- leaving the
-    display lit and unlocked inside a closed lid for as long as the
-    inhibitor holds. Rather than have the plugin manage its own lock/DPMS
-    watcher (a long-running process, with all the QML-lifetime pitfalls
-    that hit rotation-lock's respawn), let Hyprland handle the lid switch
-    directly: it reads the raw libinput switch event itself, independent of
-    logind entirely, via a static keybind that's never spawned/torn down
-    by any widget.
+    Page-relative workspace navigation.
 
-    Both scripts gate on whether the plugin's inhibitor is actually held
-    (pgrep on its --who= tag -- the plugin's only externally-visible
-    marker) so they only act while No Sleep is on; otherwise they no-op and
-    logind's normal suspend flow (already locked via
-    session-lock-hooks.nix's sleep.target hook) proceeds untouched.
+    Compositor-level on purpose, not part of any shell: the numbering is how
+    the KEYS behave, and it stays coherent with no bar on screen at all. A
+    shell that draws a workspace strip is expected to mirror this arithmetic
+    (features/dms/plugins/workspaces does) rather than to own it.
+
+    Slot N means "the Nth workspace of the group of ten I am currently in", not
+    workspace N. The page is derived from the LIVE focused workspace on every
+    press rather than tracked in a variable, so the bar plugin and the keybinds
+    cannot disagree -- they run the same arithmetic against the same source and
+    neither writes state the other has to trust.
+
+    Legacy `hyprctl dispatch workspace N` does NOT work here: configType = "lua"
+    routes dispatch through hl.dispatch(), and the bare form dies with
+    "')' expected near '2'". The lua dispatcher form is the only one that
+    parses.
   */
-
-  lidClose = pkgs.writeShellScript "dms-lid-close" ''
-    if ${pkgs.procps}/bin/pgrep -f -- "--who=DMS No Sleep plugin" >/dev/null; then
-      dms ipc call lock lock
-      # Lua dispatch form -- legacy "dpms off" no longer parses under
-      # configType = "lua", same as the lisgd commands in touch-gestures.
-      hyprctl dispatch 'hl.dsp.dpms({ action = "off" })'
-    fi
-  '';
-  lidOpen = pkgs.writeShellScript "dms-lid-open" ''
-    if ${pkgs.procps}/bin/pgrep -f -- "--who=DMS No Sleep plugin" >/dev/null; then
-      hyprctl dispatch 'hl.dsp.dpms({ action = "on" })'
+  wsSlot = pkgs.writeShellScript "hypr-ws-slot" ''
+    slot="$1"
+    active=$(${pkgs.hyprland}/bin/hyprctl activeworkspace -j | ${pkgs.jq}/bin/jq -r '.id')
+    # Workspaces are 1-based, so bias before dividing: 1..10 -> page 0.
+    page=$(( (active - 1) / 10 ))
+    target=$(( page * 10 + slot ))
+    if [ "$2" = move ]; then
+      ${pkgs.hyprland}/bin/hyprctl dispatch "hl.dsp.window.move({ workspace = $target, follow = true })"
+    else
+      ${pkgs.hyprland}/bin/hyprctl dispatch "hl.dsp.focus({ workspace = $target })"
     fi
   '';
 
 in
 {
   /*
-    DMS's screenshot IPC (`dms ipc call niri screenshot*`) is documented as niri-only
-    (requires niri 25.11+); no hyprland equivalent exists. Use grimblast, the standard
-    Hyprland screen/window/area capture wrapper around grim+slurp+hyprctl, instead.
+    Screenshots are a COMPOSITOR concern here, not a shell one. DMS does ship a
+    screenshot IPC, but it is documented as niri-only (`dms ipc call niri
+    screenshot*`, niri 25.11+) with no hyprland equivalent, so this feature
+    carries a standalone slurp-based wrapper and every shell gets the same
+    behaviour.
+
+    HYPRSHOT RATHER THAN GRIMBLAST, because grimblast's area mode is unusable by
+    touch. Both wrap the same slurp, but they call it differently:
+
+      grimblast  echo "$rects" | slurp -o ... -f '%x,%y %wx%h|%l'   snap-to-window
+      hyprshot   slurp -d                                          free-form
+
+    grimblast's `area` has no free-form path at all -- it always feeds slurp the
+    window rectangles on stdin and passes -o, i.e. selection is constrained to
+    snapping onto an existing window. Measured on this machine: bare `slurp`
+    accepts finger input, grimblast's area mode does not.
+
+    S PEN DOES NOT WORK IN EITHER, and that is not what this change fixes.
+    Tested against slurp directly and against hyprshot: touch works, stylus does
+    not, so the gap is below both wrappers -- either slurp's zwp_tablet_v2
+    handling or Hyprland's routing of tablet events to a layer surface. Ruled
+    out rather than assumed: slurp 1.5.0 does carry the tablet protocol symbols,
+    so it is not simply built without support. Accepted as a limitation: a
+    finger is always present, the pen is not.
+
+    NOTE a real behaviour change on CTRL+Print. `grimblast copy screen` captured
+    ALL monitors into one image; hyprshot has no such mode, and `-m output`
+    captures the focused output only. Nothing else moves.
   */
   home.packages = lib.mkIf (osConfig.my.desktop.compositor == "hyprland") [
-    pkgs.grimblast
+    pkgs.hyprshot
     iioHyprlandWithTransformFix
     # iio-hyprland shells out to `hyprctl -j monitors | jq` internally; without
     # jq in PATH it fails immediately and aborts uncleanly (dbus_disconnect
@@ -165,7 +246,7 @@ in
           gaps_in = 2;
           gaps_out = 4;
           border_size = 0;
-          # layout = "scrolling";
+          layout = "scrolling";
           # Ask 2: resize by dragging a window's edge/gap, with mouse or
           # finger -- both route through the same click-and-drag hit-test,
           # so enabling this covers touch too (verified against 0.56.0
@@ -180,21 +261,18 @@ in
         };
 
         /*
-          DMS's Hyprland theming writes two Lua snippets, each its own
-          hl.config call: colors.lua (general.col.*, group.col.*) and
-          layout.lua (gaps_in/gaps_out/border_size/decoration.rounding).
-          hyprlang could never source either -- hence the static snapshot
-          this replaced.
+          GAPS, BORDER AND ROUNDING ARE THIS FEATURE'S, and a themed shell must
+          not be allowed to set them. Stated here because DMS makes the offer:
+          its Hyprland theming writes two Lua snippets, each its own hl.config
+          call -- colors.lua (general.col.*, group.col.*) and layout.lua
+          (gaps_in/gaps_out/border_size/decoration.rounding).
 
-          colors.lua is now required live (extraConfig) -- it only touches
-          fields nothing else here sets, so there's nothing to race.
-          layout.lua is deliberately NOT required: it sets border_size = 2,
-          and this config keeps border_size = 0 on purpose (the touchscreen
-          workspace-swipe activation strip below is
-          (gaps_out + border_size) / screen_height -- widening border_size
-          silently widens that strip). gaps_in/gaps_out/rounding stay static
-          snapshots below, same limitation as before, now isolated to just
-          those three values instead of colors too.
+          Colours are safe to hand over, and features/dms does exactly that.
+          layout.lua is not: it sets border_size = 2, and border_size is not
+          cosmetic here. The touchscreen workspace-swipe activation strip is
+          (gaps_out + border_size) / screen_height, so a shell nudging the
+          border silently widens the strip that steals edge touches. The values
+          below stay static for that reason.
         */
 
         # Niri's touchpad block explicitly enables natural-scroll; Hyprland
@@ -256,17 +334,20 @@ in
           workspace_swipe_touch_invert = false;
         };
 
-        # group.col.* comes from require("dms.colors") in extraConfig, same
-        # as general's border colors -- DMS's colors.lua sets both in one
-        # hl.config call (verified against its actual generated content), so
-        # setting them here too would just race the same fields against it.
+        # NEITHER general.col.* NOR group.col.* is set here, deliberately.
+        # A shell with live theming writes them at runtime (DMS emits a
+        # colors.lua setting both in a single hl.config call, and its feature
+        # requires that file), so a static value here would only race it. With
+        # no shell selected, Hyprland's own defaults apply -- which is the
+        # correct outcome, not a gap.
 
         decoration = {
           rounding = 16;
-          # Glassmorphism: true backdrop blur behind translucent surfaces
-          # (DMS panels get alpha < 1 via its transparency settings; the
-          # layer_rule in extraConfig below opts the dms namespace into this
-          # blur).
+          # Glassmorphism: true backdrop blur behind translucent surfaces.
+          # Compositor-side half only. Blur applies to translucent WINDOWS
+          # automatically, but a layer surface has to opt in with a
+          # layer_rule, so a shell that wants frosted panels contributes that
+          # rule (and its own alpha) from its own feature.
           blur = {
             enabled = true;
             size = 8;
@@ -321,16 +402,16 @@ in
         "3, swipe, move" string form, which Lua mode doesn't parse at all).
       */
       gesture = [
-        # 4-finger free drag/move of the focused window.
+        # 3-finger free drag/move of the focused window.
         {
-          fingers = 4;
+          fingers = 3;
           direction = "swipe";
           action = "move";
         }
-        # 3-finger vertical swipe: workspace switch, matching the touchscreen
+        # 4-finger vertical swipe: workspace switch, matching the touchscreen
         # gesture direction above and the "slidevert" animation style.
         {
-          fingers = 3;
+          fingers = 4;
           direction = "vertical";
           action = "workspace";
         }
@@ -340,7 +421,7 @@ in
         # for the scrolling layout's tape -- live momentum + snap-to-column
         # (gestures:scrolling:* defaults handle it).
         {
-          fingers = 3;
+          fingers = 4;
           direction = "horizontal";
           action = "scroll_move";
         }
@@ -364,12 +445,30 @@ in
           bind-dispatcher-factory form) runs immediately as the script loads
           -- the exec-once equivalent. LuaBindingsToplevel.cpp:321.
     */
-    extraConfig = ''
-      local mod = "SUPER"
+    /*
+      mkBefore, and it is load-bearing.
 
-      -- DMS's cursorSettings plumbing is niri-only (cursorSettings.niri.hideWhenTyping);
-      -- Hyprland never gets these applied, so it falls back to its own built-in
-      -- hyprcursor theme. Set both XCURSOR_* (X/Wayland apps) and HYPRCURSOR_*
+      extraConfig is types.lines, so every module defining it is concatenated
+      into the one generated hyprland.lua -- that is what lets other features
+      contribute binds and rules. Order between definitions is definition
+      order, and flake.nix builds the feature list from
+      `builtins.readDir ./features`, which is ALPHABETICAL: `dms` sorts before
+      `hyprland`. Without an explicit order a contributed fragment lands above
+      this one, referencing `mod` before it is declared and calling hl.* before
+      hl.config has run -- a Lua error at session start, not at build time.
+
+      So: this block is mkBefore, every contributed fragment is mkAfter.
+    */
+    extraConfig = lib.mkBefore ''
+      -- From my.hyprland.modKey, so a bind contributed by another feature
+      -- interpolates the same Nix value rather than depending on this local
+      -- happening to be concatenated above it.
+      local mod = "${osConfig.my.hyprland.modKey}"
+
+      -- Cursor, set here because no shell reliably sets it for Hyprland: DMS's
+      -- cursorSettings plumbing is niri-only (cursorSettings.niri.hideWhenTyping),
+      -- so Hyprland would otherwise fall back to its own built-in hyprcursor
+      -- theme. Set both XCURSOR_* (X/Wayland apps) and HYPRCURSOR_*
       -- (Hyprland's native cursor renderer) so it's consistent everywhere.
       -- Bibata-Modern-Classic-Glass = Bibata-Modern-Classic with alpha
       -- multiplied down, generated in features/cursor-theme/home.nix (home.pointerCursor
@@ -382,8 +481,10 @@ in
       hl.env("HYPRCURSOR_SIZE", "24")
       -- Qt apps outside Plasma (dolphin, kdenlive, ...) have no platform
       -- theme and fall back to a broken mixed palette (black-on-black text).
-      -- qt6ct is installed and DMS's matugen already generates its palette
-      -- (~/.config/qt6ct -> DankMatugen.colors) -- this activates it.
+      -- qt6ct is installed and a matugen-driven shell generates its palette
+      -- (DMS writes ~/.config/qt6ct -> DankMatugen.colors) -- this activates
+      -- it, and is harmless with no such shell: qt6ct then simply uses
+      -- whatever palette is on disk.
       -- This alone is NOT sufficient -- plugin discovery, qt6ct.conf
       -- contents, and KDE apps' KColorSchemeManager each needed their own
       -- fix. See features/qt-theming/nixos.nix (QT_PLUGIN_PATH +
@@ -396,15 +497,6 @@ in
       -- var and accepts fractional values, unlike GDK_SCALE. Kept in sync
       -- with the monitor scale via my.desktop.primaryOutputScale.
       hl.env("AVALONIA_GLOBAL_SCALE_FACTOR", "${osConfig.my.desktop.primaryOutputScale}")
-
-      -- DMS's own live colors -- see the "config" table's decoration/general
-      -- comment above for why layout.lua (gaps/border/rounding) is NOT
-      -- required here.
-      do
-        local xdg = os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")
-        package.path = xdg .. "/hypr/?.lua;" .. xdg .. "/hypr/?/init.lua;" .. package.path
-      end
-      require("dms.colors")
 
       -- Hyprland's stock animation speeds read as sluggish coming from
       -- niri. NOT a field of hl.config's "animations" table: "animation" is
@@ -447,11 +539,12 @@ in
       -- iio-hyprland: reads iio-sensor-proxy orientation over D-Bus, rotates the
       -- eDP-1 output and touch input transform automatically (accel_3d + hinge
       -- sensors confirmed present via /sys/bus/iio/devices; enabled in hardware.nix).
-      -- NO "dms run" here: systemd already starts dms.service via
-      -- graphical-session.target (uwsm activates it) -- an exec-once copy runs
-      -- a second, unmanaged instance (observed: two bars, hyprland-parented
-      -- `dms run` without --session alongside dms.service's `dms run --session`).
-      -- Same reasoning as the niri side's spawn-at-startup comment.
+      -- NOTHING ELSE IS SPAWNED HERE, and a shell least of all: its feature
+      -- starts it as a systemd user service off graphical-session.target,
+      -- which uwsm activates. An exec-once copy alongside that produced a
+      -- second, unmanaged instance -- observed as two bars, one
+      -- hyprland-parented. Same reasoning as the niri side's
+      -- spawn-at-startup comment.
       --
       -- INSIDE hl.on("hyprland.start"), NEVER at top level: a top-level
       -- hl.exec_cmd runs on EVERY config reload (the whole Lua script
@@ -470,15 +563,6 @@ in
         hl.exec_cmd("iio-hyprland ${osConfig.my.desktop.primaryOutput}")
       end)
 
-      -- Glassmorphism for DMS layer surfaces. ignore_alpha skips
-      -- near-fully-transparent pixels (the empty regions of the bar
-      -- surface) so they don't render as a hazy smear.
-      hl.layer_rule({ match = { namespace = "^(dms.*)$" }, no_anim = true, blur = true, ignore_alpha = 0.05 })
-      -- Same glass treatment for the OSK (features/dms/plugins/osk-toggle):
-      -- wvkbd's own --alpha only sets its drawn pixels' transparency, the
-      -- actual frosted backdrop still needs Hyprland's blur behind it.
-      hl.layer_rule({ match = { namespace = "^(wvkbd)$" }, blur = true, ignore_alpha = 0.05 })
-
       -- Emacs opens as a FULL-WIDTH COLUMN, not maximized. `maximize` is a
       -- fullscreen STATE: it renders over the reserved area, drops gaps and
       -- corner rounding, and has to be cleared before any colresize can be
@@ -492,6 +576,10 @@ in
       -- straight back to 0.5 with no state to clear first.
       hl.window_rule({ match = { class = "^(emacs)$" }, scrolling_width = 1.0 })
       hl.window_rule({ match = { class = "^(org.gnu.emacs)$" }, scrolling_width = 1.0 })
+      -- Matplotlib floating
+      hl.window_rule({ match = { class = "^(Matplotlib)$" }, float = true })
+      -- Waydroid size lock
+      hl.window_rule({ match = { class = "^(Waydroid)$" }, scrolling_width = 1.0 })
       -- Glassmorphism: translucent KDE apps; backdrop blur applies to
       -- translucent windows automatically (decoration.blur). kdeconnect
       -- covers all its windows (.app, .sms, -indicator, ...).
@@ -522,20 +610,12 @@ in
       -- explicit list of what that leaves out.
       -- ============================================================
 
-      -- DMS / apps (unchanged from the pre-Lua config)
-      hl.bind(mod .. " + space", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
-      hl.bind(mod .. " + I", hl.dsp.exec_cmd("dms ipc call settings toggle"))
-      hl.bind(mod .. " + T", hl.dsp.exec_cmd("kitty"))
+      -- Application spawns. Anything that toggles a SHELL surface -- launcher,
+      -- notifications, clipboard, power menu, lock -- is contributed by
+      -- whichever feature implements that shell, not bound here.
+      hl.bind(mod .. " + Return", hl.dsp.exec_cmd("kitty"))
       hl.bind(mod .. " + W", hl.dsp.exec_cmd("firefox"))
       hl.bind(mod .. " + E", hl.dsp.exec_cmd("emacsclient -c"))
-      hl.bind(mod .. " + A", hl.dsp.exec_cmd("dms ipc call plugins toggle aiAssistant"))
-      hl.bind(mod .. " + N", hl.dsp.exec_cmd("dms ipc call notifications toggle"))
-      hl.bind(mod .. " + P", hl.dsp.exec_cmd("dms ipc call notepad toggle"))
-      hl.bind(mod .. " + V", hl.dsp.exec_cmd("dms ipc call clipboard toggle"))
-      hl.bind(mod .. " + X", hl.dsp.exec_cmd("dms ipc call powermenu toggle"))
-      hl.bind(mod .. " + M", hl.dsp.exec_cmd("dms ipc call processlist toggle"))
-      hl.bind(mod .. " + ALT + N", hl.dsp.exec_cmd("dms ipc call night toggle"))
-      hl.bind("SUPER + ALT + L", hl.dsp.exec_cmd("dms ipc call lock lock"))
       -- Compositor-level IME toggle, same logic as niri.nix's Hangul bind.
       hl.bind("Hangul", hl.dsp.exec_cmd("${hangulToggle}"))
 
@@ -590,9 +670,9 @@ in
         end
       end)
       hl.bind(mod .. " + ALT + space", hl.dsp.window.float())
-      -- end-4's Mod+P is "pin"; this config's Mod+P is already DMS's
-      -- notepad toggle (see above), so pin goes on Mod+Alt+P instead of
-      -- silently overwriting an existing, deliberately-chosen bind.
+      -- end-4's Mod+P is "pin". Mod+P is left free here for a shell to claim
+      -- (DMS binds its notepad there), so pin goes on Mod+Alt+P rather than
+      -- taking a key the shell layer is expected to want.
       hl.bind(mod .. " + ALT + P", hl.dsp.window.pin())
       -- niri's Mod+Shift+V (switch focus between floating/tiling) has no
       -- direct hyprland dispatcher; `togglegroup` is a different concept
@@ -628,12 +708,22 @@ in
       -- Workspace cycle among EXISTING workspaces ("e±1"), same string
       -- syntax as the legacy `workspace, e-1` dispatcher -- hl.dsp.focus's
       -- workspace-selector overload hands it to the identical parser.
-      hl.bind(mod .. " + J", hl.dsp.focus({ workspace = "e-1" }))
-      hl.bind(mod .. " + K", hl.dsp.focus({ workspace = "e+1" }))
-      hl.bind(mod .. " + Page_Down", hl.dsp.focus({ workspace = "e-1" }))
-      hl.bind(mod .. " + Page_Up", hl.dsp.focus({ workspace = "e+1" }))
-      hl.bind(mod .. " + CTRL + U", hl.dsp.window.move({ workspace = "e-1", follow = true }))
-      hl.bind(mod .. " + CTRL + I", hl.dsp.window.move({ workspace = "e+1", follow = true }))
+      -- RELATIVE, NOT e-RELATIVE. These were "e-1"/"e+1", which walk only
+      -- workspaces that already EXIST -- so from workspace 10 with nothing
+      -- above it, e+1 wrapped back to 1 (measured, not assumed). That made
+      -- every page past the first unreachable, and paging is the whole point
+      -- of a shell's workspace strip.
+      --
+      -- Plain "+1"/"-1" step into empty workspaces, creating them on demand:
+      -- 10 -> 11 -> 12, which rolls the page over as intended. "-1" clamps at
+      -- workspace 1 rather than running negative, so the low end needs no
+      -- special case.
+      hl.bind(mod .. " + K", hl.dsp.focus({ workspace = "-1" }))
+      hl.bind(mod .. " + J", hl.dsp.focus({ workspace = "+1" }))
+      hl.bind(mod .. " + Page_Down", hl.dsp.focus({ workspace = "-1" }))
+      hl.bind(mod .. " + Page_Up", hl.dsp.focus({ workspace = "+1" }))
+      hl.bind(mod .. " + CTRL + U", hl.dsp.window.move({ workspace = "-1", follow = true }))
+      hl.bind(mod .. " + CTRL + I", hl.dsp.window.move({ workspace = "+1", follow = true }))
 
       -- Move window (direction)
       hl.bind(mod .. " + CTRL + left", hl.dsp.window.move({ direction = "left" }))
@@ -644,8 +734,8 @@ in
       hl.bind(mod .. " + CTRL + J", hl.dsp.window.move({ direction = "down" }))
       hl.bind(mod .. " + CTRL + K", hl.dsp.window.move({ direction = "up" }))
       hl.bind(mod .. " + CTRL + L", hl.dsp.window.move({ direction = "right" }))
-      hl.bind(mod .. " + CTRL + Page_Down", hl.dsp.window.move({ workspace = "e-1", follow = true }))
-      hl.bind(mod .. " + CTRL + Page_Up", hl.dsp.window.move({ workspace = "e+1", follow = true }))
+      hl.bind(mod .. " + CTRL + Page_Down", hl.dsp.window.move({ workspace = "-1", follow = true }))
+      hl.bind(mod .. " + CTRL + Page_Up", hl.dsp.window.move({ workspace = "+1", follow = true }))
 
       -- Resize (niri's Mod+Minus/Equal, Mod+Shift+Minus/Equal). BEHAVIOR
       -- CHANGE from the pre-Lua config: legacy `resizeactive` took
@@ -674,29 +764,36 @@ in
       hl.bind(mod .. " + SHIFT + CTRL + K", hl.dsp.window.move({ monitor = "u" }))
       hl.bind(mod .. " + SHIFT + CTRL + L", hl.dsp.window.move({ monitor = "r" }))
 
-      -- Workspaces 1-9
+      -- Workspaces: PAGE-RELATIVE, not absolute.
+      --
+      -- Super+N goes to slot N of the group of ten containing the focused
+      -- workspace, so on workspace 15 Super+1 means 11. The digits keep meaning
+      -- "first slot of what I am looking at" instead of an id you have to
+      -- remember. A shell drawing a workspace strip derives its page the same
+      -- way, from the live focused workspace, so the two cannot drift -- see
+      -- features/dms/plugins/workspaces for the one that does.
+      --
+      -- The persistent workspace_rule calls that used to be here are GONE. They
+      -- existed to force the DankBar switcher to render a fixed 1-9; the plugin
+      -- draws ten slots whether or not the workspaces exist, so keeping them
+      -- would only pin page 0 into existence while every other page stayed
+      -- ephemeral -- an asymmetry with no upside.
       for i = 1, 9 do
-        hl.bind(mod .. " + " .. tostring(i), hl.dsp.focus({ workspace = i }))
-        hl.bind(mod .. " + CTRL + " .. tostring(i), hl.dsp.window.move({ workspace = i, follow = true }))
+        hl.bind(mod .. " + " .. tostring(i), hl.dsp.exec_cmd("${wsSlot} " .. tostring(i)))
+        hl.bind(mod .. " + CTRL + " .. tostring(i), hl.dsp.exec_cmd("${wsSlot} " .. tostring(i) .. " move"))
       end
+      -- 0 is the tenth slot, keeping the row of digits contiguous.
+      hl.bind(mod .. " + 0", hl.dsp.exec_cmd("${wsSlot} 10"))
+      hl.bind(mod .. " + CTRL + 0", hl.dsp.exec_cmd("${wsSlot} 10 move"))
 
       hl.bind(mod .. " + SHIFT + E", hl.dsp.exit())
-      hl.bind("Print", hl.dsp.exec_cmd("grimblast copy area"))
-      hl.bind("CTRL + Print", hl.dsp.exec_cmd("grimblast copy screen"))
-      hl.bind("ALT + Print", hl.dsp.exec_cmd("grimblast copy active"))
+      -- --clipboard-only skips writing a file at all (hyprshot otherwise saves
+      -- AND copies); --silent matches grimblast's old no-notification default.
+      hl.bind("Print", hl.dsp.exec_cmd("hyprshot -m region --clipboard-only --silent"))
+      hl.bind("CTRL + Print", hl.dsp.exec_cmd("hyprshot -m output --clipboard-only --silent"))
+      hl.bind("ALT + Print", hl.dsp.exec_cmd("hyprshot -m window -m active --clipboard-only --silent"))
       hl.bind(mod .. " + SHIFT + P", hl.dsp.dpms({ action = "off" }))
 
-      -- Media/brightness keys: repeating + fires even while locked.
-      hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("dms ipc call audio increment 3"), { locked = true, repeating = true })
-      hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("dms ipc call audio decrement 3"), { locked = true, repeating = true })
-      hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd('dms ipc call brightness increment 5 ""'), { locked = true, repeating = true })
-      hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd('dms ipc call brightness decrement 5 ""'), { locked = true, repeating = true })
-
-      -- Mute/lid: locked (fires once already locked) but not repeating.
-      hl.bind("XF86AudioMute", hl.dsp.exec_cmd("dms ipc call audio mute"), { locked = true })
-      hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("dms ipc call audio micmute"), { locked = true })
-      hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("${lidClose}"), { locked = true })
-      hl.bind("switch:off:Lid Switch", hl.dsp.exec_cmd("${lidOpen}"), { locked = true })
     '';
   };
 }
