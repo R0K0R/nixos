@@ -165,7 +165,7 @@ in
           gaps_in = 2;
           gaps_out = 4;
           border_size = 0;
-          layout = "scrolling";
+          # layout = "scrolling";
           # Ask 2: resize by dragging a window's edge/gap, with mouse or
           # finger -- both route through the same click-and-drag hit-test,
           # so enabling this covers touch too (verified against 0.56.0
@@ -321,16 +321,16 @@ in
         "3, swipe, move" string form, which Lua mode doesn't parse at all).
       */
       gesture = [
-        # 3-finger free drag/move of the focused window.
+        # 4-finger free drag/move of the focused window.
         {
-          fingers = 3;
+          fingers = 4;
           direction = "swipe";
           action = "move";
         }
-        # 4-finger vertical swipe: workspace switch, matching the touchscreen
+        # 3-finger vertical swipe: workspace switch, matching the touchscreen
         # gesture direction above and the "slidevert" animation style.
         {
-          fingers = 4;
+          fingers = 3;
           direction = "vertical";
           action = "workspace";
         }
@@ -340,7 +340,7 @@ in
         # for the scrolling layout's tape -- live momentum + snap-to-column
         # (gestures:scrolling:* defaults handle it).
         {
-          fingers = 4;
+          fingers = 3;
           direction = "horizontal";
           action = "scroll_move";
         }
@@ -525,7 +525,7 @@ in
       -- DMS / apps (unchanged from the pre-Lua config)
       hl.bind(mod .. " + space", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
       hl.bind(mod .. " + I", hl.dsp.exec_cmd("dms ipc call settings toggle"))
-      hl.bind(mod .. " + Return", hl.dsp.exec_cmd("kitty"))
+      hl.bind(mod .. " + T", hl.dsp.exec_cmd("kitty"))
       hl.bind(mod .. " + W", hl.dsp.exec_cmd("firefox"))
       hl.bind(mod .. " + E", hl.dsp.exec_cmd("emacsclient -c"))
       hl.bind(mod .. " + A", hl.dsp.exec_cmd("dms ipc call plugins toggle aiAssistant"))

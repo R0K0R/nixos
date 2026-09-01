@@ -512,10 +512,6 @@
       borderThickness = 1;
       bottomGap = 0;
       centerWidgets = [
-        {
-          enabled = true;
-          id = "oskToggle";
-        }
         "music"
         "clock"
         "weather"
