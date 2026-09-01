@@ -56,6 +56,30 @@ let
         defaultText = lib.literalExpression "the primary user";
         description = "SSH user on the peer.";
       };
+
+      address = lib.mkOption {
+        type = lib.types.str;
+        default = name;
+        defaultText = lib.literalExpression "the attribute name";
+        description = ''
+          What to actually connect to, when that differs from the peer's name.
+
+          Set ONLY in the peer's ssh_config block (peer-*.nix). Everything else
+          -- /etc/nix/machines, the substituter URLs, the wrapper scripts --
+          keeps using the attribute name, and ssh translates it via
+          `Host <name>` / `HostName <address>`. One place knows the address.
+
+          Needed because MagicDNS does not give every client the same name for
+          the same machine. victus-15 and yulee live in the `injoystickly@`
+          tailnet: galaxybook4-pro360 is in that tailnet and resolves the bare
+          `victus-15`, but dell-latitude is in `sihooleebd@` and sees them as
+          SHARED nodes, which get only their FQDN -- bare `victus-15` does not
+          resolve there at all.
+
+          Whatever this is set to is what ssh verifies against known_hosts (no
+          HostKeyAlias is set), so the peer's knownHosts entry must list it.
+        '';
+      };
       maxJobs = lib.mkOption {
         type = lib.types.ints.positive;
         default = 5;
