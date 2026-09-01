@@ -353,6 +353,23 @@
       },
       "parent": []
     },
+    "feat-hakuspace": {
+      "inputs": {
+        "hakuspace": "hakuspace",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "path": "./features/hakuspace",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/hakuspace",
+        "type": "path"
+      },
+      "parent": []
+    },
     "feat-hop": {
       "inputs": {
         "hop-src": "hop-src",
@@ -413,6 +430,24 @@
         "owner": "NixOS",
         "repo": "flake-compat",
         "type": "github"
+      }
+    },
+    "hakuspace": {
+      "inputs": {
+        "nixpkgs": [
+          "feat-hakuspace",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1788288406,
+        "narHash": "sha256-yuk9qAUW1dEfdFofjSMzgBz9NXTYQlRR/HaKEe3wiGI=",
+        "path": "/home/r0k0r/hakuspace-contrib",
+        "type": "path"
+      },
+      "original": {
+        "path": "/home/r0k0r/hakuspace-contrib",
+        "type": "path"
       }
     },
     "home-manager": {
@@ -624,6 +659,7 @@
         "feat-dms": "feat-dms",
         "feat-easyeffects": "feat-easyeffects",
         "feat-emacs": "feat-emacs",
+        "feat-hakuspace": "feat-hakuspace",
         "feat-hop": "feat-hop",
         "feat-niri": "feat-niri",
         "feat-samsung-galaxybook": "feat-samsung-galaxybook",

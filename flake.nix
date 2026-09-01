@@ -37,6 +37,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    feat-hakuspace = {
+      url = "path:./features/hakuspace";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     feat-agenix = {
       url = "path:./features/agenix";
       inputs.nixpkgs.follows = "nixpkgs";
