@@ -11,69 +11,109 @@ let
     below) -- Super otherwise only exists on the "Special" layer, reachable
     via the next-layer button, not on either primary typing layer.
 
-    Both edits are pinned to exact upstream line numbers rather than
-    context blocks: the surrounding code (esp. the Compose key line) is
-    byte-identical across several other layers in the same file, so a
-    context-matched substitution would silently touch the wrong layer.
-    Fine for a single pinned nixpkgs revision; will need re-checking if
-    wvkbd is ever bumped.
+    ANCHORED ON CODE, NOT ON LINE NUMBERS. This patch used to address every
+    site by absolute line number, which broke the moment nixpkgs bumped
+    wvkbd's source: main.c had grown fractional-scale support, so every
+    target had moved 60-80 lines. The seds still "succeeded" -- they just
+    landed on unrelated code. The insertion meant for the end of the
+    `anchor` declaration landed in the MIDDLE of it, and the one meant for
+    redimension_keyboard() overwrote a line of
+    wp_fractional_scale_preferred_scale()'s parameter list, deleting that
+    function. The result was a wall of confusing C errors ("expected '=',
+    ',', ';' ... before '|' token") pointing at code nobody had touched on
+    purpose.
+
+    So: every main.c edit is now a substituteInPlace --replace-fail keyed on
+    a unique line of surrounding code, which ABORTS THE BUILD if its anchor
+    ever stops matching. A moved anchor now fails immediately, naming the
+    text it could not find, instead of silently corrupting the translation
+    unit. All four anchors were verified to match exactly once.
+
+    Only the ANCHORS must match byte-for-byte; inserted text is free-form,
+    so nix's ''...'' dedent (which strips a different amount of leading
+    whitespace than main.c uses) cannot misalign it. That constraint is why
+    the original avoided multi-line context matching, and it still holds --
+    it just does not apply to the replacement side.
+
+    layout.mobintl.h is the one place a plain context match genuinely is
+    ambiguous: `{"Cmp", ...}` is byte-identical in NINE key arrays. Those two
+    substitutions are therefore confined to their array's brace range, and
+    the result is counted afterwards rather than assumed.
   */
   wvkbdFloating = pkgs.wvkbd.overrideAttrs (old: {
-    # Line-number-targeted sed, not substituteInPlace: nix's ''...''
-    # dedent strips leading whitespace by a different amount than main.c's
-    # own indentation, so a whitespace-sensitive multi-line context match
-    # silently fails to find its anchor. Insertions sidestep that (the
-    # inserted text's own indentation doesn't need to match anything);
-    # line numbers are pinned to this exact nixpkgs-pinned wvkbd version.
-    #
-    # Applied highest-original-line-number first: an `a` insertion shifts
-    # every line below it down, so editing top-to-bottom would make each
-    # later sed target the wrong (pre-shift) line number. Doing it in
-    # descending order means every target is still at its original,
-    # unshifted line number when its turn comes.
     postPatch = (old.postPatch or "") + ''
-      # after the -H case, before the -L case (main.c:905-911)
-      sed -i '910a\
-        } else if ((!strcmp(argv[i], "-W")) || (!strcmp(argv[i], "--width"))) {\
-            if (i >= argc - 1) {\
-                usage(argv[0]);\
-                exit(1);\
-            }\
-            surface_width = atoi(argv[++i]);\
-            if (surface_width > 0) {\
-                anchor = ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM;\
-            }' main.c
+      # The panel-width state itself, declared after the `anchor` block ends
+      # (anchored on its last line, the only ANCHOR_RIGHT in the file).
+      substituteInPlace main.c \
+        --replace-fail 'ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT;' 'ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT;
 
-      # the set_size call (main.c:714)
-      sed -i '714s/.*/    zwlr_layer_surface_v1_set_size(layer_surface, surface_width, height);/' main.c
+/* 0 = fill horizontally; --width overrides */
+static uint32_t surface_width = 0;'
 
-      # redimension_keyboard() (main.c:505) hardcodes keyboard.w to the
-      # full-output probe width regardless of what was requested via
-      # set_size. The real layer surface's configure event legitimately
-      # echoes back our requested (narrower) width, so keyboard.w then
-      # never matches the compositor's configure -- main.c's mismatch
-      # check (line 525: `keyboard.w != w`) treats that as "not what we
-      # expected" and loops hide()/show() forever, never reaching
-      # kbd_resize/drawing. Verified live: layer registers at the right
-      # geometry but sits permanently inactive (hyprctl layers: `a: 0`),
+      # -W/--width, spliced in ahead of the existing -L case.
+      substituteInPlace main.c \
+        --replace-fail '} else if (!strcmp(argv[i], "-L")) {' '} else if ((!strcmp(argv[i], "-W")) || (!strcmp(argv[i], "--width"))) {
+            if (i >= argc - 1) {
+                usage(argv[0]);
+                exit(1);
+            }
+            surface_width = atoi(argv[++i]);
+            if (surface_width > 0) {
+                anchor = ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM;
+            }
+        } else if (!strcmp(argv[i], "-L")) {'
+
+      # Request the narrower width from the compositor (upstream hardcodes 0,
+      # meaning "fill the output").
+      substituteInPlace main.c \
+        --replace-fail 'zwlr_layer_surface_v1_set_size(layer_surface, 0, height);' \
+                       'zwlr_layer_surface_v1_set_size(layer_surface, surface_width, height);'
+
+      # redimension_keyboard() hardcodes keyboard.w to the full-output probe
+      # width regardless of what was requested via set_size. The real layer
+      # surface's configure event legitimately echoes back our requested
+      # (narrower) width, so keyboard.w then never matches the compositor's
+      # configure -- main.c's mismatch check (`keyboard.w != w`) treats that
+      # as "not what we expected" and loops hide()/show() forever, never
+      # reaching kbd_resize/drawing. Verified live: layer registers at the
+      # right geometry but sits permanently inactive (hyprctl layers: `a: 0`),
       # nothing ever drawn.
-      sed -i '505s/.*/    keyboard.w = surface_width > 0 ? surface_width : available_width;/' main.c
+      substituteInPlace main.c \
+        --replace-fail '    keyboard.w = available_width;' \
+                       '    keyboard.w = surface_width > 0 ? surface_width : available_width;'
 
-      # after the `anchor` declaration (main.c:62-64)
-      sed -i '64a\
-      static uint32_t surface_width = 0; /* 0 = fill horizontally; --width overrides */' main.c
-
-      # main.c:494 picks the active layer set by aspect ratio, not a fixed
+      # The active layer set is chosen by aspect ratio, not by a fixed
       # default: `keyboard.landscape = available_width > available_height`.
-      # Portrait (width < height) uses layers[] -> Full -> keys_full (line
-      # 237, below). Landscape (width > height, our laptop's normal state)
-      # uses landscape_layers[] -> Landscape -> keys_landscape (line 1153) --
-      # a third, separate array, NOT keys_full_wide (that one maps to the
-      # unused FullWide id and isn't in either default cycle list). Missing
-      # this is exactly why an earlier version of this patch only showed
-      # Super when the panel was rotated vertical.
-      sed -i '237s/.*/  {"Sup", "Sup", 1.0, Mod, Super, .scheme = 1},/' layout.mobintl.h
-      sed -i '1153s/.*/  {"Sup", "Sup", 1.0, Mod, Super, .scheme = 1},/' layout.mobintl.h
+      # Portrait (width < height) uses layers[] -> Full -> keys_full.
+      # Landscape (width > height, our laptop's normal state) uses
+      # landscape_layers[] -> Landscape -> keys_landscape -- a third,
+      # separate array, NOT keys_full_wide (that one maps to the unused
+      # FullWide id and isn't in either default cycle list). Missing this is
+      # exactly why an earlier version of this patch only showed Super when
+      # the panel was rotated vertical.
+      sed -i '/^static struct key keys_full\[\] = {/,/^};/ s/^  {"Cmp", "Cmp", 1\.0, Compose, \.scheme = 1},$/  {"Sup", "Sup", 1.0, Mod, Super, .scheme = 1},/' layout.mobintl.h
+      sed -i '/^static struct key keys_landscape\[\] = {/,/^};/ s/^  {"Cmp", "Cmp", 1\.0, Compose, \.scheme = 1},$/  {"Sup", "Sup", 1.0, Mod, Super, .scheme = 1},/' layout.mobintl.h
+
+      # sed cannot fail on a non-match, so assert the outcome instead --
+      # PER ARRAY, not as a file-wide count. Upstream already ships three
+      # Super keys of its own (on the Special/landscape-special layers), so
+      # a total-occurrence check conflates ours with theirs and reports a
+      # bogus failure. What actually has to hold is local to each array:
+      # the Compose key is gone and exactly one Super key took its place.
+      for _arr in keys_full keys_landscape; do
+        _block=$(sed -n "/^static struct key $_arr\[\] = {/,/^};/p" layout.mobintl.h)
+        _sup=$(printf '%s\n' "$_block" | grep -cF '{"Sup", "Sup", 1.0, Mod, Super, .scheme = 1},') || true
+        _cmp=$(printf '%s\n' "$_block" | grep -cF '{"Cmp", "Cmp", 1.0, Compose, .scheme = 1},') || true
+        if [ -z "$_block" ]; then
+          echo "wvkbd patch: array $_arr[] not found in layout.mobintl.h" >&2
+          exit 1
+        fi
+        if [ "$_sup" != 1 ] || [ "$_cmp" != 0 ]; then
+          echo "wvkbd patch: $_arr[] has $_sup Super / $_cmp Compose keys, expected 1 / 0" >&2
+          echo "  (the array moved, or the Compose entry changed shape upstream)" >&2
+          exit 1
+        fi
+      done
     '';
   });
 in
