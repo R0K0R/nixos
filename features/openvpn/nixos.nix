@@ -10,9 +10,19 @@ in
       `sudo systemctl start openvpn-home`
     '';
 
+    profileSecret = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      example = lib.literalExpression "../../age/openvpn-profile.age";
+      description = ''
+        agenix file holding the .ovpn profile. Decrypts to the path `profile`
+        defaults to, so setting this is normally all a host needs.
+      '';
+    };
+
     profile = lib.mkOption {
       type = lib.types.path;
-      default = "/etc/nixos/secrets/openvpn/profile.ovpn";
+      default = "/run/agenix/openvpn-profile";
       description = ''
         Path to the .ovpn profile, read at runtime from outside the store.
 
@@ -27,6 +37,36 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    /*
+      The profile carries inline credentials, so it is an agenix secret rather
+      than an untracked file under /etc/nixos/secrets that had to be installed
+      by hand on every machine.
+
+      Declared here rather than left to the host: cfg.profile defaults to the
+      /run/agenix path, so the secret and the consumer cannot drift.
+    */
+    age.secrets = lib.mkIf (cfg.profileSecret != null) {
+      openvpn-profile = {
+        file = cfg.profileSecret;
+        mode = "0400";
+        owner = "root";
+        group = "root";
+      };
+    };
+
+    /*
+      Same silent-failure class features/emacs guards against: a declared
+      age.secrets entry on a host without agenix evaluates, builds and
+      switches, leaving openvpn pointing at a file that was never decrypted.
+      The tunnel then fails at connect time rather than at build time.
+    */
+    assertions = [
+      {
+        assertion = cfg.profileSecret == null || config.my.agenix.enable;
+        message = "my.openvpn.profileSecret requires my.agenix.enable";
+      }
+    ];
+
     /*
       Used as an UNDERLAY for tailscale when abroad: DERP relays (tor<->tok)
       are slower than routing through home. tailscaled advertises tun0's

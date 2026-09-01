@@ -41,7 +41,11 @@
     users.r0k0r = {
       primary = true;
       extraGroups = [ "wheel" "networkmanager" "video" "audio" "dialout" ];
-      hashedPasswordFile =  "/etc/nixos/secrets/hashed-password-r0k0r";
+      # Was /etc/nixos/secrets/hashed-password-r0k0r -- an untracked file that
+      # had to exist on the machine before login worked, and in fact did NOT
+      # exist here (mutableUsers = true meant the live shadow entry carried
+      # the password and the missing file went unnoticed).
+      passwordSecret = ../../age/hashed-password-r0k0r.age;
       shell = pkgs.fish;
     };
     upower.enable = true;
@@ -54,7 +58,10 @@
     locale.enable = true;
     firefox.enable = true;
     fcitx.enable = true;
-    openvpn.enable = true;
+    openvpn = {
+      enable = true;
+      profileSecret = ../../age/openvpn-profile.age;
+    };
     waydroid.enable = true;
     session-env.enable = true;
     fish = {

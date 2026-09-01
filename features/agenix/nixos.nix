@@ -26,7 +26,7 @@ in
 
     identityPaths = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "/etc/agenix/identity.txt" ];
+      default = [ "/etc/agenix/identity-ed25519" ];
       description = ''
         Private age identities used to DECRYPT at activation, in order.
 
@@ -35,8 +35,12 @@ in
         Never add it to the repo (the flake is public, and a git flake would
         copy it into the world-readable store).
 
-        Not the usual /etc/ssh/ssh_host_ed25519_key: agenix's default assumes
-        the host runs sshd and therefore HAS host keys.
+        An ed25519 SSH key, but NOT /etc/ssh/ssh_host_ed25519_key: agenix's
+        default assumes the host runs sshd and therefore has host keys.
+        A standalone key from `ssh-keygen` needs no sshd, and buys what a
+        native age key cannot -- `melt` encodes it as a 24-word seed phrase,
+        so the identity is recoverable from words rather than from a file
+        that must reach the machine before anything decrypts.
         galaxybook4-pro360 does not (only victus-15 sets
         services.openssh.enable), so there is nothing to encrypt to. A
         dedicated age identity avoids running an ssh daemon purely to
