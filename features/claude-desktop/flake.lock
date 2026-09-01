@@ -1,0 +1,23 @@
+{
+  "nodes": {
+    "claude-desktop-bin": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-nxaTivY3d18ziV7Wnk3KFsJO0xNAr87WqGgm9yicm7Q=",
+        "type": "file",
+        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.40609.0_amd64.deb"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.40609.0_amd64.deb"
+      }
+    },
+    "root": {
+      "inputs": {
+        "claude-desktop-bin": "claude-desktop-bin"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

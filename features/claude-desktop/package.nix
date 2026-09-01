@@ -61,7 +61,7 @@
 }:
 stdenv.mkDerivation {
   pname = "claude-desktop";
-  version = "1.24012.11";
+  version = "1.40609.0";
 
   inherit src;
 
