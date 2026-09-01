@@ -123,12 +123,39 @@
         yulee = {
           maxJobs = 7;
           speedFactor = 10;
-          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "gccarch-meteorlake" ];
+          # No gccarch-meteorlake -- see victus-15 below. Neither peer is an
+          # Intel machine, and neither is asked to EXECUTE meteorlake code:
+          # buildPlatform.canExecute hostPlatform is false here, so build-time
+          # tools come from the untuned pkgsBuildBuild set. A peer only ever
+          # compiles meteorlake code, which any x86_64 can do.
+          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" ];
         };
         victus-15 = {
           maxJobs = 5;
           speedFactor = 4;
-          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "gccarch-meteorlake" ];
+          /*
+            NO gccarch-meteorlake, on either peer, and the reason is worth
+            stating because the feature LOOKS like it should be here.
+
+            Neither peer is Intel: yulee is Zen 5, this one is a Ryzen 5 5600H
+            (Zen 3) missing avxvnni, gfni, movdiri and movdir64b outright. But
+            advertising the feature would not be a white lie about hardware --
+            it would be claiming a capability nothing in this setup needs.
+
+            buildPlatform.canExecute hostPlatform is FALSE here: build and host
+            share a config string but differ in gcc.arch, and nixpkgs treats
+            that as a real cross build. Build-time tools therefore come from
+            the untuned pkgsBuildBuild set and run anywhere. A peer only ever
+            COMPILES meteorlake code, never runs it, and any x86_64 can do
+            that.
+
+            When a build does run tuned code on a peer -- rusty-v8's mksnapshot
+            did, and SIGILLed -- that is a defect in the package's own build
+            system smuggling host flags into a build-time tool, not a missing
+            builder capability. Fix it there (qtbase's -mwaitpkg strip is the
+            precedent), rather than requiring every peer to be an Intel CPU.
+          */
+          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" ];
         };
       };
     };
