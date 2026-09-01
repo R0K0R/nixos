@@ -36,6 +36,19 @@ in
       environment.systemPackages = [ pkgs.wl-clipboard ];
     })
 
+    /*
+      android-tools travels with autoAdb, not with waydroid generally.
+
+      Flipping auto_adb in waydroid.cfg makes the container expose adb, but
+      nothing on the host could talk to it -- `adb` was not on PATH at all,
+      so the setting was only half a feature. Sideloading an APK
+      (`adb connect <waydroid-ip>:5555 && adb install foo.apk`) is the whole
+      reason to enable it, since a MAINLINE image has no Play Store.
+    */
+    (lib.mkIf (cfg.enable && cfg.autoAdb) {
+      environment.systemPackages = [ pkgs.android-tools ];
+    })
+
     (lib.mkIf (cfg.enable && cfg.autoAdb) {
 
       system.activationScripts.waydroid-auto-adb = lib.mkAfter ''
