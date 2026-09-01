@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   cfg = config.my.network;
@@ -43,5 +43,25 @@ in
       package, so features/desktop-apps no longer carries kdeconnect-kde.
     */
     programs.kdeconnect.enable = cfg.kdeconnect.enable;
+
+    /*
+      playerctl travels with KDE Connect, not just with features/media.
+
+      The MPRIS plugin is the reason: KDE Connect both consumes local players
+      and PUBLISHES remote ones onto this session bus, as
+      org.mpris.MediaPlayer2.kdeconnect.mpris_* -- the phone's player and, with
+      Waydroid paired to itself, Waydroid's. Those are ordinary MPRIS names, so
+      playerctl drives them exactly like a local mpv, from a script or a TTY,
+      with no compositor binding and no shell running.
+
+      Deliberately also listed in features/media/packages.nix. A feature is
+      meant to be self-contained -- someone enabling kdeconnect and nothing
+      else should still get a working MPRIS CLI -- and duplicate entries cost
+      nothing, since buildEnv dedups identical derivations.
+
+      Gated on kdeconnect specifically rather than on my.network.enable: a
+      headless host wants NetworkManager without an MPRIS client.
+    */
+    environment.systemPackages = lib.mkIf cfg.kdeconnect.enable [ pkgs.playerctl ];
   };
 }

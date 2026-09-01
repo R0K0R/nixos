@@ -695,6 +695,24 @@ in
       -- Mute/lid: locked (fires once already locked) but not repeating.
       hl.bind("XF86AudioMute", hl.dsp.exec_cmd("dms ipc call audio mute"), { locked = true })
       hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("dms ipc call audio micmute"), { locked = true })
+
+      -- Transport keys. Volume and mute were bound; play/next/prev never were,
+      -- so anything sending them did nothing at all -- including Galaxy Buds
+      -- taps, which arrive over Bluetooth AVRCP as ordinary XF86Audio* key
+      -- events, not as some separate headset channel.
+      --
+      -- locked = true matters more here than for volume: controlling playback
+      -- from the buds with the laptop closed is the whole point.
+      --
+      -- The target need not be a local player. DMS drives whatever MPRIS
+      -- players exist, and KDE Connect publishes the phone's and Waydroid's
+      -- as org.mpris.MediaPlayer2.kdeconnect.mpris_* on this session bus, so
+      -- these keys reach Melon in Waydroid the same way they reach mpv.
+      hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("dms ipc call mpris playPause"), { locked = true })
+      hl.bind("XF86AudioPause", hl.dsp.exec_cmd("dms ipc call mpris pause"), { locked = true })
+      hl.bind("XF86AudioStop", hl.dsp.exec_cmd("dms ipc call mpris stop"), { locked = true })
+      hl.bind("XF86AudioNext", hl.dsp.exec_cmd("dms ipc call mpris next"), { locked = true })
+      hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("dms ipc call mpris previous"), { locked = true })
       hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("${lidClose}"), { locked = true })
       hl.bind("switch:off:Lid Switch", hl.dsp.exec_cmd("${lidOpen}"), { locked = true })
     '';

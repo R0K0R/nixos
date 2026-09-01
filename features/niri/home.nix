@@ -135,6 +135,40 @@
             allow-when-locked = true;
             action = dms-ipc "audio" "micmute";
           };
+
+          /*
+            Transport keys. Volume and mute were bound; play/next/prev never
+            were, so anything emitting them did nothing -- including Galaxy
+            Buds taps, which arrive over Bluetooth AVRCP as ordinary XF86Audio*
+            key events rather than on some separate headset channel.
+
+            allow-when-locked matters more here than for volume: controlling
+            playback from the buds with the lid shut is the point.
+
+            The target need not be a local player. DMS drives whatever MPRIS
+            players exist, and KDE Connect publishes the phone's and Waydroid's
+            as org.mpris.MediaPlayer2.kdeconnect.mpris_* on this session bus.
+          */
+          "XF86AudioPlay" = {
+            allow-when-locked = true;
+            action = dms-ipc "mpris" "playPause";
+          };
+          "XF86AudioPause" = {
+            allow-when-locked = true;
+            action = dms-ipc "mpris" "pause";
+          };
+          "XF86AudioStop" = {
+            allow-when-locked = true;
+            action = dms-ipc "mpris" "stop";
+          };
+          "XF86AudioNext" = {
+            allow-when-locked = true;
+            action = dms-ipc "mpris" "next";
+          };
+          "XF86AudioPrev" = {
+            allow-when-locked = true;
+            action = dms-ipc "mpris" "previous";
+          };
           "XF86MonBrightnessUp" = {
             allow-when-locked = true;
             action = dms-ipc "brightness" "increment" "5" "";
