@@ -2,27 +2,35 @@
   description = "Haku Space: the Waybar/Rofi/SwayNC desktop shell and its script suite";
 
   /*
-    POINTS AT A LOCAL CHECKOUT, and must not stay that way.
+    A FORK, PENDING UPSTREAM.
 
     The declarative half of hakuspace -- packages.hakuspace and
-    homeModules.hakuspace -- does not exist upstream yet. It was written for
-    this feature and lives on the `pr/nix-home-module` branch of
-    ~/hakuspace-contrib; upstream's own Nix support installs packages and
-    system services but has never placed a dotfile, so there is nothing to
-    consume until that lands.
+    homeModules.hakuspace -- does not exist upstream yet. Its own Nix support
+    installs packages and system services but has never placed a dotfile,
+    because those are copied by install.sh. So the package and the
+    home-manager module were written for this feature and live on
+    `pr/nix-home-module` of the fork, to be offered back.
 
-    Swap this for `github:hakuimaku/hakuspace` once the PR is merged, or for
-    the fork's URL to unblock a rebuild from another machine. An absolute
-    path input is NOT reproducible: it locks with no narHash, so the flake
-    evaluates differently -- or not at all -- anywhere that directory is
-    missing. That is acceptable for a branch under review and for nothing
-    else.
+    Point this at `github:hakuimaku/hakuspace` once that PR lands. Not before:
+    the branch is what carries the module, and following the upstream default
+    branch would silently lose it.
+
+    A BRANCH REF, NOT A LOCAL PATH, and the difference matters. `path:` inputs
+    lock with no narHash and no revision, so the flake evaluates differently --
+    or not at all -- on any machine where that directory is missing, which is
+    exactly the property a lock file exists to prevent. This locks to a commit
+    like every other input here.
+
+    nixpkgs is the usual always-followed placeholder: the root flake points it
+    at the tuned fork, so the module builds against the same package set as
+    everything else rather than dragging in the nixos-26.05 the upstream flake
+    pins for its own standalone use.
   */
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     hakuspace = {
-      url = "path:/home/r0k0r/hakuspace-contrib";
+      url = "github:R0K0R/hakuspace/pr/nix-home-module";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };

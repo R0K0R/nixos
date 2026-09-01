@@ -441,13 +441,17 @@
       },
       "locked": {
         "lastModified": 1788288406,
-        "narHash": "sha256-yuk9qAUW1dEfdFofjSMzgBz9NXTYQlRR/HaKEe3wiGI=",
-        "path": "/home/r0k0r/hakuspace-contrib",
-        "type": "path"
+        "narHash": "sha256-6nwGQKpacM3L2QPFIaLOO04iGVTUsBYm6spsxE9IgVg=",
+        "owner": "R0K0R",
+        "repo": "hakuspace",
+        "rev": "8b8e67182aa4c69401b12b8f7e6096f12d034703",
+        "type": "github"
       },
       "original": {
-        "path": "/home/r0k0r/hakuspace-contrib",
-        "type": "path"
+        "owner": "R0K0R",
+        "ref": "pr/nix-home-module",
+        "repo": "hakuspace",
+        "type": "github"
       }
     },
     "home-manager": {
