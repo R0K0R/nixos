@@ -65,117 +65,25 @@
       # niri-flake emits exactly these binds — defaults live in ./default-binds.nix.
       binds = lib.mergeAttrs niriBindsBase (
         with config.lib.niri.actions;
-        let
-          dms-ipc = spawn "dms" "ipc";
-        in
         {
-          /* Override same combo as DMS `enableKeybinds` hotkey-overlay title. */
-          "Mod+Space" = lib.mkForce {
-            action = spawn "dms" "ipc" "spotlight" "toggle";
-            hotkey-overlay.title = "Launcher";
-          };
+          /*
+            SHELL BINDS ARE NOT HERE. Everything that toggled a DMS surface --
+            spotlight, settings, notifications, notepad, clipboard, powermenu,
+            processlist, night mode, lock, the audio/brightness/transport keys
+            -- was written out by hand in this file, because
+            programs.dank-material-shell.niri.enableKeybinds was switched off to
+            keep one source of truth across both compositors.
 
+            That made this feature unusable without that shell. They now live in
+            features/dms/compositor.nix and are contributed into
+            programs.niri.settings.binds, which is an attrsOf and merges by key,
+            so the generated KDL is unchanged.
+
+            Mod+Space and Mod+I are among them, including their mkForce over
+            niri-flake's defaults.
+          */
           "Mod+Comma" = lib.mkForce {
             action = { consume-window-into-column = [ ]; };
-          };
-
-          "Mod+I" = lib.mkForce {
-            action = spawn "dms" "ipc" "settings" "toggle";
-            hotkey-overlay.title = "Settings";
-          };
-
-          /*
-            Below: replicated from DMS's distro/nix/niri.nix `enableKeybinds` block
-            (now disabled in features/dms/home.nix so this file is the
-            single source of truth for keybinds).
-          */
-          "Mod+N" = {
-            action = dms-ipc "notifications" "toggle";
-            hotkey-overlay.title = "Toggle Notification Center";
-          };
-          "Mod+P" = {
-            action = dms-ipc "notepad" "toggle";
-            hotkey-overlay.title = "Toggle Notepad";
-          };
-          "Mod+V" = {
-            action = dms-ipc "clipboard" "toggle";
-            hotkey-overlay.title = "Toggle Clipboard Manager";
-          };
-          "Mod+X" = {
-            action = dms-ipc "powermenu" "toggle";
-            hotkey-overlay.title = "Toggle Power Menu";
-          };
-          "Mod+M" = {
-            action = dms-ipc "processlist" "toggle";
-            hotkey-overlay.title = "Toggle Process List";
-          };
-          "Mod+Alt+N" = {
-            allow-when-locked = true;
-            action = dms-ipc "night" "toggle";
-            hotkey-overlay.title = "Toggle Night Mode";
-          };
-          "Super+Alt+L" = {
-            allow-when-locked = true;
-            action = dms-ipc "lock" "lock";
-            hotkey-overlay.title = "Toggle Lock Screen";
-          };
-          "XF86AudioRaiseVolume" = {
-            allow-when-locked = true;
-            action = dms-ipc "audio" "increment" "3";
-          };
-          "XF86AudioLowerVolume" = {
-            allow-when-locked = true;
-            action = dms-ipc "audio" "decrement" "3";
-          };
-          "XF86AudioMute" = {
-            allow-when-locked = true;
-            action = dms-ipc "audio" "mute";
-          };
-          "XF86AudioMicMute" = {
-            allow-when-locked = true;
-            action = dms-ipc "audio" "micmute";
-          };
-
-          /*
-            Transport keys. Volume and mute were bound; play/next/prev never
-            were, so anything emitting them did nothing -- including Galaxy
-            Buds taps, which arrive over Bluetooth AVRCP as ordinary XF86Audio*
-            key events rather than on some separate headset channel.
-
-            allow-when-locked matters more here than for volume: controlling
-            playback from the buds with the lid shut is the point.
-
-            The target need not be a local player. DMS drives whatever MPRIS
-            players exist, and KDE Connect publishes the phone's and Waydroid's
-            as org.mpris.MediaPlayer2.kdeconnect.mpris_* on this session bus.
-          */
-          "XF86AudioPlay" = {
-            allow-when-locked = true;
-            action = dms-ipc "mpris" "playPause";
-          };
-          "XF86AudioPause" = {
-            allow-when-locked = true;
-            action = dms-ipc "mpris" "pause";
-          };
-          "XF86AudioStop" = {
-            allow-when-locked = true;
-            action = dms-ipc "mpris" "stop";
-          };
-          "XF86AudioNext" = {
-            allow-when-locked = true;
-            action = dms-ipc "mpris" "next";
-          };
-          "XF86AudioPrev" = {
-            allow-when-locked = true;
-            action = dms-ipc "mpris" "previous";
-          };
-          "XF86MonBrightnessUp" = {
-            allow-when-locked = true;
-            action = dms-ipc "brightness" "increment" "5" "";
-          };
-          "XF86MonBrightnessDown" = {
-            allow-when-locked = true;
-            action = dms-ipc "brightness" "decrement" "5" "";
           };
 
           "Mod+Return" = {
@@ -192,11 +100,6 @@
           "Mod+e" = {
             action = spawn "emacsclient" "-c";
             hotkey-overlay.title = "Editor";
-          };
-
-          "Mod+a" = {
-            action = spawn "dms" "ipc" "call" "plugins" "toggle" "aiAssistant";
-            hotkey-overlay.title = "AI Assistant";
           };
 
           # Compositor-level IME toggle: works in all apps including Firefox where

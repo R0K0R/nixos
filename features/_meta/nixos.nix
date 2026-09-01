@@ -12,6 +12,23 @@ let
       map (r: { inherit name r; enabledBy = f.enabledBy; }) f.requires
     ) decl
   );
+
+  /*
+    Role -> the enabled features claiming it. Built by folding rather than by
+    mapAttrs so a role can collect claimants from features that know nothing
+    about each other, which is the whole point of naming a role instead of
+    naming rivals.
+  */
+  roleClaims = lib.foldl' (
+    acc: name:
+    let
+      f = decl.${name};
+    in
+    if !f.enabledBy then
+      acc
+    else
+      lib.foldl' (a: role: a // { ${role} = (a.${role} or [ ]) ++ [ name ]; }) acc f.provides
+  ) { } (lib.attrNames decl);
 in
 {
   /*
@@ -52,6 +69,35 @@ in
             default = false;
             description = "This feature's own enable flag, so the assertion only fires when it is on.";
           };
+
+          provides = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            example = [ "shell" ];
+            description = ''
+              Roles this feature fills. At most one ENABLED feature may fill a
+              given role; the assertion below names every claimant when two do.
+
+              A ROLE, NOT A LIST OF RIVALS. The obvious alternative is a
+              pairwise `conflicts = [ "waybar" ]`, and it was rejected because
+              it does not scale in the direction this repo grows: adding a
+              third shell means editing the two that already exist, and
+              forgetting one half leaves a conflict that is declared in one
+              direction only. Naming the role instead means a new shell
+              declares `provides = [ "shell" ]` and is mutually exclusive with
+              everything else claiming it, with no edit anywhere else.
+
+              It also says something true about the feature on its own, which
+              `conflicts` does not: a feature listing rivals is only meaningful
+              relative to a particular set of siblings, so it stops being
+              giftable the moment it names one that the recipient does not
+              have.
+
+              The role is the interface, so the name should describe what the
+              slot IS -- "shell", "compositor", "greeter" -- not what happens
+              to occupy it.
+            '';
+          };
         };
       }
     );
@@ -62,12 +108,28 @@ in
     '';
   };
 
-  config.assertions = map (req: {
-    assertion = !req.enabledBy || enabled req.r;
-    message =
-      if !(present req.r) then
-        "feature '${req.name}' requires '${req.r}', which is not present in features/"
-      else
-        "my.${req.name}.enable requires my.${req.r}.enable";
-  }) requirements;
+  config.assertions =
+    map (req: {
+      assertion = !req.enabledBy || enabled req.r;
+      message =
+        if !(present req.r) then
+          "feature '${req.name}' requires '${req.r}', which is not present in features/"
+        else
+          "my.${req.name}.enable requires my.${req.r}.enable";
+    }) requirements
+
+    /*
+      One claimant per role. Unlike a missing dependency, a DOUBLE claim does
+      not fail at evaluation on its own -- two shells both configure the
+      compositor, both start their own bar, and the result is a session with
+      two of everything and no error anywhere. Exactly the silent-breakage
+      class the requires assertions exist for, in the opposite direction.
+    */
+    ++ lib.mapAttrsToList (role: claimants: {
+      assertion = lib.length claimants <= 1;
+      message =
+        "at most one feature may provide the '${role}' role, but these are all enabled: "
+        + lib.concatStringsSep ", " claimants
+        + ". Disable all but one.";
+    }) roleClaims;
 }

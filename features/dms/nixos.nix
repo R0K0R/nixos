@@ -83,6 +83,10 @@ in
         # The shell reads my.desktop.compositor for its workspace and bar
         # integration; with no compositor selected it has nothing to attach to.
         requires = [ "compositor" ];
+        # Two shells would both configure the compositor, both start a bar, and
+        # produce a session with two of everything and no error. See the role
+        # note in features/_meta.
+        provides = [ "shell" ];
         enabledBy = cfg.enable;
       };
 
@@ -93,6 +97,20 @@ in
         enabledBy = cfg.greeter.enable;
       };
     }
+
+    /*
+      Swap the bar when the screen rotates.
+
+      Through the compositor's hook list rather than by features/hyprland
+      calling this script directly, which is what it used to do. Rotation is
+      not a keypress -- it arrives as a batch of legacy `hyprctl keyword`
+      commands that the shim in features/hyprland rewrites -- so it is the one
+      piece of compositor integration home-manager's option merging cannot
+      express, and needs a declared extension point instead.
+    */
+    (lib.mkIf (cfg.enable && config.my.desktop.compositor == "hyprland") {
+      my.hyprland.rotationHooks = [ (import ./bar-orientation.nix { inherit pkgs; }) ];
+    })
 
     (lib.mkIf cfg.greeter.enable {
     programs.dms-greeter = {

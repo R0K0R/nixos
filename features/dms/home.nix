@@ -23,6 +23,10 @@ in
     ./third-party.nix
     ./session-lock-hooks.nix
     ./plugins.nix
+    # Keybinds, layer rules and the bar-orientation unit that used to live in
+    # features/hyprland and features/niri. Contributed to whichever compositor
+    # is selected, so the compositor features no longer name this shell.
+    ./compositor.nix
   ];
 
   config = lib.mkIf (osConfig.my.dms.enable && inScope) {
