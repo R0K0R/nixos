@@ -133,6 +133,13 @@ lib.mkIf osConfig.my.dms.enable {
       src = ./plugins/screenshot;
     };
 
+    # Replaces the stock workspaceSwitcher widget -- see settings.nix, where
+    # "workspaceSwitcher" is dropped from leftWidgets in favour of this.
+    pagedWorkspaces = {
+      enable = true;
+      src = ./plugins/workspaces;
+    };
+
     noSleep = {
       enable = true;
       src = ./plugins/no-sleep;
