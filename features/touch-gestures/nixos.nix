@@ -88,8 +88,15 @@ in
         # (hyprctl's own hint: "dispatch in lua is a shorthand for
         # hl.dispatch(...)"). The table has one field, so no commas -- which
         # matters, commas would split this lisgd -g spec.
-        "${toString cfg.fingers},DU,*,*,hyprctl dispatch 'hl.dsp.focus({ workspace = \"e+1\" })'"
-        "${toString cfg.fingers},UD,*,*,hyprctl dispatch 'hl.dsp.focus({ workspace = \"e-1\" })'"
+        # RELATIVE, NOT e-RELATIVE. "e+1"/"e-1" walk only workspaces that
+        # already EXIST, so swiping up from workspace 10 with nothing above it
+        # wrapped back to 1 -- measured. That put the swipes at odds with the
+        # keybinds and made every page past the first unreachable by touch; see
+        # the paged strip in features/dms/plugins/workspaces. Plain "+1"/"-1"
+        # step into empty workspaces, creating them on demand, and "-1" clamps
+        # at workspace 1 rather than running negative.
+        "${toString cfg.fingers},DU,*,*,hyprctl dispatch 'hl.dsp.focus({ workspace = \"+1\" })'"
+        "${toString cfg.fingers},UD,*,*,hyprctl dispatch 'hl.dsp.focus({ workspace = \"-1\" })'"
         # Horizontal swipes walk the scrolling layout's tape, same dispatcher
         # as the Mod+H/L keybinds (features/hyprland/home.nix) -- column data
         # structure, not geometry, so it works on maximized windows too.

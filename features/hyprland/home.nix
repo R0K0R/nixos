@@ -22,6 +22,37 @@ let
   '';
 
   /*
+    Swap the bar for the screen's orientation.
+
+    Rotating takes the bar from 1920px to 1200 and DMS's three sections have no
+    width negotiation between them, so past a certain total they overlap --
+    see the barConfigs comment in features/dms/settings.nix for why padding
+    cannot recover it and why the two other runtime routes (widget hide,
+    settings set barConfigs) do not work.
+
+    Per-bar visibility does work, so both bars are declared and exactly one is
+    revealed. Reveal-then-hide, in that order, so there is never a frame with
+    no bar at all.
+
+    Transforms 1/3/5/7 are the 90 and 270 degree rotations, flipped variants
+    included; everything else is landscape.
+  */
+  barOrientation = pkgs.writeShellScript "dms-bar-orientation" ''
+    x="''${1:-}"
+    if [ -z "$x" ]; then
+      x=$(${pkgs.hyprland}/bin/hyprctl monitors -j 2>/dev/null | ${pkgs.jq}/bin/jq -r '.[0].transform // 0')
+    fi
+    case "$x" in
+      1|3|5|7) want=compact; other=default ;;
+      *)       want=default; other=compact ;;
+    esac
+    # Best-effort: DMS may not be up yet at session start, and a missing bar is
+    # not worth failing a rotation over.
+    dms ipc call bar reveal id "$want" >/dev/null 2>&1 || true
+    dms ipc call bar hide id "$other" >/dev/null 2>&1 || true
+  '';
+
+  /*
     iio-hyprland speaks legacy hyprctl -- a four-command keyword batch per
     rotation (monitor transform, touchdevice transform, tablet transform,
     workspace orientation). Under configType = "lua" the keyword parser is
@@ -49,6 +80,9 @@ let
           # config defaults (0) and clears the workspace orientation rule
           # -- exactly the landscape state wanted, and the same net effect
           # the pre-Lua reload had.
+          # Back to landscape. Swap BEFORE exec -- exec replaces this
+          # process, so anything after it never runs.
+          ${barOrientation} "$xform"
           exec "$real" reload
         fi
         # configType = "lua" killed `hyprctl keyword` outright ("keyword
@@ -67,12 +101,46 @@ let
         #     the original partial-rule bug this shim was born for
         #   - input transforms are plain config values
         #     (input:touchdevice:transform, input:tablet:transform)
-        #   - the orientation keyword maps to hl.workspace_rule's
-        #     layout_opts table
+        #   - the orientation keyword is NOT forwarded as-is; it names a
+        #     master-layout option this layout ignores, so it is remapped to
+        #     scrolling:direction below
         lua="hl.monitor({ output = \"$mon\", transform = $xform }) hl.config({ input = { touchdevice = { transform = $xform }, tablet = { transform = $xform } } })"
-        if [[ "$2" =~ workspace\ m\[([^]]+)\],\ layoutopt:orientation:([a-z]+) ]]; then
-          lua="$lua hl.workspace_rule({ workspace = \"m[''${BASH_REMATCH[1]}]\", layout_opts = { orientation = \"''${BASH_REMATCH[2]}\" } })"
-        fi
+        # THE LAYOUT AXIS. iio-hyprland's fourth command is
+        #
+        #   keyword workspace m[<ID>], layoutopt:orientation:<left|top|right|bottom>
+        #
+        # which is a MASTER-layout option. general:layout here is "scrolling",
+        # and that algorithm never reads `orientation` -- it reads `direction`:
+        #
+        #   if (WORKSPACERULE->m_layoutopts.contains("direction"))
+        #     -- src/layout/algorithm/tiled/scrolling/ScrollingAlgorithm.cpp:1942
+        #
+        # So the orientation this shim used to forward was translated
+        # faithfully and then silently discarded, which is why rotating left
+        # windows side by side instead of stacking them.
+        #
+        # Derived from $xform rather than from iio's orientation word: the
+        # transform is unambiguous, and it keeps the mapping readable as
+        # "which way is the long axis now".
+        #
+        #   0 normal    -> right  tape runs across the wide axis
+        #   1 90 deg    -> down   long axis is now vertical, so stack
+        #   2 180 deg   -> left   horizontal again, reversed
+        #   3 270 deg   -> up     vertical again, reversed
+        #
+        # Set globally rather than per workspace so it applies to workspaces
+        # that do not exist yet. Returning to landscape needs no counterpart:
+        # the transform-0 branch above execs `reload`, which drops back to the
+        # configured default.
+        case "$xform" in
+          1) _dir=down ;;
+          2) _dir=left ;;
+          3) _dir=up ;;
+          *) _dir=right ;;
+        esac
+        lua="$lua hl.config({ scrolling = { direction = \"$_dir\" } })"
+        # Same reason: swap before exec, not after.
+        ${barOrientation} "$xform"
         exec "$real" eval "$lua"
       fi
     fi
@@ -129,20 +197,102 @@ let
     fi
   '';
 
+  /*
+    Page-relative workspace navigation, the keybind half of the paged strip in
+    features/dms/plugins/workspaces.
+
+    Slot N means "the Nth workspace of the group of ten I am currently in", not
+    workspace N. The page is derived from the LIVE focused workspace on every
+    press rather than tracked in a variable, so the bar plugin and the keybinds
+    cannot disagree -- they run the same arithmetic against the same source and
+    neither writes state the other has to trust.
+
+    Legacy `hyprctl dispatch workspace N` does NOT work here: configType = "lua"
+    routes dispatch through hl.dispatch(), and the bare form dies with
+    "')' expected near '2'". The lua dispatcher form is the only one that
+    parses.
+  */
+  wsSlot = pkgs.writeShellScript "hypr-ws-slot" ''
+    slot="$1"
+    active=$(${pkgs.hyprland}/bin/hyprctl activeworkspace -j | ${pkgs.jq}/bin/jq -r '.id')
+    # Workspaces are 1-based, so bias before dividing: 1..10 -> page 0.
+    page=$(( (active - 1) / 10 ))
+    target=$(( page * 10 + slot ))
+    if [ "$2" = move ]; then
+      ${pkgs.hyprland}/bin/hyprctl dispatch "hl.dsp.window.move({ workspace = $target, follow = true })"
+    else
+      ${pkgs.hyprland}/bin/hyprctl dispatch "hl.dsp.focus({ workspace = $target })"
+    fi
+  '';
+
 in
 {
   /*
     DMS's screenshot IPC (`dms ipc call niri screenshot*`) is documented as niri-only
-    (requires niri 25.11+); no hyprland equivalent exists. Use grimblast, the standard
-    Hyprland screen/window/area capture wrapper around grim+slurp+hyprctl, instead.
+    (requires niri 25.11+); no hyprland equivalent exists, so this needs a standalone
+    grim+slurp+hyprctl wrapper.
+
+    HYPRSHOT RATHER THAN GRIMBLAST, because grimblast's area mode is unusable by
+    touch. Both wrap the same slurp, but they call it differently:
+
+      grimblast  echo "$rects" | slurp -o ... -f '%x,%y %wx%h|%l'   snap-to-window
+      hyprshot   slurp -d                                          free-form
+
+    grimblast's `area` has no free-form path at all -- it always feeds slurp the
+    window rectangles on stdin and passes -o, i.e. selection is constrained to
+    snapping onto an existing window. Measured on this machine: bare `slurp`
+    accepts finger input, grimblast's area mode does not.
+
+    S PEN DOES NOT WORK IN EITHER, and that is not what this change fixes.
+    Tested against slurp directly and against hyprshot: touch works, stylus does
+    not, so the gap is below both wrappers -- either slurp's zwp_tablet_v2
+    handling or Hyprland's routing of tablet events to a layer surface. Ruled
+    out rather than assumed: slurp 1.5.0 does carry the tablet protocol symbols,
+    so it is not simply built without support. Accepted as a limitation: a
+    finger is always present, the pen is not.
+
+    NOTE a real behaviour change on CTRL+Print. `grimblast copy screen` captured
+    ALL monitors into one image; hyprshot has no such mode, and `-m output`
+    captures the focused output only. Nothing else moves.
   */
   home.packages = lib.mkIf (osConfig.my.desktop.compositor == "hyprland") [
-    pkgs.grimblast
+    pkgs.hyprshot
     iioHyprlandWithTransformFix
     # iio-hyprland shells out to `hyprctl -j monitors | jq` internally; without
     # jq in PATH it fails immediately and aborts uncleanly (dbus_disconnect
     # crash) instead of just erroring on the missing monitor lookup.
   ];
+
+  /*
+    Pick the right bar once at session start.
+
+    The rotation shim only fires when iio-hyprland reports a CHANGE, so logging
+    in already rotated -- or DMS restarting while rotated -- would otherwise
+    leave the landscape bar on a 1200px screen, which is the overlapping state
+    this whole mechanism exists to avoid.
+
+    After graphical-session.target rather than with it: the bar has to exist
+    before it can be revealed or hidden. The script is best-effort anyway, and
+    a rotation re-runs it, so losing the race costs nothing permanent.
+  */
+  systemd.user.services.dms-bar-orientation =
+    lib.mkIf (osConfig.my.desktop.compositor == "hyprland") {
+      Unit = {
+        Description = "Select the DMS bar matching the screen orientation";
+        PartOf = [ "graphical-session.target" ];
+        After = [ "graphical-session.target" ];
+      };
+      Install.WantedBy = [ "graphical-session.target" ];
+      Service = {
+        Type = "oneshot";
+        # DMS registers its IPC a moment after the session target is reached.
+        # No longer a race for correctness -- the compact bar starts hidden
+        # (visible = false in settings.nix), so landscape is right from the
+        # first frame and this only has to catch the already-rotated case.
+        ExecStartPre = "${pkgs.coreutils}/bin/sleep 5";
+        ExecStart = toString barOrientation;
+      };
+    };
 
   wayland.windowManager.hyprland = {
     enable = osConfig.my.desktop.compositor == "hyprland";
@@ -492,6 +642,10 @@ in
       -- straight back to 0.5 with no state to clear first.
       hl.window_rule({ match = { class = "^(emacs)$" }, scrolling_width = 1.0 })
       hl.window_rule({ match = { class = "^(org.gnu.emacs)$" }, scrolling_width = 1.0 })
+      -- Matplotlib floating
+      hl.window_rule({ match = { class = "^(Matplotlib)$" }, float = true })
+      -- Waydroid size lock
+      hl.window_rule({ match = { class = "^(Waydroid)$" }, scrolling_width = 1.0 })
       -- Glassmorphism: translucent KDE apps; backdrop blur applies to
       -- translucent windows automatically (decoration.blur). kdeconnect
       -- covers all its windows (.app, .sms, -indicator, ...).
@@ -628,12 +782,22 @@ in
       -- Workspace cycle among EXISTING workspaces ("e±1"), same string
       -- syntax as the legacy `workspace, e-1` dispatcher -- hl.dsp.focus's
       -- workspace-selector overload hands it to the identical parser.
-      hl.bind(mod .. " + J", hl.dsp.focus({ workspace = "e-1" }))
-      hl.bind(mod .. " + K", hl.dsp.focus({ workspace = "e+1" }))
-      hl.bind(mod .. " + Page_Down", hl.dsp.focus({ workspace = "e-1" }))
-      hl.bind(mod .. " + Page_Up", hl.dsp.focus({ workspace = "e+1" }))
-      hl.bind(mod .. " + CTRL + U", hl.dsp.window.move({ workspace = "e-1", follow = true }))
-      hl.bind(mod .. " + CTRL + I", hl.dsp.window.move({ workspace = "e+1", follow = true }))
+      -- RELATIVE, NOT e-RELATIVE. These were "e-1"/"e+1", which walk only
+      -- workspaces that already EXIST -- so from workspace 10 with nothing
+      -- above it, e+1 wrapped back to 1 (measured, not assumed). That made
+      -- every page past the first unreachable, and paging is the whole point
+      -- of the strip in features/dms/plugins/workspaces.
+      --
+      -- Plain "+1"/"-1" step into empty workspaces, creating them on demand:
+      -- 10 -> 11 -> 12, which rolls the page over as intended. "-1" clamps at
+      -- workspace 1 rather than running negative, so the low end needs no
+      -- special case.
+      hl.bind(mod .. " + K", hl.dsp.focus({ workspace = "-1" }))
+      hl.bind(mod .. " + J", hl.dsp.focus({ workspace = "+1" }))
+      hl.bind(mod .. " + Page_Down", hl.dsp.focus({ workspace = "-1" }))
+      hl.bind(mod .. " + Page_Up", hl.dsp.focus({ workspace = "+1" }))
+      hl.bind(mod .. " + CTRL + U", hl.dsp.window.move({ workspace = "-1", follow = true }))
+      hl.bind(mod .. " + CTRL + I", hl.dsp.window.move({ workspace = "+1", follow = true }))
 
       -- Move window (direction)
       hl.bind(mod .. " + CTRL + left", hl.dsp.window.move({ direction = "left" }))
@@ -644,8 +808,8 @@ in
       hl.bind(mod .. " + CTRL + J", hl.dsp.window.move({ direction = "down" }))
       hl.bind(mod .. " + CTRL + K", hl.dsp.window.move({ direction = "up" }))
       hl.bind(mod .. " + CTRL + L", hl.dsp.window.move({ direction = "right" }))
-      hl.bind(mod .. " + CTRL + Page_Down", hl.dsp.window.move({ workspace = "e-1", follow = true }))
-      hl.bind(mod .. " + CTRL + Page_Up", hl.dsp.window.move({ workspace = "e+1", follow = true }))
+      hl.bind(mod .. " + CTRL + Page_Down", hl.dsp.window.move({ workspace = "-1", follow = true }))
+      hl.bind(mod .. " + CTRL + Page_Up", hl.dsp.window.move({ workspace = "+1", follow = true }))
 
       -- Resize (niri's Mod+Minus/Equal, Mod+Shift+Minus/Equal). BEHAVIOR
       -- CHANGE from the pre-Lua config: legacy `resizeactive` took
@@ -674,16 +838,69 @@ in
       hl.bind(mod .. " + SHIFT + CTRL + K", hl.dsp.window.move({ monitor = "u" }))
       hl.bind(mod .. " + SHIFT + CTRL + L", hl.dsp.window.move({ monitor = "r" }))
 
-      -- Workspaces 1-9
+      -- Workspaces: PAGE-RELATIVE, not absolute.
+      --
+      -- Super+N goes to slot N of the group of ten containing the focused
+      -- workspace, so on workspace 15 Super+1 means 11. The digits keep meaning
+      -- "first slot of what I am looking at" instead of an id you have to
+      -- remember. features/dms/plugins/workspaces draws the matching strip and
+      -- derives its page the same way, from the live focused workspace, so the
+      -- two cannot drift.
+      --
+      -- The persistent workspace_rule calls that used to be here are GONE. They
+      -- existed to force the DankBar switcher to render a fixed 1-9; the plugin
+      -- draws ten slots whether or not the workspaces exist, so keeping them
+      -- would only pin page 0 into existence while every other page stayed
+      -- ephemeral -- an asymmetry with no upside.
       for i = 1, 9 do
-        hl.bind(mod .. " + " .. tostring(i), hl.dsp.focus({ workspace = i }))
-        hl.bind(mod .. " + CTRL + " .. tostring(i), hl.dsp.window.move({ workspace = i, follow = true }))
+        hl.bind(mod .. " + " .. tostring(i), hl.dsp.exec_cmd("${wsSlot} " .. tostring(i)))
+        hl.bind(mod .. " + CTRL + " .. tostring(i), hl.dsp.exec_cmd("${wsSlot} " .. tostring(i) .. " move"))
+      end
+      -- 0 is the tenth slot, keeping the row of digits contiguous.
+      hl.bind(mod .. " + 0", hl.dsp.exec_cmd("${wsSlot} 10"))
+      hl.bind(mod .. " + CTRL + 0", hl.dsp.exec_cmd("${wsSlot} 10 move"))
+
+      -- Hold Super to reveal the numbers. hl.dsp.global routes to Hyprland's
+      -- global-shortcuts protocol, which delivers press AND release -- the
+      -- plugin's GlobalShortcut turns those straight into its `peeking` flag.
+      -- A plain bind fires once and would need a second release bind plus
+      -- shared state to reconstruct a hold.
+      -- BARE KEY, ignore_mods, transparent -- the shape end-4/dots-hyprland
+      -- uses for exactly this gesture, arrived at after the obvious spellings
+      -- failed here.
+      --
+      -- Not "SUPER + Super_L": binding a modifier under its own modmask cannot
+      -- match on press, per KeybindManager.cpp
+      --
+      --   652:  if (... (modmask != k->modmask && !k->ignoreMods) ...) continue;
+      --   744:  // key.modmaskAtPressTime is set from currently pressed keys as
+      --         // programs see them, but it doesn't yet include the currently
+      --         // pressed mod key
+      --
+      -- When Super_L goes down Hyprland's modmask is still 0 while the bind
+      -- demands SUPER (64). ignore_mods alone got press working, but release
+      -- was still dropped whenever the hold had been USED for a combo
+      -- (Super+1, Super+W), which latched the peek on.
+      --
+      -- transparent is the missing half: KeybindManager.cpp:867 exempts it
+      -- from shadowing alongside `global`, and it stops the bind interfering
+      -- with every other Super combo -- so Super keeps working as a modifier
+      -- AND both edges get delivered.
+      --
+      -- Both physical Super keys, since either can start the hold.
+      for _, k in ipairs({ "SUPER_L", "SUPER_R" }) do
+        hl.bind(k, hl.dsp.global("dms-workspaces:peek"),
+                { ignore_mods = true, transparent = true })
+        hl.bind(k, hl.dsp.global("dms-workspaces:peek"),
+                { ignore_mods = true, transparent = true, release = true })
       end
 
       hl.bind(mod .. " + SHIFT + E", hl.dsp.exit())
-      hl.bind("Print", hl.dsp.exec_cmd("grimblast copy area"))
-      hl.bind("CTRL + Print", hl.dsp.exec_cmd("grimblast copy screen"))
-      hl.bind("ALT + Print", hl.dsp.exec_cmd("grimblast copy active"))
+      -- --clipboard-only skips writing a file at all (hyprshot otherwise saves
+      -- AND copies); --silent matches grimblast's old no-notification default.
+      hl.bind("Print", hl.dsp.exec_cmd("hyprshot -m region --clipboard-only --silent"))
+      hl.bind("CTRL + Print", hl.dsp.exec_cmd("hyprshot -m output --clipboard-only --silent"))
+      hl.bind("ALT + Print", hl.dsp.exec_cmd("hyprshot -m window -m active --clipboard-only --silent"))
       hl.bind(mod .. " + SHIFT + P", hl.dsp.dpms({ action = "off" }))
 
       -- Media/brightness keys: repeating + fires even while locked.
