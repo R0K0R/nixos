@@ -21,10 +21,13 @@
     exactly the property a lock file exists to prevent. This locks to a commit
     like every other input here.
 
-    nixpkgs is the usual always-followed placeholder: the root flake points it
-    at the tuned fork, so the module builds against the same package set as
-    everything else rather than dragging in the nixos-26.05 the upstream flake
-    pins for its own standalone use.
+    nixpkgs is a LOCK-SLIMMING placeholder only. It does NOT decide what the
+    package is built against: home.nix overrides programs.hakuspace.package
+    with a host-pkgs callPackage, precisely because the flake default
+    (self.packages, evaluated on this input's nixpkgs) built against the wrong
+    set on every host -- see the comment on that override. The follows exists
+    so the lock does not pin, and evaluation does not fetch, the nixos-26.05
+    the upstream flake declares for its own standalone use.
   */
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

@@ -440,11 +440,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1788288406,
+        "lastModified": 1788290651,
         "narHash": "sha256-6nwGQKpacM3L2QPFIaLOO04iGVTUsBYm6spsxE9IgVg=",
         "owner": "R0K0R",
         "repo": "hakuspace",
-        "rev": "8b8e67182aa4c69401b12b8f7e6096f12d034703",
+        "rev": "719c43c265ea422da2bfb0cb497985b6b67a9f07",
         "type": "github"
       },
       "original": {

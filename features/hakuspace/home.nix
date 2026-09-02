@@ -60,6 +60,39 @@ in
       inherit (cfg) configNames;
 
       /*
+        Built from HOST pkgs, overriding the flake module's default.
+
+        The homeModule defaults `package` to self.packages.<system>.hakuspace,
+        which is callPackage'd from the hakuspace flake's OWN nixpkgs input --
+        after the follows chain, the tuned fork's plain legacyPackages. That is
+        the wrong package set on every host, in opposite directions:
+
+          - dell-latitude (tuning.enable = false) runs on upstream nixpkgs
+            precisely so everything substitutes from cache.nixos.org. The
+            fork's cc-wrapper patch moves stdenv's hash, so the default drags
+            a SECOND, fork-built copy of the wrapper's whole dependency
+            surface -- python + colorthief, waybar, rofi, imagemagick,
+            hyprland, kitty -- through a from-scratch bootstrap that no cache
+            has. Measured: 2482 of this host's 2982 cache.nixos.org misses
+            were inside that one package's build closure.
+
+          - tuned hosts get the fork, but PLAIN: legacyPackages carries none
+            of my.tuning's overlays or the march platform split, so the shell
+            the user stares at all day is the one thing built untuned.
+
+        callPackage from `pkgs` gives each host its own answer -- upstream
+        and fully substitutable here, fork-with-overlays there -- and the
+        scripts wrap the SAME rofi/waybar/etc. the rest of the system runs,
+        instead of a byte-different duplicate closure.
+
+        The input's `follows = "nixpkgs"` stays: nothing consumes its
+        packages output anymore, but the follows keeps the lock from pinning
+        (and evaluation from fetching) the second nixpkgs the upstream flake
+        declares for standalone use.
+      */
+      package = pkgs.callPackage "${inputs.feat-hakuspace.inputs.hakuspace}/nix/package.nix" { };
+
+      /*
         NULL, deliberately: this is what keeps the two halves separable.
 
         hakuspace ships a COMPLETE Hyprland config -- monitors, input, layout,
