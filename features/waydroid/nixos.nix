@@ -21,6 +21,26 @@ in
         With `ro.adb.secure=1` you may still need Developer options → USB debugging and one RSA approval in the Waydroid UI the first time.
       '';
     };
+
+    tablet = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Present the container as a TABLET, by forcing
+        `ro.build.characteristics=tablet` into /var/lib/waydroid/waydroid_base.prop.
+
+        The reason is KakaoTalk (and other Kakao apps): one account may be
+        signed in on a phone AND a tablet/PC at once, but two *phones* conflict.
+        Waydroid identifies as a phone by default, so logging in there fights
+        the real phone. As a tablet it registers as the secondary device and
+        the two coexist.
+
+        A `ro.` build prop, so it lives in waydroid_base.prop (applied at
+        session start), not a runtime `persist.` prop. Takes effect after
+        `waydroid session stop` + start (or a reboot); re-log KakaoTalk once so
+        it re-registers as the tablet.
+      '';
+    };
   };
 
   config = lib.mkMerge [
@@ -33,7 +53,15 @@ in
       # `RuntimeError … waydroid-net.sh start` is common (`networking.nftables.enable` is often unset).
       virtualisation.waydroid.package = pkgs.waydroid-nftables;
 
-      environment.systemPackages = [ pkgs.wl-clipboard ];
+      # wl-clipboard: host<->container copy/paste. waydroid-helper: the GTK
+      # tool that installs the extensions a MAINLINE image lacks -- ARM
+      # translation (libndk/libhoudini, REQUIRED to run ARM-only apps like
+      # KakaoTalk on this x86_64 host) and optional GApps. Runtime, one-time:
+      # the .img files it fetches are not something a rebuild can place.
+      environment.systemPackages = [
+        pkgs.wl-clipboard
+        pkgs.waydroid-helper
+      ];
     })
 
     /*
@@ -55,6 +83,23 @@ in
         cfg=/var/lib/waydroid/waydroid.cfg
         if [ -r "$cfg" ] && grep -qxF 'auto_adb = False' "$cfg"; then
           ${lib.getExe pkgs.gnused} -i 's/^auto_adb = False/auto_adb = True/' "$cfg"
+        fi
+      '';
+    })
+
+    /*
+      Force the tablet build characteristic into waydroid_base.prop. Idempotent:
+      drop any existing ro.build.characteristics line, then append the tablet
+      one -- so toggling the option off (to `default`) is a matching edit, not
+      a stale leftover. Only touches an initialised container (the prop file
+      exists after `waydroid init`); a session restart applies it.
+    */
+    (lib.mkIf (cfg.enable && cfg.tablet) {
+      system.activationScripts.waydroid-tablet = lib.mkAfter ''
+        prop=/var/lib/waydroid/waydroid_base.prop
+        if [ -w "$prop" ]; then
+          ${lib.getExe pkgs.gnused} -i '/^ro\.build\.characteristics=/d' "$prop"
+          printf 'ro.build.characteristics=tablet\n' >> "$prop"
         fi
       '';
     })

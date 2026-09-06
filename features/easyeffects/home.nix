@@ -104,6 +104,17 @@ lib.mkIf (osConfig.my.easyeffects.enable && inScope) {
     Install.WantedBy = [ "graphical-session.target" ];
     Service = {
       Type = "simple";
+      /*
+        Wait for the system-tray host before starting. EasyEffects registers
+        its tray icon only if a StatusNotifierWatcher (org.kde.StatusNotifier-
+        Watcher, owned by the shell's bar -- waybar here) already exists WHEN IT
+        STARTS; otherwise it comes up trayless and the "Show tray icon" toggle
+        greys out. This service normally wins the race against the bar at login,
+        which is why the icon appeared only after a manual restart. Poll up to
+        ~10s for the name, then start regardless (exit 0), so a host with no
+        tray host still gets EasyEffects.
+      */
+      ExecStartPre = "${pkgs.bash}/bin/bash -c 'for i in $(seq 1 20); do ${pkgs.systemd}/bin/busctl --user status org.kde.StatusNotifierWatcher >/dev/null 2>&1 && exit 0; sleep 0.5; done; exit 0'";
       ExecStart = "${lib.getExe pkgs.easyeffects} --hide-window";
       Restart = "on-failure";
       RestartSec = 5;

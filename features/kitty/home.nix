@@ -30,7 +30,7 @@ lib.mkIf (osConfig.my.kitty.enable && inScope) {
     settings = {
       shell = "${pkgs.fish}/bin/fish";
 
-      font_family = "JetBrainsMono Nerd Font";
+      font_family = "DepartureMono Nerd Font";
       bold_font = "auto";
       italic_font = "auto";
       bold_italic_font = "auto";

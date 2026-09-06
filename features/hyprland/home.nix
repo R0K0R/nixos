@@ -246,7 +246,10 @@ in
           gaps_in = 2;
           gaps_out = 4;
           border_size = 0;
-          layout = "scrolling";
+          # Scrolling layout off (again -- same tweak as pre-readopt commit
+          # 990f0f5): no horizontal window tape on this machine. Falls back
+          # to the default layout; the colresize binds below go inert.
+          # layout = "scrolling";
           # Ask 2: resize by dragging a window's edge/gap, with mouse or
           # finger -- both route through the same click-and-drag hit-test,
           # so enabling this covers touch too (verified against 0.56.0
@@ -278,7 +281,13 @@ in
         # Niri's touchpad block explicitly enables natural-scroll; Hyprland
         # has no input block at all here, defaulting to non-natural (i.e.
         # inverted relative to what niri was doing).
-        input.touchpad.natural_scroll = true;
+        input.touchpad = {
+          natural_scroll = true;
+          # libinput's "clickfinger" method: a two-finger physical click is
+          # a right click and three fingers a middle click, replacing the
+          # default software button areas at the pad's bottom edge.
+          clickfinger_behavior = true;
+        };
 
         /*
           Ask 1, root cause (verified against 0.56.0 source, not guessed):
@@ -332,6 +341,14 @@ in
         gestures = {
           workspace_swipe_touch = true;
           workspace_swipe_touch_invert = false;
+
+          # Swipe sensitivity, tuned for the 3-finger workspace gesture: the
+          # 300px default needs most of this touchpad's height for one
+          # switch. Distance is how far a full swipe travels (lower = more
+          # sensitive); cancel_ratio commits the switch once 30% of that is
+          # covered instead of half, so a short flick lands.
+          workspace_swipe_distance = 120;
+          workspace_swipe_cancel_ratio = 0.3;
         };
 
         # NEITHER general.col.* NOR group.col.* is set here, deliberately.
@@ -401,17 +418,19 @@ in
         "vertical"/"horizontal" for axis-locked ones -- NOT the legacy
         "3, swipe, move" string form, which Lua mode doesn't parse at all).
       */
+      # Finger counts swapped from upstream's (workspace on 3, move on 4) --
+      # the same preference the pre-readopt commit 990f0f5 carried.
       gesture = [
-        # 3-finger free drag/move of the focused window.
+        # 4-finger free drag/move of the focused window.
         {
-          fingers = 3;
+          fingers = 4;
           direction = "swipe";
           action = "move";
         }
-        # 4-finger vertical swipe: workspace switch, matching the touchscreen
+        # 3-finger vertical swipe: workspace switch, matching the touchscreen
         # gesture direction above and the "slidevert" animation style.
         {
-          fingers = 4;
+          fingers = 3;
           direction = "vertical";
           action = "workspace";
         }
@@ -419,9 +438,10 @@ in
         # dispatcher's "scrollMove" spelling, which errors here:
         # "hl.gesture: unknown action \"scrollMove\""): purpose-built gesture
         # for the scrolling layout's tape -- live momentum + snap-to-column
-        # (gestures:scrolling:* defaults handle it).
+        # (gestures:scrolling:* defaults handle it). Inert while the layout
+        # is off, kept for the day it comes back.
         {
-          fingers = 4;
+          fingers = 3;
           direction = "horizontal";
           action = "scroll_move";
         }
@@ -601,6 +621,25 @@ in
       -- per-window -- force_zero_scaling has no per-window form.
       hl.window_rule({ match = { class = "^(GalaxyBudsClient)$" }, float = true })
 
+      -- Utility / settings windows float AND center, rather than joining the
+      -- tape as a full column or opening at the cursor. These are the small
+      -- managers, pickers and config panels that are only in the way when
+      -- tiled: audio/bluetooth/network/display/printer settings, EasyEffects,
+      -- the file browser, the KDE file-picker portal. Class regexes (Wayland
+      -- app_id / XWayland WM_CLASS); if a rule doesn't bite, check the real
+      -- class with `hyprctl clients | grep -i <app>`. float + center in one
+      -- rule -- both verified accepted by this build's Lua binding.
+      hl.window_rule({ match = { class = "^(org\\.kde\\.dolphin)$" }, float = true, center = true })
+      hl.window_rule({ match = { class = "^(.*pavucontrol.*)$" }, float = true, center = true })
+      hl.window_rule({ match = { class = "^(blueman-manager)$" }, float = true, center = true })
+      hl.window_rule({ match = { class = "^(nm-connection-editor)$" }, float = true, center = true })
+      hl.window_rule({ match = { class = "^(.*[Ss]ystem-config-printer.*)$" }, float = true, center = true })
+      hl.window_rule({ match = { class = "^(com\\.github\\.wwmm\\.easyeffects)$" }, float = true, center = true })
+      hl.window_rule({ match = { class = "^(wdisplays)$" }, float = true, center = true })
+      hl.window_rule({ match = { class = "^(qt6ct)$" }, float = true, center = true })
+      hl.window_rule({ match = { class = "^(org\\.kde\\.systemsettings)$" }, float = true, center = true })
+      hl.window_rule({ match = { class = "^(xdg-desktop-portal-.*)$" }, float = true, center = true })
+
       -- ============================================================
       -- Binds. Key-layout aligned with end-4/dots-hyprland's
       -- keybinds.lua where it has a real Hyprland-dispatcher
@@ -613,11 +652,26 @@ in
       -- Application spawns. Anything that toggles a SHELL surface -- launcher,
       -- notifications, clipboard, power menu, lock -- is contributed by
       -- whichever feature implements that shell, not bound here.
+      -- Launch scheme: W browser, T terminal, B file browser, L office
+      -- (mod+L was focus-right -- see the note there; use mod+Right instead).
       hl.bind(mod .. " + Return", hl.dsp.exec_cmd("kitty"))
+      hl.bind(mod .. " + T", hl.dsp.exec_cmd("kitty"))
       hl.bind(mod .. " + W", hl.dsp.exec_cmd("firefox"))
+      hl.bind(mod .. " + B", hl.dsp.exec_cmd("dolphin"))
       hl.bind(mod .. " + E", hl.dsp.exec_cmd("emacsclient -c"))
       -- Compositor-level IME toggle, same logic as niri.nix's Hangul bind.
       hl.bind("Hangul", hl.dsp.exec_cmd("${hangulToggle}"))
+
+      -- Laptop Fn media keys. The keys emit XF86 keysyms; nothing was bound to
+      -- them, so they did nothing. Global (no mod), locked = true so they work
+      -- on the lock screen, and ["repeat"] = true (quoted -- `repeat` is a Lua
+      -- keyword) so holding ramps. wpctl (wireplumber) for audio, brightnessctl
+      -- for backlight; volume capped at 100% (-l 1.0).
+      hl.bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"), { locked = true })
+      hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%-"), { locked = true, ["repeat"] = true })
+      hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+"), { locked = true, ["repeat"] = true })
+      hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl set 5%-"), { locked = true, ["repeat"] = true })
+      hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("brightnessctl set 5%+"), { locked = true, ["repeat"] = true })
 
       -- Window management
       hl.bind(mod .. " + Q", hl.dsp.window.close())
@@ -678,9 +732,15 @@ in
       -- direct hyprland dispatcher; `togglegroup` is a different concept
       -- (window grouping), so it's dropped rather than mis-mapped.
 
-      -- niri's Mod+R (switch-preset-column-width) -> scrolling layout's
-      -- colresize +conf, which cycles through scrolling:explicit_column_widths.
-      hl.bind(mod .. " + R", hl.dsp.layout("colresize +conf"))
+      -- Mod+R (was: scrolling layout's colresize +conf) is GONE, not just
+      -- inert: the scrolling layout is off on this machine, and the freed
+      -- key avoids the drun-launcher collision hakuspace had to dodge.
+      -- In its place, the default Lua config's mouse pair that this file
+      -- never carried over: Mod + left-drag moves a window anywhere
+      -- (floats it out of the tiling if dragged free), Mod + right-drag
+      -- resizes. { mouse = true } is what makes a bind track the pointer.
+      hl.bind(mod .. " + mouse:272", hl.dsp.window.drag(), { mouse = true })
+      hl.bind(mod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
 
       -- Focus movement (h/j/k/l + arrows). hl.dsp.focus is the single
       -- dispatcher covering movefocus/focusmonitor/focus-workspace by
@@ -703,8 +763,11 @@ in
       -- focus-column semantics, which is what H/L meant here originally.
       -- Arrows stay movefocus: layoutmsg only knows tiled tape members, so
       -- arrows remain the way to reach floating windows.
+      -- mod+L reassigned to LibreOffice (launch scheme above). Focus-right is
+      -- now mod+Right only; focus-left keeps mod+H. Asymmetric on purpose --
+      -- the office launcher was wanted on L.
       hl.bind(mod .. " + H", hl.dsp.layout("focus l"))
-      hl.bind(mod .. " + L", hl.dsp.layout("focus r"))
+      hl.bind(mod .. " + L", hl.dsp.exec_cmd("libreoffice"))
       -- Workspace cycle among EXISTING workspaces ("e±1"), same string
       -- syntax as the legacy `workspace, e-1` dispatcher -- hl.dsp.focus's
       -- workspace-selector overload hands it to the identical parser.
@@ -778,13 +841,19 @@ in
       -- draws ten slots whether or not the workspaces exist, so keeping them
       -- would only pin page 0 into existence while every other page stayed
       -- ephemeral -- an asymmetry with no upside.
+      -- SHIFT as a second spelling for move-to-slot, alongside CTRL: the
+      -- SUPER+SHIFT+<n> convention from stock Hyprland/most WMs. Both stay --
+      -- CTRL mirrors the CTRL+U/I workspace-move pair above, SHIFT is muscle
+      -- memory.
       for i = 1, 9 do
         hl.bind(mod .. " + " .. tostring(i), hl.dsp.exec_cmd("${wsSlot} " .. tostring(i)))
         hl.bind(mod .. " + CTRL + " .. tostring(i), hl.dsp.exec_cmd("${wsSlot} " .. tostring(i) .. " move"))
+        hl.bind(mod .. " + SHIFT + " .. tostring(i), hl.dsp.exec_cmd("${wsSlot} " .. tostring(i) .. " move"))
       end
       -- 0 is the tenth slot, keeping the row of digits contiguous.
       hl.bind(mod .. " + 0", hl.dsp.exec_cmd("${wsSlot} 10"))
       hl.bind(mod .. " + CTRL + 0", hl.dsp.exec_cmd("${wsSlot} 10 move"))
+      hl.bind(mod .. " + SHIFT + 0", hl.dsp.exec_cmd("${wsSlot} 10 move"))
 
       hl.bind(mod .. " + SHIFT + E", hl.dsp.exit())
       -- --clipboard-only skips writing a file at all (hyprshot otherwise saves

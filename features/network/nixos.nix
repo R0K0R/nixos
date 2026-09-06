@@ -36,6 +36,14 @@ in
   config = lib.mkIf cfg.enable {
     networking.networkmanager.enable = true;
 
+    # OpenVPN through NetworkManager (and thus nm-applet): the plugin adds the
+    # OpenVPN connection type, so the applet's VPN menu can import a .ovpn and
+    # connect, and nm-connection-editor gains OpenVPN pages. Independent of
+    # features/openvpn's standalone `openvpn-home` systemd service -- this is
+    # the click-from-the-tray route, that one is the always-on config-file
+    # route; keep whichever fits a given profile.
+    networking.networkmanager.plugins = [ pkgs.networkmanager-openvpn ];
+
     /*
       Delegated rather than reimplemented. The upstream module is four lines of
       config, but it is the four lines that were got wrong by hand, and it keeps

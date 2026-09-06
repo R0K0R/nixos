@@ -1,4 +1,4 @@
-{ config, lib, osConfig, ... }:
+{ config, lib, osConfig, pkgs, ... }:
 
 /*
   Haku Space's half of the compositor configuration -- the same seam
@@ -23,26 +23,53 @@ let
   compositor = osConfig.my.desktop.compositor;
   mod = osConfig.my.hyprland.modKey;
   bin = name: "${config.home.homeDirectory}/.local/bin/${name}";
+
+  /*
+    STORE PATHS for the binds that exec a bare binary. Every other bind here
+    runs a wrapped ~/.local/bin script, which carries rofi and friends on its
+    own PATH -- but a bind that names the binary directly execs in Hyprland's
+    spawn environment, where rofi and swaync-client are installed by nothing
+    (the hakuspace package wraps them into its scripts and exposes neither).
+    That is why hakumenu (a script) always worked while the launcher (bare
+    `rofi`) never did.
+
+    With the emoji plugin, because the emoji bind needs it and upstream's
+    install.sh puts rofi-emoji on the system; plain pkgs.rofi would make that
+    bind silently show an empty mode list.
+  */
+  rofi = pkgs.rofi.override { plugins = [ pkgs.rofi-emoji ]; };
 in
 {
   config = lib.mkIf (enabled && compositor == "hyprland") {
     wayland.windowManager.hyprland.extraConfig = lib.mkAfter ''
       -- Launcher, menus and the notification centre.
-      hl.bind("${mod} + R", hl.dsp.exec_cmd("rofi -show drun"))
-      hl.bind("${mod} + SLASH", hl.dsp.exec_cmd("rofi -modi emoji -show emoji"))
-      hl.bind("${mod} + TAB", hl.dsp.exec_cmd("${bin "hakumenu.sh"}"))
-      hl.bind("${mod} + N", hl.dsp.exec_cmd("swaync-client -t -sw"))
+      --
+      -- SPACE, not upstream's R: Hyprland fires EVERY bind registered on a
+      -- combo, and features/hyprland already has mod+R (colresize +conf, the
+      -- niri-style column width cycle) -- upstream's key would resize the
+      -- column AND open the launcher on one press. Same collision class as
+      -- the W / SHIFT+P moves documented below, but these three were only
+      -- caught live: registration order reports nothing.
+      hl.bind("${mod} + space", hl.dsp.exec_cmd("${rofi}/bin/rofi -show drun"))
+      hl.bind("${mod} + slash", hl.dsp.exec_cmd("${rofi}/bin/rofi -modi emoji -show emoji"))
+      hl.bind("${mod} + Tab", hl.dsp.exec_cmd("${bin "hakumenu.sh"}"))
+      hl.bind("${mod} + N", hl.dsp.exec_cmd("${pkgs.swaynotificationcenter}/bin/swaync-client -t -sw"))
       hl.bind("${mod} + V", hl.dsp.exec_cmd("${bin "clipboard_menu.sh"}"))
       hl.bind("${mod} + SHIFT + V", hl.dsp.exec_cmd("${bin "clipboard_menu.sh"} --wipe"))
 
-      -- Session.
-      hl.bind("${mod} + K", hl.dsp.exec_cmd("${bin "lock.sh"}"), { locked = true })
-      hl.bind("${mod} + L", hl.dsp.exec_cmd("${bin "nightlight_toggle.sh"}"))
+      -- Session. ESCAPE, not upstream's K (mod+K is focus workspace -1 --
+      -- locking the screen while switching workspaces); SHIFT+L, not
+      -- upstream's L (mod+L is focus right).
+      hl.bind("${mod} + Escape", hl.dsp.exec_cmd("${bin "lock.sh"}"), { locked = true })
+      hl.bind("${mod} + SHIFT + L", hl.dsp.exec_cmd("${bin "nightlight_toggle.sh"}"))
 
       -- Appearance: wallpaper, the cava underbar, and the bar layout cycle.
       hl.bind("${mod} + Y", hl.dsp.exec_cmd("${bin "wallpaper_select.sh"}"))
       hl.bind("${mod} + SHIFT + Y", hl.dsp.exec_cmd("${bin "wallpaper_video_select.sh"}"))
-      hl.bind("${mod} + T", hl.dsp.exec_cmd("${bin "cava_manager.sh"}"))
+      -- Cava's keybind was mod+T, now reassigned to the terminal (launch
+      -- scheme in features/hyprland). Cava stays toggleable from the hakumenu
+      -- (SUPER+TAB -> Theme -> Cava Underbar); moved to mod+SHIFT+C for a key.
+      hl.bind("${mod} + SHIFT + C", hl.dsp.exec_cmd("${bin "cava_manager.sh"}"))
       hl.bind("${mod} + SHIFT + W", hl.dsp.exec_cmd("${bin "waybar_manager.sh"} --cycle"))
 
       -- Capture.

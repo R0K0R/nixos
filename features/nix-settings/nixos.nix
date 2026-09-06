@@ -94,7 +94,23 @@ in
     nix.registry.nixpkgs = lib.mkForce { flake = inputs.nixpkgs-upstream; };
     nix.nixPath = lib.mkForce [ "nixpkgs=${inputs.nixpkgs-upstream}" ];
 
-    nix.gc.automatic = cfg.gc.automatic;
+    /*
+      When automatic GC is on (per-host opt-in; off by default for the fork
+      project), use the settings this feature's gc.automatic docs record as the
+      previous working values: weekly, keep 14 days, and persistent so a laptop
+      that was asleep at the scheduled time still GCs at next boot.
+    */
+    nix.gc = lib.mkIf cfg.gc.automatic {
+      automatic = true;
+      dates = "weekly";
+      options = "--delete-older-than 14d";
+      persistent = true;
+    };
+
+    # Hardlink identical files in the store on every build. Pure disk savings
+    # (a 100 GB+ store of overlapping closures dedups substantially), and
+    # universally safe -- nothing depends on inodes being distinct.
+    nix.settings.auto-optimise-store = true;
 
     # mkDefault so the remote-builder feature's own substituter list (which adds
     # peer stores) wins where both are enabled, rather than conflicting.

@@ -74,7 +74,16 @@ in
   apps); the tray's name-based lookups are covered by qt6ct.conf's
   icon_theme= instead.
 */
-lib.mkIf (osConfig.my.qt-theming.enable && inScope) {
+/*
+  GATED ON DMS, not just on the feature switch: everything below is repair
+  machinery for DMS's matugen theming -- kdeglobals is REWRITTEN from
+  DankMatugen.colors at every boot and every activation, and qt6ct.conf is
+  "fixed up" against DMS's qt.sh. On a host running another shell the matugen
+  source is a stale leftover that nothing regenerates, so this machinery only
+  clobbered the user's Qt color choices back to the dead DMS palette on every
+  restart. With DMS off, kdeglobals and qt6ct.conf belong to the user.
+*/
+lib.mkIf (osConfig.my.qt-theming.enable && inScope && osConfig.my.dms.enable) {
   # Regenerate scheme + kdeglobals whenever matugen rewrites the source
   # scheme (theme/wallpaper change), once at login, and once per HM
   # activation (initial seed).

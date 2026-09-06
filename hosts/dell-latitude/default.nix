@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, inputs, ... }:
 
 {
   imports = [
@@ -6,6 +6,73 @@
   ];
 
   services.tailscale.enable = true;
+
+  /*
+    Laptop system upgrades (plain NixOS options -- machine-appropriate, not
+    feature-worthy):
+
+      thermald  Intel's thermal daemon. Proactively manages package temp and
+                throttling instead of leaving it to the kernel's reactive
+                trip points -- the lever for the build-time heat this machine
+                hits when it can't offload.
+      fwupd     Firmware/BIOS/SSD/Thunderbolt updates via LVFS; Dell has broad
+                coverage. `fwupdmgr refresh && fwupdmgr update` to apply.
+      zramSwap  A compressed-RAM swap device, higher priority than the
+                features/swapfile 16 GB file (which stays for overflow and
+                hibernation). Faster than swapping to the SSD and spares it
+                the writes. systemd-oomd (on by NixOS default) still guards
+                the hard-pressure case.
+  */
+  services.thermald.enable = true;
+  services.fwupd.enable = true;
+  zramSwap.enable = true;
+
+  /*
+    Syncthing, running as benjamin. overrideDevices/overrideFolders = false so
+    the pairings and folders added through the web UI (http://localhost:8384)
+    are the source of truth -- Nix only turns the daemon on and does not
+    reconcile its contents away on the next rebuild. Reachable across the
+    tailnet like any other service on this host.
+  */
+  services.syncthing = {
+    enable = true;
+    user = "benjamin";
+    group = "users";
+    dataDir = "/home/benjamin";
+    configDir = "/home/benjamin/.config/syncthing";
+    overrideDevices = false;
+    overrideFolders = false;
+  };
+
+  /*
+    Caps Lock as the macOS-style language toggle.
+
+    keyd rewrites at the evdev/uinput layer, so a TAP of Caps emits the Hangul
+    key -- which features/hyprland already binds to the fcitx keyboard-us <->
+    hangul switch (hl.bind("Hangul", ...)) -- and a HOLD past 200ms is a real
+    Caps Lock, the "leave it as long press" fallback. Nothing else is remapped.
+
+    my.keyd.enable stays false ON PURPOSE: that feature is the HHKB layout
+    (Caps -> Ctrl/Esc, RAlt -> Hangul), a different intent. This is one key,
+    so services.keyd is set directly here rather than by flipping on a layout
+    this host does not want. keyd applies everywhere -- TTY, greeter,
+    compositor -- because it rewrites before any session sees the key.
+  */
+  services.keyd = {
+    enable = true;
+    keyboards.default = {
+      ids = [ "*" ];
+      # Plain remap, NOT timeout(hangeul, 200, capslock). The tap-hold macro
+      # made keyd hold events for up to 200ms to disambiguate tap vs hold,
+      # which (a) delayed the language toggle -- the first key typed after a
+      # switch beat the Hangul emit and landed in the old language -- and
+      # (b) buffered near-simultaneous keys, reordering them (typing ㅛ then ㅇ
+      # arrived as ㅇㅛ and composed to 요). A 1:1 remap emits Hangul the
+      # instant Caps is pressed and never buffers. The hold-for-real-capslock
+      # is dropped, which is fine: this key is never used for capslock here.
+      settings.main.capslock = "hangeul";
+    };
+  };
 
   system.stateVersion = "26.05";
 
@@ -62,7 +129,12 @@
     firefox.enable = true;
     fcitx.enable = true;
     openvpn.enable = true;
-    waydroid.enable = true;
+    waydroid = {
+      enable = true;
+      # Present as a tablet so KakaoTalk registers as a secondary device
+      # rather than fighting the phone login. See the option's docs.
+      tablet = true;
+    };
     session-env.enable = true;
     fish.enable = true;
     kitty.enable = true;
@@ -77,8 +149,15 @@
       hosts.yulee = { };
     };
     opencode.enable = true;
-    nix-settings.enable = true;
+    nix-settings = {
+      enable = true;
+      # Automatic GC is off repo-wide (fork-project artifact preservation), but
+      # this host is untuned and does no fork builds -- its store just grows.
+      # Weekly GC + 14-day retention (see the feature) keeps it in check.
+      gc.automatic = true;
+    };
     emacs.enable = true;
+    neovim.enable = true;
 
     # Package sets, each owning its own list (features/<name>/packages.nix).
     base.enable = true;
@@ -177,12 +256,72 @@
       my.packages.extra's own docs on why lookup.nix cannot read a mkIf here.
     */
     packages.extra.user = with pkgs; [
-        fastfetch
+      fastfetch
+      kdePackages.okular
+      btop # hakuspace's theme pipeline already writes ~/.config/btop themes
+      gimp
+
+      # Nix workflow. nh wraps nixos-rebuild with a change diff; nom turns the
+      # build wall-of-text into a live tree; comma (`, foo`) runs a program
+      # from nixpkgs without installing it.
+      nh
+      nix-output-monitor
+      comma
+
+      # Modern CLI. fzf and zoxide get their fish hooks in features/fish;
+      # the rest are drop-in binaries. ripgrep is already on PATH via
+      # features/neovim, so it is not repeated here.
+      fd
+      bat
+      dust
+      duf
+      procs
+      sd
+      tealdeer # `tldr`; run `tldr --update` once to fetch the page cache
+      hyperfine
+      jless
+      yq-go
+      lazygit
+      bluetui # Bluetooth TUI; the waybar bluetooth icon opens it, also on PATH
+
+      # Sonora, from its flake (prebuilt packages.default). Literal system
+      # string, not pkgs.system: this list is also raw-imported by
+      # tuning/runtime-cache/lookup.nix, and a literal keeps it independent of
+      # how pkgs is provided there.
+      inputs.sonora.packages."x86_64-linux".default
+
+      /*
+        Display management (zoom/scale, placement, resolution, extend). Both
+        show up in the launcher via their .desktop entries.
+
+          wdisplays  the workhorse: applies changes LIVE through the
+                     wlr-output-management Wayland protocol, which Hyprland
+                     implements natively -- so it works regardless of this
+                     host's Lua config (nwg-displays, by contrast, persists by
+                     writing hyprlang `monitor=` lines that a Lua config cannot
+                     `source`). Drag to arrange, set mode/scale/rotation,
+                     enable/disable -- effective immediately.
+          wlr-randr  the CLI behind it; also what a mirror toggle would script
+                     (`wlr-randr --output HDMI-A-1 --pos 0,0` etc.).
+
+        Live-only, on purpose: the built-in panel stays declarative
+        (my.desktop.primaryOutput/Scale); externals are ad-hoc, re-arranged
+        when plugged in. Mirroring is the one thing wdisplays can't do from its
+        UI -- ask and I'll add a bound `hyprctl keyword monitor …,mirror,eDP-1`
+        toggle once there's an external to test against.
+      */
+      wdisplays
+      wlr-randr
     ];
 
     power.enable = true;
     flatpak.enable = true;
-    easyeffects.enable = true;
+    easyeffects = {
+      enable = true;
+      # Effects applied from login, window hidden -- the feature's own
+      # graphical-session service, not an exec-once.
+      startUp = true;
+    };
 
     boot.enable = true;
 
@@ -191,8 +330,8 @@
       ;;; Loaded by Doom `config.el` from ~/.config/home-manager/doom-machine-local.el
 
       (defun my/machine-local-reset-fonts-h ()
-        (setq doom-font (font-spec :family "JetBrainsMonoNL Nerd Font" :size 16 :weight 'semi-light)
-              doom-variable-pitch-font (font-spec :family "JetBrainsMonoNL Nerd Font" :size 16))
+        (setq doom-font (font-spec :family "DepartureMono Nerd Font" :size 16)
+              doom-variable-pitch-font (font-spec :family "DepartureMono Nerd Font" :size 16))
         (when (fboundp 'doom-init-fonts-h)
           (doom-init-fonts-h 'reload)))
 
@@ -212,15 +351,19 @@
     /*
       Shell is Haku Space, not DMS -- mutually exclusive `provides = ["shell"]`
       claimants (features/_meta), so dms.enable must be false or the role
-      assertion fires. The greeter is a SEPARATE switch (features/dms/nixos.nix:
-      its config is gated on cfg.greeter.enable alone, not on cfg.enable) --
-      it is DMS's dank-greeter login screen, unrelated to which shell runs once
-      logged in, so it stays on here.
+      assertion fires. The greeter switch is off too: with the shell gone,
+      dank-greeter was the last DMS piece running, and the login screen is now
+      tuigreet (below) -- a terminal greeter matching the rest of this
+      machine's aesthetic. Both greeters define greetd's
+      default_session.command, so enabling this alongside tuigreet fails
+      evaluation rather than racing.
     */
     dms = {
       enable = false;
-      greeter.enable = true;
+      greeter.enable = false;
     };
+
+    tuigreet.enable = true;
 
     hakuspace.enable = true;
 

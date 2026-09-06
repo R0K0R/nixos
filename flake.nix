@@ -61,6 +61,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Sonora, consumed as a plain prebuilt package
+    # (packages.<system>.default) on dell-latitude. No nixpkgs.follows: let it
+    # build against its own pin so the author's binary cache applies, rather
+    # than forcing it onto this flake's nixpkgs.
+    sonora.url = "github:nolight132/sonora";
+
   };
 
   outputs =

@@ -7,6 +7,22 @@ let
   inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "fish"; };
 in
 lib.mkIf (osConfig.my.fish.enable && inScope) {
+  /*
+    zoxide and fzf earn their keep only through the shell hooks, so they are
+    declared here (with fish integration) rather than as bare binaries in the
+    host package list. zoxide adds `z <dir>` frecency jumping; fzf adds
+    Ctrl-R history search and Ctrl-T file insertion. Both append their init to
+    interactiveShellInit, which composes with the block below.
+  */
+  programs.zoxide = {
+    enable = true;
+    enableFishIntegration = true;
+  };
+  programs.fzf = {
+    enable = true;
+    enableFishIntegration = true;
+  };
+
   programs.fish = {
     enable = true;
 
@@ -21,8 +37,18 @@ lib.mkIf (osConfig.my.fish.enable && inScope) {
 
     functions.starship_transient_prompt_func.body = "starship module character";
 
+    /*
+      fastfetch as the greeting, replacing fish's default text. A function,
+      not `set fish_greeting`: defining the function overrides the
+      variable-printing default outright. `command -q` guards hosts that do
+      not install fastfetch (the headless builder), where the greeting
+      quietly stays empty.
+    */
+    functions.fish_greeting.body = ''
+      command -q fastfetch; and fastfetch
+    '';
+
     interactiveShellInit = ''
-      set fish_greeting
 
       # Theme (from former fish_variables; omit fisher plugin state)
       set -g fish_color_autosuggestion '555\x1ebrblack'

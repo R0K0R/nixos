@@ -54,6 +54,19 @@ in
      They are referenced by KDE Connect, GNOME-ish power UI tooling, portals, etc. */
   security.polkit.enable = true;
 
+  /*
+    The setuid pkexec wrapper. security.polkit.enable starts polkitd but the
+    setuid /run/wrappers/bin/pkexec is a SEPARATE opt-in -- nixpkgs made it
+    off-by-default hardening after the PwnKit CVE (security/polkit.nix's
+    enablePkexecWrapper). Without it `pkexec` resolves to the raw store
+    binary and dies with "pkexec must be setuid root"; any GUI tool that
+    escalates through pkexec (waydroid-helper installing container extensions
+    surfaced it) needs the wrapper. Use the module's own option rather than a
+    hand-rolled security.wrappers.pkexec, which collides with the conditional
+    definition the module already carries.
+  */
+  security.polkit.enablePkexecWrapper = true;
+
   # dconf package/CLI/D-Bus service itself -- see compiledGsettingsSchemas
   # above for why this alone doesn't fix schema discovery.
   programs.dconf.enable = true;
@@ -93,19 +106,72 @@ in
   */
   xdg.portal = {
     enable = true;
-    extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
-    config.common.default = [ "gtk" ];
+    extraPortals = [
+      pkgs.xdg-desktop-portal-gtk
+      pkgs.kdePackages.xdg-desktop-portal-kde
+    ];
+    config.common = {
+      # gtk stays the general default -- it is what serves Settings (see the
+      # UseIn=gnome saga above) and the rest.
+      default = [ "gtk" ];
+      # ...but the FILE PICKER goes to KDE, so open/save/upload dialogs are
+      # the Dolphin-style chooser instead of gtk's nautilus-look. kde.portal
+      # declares UseIn=KDE and would otherwise be skipped on Hyprland;
+      # naming it explicitly here overrides that guard, exactly as
+      # default=gtk overrides gtk's own UseIn=gnome for Settings. The KDE
+      # portal must also reach the home profile the daemon searches -- see
+      # features/desktop-apps/home.nix.
+      "org.freedesktop.impl.portal.FileChooser" = [ "kde" ];
+    };
   };
+
+  /*
+    Make the FileChooser routing above actually reach GTK apps. GTK apps
+    (Firefox, Chrome, GTK dialogs) default to their OWN built-in
+    GtkFileChooser -- the nautilus-look picker -- and never consult
+    xdg-desktop-portal, so the kde routing was invisible to them. GTK_USE_PORTAL
+    forces them through the portal, which then hands the file dialog to the KDE
+    backend. Qt/KDE apps already use the KDE dialog natively, so this is
+    specifically the GTK half.
+  */
+  environment.sessionVariables.GTK_USE_PORTAL = "1";
 
   services.accounts-daemon.enable = true;
   services.power-profiles-daemon.enable = true;
   services.geoclue2.enable = true;
 
   /*
-    Cups-pk-helper is pulled in via the printing stack (dbus activation + polkit)
-    once polkit-enabled printing is on.
+    CUPS + a printer manager. Cups-pk-helper rides in via the printing stack
+    (dbus activation + polkit) once polkit-enabled printing is on.
+
+    drivers: a broad default set so most USB/older printers work out of the box
+    -- gutenprint (Canon/Epson/many), hplip (HP), brlaser (Brother laser),
+    epson-escpr (Epson inkjet). Modern network printers are DRIVERLESS (IPP
+    Everywhere / AirPrint) and need none of these -- just CUPS + avahi, which
+    features/discovery already provides (avahi + nssmdns4), so they show up on
+    their own.
+
+    system-config-printer is the GUI: add/remove printers, pick drivers, watch
+    the queue. It appears in the launcher and uses polkit to talk to CUPS. The
+    CUPS web UI at http://localhost:631 is always there as a fallback.
   */
-  services.printing.enable = true;
+  services.printing = {
+    enable = true;
+    drivers = with pkgs; [
+      gutenprint
+      hplip
+      # Brother: brlaser covers most lasers (open source); brgenml1 is
+      # Brother's own generic driver for the models brlaser misses. Between
+      # the two -- plus driverless IPP for modern network Brothers -- an
+      # unknown Brother is very likely covered. (Scanning on a Brother MFC
+      # would additionally want brscan4 + sane; ask if you need it.)
+      brlaser
+      brgenml1lpr
+      brgenml1cupswrapper
+      epson-escpr
+    ];
+  };
+  environment.systemPackages = [ pkgs.system-config-printer ];
 
   /* systemd / logind lid policy (upstream defaults vary; laptop users expect suspend). */
   services.logind.settings.Login = {
