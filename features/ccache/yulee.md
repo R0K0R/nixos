@@ -4,7 +4,8 @@ yulee is the fastest builder and it is Ubuntu, so the NixOS half of
 `features/ccache` cannot reach it. These are the manual steps that mirror it.
 Everything the derivations need (`CCACHE_DIR=/var/cache/ccache/l1`, umask 002,
 no remote-storage env) is baked in by `tuning/overlays/heavy.nix`; this file is
-the builder half only. Steps 1-3 were done by hand on 2026-09-07.
+the builder half only. All steps were done by hand on 2026-09-07; kept as the
+record of yulee's state and for rebuilding it.
 
 ## 1. Directories (done)
 
@@ -33,7 +34,7 @@ rides along.
 
     echo user_allow_other | sudo tee -a /etc/fuse.conf
 
-## 4. ccache.conf -- the L2 lever
+## 4. ccache.conf -- the L2 lever (done)
 
     sudo tee /var/cache/ccache/l1/ccache.conf <<'CONF'
     max_size = 20G
@@ -48,7 +49,7 @@ Drop the `peer-*` backend to go local-only; `disable = true` switches ccache
 off entirely. Never set remote storage through the environment -- env is
 ccache's highest-precedence source and would override this file.
 
-## 5. Peer mount: victus-15's stage, read-only, over Tailscale
+## 5. Peer mount: victus-15's stage, read-only, over Tailscale (done)
 
 `/etc/fstab`:
 
@@ -65,7 +66,7 @@ the daemon's stat. victus-15 authorizes `~r0k0r/.ssh/id_ed25519.pub` (added
 Sanity: `tailscale ping 100.64.0.2` must say `via <ip>:41641` (direct), not
 `via DERP` -- a relay multiplies every per-op cost.
 
-## 6. Trim the stage (ccache never cleans remote storage itself)
+## 6. Trim the stage (done; ccache never cleans remote storage itself)
 
     sudo tee /etc/cron.daily/ccache-trim-stage <<'CRON'
     #!/bin/sh
@@ -73,7 +74,7 @@ Sanity: `tailscale ping 100.64.0.2` must say `via <ip>:41641` (direct), not
     CRON
     sudo chmod +x /etc/cron.daily/ccache-trim-stage
 
-## 7. CA derivations (tuning/ca.nix) -- daemon-side flag
+## 7. CA derivations (tuning/ca.nix) -- daemon-side flag (done)
 
     experimental-features = nix-command flakes ca-derivations
 
@@ -81,7 +82,7 @@ in `/etc/nix/nix.conf`, then restart nix-daemon. The client cannot even
 evaluate a CA derivation unless the DAEMON has the feature; `--extra-experimental-features`
 on the command line does not help (verified).
 
-## 8. Move /var/cache/ccache onto the store NVMe
+## 8. Move /var/cache/ccache onto the store NVMe (done)
 
 `/` (ext4, 937 G) is at 96% with ~40 G free, so L1 20 G + stage 40 G do not
 fit there. The 239 G btrfs on `nvme2n1` has ~105 G free, BUT it is mounted
@@ -107,12 +108,22 @@ Preconditions: no builds running, nothing else using `/nix/store`.
     sudo sed -i 's#^UUID=73d5b9dd-1771-440a-91a8-068af0c2aca9 /nix/store btrfs compress=zstd 0 2#UUID=73d5b9dd-1771-440a-91a8-068af0c2aca9 /nix/store        btrfs subvol=@store,compress=zstd,noatime 0 2\nUUID=73d5b9dd-1771-440a-91a8-068af0c2aca9 /var/cache/ccache btrfs subvol=@ccache,noatime 0 2#' /etc/fstab
     grep -n 73d5b9dd /etc/fstab            # two lines
 
-    # 4. switch the store mount to the snapshot
-    sudo umount /nix/store && sudo systemctl daemon-reload && sudo mount /nix/store
-    findmnt -no OPTIONS /nix/store         # must contain subvol=/@store
-    ls /nix/store | head -3                # store paths, no @store entry
+    # 4. switch the store mount to the snapshot. `umount /nix/store` says
+    #    "target is busy" (every running Nix-built process, the login shell
+    #    included, has binaries mapped from it) and `mount` refuses to stack
+    #    the same device on the same mountpoint -- so mount elsewhere and
+    #    bind it over. The old top-level mount stays underneath until the
+    #    next reboot, when fstab mounts @store directly.
+    sudo mkdir -p /mnt/newstore
+    sudo mount -o subvol=@store,compress=zstd,noatime UUID=73d5b9dd-1771-440a-91a8-068af0c2aca9 /mnt/newstore
+    sudo mount --bind /mnt/newstore /nix/store
+    sudo umount -l /mnt/newstore && sudo rmdir /mnt/newstore
+    findmnt -no SOURCE,FSROOT /nix/store   # /dev/nvme2n1  /@store
+    ls -A /nix/store | grep -c '^@'        # 0
 
     # 5. mount the cache subvolume, carry the dirs over, restore perms
+    #    (stop the peer automount first: an autofs mountpoint inside blocks the mv)
+    sudo systemctl stop 'var-cache-ccache-peer\x2dvictus\x2d15.automount'
     sudo mv /var/cache/ccache /var/cache/ccache.old
     sudo mkdir -m2775 /var/cache/ccache && sudo mount /var/cache/ccache
     sudo cp -a /var/cache/ccache.old/. /var/cache/ccache/
@@ -122,7 +133,7 @@ Preconditions: no builds running, nothing else using `/nix/store`.
     sudo rm -rf /var/cache/ccache.old
 
     # 6. daemon back; extra-sandbox-paths is unchanged so no nix.conf edit
-    sudo systemctl start nix-daemon.socket
+    sudo systemctl start nix-daemon.socket 'var-cache-ccache-peer\x2dvictus\x2d15.automount'
     nix store ping && nix build --no-link nixpkgs#hello   # smoke test
 
     # 7. reclaim: delete the OLD top-level copy (everything except the @-subvolumes)
@@ -131,9 +142,10 @@ Preconditions: no builds running, nothing else using `/nix/store`.
     sudo find /mnt/nixroot -mindepth 1 -maxdepth 1 ! -name '@*' -exec rm -rf {} +
     ls -A /mnt/nixroot                     # only @store @ccache
     sudo umount /mnt/nixroot && sudo rmdir /mnt/nixroot
-    df -h /nix/store                       # used should be back to ~125 G
+    df -h /nix/store                       # unchanged (~126 G): the copies shared every extent
 
-Until step 7 both copies exist and share extents, so nothing is lost by
+The deletion in step 7 takes a while (millions of unlinks, the .links
+hard-link farm included); it is not hung. Until step 7 both copies exist and share extents, so nothing is lost by
 stopping midway; to back out before step 7, restore the old fstab line and
 remount. Sizes afterwards: raise `max_size` in `ccache.conf` and the cron
 `--trim-max-size` freely (it is all runtime); leave the store ~40 G of
