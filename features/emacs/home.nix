@@ -40,6 +40,106 @@ lib.mkIf (cfg.enable && inScope) {
     # Nix >2.18 breaks fetchGit's revision resolution for Unstraightened's
     # per-package fetches; fetchTree does not have that problem.
     experimentalFetchTree = true;
+
+    /*
+      typst-ts-mode's generated autoloads are not loadable under Emacs 31, and
+      that one package takes the whole daemon down.
+
+      SYMPTOM. emacs.service exits 255 at startup with
+
+        Symbol's function definition is void: define-compilation-mode
+        Symbol's function definition is void: vi-tilde-fringe-mode
+
+      The second is a red herring. The first aborts Doom's
+      `doom--startup-loaddefs-packages' loop, so every package whose autoloads
+      had not been reached yet stays undefined, and the next hook to call one
+      of them kills the daemon. Exactly one package is at fault -- confirmed by
+      walking the generated init.<version>.el and checking every head symbol
+      used inside a `(let* ((load-file-name ...)) ...)' autoloads block against
+      fboundp, which finds define-compilation-mode and nothing else.
+
+      Note `--batch' does NOT reproduce this: it skips the UI package loading
+      that reaches the failing hook, so the same binary that dies as a daemon
+      boots clean under `emacs --batch'. Reproduce with `--fg-daemon'.
+
+      CAUSE. typst-ts-compile.el:108 puts a `;;;###autoload' cookie on a
+      `define-compilation-mode' form -- a macro that lives in compile.el.
+      Emacs 30's loaddefs-generate MACROEXPANDED that to a plain stub:
+
+        (autoload 'typst-ts-compilation-mode "typst-ts-compile" "...")
+
+      Emacs 31's copies the macro call in VERBATIM:
+
+        (define-compilation-mode typst-ts-compilation-mode "Typst Compilation"
+        "..." (setq-local compilation-error-regexp-alist-alist nil) ...)
+
+      compile.el is not loaded when an autoloads file is, so evaluating that
+      raises void-function. Same package version (0.12.2) both ways -- the
+      difference is entirely which Emacs generated the autoloads, which is why
+      this appeared the moment `emacs30: remove' forced 30.2 -> 31.1.
+
+      WHY HERE AND NOT nixpkgs.overlays. Overriding `emacsPackagesFor' in a
+      nixpkgs overlay looks like it works -- pkgs.emacs-pgtk.pkgs.typst-ts-mode
+      really does pick up the change -- and is SILENTLY INEFFECTIVE, because
+      Unstraightened does not use nixpkgs' emacsPackagesFor at all. Its
+      flake.nix:71 takes emacs-overlay's instead:
+
+        inherit (emacs-overlay.overlays.package { } pkgs) emacsPackagesFor;
+
+      so the doom derivation's out path does not change. emacsPackageOverrides
+      is the supported hook, applied after Doom's pins (default.nix:132).
+
+      FIX. Make the macro reachable by autoload before the form is evaluated,
+      inserted AFTER line 1 so the `-*- lexical-binding: t -*-' cookie stays on
+      the first line -- prepending above it would silently switch the whole
+      autoloads file to dynamic binding.
+
+      Written to FAIL THE BUILD once it stops being needed rather than rot in
+      place: if the raw macro form is gone from the generated autoloads, the
+      guard aborts and says to delete this. Guarded with optionalAttrs so that
+      dropping `(typst +lsp)' from init.el simply makes it a no-op instead of
+      an eval error.
+    */
+    emacsPackageOverrides =
+      _eself: esuper:
+      lib.optionalAttrs (esuper ? typst-ts-mode) {
+        typst-ts-mode = esuper.typst-ts-mode.overrideAttrs (old: {
+          postInstall = (old.postInstall or "") + ''
+            autoloads="$(find "$out/share/emacs" -name typst-ts-mode-autoloads.el -print -quit)"
+
+            if [ -z "$autoloads" ]; then
+              echo "typst-ts-mode: no typst-ts-mode-autoloads.el under $out/share/emacs;" >&2
+              echo "  the autoloads workaround in features/emacs/home.nix cannot apply." >&2
+              exit 1
+            fi
+
+            if ! grep -q '^(define-compilation-mode typst-ts-compilation-mode' "$autoloads"; then
+              echo "typst-ts-mode: the raw (define-compilation-mode ...) form is no longer in" >&2
+              echo "  the generated autoloads, so this workaround is obsolete." >&2
+              echo "  DELETE emacsPackageOverrides in features/emacs/home.nix." >&2
+              exit 1
+            fi
+
+            if ! head -1 "$autoloads" | grep -q 'lexical-binding: t'; then
+              echo "typst-ts-mode: line 1 of the autoloads is not the lexical-binding header;" >&2
+              echo "  refusing to insert after it, which would change the binding mode." >&2
+              exit 1
+            fi
+
+            shim="$(mktemp)"
+            cat > "$shim" <<'SHIM'
+            ;; Inserted by features/emacs/home.nix. Emacs 31's loaddefs-generate
+            ;; copies the cookied (define-compilation-mode ...) form below verbatim
+            ;; instead of expanding it to an autoload, and compile.el is not loaded
+            ;; when this file is. Make the macro reachable rather than eagerly
+            ;; requiring compile.
+            (autoload 'define-compilation-mode "compile" nil nil 'macro)
+            SHIM
+            sed -i "1r $shim" "$autoloads"
+            rm -f "$shim"
+          '';
+        });
+      };
     extraBinPackages = with pkgs; [
       git
       ripgrep
