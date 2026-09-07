@@ -31,7 +31,11 @@
       next to losing the tool kernel patches are sent with.
     */
     pkgsBuildHost.git
-    gh
+    # gh is NOT here: features/base/home.nix enables programs.gh, which installs
+    # it into home.packages on every host -- and, the point of going through the
+    # module, writes the git credential helper against a store path the
+    # generation keeps alive. Listing it here too would put a second, unmanaged
+    # gh in users.users.<n>.packages, shadowing that one by PATH order.
     nixd
     nixfmt
     statix
