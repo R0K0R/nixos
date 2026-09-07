@@ -2,7 +2,7 @@
 { pkgs }:
 {
   system = with pkgs; [
-    libreoffice
+    libreoffice-qt-stable
     rnote
     google-chrome
     discord
