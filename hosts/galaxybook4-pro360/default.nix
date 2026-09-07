@@ -15,6 +15,12 @@
 
   my = {
     tuning = {
+      # build-time accelerators for the heavy list (tuning/heavy.nix) and
+      # step 1 of content-addressed derivations (tuning/ca.nix). Step 2
+      # (contentAddress) waits until ca-derivations is live on all three
+      # machines, yulee by hand.
+      heavy.enable = true;
+      ca.enable = true;
       # Literal, and it must stay one: flake.nix raw-imports this file to pick
       # between the patched fork and plain upstream nixpkgs before the module
       # system exists. false here would substitute the whole package set from
@@ -28,6 +34,7 @@
       qtPatches.enable = true;
       refreshTool.enable = true;
     };
+    ccache.enable = true;
 
     /*
       The people who use this machine. Declaring an account creates it; the

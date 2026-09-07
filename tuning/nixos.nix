@@ -106,6 +106,8 @@ in
   imports = [
     ./pkgs-config.nix
     ./runtime-cache-refresh.nix
+    ./heavy.nix
+    ./ca.nix
   ];
 
   config = lib.mkMerge [

@@ -188,6 +188,12 @@
       patching and yulee-sandbox test exclusions, none of which applies here.
     */
     tuning = {
+      # build-time accelerators for the heavy list (tuning/heavy.nix) and
+      # step 1 of content-addressed derivations (tuning/ca.nix). Step 2
+      # (contentAddress) waits until ca-derivations is live on all three
+      # machines, yulee by hand.
+      heavy.enable = true;
+      ca.enable = true;
       # Literal, and it must stay one -- see the note in galaxybook4-pro360.
       enable = true;
       march = "znver3";
@@ -196,6 +202,14 @@
       lto.enable = true;
       upstreamTools.enable = true;
       refreshTool.enable = true;
+    };
+    ccache.enable = true;
+    ccache.builder = {
+      enable = true;
+      # yulee's write-behind stage, mounted read-only over Tailscale, so a
+      # build interrupted there resumes warm here. yulee mounts ours the same
+      # way by hand (features/ccache/yulee.md §5).
+      peers.yulee = { host = "100.64.0.1"; };
     };
   };
 
