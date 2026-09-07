@@ -15,12 +15,18 @@
 
   my = {
     tuning = {
-      # build-time accelerators for the heavy list (tuning/heavy.nix) and
+      # build-time accelerators for the whole tuned host set (tuning/heavy.nix) and
       # step 1 of content-addressed derivations (tuning/ca.nix). Step 2
       # (contentAddress) waits until ca-derivations is live on all three
       # machines, yulee by hand.
       heavy.enable = true;
       ca.enable = true;
+      # FLIP THIS after the switch above has run on galaxybook, victus-15 AND
+      # yulee: the daemon must already carry ca-derivations to so much as
+      # EVALUATE a CA derivation, and that failure is not catchable (tried).
+      # The second pass rebuilds the tuned closure, but every compile in it is
+      # a ccache hit by then, so it is link-and-package time, not compile time.
+      ca.contentAddress = false;
       # Literal, and it must stay one: flake.nix raw-imports this file to pick
       # between the patched fork and plain upstream nixpkgs before the module
       # system exists. false here would substitute the whole package set from

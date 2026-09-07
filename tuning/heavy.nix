@@ -1,104 +1,122 @@
 /*
-  my.tuning.heavy -- the explicit list of packages worth ccache, mold and
-  dropping debug info for, and the overlay that applies them (overlays/heavy.nix).
+  my.tuning.heavy -- mold + ccache across the tuned host set.
 
-  Explicit rather than global on purpose. ccache only pays back when the SAME
-  derivation is rebuilt, and swapping a package's stdenv rebuilds it and
-  everything above it once; for the long tail of small, build-once packages
-  that is all cost and no return. The list below is "aggressive": every tuned
-  (actually-compiled-here) package that is heavy or medium, grouped by the
-  mechanism its stdenv is reached through. Packages the classifier aliases to
-  upstream (chromium, firefox, electron, jdk, ...) are absent because they are
-  substituted, never compiled.
+  Scope is the runtime classifier, not a hand-picked list: the same set
+  overlays/ca.nix marks content-addressed. Those derivations already differ
+  from upstream because of the march, so they never substituted from
+  cache.nixos.org and adding a linker and a compiler cache costs no
+  substitutability at all. The build platform is left alone.
 
-  THE CASCADE, stated once: glib, openssl, icu, python3, perl sit near the root
-  of the host graph. Including them means a one-time rebuild of essentially
-  the whole tuned closure on both builders. Accepted deliberately; paid once.
+  Three deliberate holes, each opt-in rather than global:
+
+  - `mold.exclude` keeps the normal linker for a name and everything under it.
+    The kernel is there because it drives its own link with $(LD) instead of
+    going through the compiler driver, so -fuse-ld=mold is inert at best there.
+    ccache still applies.
+  - `noDebugInfo.packages` turns separateDebugInfo off. That removes debug
+    symbols, so it is worth it only where the DWARF dwarfs the output:
+    webkitgtk measured 125 MB of library against 460 MB of debug info, and its
+    setup hook is what injects the -ggdb that produces it, so the cost is paid
+    at compile time too.
+  - `scopes` and `extras` reach what the classifier's names cannot: members of
+    package sets (qt6 modules, kdePackages) and attributes whose name differs
+    from the derivation's or that take a non-default stdenv argument.
+
+  ccache's own configuration (cache dir, sizes, L2 peers) lives in
+  features/ccache. Only `wrapperConfig` crosses over, and it carries no
+  remote-storage setting on purpose: env is ccache's highest-precedence config
+  source, so L2 there would be baked into every derivation hash instead of
+  staying a runtime lever.
 */
-{ config, lib, ... }:
+{ config, inputs, lib, hostName, ... }:
 
 let
   cfg = config.my.tuning.heavy;
-  entry = lib.types.attrsOf lib.types.anything;
+  hostRuntimeClassifier = import ./host-runtime-classifier.nix {
+    inherit inputs;
+    host = hostName;
+    system = "x86_64-linux";
+  };
 in
 {
   options.my.tuning.heavy = {
-    enable = lib.mkEnableOption "ccache / mold / no-debug-info treatment of the heavy package list";
-    mold.enable = lib.mkEnableOption "linking the heavy list with mold (stdenvAdapters.useMoldLinker)" // { default = true; };
-    noDebugInfo.enable = lib.mkEnableOption "separateDebugInfo = false on the heavy list (drops -ggdb; webkit's 460 MB of DWARF)" // { default = true; };
+    enable = lib.mkEnableOption "mold + ccache for the tuned host package set";
 
-    packages = lib.mkOption {
-      type = lib.types.listOf entry;
-      description = ''
-        Entries are `{ attr; stdenvArg ? "stdenv"; via ? null; mold ? true; noDebugInfo ? true; }`
-        for top-level packages, or `{ scope; members ? null; mold ? true; }` for a
-        makeScope -- the whole scope's stdenv (qt6, kdePackages) or just the
-        named members (llvmPackages.llvm). `via` names a passthru holding the real build
-        behind a wrapper (libreoffice-qt-stable.unwrapped). `attr = "buildLinux"`
-        reaches every kernel built from the overlay.
-      '';
+    mold = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Link the tuned host set with mold instead of ld.bfd.";
+      };
+
+      exclude = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [
+          "linux"
+          "linuxPackages"
+          "linuxPackages_latest"
+          "linuxKernel"
+        ];
+        description = "Names kept on the normal linker. They still get ccache.";
+      };
+    };
+
+    skip = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
       default = [
-        # --- the original three
-        { attr = "webkitgtk_4_1"; stdenvArg = "clangStdenv"; }
-        { attr = "webkitgtk_6_0"; stdenvArg = "clangStdenv"; }
-        { attr = "libreoffice-qt-stable"; via = "unwrapped"; }
-        { attr = "buildLinux"; noDebugInfo = false; }          # the kernel; not a derivation itself
-        # --- whole scopes: qtwebengine, qtdeclarative, qtbase ... and all KDE frameworks/apps
+        # The stdenv's own closure. Treating these is a cycle, not a choice:
+        # a stdenv derived from the stdenv needs the compiler it is rebuilding.
+        "gcc" "binutils" "glibc" "libgcc" "glibc-locales" "linux-headers"
+        "clang" "libcxx" "llvm" "compiler-rt"
+        "bash" "coreutils" "findutils" "diffutils" "gnused" "gnugrep" "gawk"
+        "gnutar" "gzip" "bzip2" "xz" "patch" "file" "ed" "gnumake" "patchelf"
+      ];
+      description = "Names left completely untouched: no mold, no ccache. The stdenv's own closure has to be here.";
+    };
+
+    scopes = lib.mkOption {
+      type = lib.types.listOf (lib.types.attrsOf lib.types.anything);
+      default = [
         { scope = "qt6"; }
         { scope = "kdePackages"; }
-        # --- big C/C++ leaves
-        { attr = "blender"; }
-        { attr = "qemu"; }
-        { scope = "llvmPackages"; members = [ "llvm" ]; }   # llvm only; not the scope stdenv (that is clangStdenv's ancestry)
-        { attr = "opencv"; }
-        { attr = "ffmpeg-full"; }
-        { attr = "ffmpeg"; }
-        { attr = "imagemagick"; }
-        { attr = "poppler"; }
-        { attr = "emacs-pgtk"; }
-        # hyprland applies stdenvAdapters.useMoldLinker itself; don't double it
-        { attr = "hyprland"; stdenvArg = "gcc16Stdenv"; mold = false; }
-        # --- medium libraries with many TUs
-        { attr = "mesa"; }
-        { attr = "gtk4"; }
-        { attr = "gtk3"; }
-        { attr = "pango"; }
-        { attr = "harfbuzz"; }
-        { attr = "icu"; }
-        { attr = "systemd"; }
-        { attr = "pipewire"; }
-        { attr = "boost"; }
-        { attr = "protobuf"; }
-        { attr = "abseil-cpp"; }
-        { attr = "curlMinimal"; } # `curl` is curlMinimal.override { .. }; follows
-        # --- deep roots: the cascade lives here
-        { attr = "glib"; }
-        { attr = "openssl"; }
-        { attr = "python3"; }
-        { attr = "perl"; }
       ];
+      description = "Package sets whose members are not top-level attributes; their whole scope gets the tuned stdenv.";
+    };
+
+    extras = lib.mkOption {
+      type = lib.types.listOf (lib.types.attrsOf lib.types.anything);
+      default = [
+        { attr = "webkitgtk_4_1"; stdenvArg = "clangStdenv"; }
+        { attr = "webkitgtk_6_0"; stdenvArg = "clangStdenv"; }
+        { attr = "hyprland"; stdenvArg = "gcc16Stdenv"; }
+      ];
+      description = "Attributes the classifier's names miss, or that take a non-default stdenv argument.";
+    };
+
+    noDebugInfo.packages = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [
+        "webkitgtk_4_1"
+        "webkitgtk_6_0"
+      ];
+      description = "Top-level packages built with separateDebugInfo = false. Opt-in; missing names are skipped.";
     };
   };
 
   config = lib.mkIf cfg.enable {
-    assertions = [
-      {
-        assertion = config.my.tuning.enable && config.my.tuning.march != null;
-        message = "my.tuning.heavy needs my.tuning.enable and a march: the overlay only touches the march'd host set.";
-      }
-    ];
-
-    # mkBefore: must precede o3.nix / gentoo-lto.nix -- see overlays/heavy.nix.
     nixpkgs.overlays = lib.mkBefore [
       (import ./overlays/heavy.nix {
         inherit lib;
+        mold = cfg.mold.enable;
+        moldExclude = cfg.mold.exclude;
+        inherit (cfg) skip;
+        names = hostRuntimeClassifier.runtimeNames;
+        inherit (cfg) scopes extras;
+        noDebugInfoNames = cfg.noDebugInfo.packages;
         ccache = {
-          enable = config.my.ccache.enable;
+          inherit (config.my.ccache) enable;
           extraConfig = config.my.ccache.wrapperConfig;
         };
-        mold = cfg.mold.enable;
-        noDebugInfo = cfg.noDebugInfo.enable;
-        entries = cfg.packages;
       })
     ];
   };

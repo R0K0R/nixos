@@ -1,29 +1,68 @@
 /*
-  Per-package build-time treatments for the HEAVY set: ccache, mold, and no
-  debug info -- composed on one stdenv so they cannot fight over `.override`.
+  mold + ccache across the tuned host set.
 
-  Measured 2026-09-07 before any of this was written (see the ccache memory /
-  plan for the runs):
-    - ccache pays back only on rebuilds of the SAME derivation inputs
-      (interrupted build, resume on the other builder, post-GC, --check); it
-      cannot bridge a dependency bump under Nix, and the symlink trick that
-      could was rejected as not safe enough. Hence an explicit list, not global.
-    - webkitgtk links ONE ~585 MB object with ld.bfd (125 MB .so + 460 MB DWARF
-      from separateDebugInfo); mold and dropping -ggdb attack that directly,
-      and ccache never caches links -- the three are complementary.
+  `skip` is not a preference, it is a correctness requirement: the classifier's
+  names include the stdenv's own parts (gcc, binutils, glibc, bash, coreutils,
+  ...). Rebuilding those with a stdenv derived from the stdenv is a cycle --
+  `stdenv.cc.isGNU` forces `stdenv.cc.cc`, which is the very `gcc` being
+  overridden (measured: infinite recursion at adapters.nix:343). They are also
+  the packages ccache and mold would help least.
 
-  ORDERING. This overlay is registered with lib.mkBefore so it runs BEFORE
-  o3.nix / gentoo-lto.nix. Those use overrideAttrs, which leaves a `.override`
-  that no longer exposes the original `stdenv` argument (verified: curl,
-  protobuf, abseil-cpp, boost show 1-2 override args under the tuning
-  overlays). Running first, `prev.<name>` is the pristine callPackage result,
-  the stdenv swap works, and the tuning flags layer on top unchanged.
+  SELECTION is the runtime classifier, the same set overlays/ca.nix marks
+  content-addressed: every host-runtime name that is also a top-level
+  attribute. Those derivations already differ from upstream (gccarch), so they
+  never substituted from cache.nixos.org and a linker or compiler cache costs
+  them no substitutability -- only the one rebuild the switch pays anyway. The
+  build platform (~91% of the toplevel closure, measured) is outside the guard
+  below and stays byte-identical to upstream.
 
-  Same guards as the other tuning overlays: nixpkgs re-runs the overlay list
-  for every bootstrap stage, and only the march'd HOST set is meant to be
-  touched (build-platform packages substitute from cache.nixos.org).
+  Selection by NAME rather than by swapping `stdenv` itself: a global stdenv
+  override in an overlay is infinite recursion (measured, twice -- once via
+  `builtins.attrNames prev`, once from the swap alone). `scopes` covers package
+  sets whose members are not top-level attributes (qt6 modules, kdePackages);
+  `extras` covers packages whose attribute name the classifier does not carry
+  or that take a non-default stdenv argument.
+
+  ORDERING. Registered with lib.mkBefore so it runs BEFORE o3.nix and
+  gentoo-lto.nix. Those use overrideAttrs, which leaves a `.override` that no
+  longer exposes the original `stdenv` argument (verified: curl, protobuf,
+  abseil-cpp, boost show 1-2 override args under the tuning overlays). Running
+  first, `prev.<name>` is the pristine callPackage result, the stdenv swap
+  works, and the tuning flags layer on top unchanged.
+
+  COMPOSITION, both halves verified by eval: base -> useMoldLinker -> ccache.
+
+  MOLD FIRST. `useMoldLinker` does `stdenv.cc.override { bintools = ...; }`.
+  nixpkgs' `ccacheWrapper` is makeOverridable over `{ extraConfig, cc }` and
+  REPLACES the cc-wrapper's own `.override`, so after it there is no `bintools`
+  argument left and the call dies with "unexpected argument 'bintools'". For
+  the same reason the ccache cc is built from `ccache.links` plus a plain
+  `cc.override { cc = links; }` instead of through `ccacheWrapper`: that keeps
+  the full cc-wrapper override surface, which packages applying useMoldLinker
+  themselves (hyprland) still need.
+
+  The links carry the REAL compiler's version. A cc-wrapper takes `version`
+  from the cc it wraps, so bare ccache-links makes `stdenv.cc.version` read
+  "4.13.6" (measured on glib) and every `versionAtLeast stdenv.cc.version` gate
+  in nixpkgs, useMoldLinker's own gcc >= 12 test included, takes the wrong
+  branch.
+
+  No CCACHE env beyond CCACHE_DIR and the static knobs: env is ccache's
+  highest-precedence config source, so remote storage there would bake the L2
+  topology into every derivation hash instead of leaving it a runtime lever in
+  the builder's $CCACHE_DIR/ccache.conf (features/ccache).
 */
-{ lib, ccache, mold, noDebugInfo, entries }:
+{
+  lib,
+  ccache,
+  mold,
+  names,
+  extras,
+  scopes,
+  skip,
+  moldExclude,
+  noDebugInfoNames,
+}:
 
 final: prev:
 if
@@ -33,52 +72,20 @@ then
   { }
 else
   let
-    # base stdenv -> [mold-linked] -> [no separate debug info] -> [ccache-wrapped]
     mkStdenv =
-      { useMold, noDbg }:
+      { useMold }:
       base:
       let
-        # MOLD FIRST. useMoldLinker calls `stdenv.cc.override { bintools = ..; }`;
-        # after ccache has wrapped the stdenv, `.cc.override` is ccacheWrapper's
-        # own makeOverridable ({ extraConfig, cc }) and rejects `bintools`
-        # (verified: "called with unexpected argument 'bintools'"). The other
-        # way round composes: ccache's links wrap the mold-equipped cc, and the
-        # -fuse-ld=mold that useMoldLinker adds via mkDerivationFromStdenv is
-        # an accumulated stdenv.override arg, preserved through overrideCC.
         withMold = if useMold && mold then prev.stdenvAdapters.useMoldLinker base else base;
-        # separateDebugInfo off at the stdenv, not per package: that is the
-        # only way to reach scope members (qt6 modules, kdePackages) and it
-        # also removes the -ggdb that separate-debug-info.sh injects into
-        # every TU. extendMkDerivationArgs applies it as an overrideAttrs on
-        # top, so it wins over a package's own `separateDebugInfo = true`.
-        withDbg =
-          if noDbg then prev.stdenvAdapters.addAttrsToDerivation { separateDebugInfo = false; } withMold else withMold;
-        # Mirrors nixpkgs' ccacheStdenv but with OUR extraConfig: only
-        # CCACHE_DIR and the static knobs. Deliberately NO remote-storage env
-        # var -- env is ccache's highest-precedence source and would bake the
-        # L2 choice into every derivation hash. L2 lives in the builder's
-        # $CCACHE_DIR/ccache.conf, editable at runtime (features/ccache).
-        #
-        # Built from ccache.links directly rather than via `ccacheWrapper`:
-        # that one is makeOverridable over { extraConfig, cc } and REPLACES the
-        # cc-wrapper's `.override`, so anything downstream that does
-        # `stdenv.cc.override { bintools = ..; }` -- useMoldLinker, and
-        # packages like hyprland that apply it themselves -- breaks. This way
-        # the result is a plain cc-wrapper with its full override surface.
         links = prev.buildPackages.ccache.links {
           extraConfig = ccache.extraConfig;
-          unwrappedCC = withDbg.cc.cc;
+          unwrappedCC = withMold.cc.cc;
         };
-        ccacheCC = withDbg.cc.override {
-          # cc-wrapper takes `version` from the cc it wraps, so a plain
-          # ccache-links makes stdenv.cc.version read "4.13.6" (measured on
-          # glib) and every `versionAtLeast stdenv.cc.version` gate in
-          # nixpkgs -- useMoldLinker's own gcc>=12 check included -- goes
-          # wrong. Report the real compiler's version instead.
-          cc = links.overrideAttrs (_: { version = withDbg.cc.cc.version; });
+        ccacheCC = withMold.cc.override {
+          cc = links.overrideAttrs (_: { version = withMold.cc.cc.version; });
         };
       in
-      if ccache.enable then prev.overrideCC withDbg ccacheCC else withDbg;
+      if ccache.enable then prev.overrideCC withMold ccacheCC else withMold;
 
     # Only swap through an argument the package actually declares. abseil-cpp
     # takes no `stdenv` at all and `.override { stdenv = ...; }` throws
@@ -87,19 +94,14 @@ else
     # lib.functionArgs copes with both shapes of `override` (makeOverridable's
     # functor attrset, or a bare lambda) where `.__functionArgs` does not.
     takes = pkg: arg: lib.isAttrs pkg && pkg ? override && (lib.functionArgs pkg.override) ? ${arg};
-    canSwap = pkg: arg: takes pkg arg || takes pkg "callPackage";
-    # opts = { useMold, noDbg }, as mkStdenv takes them
-    optsOf = e: {
-      useMold = e.mold or true;
-      noDbg = noDebugInfo && (e.noDebugInfo or true);
-    };
+
     swapIn =
-      pkg: arg: opts:
+      pkg: arg: useMold:
       let
-        tuned = mkStdenv opts prev.${arg};
-        # Version shims like protobuf_35 = callPackage ./35.nix { } expose
-        # only `callPackage` to override; thread the stdenv through it into
-        # the generic below, but only if that generic actually takes it.
+        tuned = mkStdenv { inherit useMold; } prev.${arg};
+        # Version shims like protobuf_35 = callPackage ./35.nix { } expose only
+        # `callPackage` to override; thread the stdenv through it into the
+        # generic below, but only if that generic actually takes it.
         viaCallPackage =
           fn: a:
           let
@@ -114,58 +116,91 @@ else
       else
         pkg;
 
-    treatAttr =
-      e:
-      let
-        arg = e.stdenvArg or "stdenv";
-        opts = optsOf e;
-        pkg = prev.${e.attr};
-        # a boolean test, not `swapped != pkg`: derivations hold functions and
-        # attrset comparison over them is an eval error
-        applicable = if e ? via then takes pkg e.via && pkg ? ${e.via} && canSwap pkg.${e.via} arg else canSwap pkg arg;
-      in
-      if !applicable then
-        pkg
-      else if e ? via then
-        # wrapper packages: the compiled thing is behind a passthru
-        # (libreoffice-qt-stable.unwrapped); swap the stdenv there and
-        # hand the wrapper the result.
-        pkg.override { ${e.via} = swapIn pkg.${e.via} arg opts; }
+    # LAZY, and that is the whole point. Deciding membership uses only the
+    # has-attr test, which forces `prev` to WHNF and nothing else; the treatment
+    # itself sits unevaluated inside `value`. Running tryEval out here instead
+    # forces all ~1900 packages while the package set is still being built,
+    # which is infinite recursion (measured). The tryEval inside `value` gives
+    # tolerance without eagerness: a package that throws on access falls back to
+    # the untouched original, which then throws exactly as it would have.
+    tryList =
+      n: f:
+      if prev ? ${n} then
+        [
+          {
+            name = n;
+            value =
+              let
+                t = builtins.tryEval (f prev.${n});
+              in
+              if t.success then t.value else prev.${n};
+          }
+        ]
       else
-        swapIn pkg arg opts;
+        [ ];
 
-    # Scopes. Without `members`: override the scope's `stdenv`, which the
-    # module builders (qt6, kdePackages) take from the scope, so one change
-    # covers every member (qtwebengine included). With `members`: only those,
-    # for scopes where touching the shared stdenv would reach too far
-    # (llvmPackages -- its stdenv IS clangStdenv's ancestry). noDebugInfo
-    # rides along inside the stdenv, so it reaches scope members too.
-    treatScope =
+    treatName =
       e:
-      # Whole scope, and the scope itself takes `stdenv` (qt6 is `callPackage
-      # ../qt-6 { }` and hands every module that stdenv EXPLICITLY, so a scope
-      # member added by overrideScope would lose to it): override at the top.
-      if !(e ? members) && takes prev.${e.scope} "stdenv" then
-        prev.${e.scope}.override { stdenv = mkStdenv (optsOf e) prev.stdenv; }
-      else
-      prev.${e.scope}.overrideScope (
-        _: sp:
-        if e ? members then
-          # only the named members, each through its own `stdenv` arg
-          builtins.listToAttrs (
-            map (m: {
-              name = m;
-              value = swapIn sp.${m} "stdenv" (optsOf e);
-            }) (builtins.filter (m: sp ? ${m}) e.members)
-          )
-        else
-          # scopes without a `stdenv` member (kdePackages) resolve it from pkgs
-          # via callPackage's fallback; adding one to the scope overrides that.
-          { stdenv = mkStdenv (optsOf e) (sp.stdenv or prev.stdenv); }
+      tryList e.attr (
+        pkg:
+        let
+          arg = e.stdenvArg or "stdenv";
+        in
+        if takes pkg arg || takes pkg "callPackage" then swapIn pkg arg (e.mold or true) else pkg
       );
 
-    attrEntries = builtins.filter (e: e ? attr && prev ? ${e.attr}) entries;
-    scopeEntries = builtins.filter (e: e ? scope && prev ? ${e.scope}) entries;
+    # Scope members are not top-level attributes. qt6 hands every module an
+    # explicit stdenv from its own argument, so overrideScope cannot reach them
+    # and the top-level override is the one that works; kdePackages has no
+    # `stdenv` member at all, so one must be added to its scope.
+    treatScope =
+      e:
+      tryList e.scope (
+        scope:
+        if takes scope "stdenv" then
+          scope.override { stdenv = mkStdenv { useMold = e.mold or true; } prev.stdenv; }
+        else
+          scope.overrideScope (
+            _: sp: { stdenv = mkStdenv { useMold = e.mold or true; } (sp.stdenv or prev.stdenv); }
+          )
+      );
+
+    # Composed ON TOP of whatever the passes above produced for the same name,
+    # never as a competing entry: listToAttrs keeps the FIRST binding, so a
+    # separate entry for a name that `extras` also produces is silently dropped
+    # (measured -- webkitgtk kept its debug output).
+    debugOff =
+      treated: n:
+      if prev ? ${n} then
+        [
+          {
+            name = n;
+            value =
+              let
+                src = treated.${n} or prev.${n};
+                t = builtins.tryEval (
+                  lib.isDerivation src && src ? overrideAttrs
+                );
+              in
+              if t.success && t.value then
+                src.overrideAttrs (_: { separateDebugInfo = false; })
+              else
+                src;
+          }
+        ]
+      else
+        [ ];
+
+    extraNames = map (e: e.attr) extras;
+    # extras win over the classifier-driven pass, so a package listed there
+    # with a non-default stdenv argument is not also swapped through `stdenv`.
+    fromClassifier = builtins.filter (
+      n: !(builtins.elem n skip) && !(builtins.elem n extraNames)
+    ) names;
+    treated = builtins.listToAttrs (
+      builtins.concatMap (n: treatName { attr = n; mold = !(builtins.elem n moldExclude); }) fromClassifier
+      ++ builtins.concatMap treatName extras
+      ++ builtins.concatMap treatScope scopes
+    );
   in
-  builtins.listToAttrs (map (e: { name = e.attr; value = treatAttr e; }) attrEntries)
-  // builtins.listToAttrs (map (e: { name = e.scope; value = treatScope e; }) scopeEntries)
+  treated // builtins.listToAttrs (builtins.concatMap (debugOff treated) noDebugInfoNames)
