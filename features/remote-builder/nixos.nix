@@ -218,7 +218,20 @@ in
     nix.buildMachines = lib.mapAttrsToList (name: p: {
       hostName = name;
       systems = [ "x86_64-linux" "i686-linux" ];
-      protocol = "ssh";
+      /*
+        ssh-ng, not ssh. The legacy `ssh://` transport is LegacySSHStore, which
+        has no `queryRealisation` operation, and content-addressed derivations
+        need exactly that to resolve an output. Dispatching a CA build to an
+        `ssh://` builder does not fail cleanly either -- Nix aborts with
+        "operation 'queryRealisation' is not supported by store" and a SIGABRT
+        stack trace (measured 2026-09-07, nix 2.34.8).
+
+        ssh-ng speaks the daemon protocol over ssh, so the peer's own daemon
+        settings apply and the connecting user must be trusted there. Verified:
+        yulee (Nix 2.18.1) and victus-15 (2.34.8) both answer `store info` over
+        ssh-ng with Trusted: 1 for this key.
+      */
+      protocol = "ssh-ng";
       inherit (p) maxJobs speedFactor sshUser;
       sshKey = cfg.sshKey;
       /*
