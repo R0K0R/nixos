@@ -30,23 +30,27 @@ then
 else
   let
     tunedSuffix = "x86_64-unknown-linux-gnu";
+    # has-attr only: it forces `prev` to WHNF and nothing more.
     candidates = builtins.filter (n: prev ? ${n}) hostRuntimeClassifier.runtimeNames;
-    eligible =
-      n:
-      let
-        t = builtins.tryEval (
-          let v = prev.${n}; in
-          lib.isDerivation v
-          && v ? overrideAttrs
-          && !(v ? outputHash)
-          && lib.hasInfix tunedSuffix (v.name or "")
-        );
-      in
-      t.success && t.value;
   in
+  # The eligibility test lives INSIDE the value, not in a filter. Deciding it
+  # out here forces every candidate while the package set is still being built,
+  # which is infinite recursion once the set is large and the packages carry a
+  # derived stdenv (measured, after overlays/heavy.nix grew to the same list).
+  # An ineligible or throwing name yields the untouched package instead.
   builtins.listToAttrs (
     map (n: {
       name = n;
-      value = prev.${n}.overrideAttrs (_: { __contentAddressed = true; });
-    }) (builtins.filter eligible candidates)
+      value =
+        let
+          v = prev.${n};
+          t = builtins.tryEval (
+            lib.isDerivation v
+            && v ? overrideAttrs
+            && !(v ? outputHash)
+            && lib.hasInfix tunedSuffix (v.name or "")
+          );
+        in
+        if t.success && t.value then v.overrideAttrs (_: { __contentAddressed = true; }) else v;
+    }) candidates
   )

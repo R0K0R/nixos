@@ -21,12 +21,12 @@
       # machines, yulee by hand.
       heavy.enable = true;
       ca.enable = true;
-      # FLIP THIS after the switch above has run on galaxybook, victus-15 AND
-      # yulee: the daemon must already carry ca-derivations to so much as
-      # EVALUATE a CA derivation, and that failure is not catchable (tried).
-      # The second pass rebuilds the tuned closure, but every compile in it is
-      # a ccache hit by then, so it is link-and-package time, not compile time.
-      ca.contentAddress = false;
+      # Needs ca-derivations ALREADY live on the daemon that evaluates and on
+      # every builder -- forcing drvPath writes the derivation through the
+      # daemon, which is what rejects it, so no client flag helps. yulee has it
+      # in nix.conf; galaxybook and victus-15 need the transient drop-in in
+      # tuning/ca.nix's header before their first switch with this on.
+      ca.contentAddress = true;
       # Literal, and it must stay one: flake.nix raw-imports this file to pick
       # between the patched fork and plain upstream nixpkgs before the module
       # system exists. false here would substitute the whole package set from
