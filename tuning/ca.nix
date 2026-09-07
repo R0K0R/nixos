@@ -15,13 +15,16 @@
 
   DOING BOTH IN ONE SWITCH. Step 1 only takes effect when the daemon restarts,
   which is the end of a switch, so a config with both on cannot evaluate on a
-  machine that has not switched yet. Neither client path helps: forcing
-  `drvPath` writes the derivation through the daemon, and it is the daemon that
-  refuses (`--extra-experimental-features` and `NIX_CONFIG` on the client were
-  both measured to fail, and the error is not catchable by tryEval either).
+  machine that has not switched yet.
 
-  The daemon reads NIX_CONFIG, though, so it can be granted the feature without
-  a switch. On each NixOS machine, BEFORE the first switch with this on:
+  BOTH SIDES need the feature, and that is the part that misleads: the client
+  evaluates `__contentAddressed` and the daemon accepts the resulting
+  derivation, so enabling either one alone still fails, with an error that
+  points at whichever half is missing (measured both ways). tryEval cannot
+  catch it, so it cannot self-bootstrap.
+
+  Daemon side, granted without a switch since the daemon reads NIX_CONFIG. On
+  each NixOS machine, BEFORE the first switch with this on:
 
     sudo mkdir -p /run/systemd/system/nix-daemon.service.d
     printf '[Service]\nEnvironment="NIX_CONFIG=experimental-features = nix-command flakes ca-derivations"\n' \
@@ -31,6 +34,14 @@
   /run, so it evaporates on reboot and the switch's own nix.conf takes over.
   Do NOT restart the daemon while a build is running; it kills them. Every
   machine that BUILDS these derivations needs it too, not just the evaluator.
+
+  Client side, for that one switch only, since /etc/nix/nix.conf does not carry
+  it until the switch lands:
+
+    sudo NIX_CONFIG="extra-experimental-features = ca-derivations" \
+      nixos-rebuild switch --flake .#<host> --target-host <host> --sudo --ask-sudo-password
+
+  `extra-` appends, so it does not clobber nix-command and flakes.
 
   Known open risk, deliberately not hidden: realisation propagation between
   yulee (Nix 2.18.1) and the 2.34.8 hosts over the remote-build protocol. The
