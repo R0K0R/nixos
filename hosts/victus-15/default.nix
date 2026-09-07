@@ -24,6 +24,26 @@
     claude-code.enable = true;
 
     /*
+      Same shape as galaxybook: this machine sits on the LAN side of yulee's
+      OpenVPN link, so it cannot reach note10 itself and jumps through yulee.
+      `sudo globaltun up` -- nothing starts on its own.
+
+      The key is r0k0r's own ~/ssh_key, spelled absolutely because the script
+      runs under sudo, where ~ is /root.
+    */
+    globaltun = {
+      enable = true;
+      jump = "r0k0r@172.30.0.215";
+      remote = "root@192.168.0.100";
+      sshKey = "/home/r0k0r/ssh_key";
+      # Distinct from galaxybook's 1080 and yulee's 1081: one relay per client
+      # on the gateway, or `up` here kills theirs.
+      remoteSocksPort = 1082;
+      # Headless -- keep the admin LAN off the tunnel.
+      keepDirect = [ "172.20.0.0/21" ];
+    };
+
+    /*
       Both humans on this machine. Declaring an account creates it, and the
       primary is what every feature's `users` option defaults to -- so benjamin
       gets an account and a home-manager configuration, but none of the features

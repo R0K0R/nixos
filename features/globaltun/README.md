@@ -69,6 +69,10 @@ into the world-readable Nix store; the type makes that inexpressible.
 not share a relay: whichever ran `up` last would kill the others' relay and
 every connection on it, silently. A required option forces the choice.
 
+The gateway is the registry, not this file — `pgrep -f rsocks` there shows what
+is actually bound (`ss` is blind under proot). Four clients have been run
+concurrently on one phone at negligible cost.
+
 **`keepDirect`** freezes prefixes onto the path they already use. Two things
 belong there: on a headless machine, the network the admin session arrives over
 — otherwise `up` cuts the connection mid-command and nothing is left to undo it

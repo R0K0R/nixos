@@ -62,6 +62,26 @@
       enable = true;
       profileSecret = ../../age/openvpn-profile.age;
     };
+
+    /*
+      On-demand full tunnel out through note10 for networks with no uplink of
+      their own -- `sudo globaltun up`. yulee is the jump host because it is the
+      only machine that can reach note10 from such a network; see
+      globaltun-findings.md.
+
+      Same identity my.ssh.builderKeyFile uses, spelled out rather than shared,
+      so the feature stays giftable. NOTE this file is a leftover: with
+      remote-builder.client.sshKeySecret set, nothing installs it any more.
+    */
+    globaltun = {
+      enable = true;
+      jump = "r0k0r@172.30.0.215";
+      remote = "root@192.168.0.100";
+      sshKey = "/etc/nix/remote-builder/ssh_key";
+      # One relay per client on the gateway; see the option's description for
+      # the current assignment across hosts.
+      remoteSocksPort = 1080;
+    };
     waydroid.enable = true;
     session-env.enable = true;
     fish = {
