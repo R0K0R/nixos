@@ -199,14 +199,17 @@
       # daemon, which is what rejects it, so no client flag helps. yulee has it
       # in nix.conf; galaxybook and victus-15 need the transient drop-in in
       # tuning/ca.nix's header before their first switch with this on.
-      # Needs a modern Nix on EVERY builder, not just the evaluator. Ubuntu's
-      # nix-bin 2.18.1 cannot resolve an output placeholder inside a reference
-      # specifier, so any CA package whose output checks name a sibling output
-      # fails there with "illegal reference specifier" (krb5's lib output
-      # disallowing its dev output, 2026-09-07). Not filterable at eval time:
-      # the placeholder only exists after instantiation, and outputChecks is on
-      # nearly every package. See features/ccache/yulee.md for the upgrade.
-      ca.contentAddress = true;
+      # OFF, and not for want of trying (2026-09-07). CA is structurally at
+      # odds with nixpkgs' reference checks here. A derivation ANYWHERE
+      # downstream of a content-addressed one gets a deferred output path, so
+      # `disallowedRequisites = [ bashNonInteractive ]` in krb5 resolves to a
+      # placeholder like "/1lba4bnb..." and the build dies with "not a valid
+      # output of this derivation". bash is not CA; readline is, and bash
+      # depends on it. Excluding packages that HAVE checks does not help: the
+      # breakage is in what the check NAMES. Every builder ran Nix 2.34.8 for
+      # this test, so it is not the version. Revisiting means stripping those
+      # checks from affected packages, which trades away a real safety net.
+      ca.contentAddress = false;
       # Literal, and it must stay one -- see the note in galaxybook4-pro360.
       enable = true;
       march = "znver3";

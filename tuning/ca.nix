@@ -75,7 +75,16 @@ in
           message = "my.tuning.ca.contentAddress needs my.tuning.ca.enable (step 1 live everywhere first) and a march'd host.";
         }
       ];
-      nixpkgs.overlays = [ (import ./overlays/ca.nix { inherit lib hostRuntimeClassifier; }) ];
+      nixpkgs.overlays = [
+        (import ./overlays/ca.nix {
+          inherit lib hostRuntimeClassifier;
+          # Same closure overlays/heavy.nix leaves alone, for a related reason:
+          # there it is a stdenv-derived-from-stdenv cycle, here it is that a
+          # CA outPath is a placeholder and poisons any reference check naming
+          # it. One list, one source of truth.
+          skip = config.my.tuning.heavy.skip;
+        })
+      ];
     })
   ];
 }
