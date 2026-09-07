@@ -52,12 +52,25 @@ in
       exclude = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [
+          # links with $(LD) itself rather than through the compiler driver
           "linux"
           "linuxPackages"
           "linuxPackages_latest"
           "linuxKernel"
+
+          # nss links bin/hw-support against static archives in a
+          # --start-group, with libnss3.so only AFTER the group. libcerthi.a's
+          # certvfypkix.o references internal PKIX_* symbols, and no pkix
+          # archive is on that line -- ld.bfd never extracts that member, mold
+          # does, and the link fails on undefined symbols (2026-09-08).
+          "nss"
         ];
-        description = "Names kept on the normal linker. They still get ccache.";
+        description = ''
+          Names kept on the normal linker. They still get ccache. Expect to add
+          to this: a tree-wide linker swap finds every build that depends on
+          ld.bfd's exact archive-extraction behaviour, and each one surfaces as
+          undefined symbols at link time.
+        '';
       };
     };
 
