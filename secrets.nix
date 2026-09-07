@@ -173,5 +173,5 @@ in
   # the agenix path is proven: it is the key that dispatches builds, so
   # breaking it costs the ability to rebuild remotely -- including the
   # rebuild that would fix it.
-  "age/remote-builder-ssh-key.age".publicKeys = [ galaxybook ];
+  "age/remote-builder-ssh-key.age".publicKeys = [ galaxybook victus15 ];
 }
