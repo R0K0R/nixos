@@ -28,6 +28,30 @@ into sysfs by hand: ACPI only enumerates the amp at 0x38, and the other three
 (0x39, 0x3c, 0x3d) have to be created manually. serial-multi-instantiate does
 this properly once it knows the MAX98390 ACPI ID.
 
+LOCAL CHANGES ON TOP OF THE PR. Two, both in max98390_hda.c:
+
+  a. Rdc calibration. DSM models voice-coil temperature by comparing the
+     coil's live DC resistance, which the amp measures through IV-sense,
+     against a reference at DSM_TPROT_RECIP_RDC_ROOM (0x2392-4). The PR ships
+     that reference inside its tuning blob, and the blob came from a Google
+     Redrix Chromebook: decoding it gives 7.09 ohm for the woofers and 6.39
+     ohm for the tweeters, so the amps are thermally protected against
+     someone else's speakers. Rdc also varies unit to unit, so no shipped
+     constant can be correct for a given machine. Adds three sysfs attributes
+     per amp -- dsm_rdc (RO, live measurement in milliohm), dsm_ref_rdc (RW,
+     the raw reference) and dsm_calibrate (WO, measure and apply).
+     Conversions match max98390_dsm_calib_put() in sound/soc/codecs/
+     max98390.c so both drivers agree what a register value means.
+     Calibration refuses to run on an idle amp, since IV-sense has nothing to
+     measure then, and rejects readings outside roughly 2-16 ohm, since an
+     over-estimated coil resistance errs towards under-protection. The result
+     survives runtime PM through the regcache but not a reboot -- the blob
+     rewrites 0x2392-4 at probe, so persisting it is userspace's job.
+
+  b. Dropped three unused locals in max98390_hda_init() (global_en, amp_en,
+     pcm_rx). They are -Werror=unused-variable errors; the PR as published
+     does not build against this config without removing them.
+
 REBASED ONTO 7.1.9, one hunk. The enum in alc269.c gained
 ALC298_FIXUP_LG_GRAM_STYLE_14 between ALC298_FIXUP_SAMSUNG_AMP_V2_4_AMPS and
 ALC298_FIXUP_SAMSUNG_HEADPHONE_VERY_QUIET, so the hunk that adds
@@ -36,7 +60,9 @@ that one line; nothing else needed touching, and every other hunk applies
 with only offsets. Expect to redo exactly this on future kernel bumps -- if
 the build fails at patchPhase, diff that enum first.
 
-Verified: 0 failed hunks against linux-7.1.9.
+Verified: 0 failed hunks against linux-7.1.9. The local changes above touch
+only max98390_hda.c, which this patch creates outright, so they cannot
+introduce a context conflict; the hand-widened alc269.c hunk is untouched.
 
 diff --git a/drivers/acpi/scan.c b/drivers/acpi/scan.c
 index ef16d58b29499d..b33e5e984ef186 100644
@@ -184,17 +210,19 @@ index 245e84f6a121d6..e80857adcaf38e 100644
 +obj-$(CONFIG_SND_HDA_SCODEC_MAX98390_I2C) += snd-hda-scodec-max98390-i2c.o
 diff --git a/sound/hda/codecs/side-codecs/max98390_hda.c b/sound/hda/codecs/side-codecs/max98390_hda.c
 new file mode 100644
-index 00000000000000..869169b3915ba3
+index 000000000000..18ffb5eab640
 --- /dev/null
 +++ b/sound/hda/codecs/side-codecs/max98390_hda.c
-@@ -0,0 +1,214 @@
+@@ -0,0 +1,404 @@
 +// SPDX-License-Identifier: GPL-2.0
 +//
 +// MAX98390 HDA driver
 +//
 +
++#include <linux/kstrtox.h>
 +#include <linux/module.h>
 +#include <linux/regmap.h>
++#include <linux/sysfs.h>
 +#include <sound/hda_codec.h>
 +#include <sound/soc.h>
 +#include "hda_local.h"
@@ -277,7 +305,7 @@ index 00000000000000..869169b3915ba3
 +static int max98390_hda_init(struct max98390_hda_priv *priv)
 +{
 +	int ret;
-+	unsigned int reg, global_en, amp_en, pcm_rx;
++	unsigned int reg;
 +
 +	/* Check device ID */
 +	ret = regmap_read(priv->regmap, MAX98390_R24FF_REV_ID, &reg);
@@ -328,6 +356,190 @@ index 00000000000000..869169b3915ba3
 +	return 0;
 +}
 +
++/*
++ * Voice-coil resistance calibration.
++ *
++ * DSM estimates coil temperature by comparing the coil's live DC resistance,
++ * which the amp measures itself through IV-sense, against a reference value
++ * held at DSM_TPROT_RECIP_RDC_ROOM. That reference arrives baked into the
++ * tuning blob, so until it is calibrated every amp is protected against
++ * whatever speaker the blob was tuned on rather than the one fitted. Rdc
++ * varies unit to unit as well, so no shipped constant can be correct for a
++ * given machine -- it has to be measured here.
++ *
++ * The conversions match max98390_dsm_calib_put() in the ASoC driver so both
++ * drivers agree on what a register value means.
++ */
++
++/*
++ * Plausible window for a laptop microspeaker coil, roughly 2 to 16 ohm. A
++ * reading outside it means the measurement cannot be trusted (no signal
++ * playing, open or shorted coil). Applying one would mis-scale the thermal
++ * model, and an over-estimated coil resistance errs towards under-protection.
++ */
++#define MAX98390_RDC_CAL_MIN	140
++#define MAX98390_RDC_CAL_MAX	1120
++
++static unsigned int max98390_hda_rdc_milliohm(unsigned int cal)
++{
++	return (unsigned int)(((u64)cal * 937 * 1000) >> 16);
++}
++
++static int max98390_hda_measure_rdc(struct max98390_hda_priv *priv, unsigned int *cal)
++{
++	unsigned int hi, lo, en;
++	int ret;
++
++	ret = regmap_read(priv->regmap, MAX98390_R23FF_GLOBAL_EN, &en);
++	if (ret)
++		return ret;
++	if (!(en & MAX98390_GLOBAL_EN_MASK))
++		return -EBUSY;	/* idle amp: IV-sense has nothing to measure */
++
++	ret = regmap_read(priv->regmap, THERMAL_RDC_RD_BACK_BYTE1, &hi);
++	if (ret)
++		return ret;
++	ret = regmap_read(priv->regmap, THERMAL_RDC_RD_BACK_BYTE0, &lo);
++	if (ret)
++		return ret;
++
++	*cal = (lo | hi << 8) & 0xffff;
++
++	return 0;
++}
++
++static int max98390_hda_write_ref_rdc(struct max98390_hda_priv *priv, unsigned int ref)
++{
++	int ret;
++
++	ret = regmap_write(priv->regmap, DSM_TPROT_RECIP_RDC_ROOM_BYTE0, ref & 0xff);
++	if (!ret)
++		ret = regmap_write(priv->regmap, DSM_TPROT_RECIP_RDC_ROOM_BYTE1,
++				   (ref >> 8) & 0xff);
++	if (!ret)
++		ret = regmap_write(priv->regmap, DSM_TPROT_RECIP_RDC_ROOM_BYTE2,
++				   (ref >> 16) & 0xff);
++
++	return ret;
++}
++
++/* Live coil resistance in milliohm, as the amp measures it right now. */
++static ssize_t dsm_rdc_show(struct device *dev, struct device_attribute *attr, char *buf)
++{
++	struct max98390_hda_priv *priv = dev_get_drvdata(dev);
++	unsigned int cal;
++	int ret;
++
++	ret = max98390_hda_measure_rdc(priv, &cal);
++	if (ret)
++		return ret;
++	if (!cal)
++		return -ENODATA;
++
++	return sysfs_emit(buf, "%u\n", max98390_hda_rdc_milliohm(cal));
++}
++static DEVICE_ATTR_RO(dsm_rdc);
++
++/* Raw reference value DSM compares against; 2^28 / rdc_cal_result. */
++static ssize_t dsm_ref_rdc_show(struct device *dev, struct device_attribute *attr, char *buf)
++{
++	struct max98390_hda_priv *priv = dev_get_drvdata(dev);
++	unsigned int b0, b1, b2;
++	int ret;
++
++	ret = regmap_read(priv->regmap, DSM_TPROT_RECIP_RDC_ROOM_BYTE0, &b0);
++	if (!ret)
++		ret = regmap_read(priv->regmap, DSM_TPROT_RECIP_RDC_ROOM_BYTE1, &b1);
++	if (!ret)
++		ret = regmap_read(priv->regmap, DSM_TPROT_RECIP_RDC_ROOM_BYTE2, &b2);
++	if (ret)
++		return ret;
++
++	return sysfs_emit(buf, "%u\n", b0 | b1 << 8 | b2 << 16);
++}
++
++static ssize_t dsm_ref_rdc_store(struct device *dev, struct device_attribute *attr,
++				 const char *buf, size_t count)
++{
++	struct max98390_hda_priv *priv = dev_get_drvdata(dev);
++	unsigned int ref;
++	int ret;
++
++	ret = kstrtouint(buf, 0, &ref);
++	if (ret)
++		return ret;
++	if (!ref || ref > 0xffffff)
++		return -EINVAL;
++
++	ret = max98390_hda_write_ref_rdc(priv, ref);
++
++	return ret ? ret : count;
++}
++static DEVICE_ATTR_RW(dsm_ref_rdc);
++
++/*
++ * Measure and apply. Needs audio playing: the amp derives Rdc from the
++ * current and voltage it is actually driving into the speaker.
++ */
++static ssize_t dsm_calibrate_store(struct device *dev, struct device_attribute *attr,
++				   const char *buf, size_t count)
++{
++	struct max98390_hda_priv *priv = dev_get_drvdata(dev);
++	unsigned int cal, ref, temp;
++	bool trigger;
++	int ret;
++
++	ret = kstrtobool(buf, &trigger);
++	if (ret)
++		return ret;
++	if (!trigger)
++		return count;
++
++	ret = max98390_hda_measure_rdc(priv, &cal);
++	if (ret == -EBUSY)
++		dev_warn(dev, "calibration needs audio playing, amp is idle\n");
++	if (ret)
++		return ret;
++
++	if (cal < MAX98390_RDC_CAL_MIN || cal > MAX98390_RDC_CAL_MAX) {
++		dev_warn(dev, "measured Rdc %u mohm out of range, not applying\n",
++			 max98390_hda_rdc_milliohm(cal));
++		return -ERANGE;
++	}
++
++	ref = 268435456U / cal;
++	ret = max98390_hda_write_ref_rdc(priv, ref);
++	if (ret)
++		return ret;
++
++	ret = regmap_read(priv->regmap, MAX98390_MEAS_ADC_CH2_READ, &temp);
++	if (!ret) {
++		unsigned int ambient = temp * 52 - 1188;
++
++		regmap_write(priv->regmap, DSM_TPROT_ROOM_TEMPERATURE_BYTE1,
++			     (ambient >> 8) & 0xff);
++		regmap_write(priv->regmap, DSM_TPROT_ROOM_TEMPERATURE_BYTE0,
++			     ambient & 0xff);
++	}
++
++	dev_info(dev, "calibrated: Rdc %u mohm (raw %u, ref 0x%06x)\n",
++		 max98390_hda_rdc_milliohm(cal), cal, ref);
++
++	return count;
++}
++static DEVICE_ATTR_WO(dsm_calibrate);
++
++static struct attribute *max98390_hda_attrs[] = {
++	&dev_attr_dsm_rdc.attr,
++	&dev_attr_dsm_ref_rdc.attr,
++	&dev_attr_dsm_calibrate.attr,
++	NULL
++};
++
++static const struct attribute_group max98390_hda_attr_group = {
++	.attrs = max98390_hda_attrs,
++};
++
 +int max98390_hda_probe(struct device *dev, const char *device_name,
 +		       int id, int irq, struct regmap *regmap,
 +		       enum max98390_hda_bus_type bus_type, int i2c_addr)
@@ -348,6 +560,10 @@ index 00000000000000..869169b3915ba3
 +	dev_set_drvdata(dev, priv);
 +
 +	ret = max98390_hda_init(priv);
++	if (ret)
++		return ret;
++
++	ret = devm_device_add_group(dev, &max98390_hda_attr_group);
 +	if (ret)
 +		return ret;
 +
