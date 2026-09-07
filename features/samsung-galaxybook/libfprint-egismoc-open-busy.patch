@@ -1,0 +1,75 @@
+egismoc: report a busy device instead of aborting on a pending task
+
+egismoc_open() asserted that no task state machine was pending:
+
+    g_assert (self->task_ssm == NULL);
+
+but nothing guarantees that. task_ssm is cleared in exactly one place,
+egismoc_task_ssm_done(), which runs only when a state machine *completes*.
+Neither teardown path clears it:
+
+    egismoc_cancel()  cancels self->interrupt_cancellable, nothing else
+    egismoc_close()   egismoc_cancel() + g_clear_object() + release_interface()
+
+So an operation cancelled without its in-flight transfer callback running
+leaves task_ssm set, the device is released, and the next claim reaches the
+assertion with task_ssm != NULL. glib turns that into abort(), which is a bad
+trade: fprintd dies with SIGABRT and every consumer of the reader -- PAM for
+sudo, polkit, the lock screen -- loses fingerprint authentication until the
+daemon restarts.
+
+Reported upstream in TenSeventy7/libfprint-egismoc-sdcp#13, where two
+reporters on different Egis sensors (1c7a:0582, and a Galaxy Book NP960XGL)
+hit it through ordinary concurrent use of one reader by several PAM stacks.
+egismoc_open(), egismoc_close() and egismoc_cancel() are byte-identical in
+upstream libfprint 1.94.100, so this is not specific to the SDCP fork.
+
+Report FP_DEVICE_ERROR_BUSY instead. pam_fprintd already copes with a busy
+device, so the failure becomes a normal, recoverable one.
+
+This deliberately does not clear the stale task_ssm -- see the in-code comment
+for why that cannot be done safely from close() -- so the device stays busy
+for the lifetime of the process. Still strictly better than aborting: no core
+dump, no half-finished operation, and a daemon restart recovers it.
+
+The interface claimed just above is released on this path, matching the other
+early returns in the function.
+
+--- a/libfprint/drivers/egismoc/egismoc.c
++++ b/libfprint/drivers/egismoc/egismoc.c
+@@ -1904,7 +1904,34 @@
+       return;
+     }
+ 
+-  g_assert (self->task_ssm == NULL);
++  /* A state machine from a previous operation can still be pending here.
++   * task_ssm is only cleared by egismoc_task_ssm_done(), i.e. on SSM
++   * completion; egismoc_cancel() and egismoc_close() both leave it set.  An
++   * operation cancelled before its transfer callback ran therefore survives
++   * the close and is still recorded when the device is claimed again.
++   *
++   * Do not abort over it.  g_assert() here kills fprintd with SIGABRT and
++   * takes fingerprint authentication down for every consumer of the reader
++   * until the daemon restarts.  A busy error is recoverable; pam_fprintd
++   * already handles one.
++   *
++   * Clearing the pending SSM from close() would be the fuller fix, but it
++   * cannot be done blindly: the completion callbacks differ per operation
++   * (egismoc_dev_init_done() calls fpi_device_open_complete(), while
++   * egismoc_task_ssm_done() calls fpi_device_action_error()), so finishing a
++   * stale SSM during close would signal completion for an action libfprint
++   * no longer considers active.
++   */
++  if (self->task_ssm != NULL)
++    {
++      g_usb_device_release_interface (fpi_device_get_usb_device (device),
++                                      0, 0, NULL);
++      fpi_device_open_complete (device,
++                                fpi_device_error_new_msg (FP_DEVICE_ERROR_BUSY,
++                                                          "Device is busy with a pending task"));
++      return;
++    }
++
+   self->task_ssm = fpi_ssm_new (device, egismoc_dev_init_handler, DEV_INIT_STATES);
+   fpi_ssm_start (self->task_ssm, egismoc_dev_init_done);
+ }

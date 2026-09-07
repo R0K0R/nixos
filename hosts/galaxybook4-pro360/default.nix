@@ -387,7 +387,18 @@
         # are for sensors this machine doesn't have (ours is the Egis 1c7a:05a1
         # the fork itself supports). The cross fixups live in postPatch, which
         # this override leaves intact.
-        patches = [ ];
+        #
+        # NOT `[ ]` any more: the egismoc driver aborts the whole fprintd
+        # process when a task state machine is still pending at open, which on
+        # this machine happened 5108 times between 2026-07-04 and 2026-09-07 --
+        # every crash taking fingerprint auth down for sudo, polkit and the
+        # lock screen at once. The patch turns that abort into a recoverable
+        # FP_DEVICE_ERROR_BUSY. Upstream-inherited, not fork-specific: the
+        # three functions involved are byte-identical in libfprint 1.94.100.
+        # Tracked as TenSeventy7/libfprint-egismoc-sdcp#13, which is open with
+        # no maintainer reply -- that fork's last push was 2025-07-29 and it
+        # has 9 unmerged PRs, so this is not arriving from upstream.
+        patches = [ ../../features/samsung-galaxybook/libfprint-egismoc-open-busy.patch ];
       });
     })
   ];
