@@ -1,5 +1,5 @@
 {
-  capturedAt = "2026-09-01T11:23:37Z";
+  capturedAt = "2026-09-06T18:24:56Z";
   names = [
     "AMB-plugins"
     "ArchiSteamFarm"
@@ -212,6 +212,7 @@
     "adept"
     "adguardhome"
     "adguardian"
+    "adhammer"
     "adi1090x-plymouth-themes"
     "adidnsdump"
     "adif-multitool"
@@ -1118,6 +1119,7 @@
     "auth0-cli"
     "authelia"
     "authenticator"
+    "authenticodeCheckHook"
     "authentik"
     "authoscope"
     "authz0"
@@ -1157,6 +1159,7 @@
     "automaticcomponenttoolkit"
     "automirror"
     "automysqlbackup"
+    "autopen"
     "autoprefixer"
     "autopsy"
     "autopush-rs"
@@ -1296,6 +1299,7 @@
     "azure-static-sites-client"
     "azure-storage-azcopy"
     "azuredatastudio"
+    "azurefox"
     "azurehound"
     "azurite"
     "b2sum"
@@ -1936,6 +1940,7 @@
     "bpftop"
     "bpftrace"
     "bpftune"
+    "bpfvet"
     "bpkg"
     "bpm-tools"
     "bpp-core"
@@ -2126,6 +2131,7 @@
     "bulloak"
     "bullshit"
     "bully"
+    "bulwark"
     "bumblebee"
     "bumblebee-status"
     "bump"
@@ -2163,6 +2169,7 @@
     "buttermanager"
     "buttplug-lite"
     "buttplug-mcp"
+    "buzz-cli"
     "buzztrax"
     "bvi"
     "bvibratr"
@@ -2398,6 +2405,7 @@
     "cargo-geiger"
     "cargo-generate"
     "cargo-gra"
+    "cargo-group-imports"
     "cargo-guppy"
     "cargo-hack"
     "cargo-hakari"
@@ -2583,6 +2591,7 @@
     "cbrowser"
     "cbtemulator"
     "cc-switch"
+    "cc-switch-cli"
     "cc-token"
     "cc-tool"
     "cc1541"
@@ -2780,6 +2789,7 @@
     "cheat"
     "cheating-daddy"
     "check"
+    "check-if-email-exists"
     "check-jsonschema"
     "check-sieve"
     "check50"
@@ -2833,6 +2843,7 @@
     "chirpstack-gateway-bridge"
     "chirpstack-gateway-mesh"
     "chirpstack-mqtt-forwarder"
+    "chirpstack-packet-multiplexer"
     "chirpstack-rest-api"
     "chirpstack-udp-forwarder"
     "chisel"
@@ -3279,6 +3290,7 @@
     "colcon"
     "coldsnap"
     "colemak-dh"
+    "colibri2"
     "colima"
     "collabora-desktop"
     "collabora-online"
@@ -3543,6 +3555,7 @@
     "corretto17"
     "corretto21"
     "corretto25"
+    "corrode-scanner"
     "corrosion"
     "corrscope"
     "corrupter"
@@ -3563,6 +3576,7 @@
     "cosmic-edit"
     "cosmic-ext-applet-caffeine"
     "cosmic-ext-applet-external-monitor-brightness"
+    "cosmic-ext-applet-mare-player"
     "cosmic-ext-applet-minimon"
     "cosmic-ext-applet-privacy-indicator"
     "cosmic-ext-applet-sysinfo"
@@ -3591,6 +3605,7 @@
     "cosmic-sound-theme"
     "cosmic-store"
     "cosmic-term"
+    "cosmic-viewer"
     "cosmic-wallpapers"
     "cosmic-workspaces-epoch"
     "cosmocc"
@@ -3638,7 +3653,6 @@
     "cpp-interop"
     "cpp-ipfs-http-client"
     "cpp-jwt"
-    "cpp-netlib"
     "cpp-redis"
     "cpp-utilities"
     "cppad"
@@ -3709,6 +3723,7 @@
     "credstash"
     "credsweeper"
     "creduce"
+    "credwolf"
     "creek"
     "creep"
     "crengine-ng"
@@ -4232,6 +4247,7 @@
     "deezer-enhanced"
     "deface"
     "defaultbrowser"
+    "deff"
     "defuddle"
     "defuddle-cli"
     "degate"
@@ -4909,6 +4925,7 @@
     "dublin-traceroute"
     "duc"
     "duckdb"
+    "duckdb-odbc"
     "ducker"
     "duckling-proxy"
     "duckmarines"
@@ -5266,11 +5283,7 @@
     "emacs-macport"
     "emacs-nox"
     "emacs-pgtk"
-    "emacs30"
-    "emacs30-gtk3"
     "emacs30-macport"
-    "emacs30-nox"
-    "emacs30-pgtk"
     "emacs31"
     "emacs31-gtk3"
     "emacs31-nox"
@@ -5287,6 +5300,8 @@
     "emboss"
     "embree"
     "emcee"
+    "emerald-legacy-launcher"
+    "emerald-legacy-launcher-unwrapped"
     "emhash"
     "emilua"
     "emissary"
@@ -5492,6 +5507,7 @@
     "etherape"
     "ethercat"
     "etherguard"
+    "ethernet-connection-status"
     "etherpad-lite"
     "ethersync"
     "ethq"
@@ -5647,6 +5663,7 @@
     "faba-icon-theme"
     "faba-mono-icons"
     "fable"
+    "fabric"
     "fabric-ai"
     "fabric-installer"
     "fac"
@@ -5738,6 +5755,7 @@
     "fastfetch"
     "fastfetch-unwrapped"
     "fastfetchMinimal"
+    "fastflix"
     "fastgron"
     "fasthenry"
     "fastjar"
@@ -5807,6 +5825,7 @@
     "fcgiwrap"
     "fcitx5"
     "fcitx5-anthy"
+    "fcitx5-areca"
     "fcitx5-array"
     "fcitx5-bamboo"
     "fcitx5-black-simplicity"
@@ -5911,6 +5930,7 @@
     "ffado-mixer"
     "ffcast"
     "fff"
+    "fff-mcp"
     "fffuu"
     "ffizer"
     "fflas-ffpack"
@@ -6013,6 +6033,7 @@
     "findnewest"
     "findomain"
     "findup"
+    "finetune"
     "fingerprintx"
     "finit"
     "fio"
@@ -6152,6 +6173,8 @@
     "flawz"
     "fldigi"
     "fleet"
+    "fleet-desktop"
+    "fleet-orbit"
     "fleetctl"
     "fleeting-plugin-aws"
     "fleng"
@@ -6873,6 +6896,7 @@
     "geekbench_4"
     "geekbench_5"
     "geekbench_6"
+    "geekbench_7"
     "geeqie"
     "geesefs"
     "gef"
@@ -6955,6 +6979,7 @@
     "gerrit_3_13"
     "gerrit_3_14"
     "gersemi"
+    "gershwin-system"
     "get-google-fonts"
     "get-graphql-schema"
     "get_iplayer"
@@ -7331,6 +7356,7 @@
     "gitopper"
     "gitoxide"
     "gitprompt-rs"
+    "gitpulsar"
     "gitqlient"
     "gitrs"
     "gitsign"
@@ -7528,7 +7554,6 @@
     "gnome-panel"
     "gnome-panel-with-modules"
     "gnome-pass-search-provider"
-    "gnome-photos"
     "gnome-podcasts"
     "gnome-pomodoro"
     "gnome-pomodoro-watcher"
@@ -7883,6 +7908,7 @@
     "googlesans-code"
     "goose"
     "goose-cli"
+    "goose-desktop"
     "goose-lang"
     "gopacked"
     "gopass"
@@ -8060,8 +8086,6 @@
     "gradle-completion"
     "gradle-dependency-tree-diff"
     "gradle-unwrapped"
-    "gradle_7"
-    "gradle_7-unwrapped"
     "gradle_8"
     "gradle_8-unwrapped"
     "gradle_9"
@@ -9073,6 +9097,7 @@
     "hyprproxlock"
     "hyprpwcenter"
     "hyprquickframe"
+    "hyprscratch"
     "hyprshade"
     "hyprshell"
     "hyprshot"
@@ -9493,6 +9518,8 @@
     "interval-tree"
     "intiface-central"
     "intltool"
+    "introspectme"
+    "introspectre"
     "intune-portal"
     "inv-sig-helper"
     "inventree"
@@ -9813,6 +9840,7 @@
     "jellyfish"
     "jellyflix"
     "jellyseerr"
+    "jellystat"
     "jellytui"
     "jemalloc"
     "jen"
@@ -10084,7 +10112,6 @@
     "k2tf"
     "k3d"
     "k3s"
-    "k3s_1_33"
     "k3s_1_34"
     "k3s_1_35"
     "k3s_1_36"
@@ -10263,10 +10290,12 @@
     "keifu"
     "keka"
     "kemai"
+    "kener"
     "kent"
     "kepler"
     "kepubify"
     "kerbrute"
+    "kerbwolf"
     "kerf"
     "kerf_1"
     "kermit"
@@ -10376,6 +10405,7 @@
     "kiterunner"
     "kitex"
     "kitget"
+    "kitops"
     "kitsas"
     "kitti3"
     "kitty"
@@ -10437,6 +10467,7 @@
     "knit"
     "knobkraft-orm"
     "knock"
+    "knockoutcitylauncher"
     "knockpy"
     "knope"
     "knossosnet"
@@ -10519,6 +10550,7 @@
     "koto"
     "koto-ls"
     "kotofetch"
+    "kotonoha"
     "koules"
     "kpcli"
     "kphotoalbum"
@@ -10701,6 +10733,7 @@
     "kwakd"
     "kwin-script-geometry-change"
     "kwok"
+    "kwybars"
     "kx-aspe-cli"
     "kxstitch"
     "kyotocabinet"
@@ -10748,6 +10781,7 @@
     "lambda-lisp-blc"
     "lambda-mod-zsh-theme"
     "lambdabot"
+    "lambdock"
     "lame"
     "laminar"
     "lammps"
@@ -10783,6 +10817,7 @@
     "latex2html"
     "latex2mathml"
     "latexminted"
+    "latexml-oxide"
     "latexrun"
     "lato"
     "latte-integrale"
@@ -10953,6 +10988,8 @@
     "lesspass-cli"
     "lesspipe"
     "lethe"
+    "letos"
+    "letos-plugins"
     "letsdns"
     "letterpress"
     "levant"
@@ -11827,6 +11864,7 @@
     "libretranslate"
     "libretro-core-info"
     "libretro-shaders-slang"
+    "libretroPackages"
     "librevenge"
     "librevna"
     "librewolf"
@@ -12243,6 +12281,7 @@
     "line-awesome"
     "linear"
     "linearicons-free"
+    "linecast"
     "linenoise"
     "lineselect"
     "lingeling"
@@ -12379,6 +12418,7 @@
     "lksctp-tools"
     "lla"
     "llama-cpp"
+    "llama-cpp-cuda"
     "llama-cpp-rocm"
     "llama-cpp-vulkan"
     "llama-swap"
@@ -12437,6 +12477,7 @@
     "lngen"
     "lnreader"
     "lnx"
+    "loadbox"
     "loadlibrary"
     "loadwatch"
     "lobster"
@@ -12634,7 +12675,6 @@
     "luigi"
     "luit"
     "lukesmithxyz-bible-kjv"
-    "lukesmithxyz-st"
     "luksmeta"
     "lulu"
     "lumafly"
@@ -12759,6 +12799,7 @@
     "macskk"
     "mactop"
     "mactracker"
+    "mactrix"
     "macvim"
     "maddy"
     "madlang"
@@ -13214,6 +13255,7 @@
     "mediaelch-qt5"
     "mediaelch-qt6"
     "mediagoblin"
+    "mediaharbor"
     "mediainfo"
     "mediainfo-gui"
     "mediamate"
@@ -13425,13 +13467,13 @@
     "microsoft-edge"
     "microsoft-gsl"
     "microsoft-identity-broker"
+    "microsoft-rush"
     "mictray"
     "mid2key"
     "middleclick"
     "midi-trigger"
     "midicsv"
     "midimonster"
-    "midisheetmusic"
     "midivisualizer"
     "mieru"
     "mighty-mike"
@@ -13894,7 +13936,6 @@
     "mox"
     "moxide"
     "moxnotify"
-    "mozart-binary"
     "mozart2"
     "mozc"
     "mozc-ut"
@@ -14030,6 +14071,7 @@
     "msr-tools"
     "msrtool"
     "mssql_jdbc"
+    "mssqlhound"
     "mstflint"
     "mstore"
     "mstpd"
@@ -14422,8 +14464,7 @@
     "netbootxyz-efi"
     "netbox"
     "netbox2netshot"
-    "netbox_4_4"
-    "netbox_4_5"
+    "netbox_4_6"
     "netcap"
     "netcap-nodpi"
     "netcat"
@@ -14560,6 +14601,7 @@
     "nfpm"
     "nfs-ganesha"
     "nfs-utils"
+    "nfswolf"
     "nftables"
     "nftrace"
     "ngadmin"
@@ -14633,6 +14675,7 @@
     "nipap-cli"
     "nipap-www"
     "niri"
+    "niri-sidebar"
     "nirimod"
     "nirimon"
     "niriswitcher"
@@ -14950,6 +14993,7 @@
     "np"
     "np2kai"
     "npapi_sdk"
+    "npb"
     "npc"
     "nph"
     "npiet"
@@ -15007,6 +15051,7 @@
     "nsync"
     "nsz"
     "ntbtls"
+    "ntdswolf"
     "ntfs2btrfs"
     "ntfs3g"
     "ntfsprogs"
@@ -15052,6 +15097,7 @@
     "numberstation"
     "numcpp"
     "numdiff"
+    "numen"
     "numi"
     "numix-cursor-theme"
     "numix-icon-theme"
@@ -15187,6 +15233,7 @@
     "obscura"
     "obsidian"
     "obsidian-export"
+    "obsidian-headless"
     "obuild"
     "ocaml"
     "ocaml-crunch"
@@ -15337,6 +15384,7 @@
     "omniorb"
     "omnisharp-roslyn"
     "omnissa-horizon-client"
+    "omniwm"
     "omnix"
     "omnom"
     "omorfi"
@@ -16282,8 +16330,8 @@
     "pdfgrep"
     "pdfhummus"
     "pdfid"
+    "pdfium"
     "pdfium-binaries"
-    "pdfium-binaries-v8"
     "pdfminer"
     "pdfmixtool"
     "pdfmm"
@@ -16361,6 +16409,7 @@
     "perf_data_converter"
     "perfect-hash"
     "perfect_dark"
+    "perfetto"
     "performous"
     "periphery"
     "perkeep"
@@ -16441,6 +16490,7 @@
     "pgread"
     "pgrok"
     "pgroll"
+    "pgschema"
     "pgscv"
     "pgsql-tools"
     "pgsrip"
@@ -16643,6 +16693,7 @@
     "pistol"
     "piston-cli"
     "pitch-black"
+    "pitchfork"
     "pithos"
     "pitivi"
     "pius"
@@ -16867,6 +16918,7 @@
     "poke"
     "pokefinder"
     "pokeget-rs"
+    "pokego"
     "pokemmo-installer"
     "pokemon-colorscripts"
     "pokemon-colorscripts-mac"
@@ -16876,8 +16928,6 @@
     "pokerth-server"
     "pokete"
     "polar"
-    "polar-bookshelf"
-    "polar-bookshelf1"
     "polari"
     "polaris"
     "polaris-web"
@@ -17124,6 +17174,7 @@
     "prmt"
     "pro-office-calculator"
     "probe-rs-tools"
+    "probezen"
     "procdump"
     "process-compose"
     "process-cpp"
@@ -17376,6 +17427,7 @@
     "proxyman"
     "proxypin"
     "proxysql"
+    "proxyt"
     "proxytunnel"
     "proycon-wayout"
     "prpll"
@@ -17582,6 +17634,7 @@
     "pyrosimple"
     "pyrra"
     "pyrseas"
+    "pyscan"
     "pysentation"
     "pysolfc"
     "pyspread"
@@ -17729,6 +17782,7 @@
     "qosmic"
     "qovery-cli"
     "qownnotes"
+    "qownnotes-tui"
     "qpaeq"
     "qpdf"
     "qpdfview"
@@ -17904,6 +17958,7 @@
     "radianWrapper"
     "radiance-vj"
     "radicale"
+    "radicle-artifact"
     "radicle-ci-broker"
     "radicle-desktop"
     "radicle-explorer"
@@ -18021,7 +18076,6 @@
     "raxml"
     "raxml-mpi"
     "raycast"
-    "raycast-beta"
     "raygui"
     "raylib"
     "raylib-games"
@@ -18071,7 +18125,6 @@
     "re-plistbuddy"
     "re2"
     "re2c"
-    "react-native-debugger"
     "reactguard"
     "reaction"
     "reactphysics3d"
@@ -18725,6 +18778,7 @@
     "rtl8761b-firmware"
     "rtl_433"
     "rtl_fm_streamer"
+    "rtl_wmbus"
     "rtlamr"
     "rtlcss"
     "rtmidi"
@@ -19190,6 +19244,7 @@
     "scss-lint"
     "sct"
     "scuba"
+    "sculpin"
     "scummvm"
     "scx-loader"
     "sd"
@@ -19377,6 +19432,7 @@
     "sewer"
     "sexp-cpp"
     "sexpp"
+    "sextractor"
     "seyren"
     "sfcgal"
     "sfeed"
@@ -19918,6 +19974,7 @@
     "soapyuhd"
     "sobjectizer"
     "socalabs-papu"
+    "socalabs-piano"
     "socalabs-rp2a03"
     "socalabs-sid"
     "socalabs-sn76489"
@@ -20113,6 +20170,7 @@
     "specup"
     "spedread"
     "speech-denoiser"
+    "speech-to-phrase"
     "speech-tools"
     "speechd"
     "speechd-minimal"
@@ -20146,6 +20204,7 @@
     "spi-tools"
     "spice"
     "spice-autorandr"
+    "spice-glib"
     "spice-gtk"
     "spice-protocol"
     "spice-up"
@@ -20182,6 +20241,7 @@
     "splash"
     "splat"
     "splayer"
+    "splayer-next"
     "spleen"
     "splint"
     "splitcode"
@@ -20370,6 +20430,7 @@
     "sssd"
     "sssnake"
     "ssss"
+    "sstorytime"
     "sstp"
     "ssw"
     "st"
@@ -20388,6 +20449,7 @@
     "stackql"
     "stacks"
     "stacktile"
+    "stackwhere"
     "stacs"
     "stag"
     "stagit"
@@ -20449,6 +20511,7 @@
     "statserial"
     "status-im"
     "statverif"
+    "stave"
     "stax"
     "stayrtr"
     "stb"
@@ -20546,6 +20609,7 @@
     "stp"
     "strace"
     "strace-analyzer"
+    "strace-tui"
     "stratis-cli"
     "stratisd"
     "stratovirt"
@@ -20644,7 +20708,6 @@
     "substudy"
     "subsurface"
     "subtitlecomposer"
-    "subtitleedit"
     "subtitleeditor"
     "subtitlr"
     "subunit"
@@ -20720,6 +20783,7 @@
     "surge"
     "surge-XT"
     "surge-cli"
+    "surge-downloader"
     "surge-xt"
     "surgescript"
     "suricata"
@@ -21008,6 +21072,7 @@
     "tahoe-lafs"
     "tai-ahom"
     "tail-tray"
+    "tailcat"
     "tailer"
     "tailor-gui"
     "tailscale"
@@ -21097,6 +21162,7 @@
     "taskchampion-sync-server"
     "taskflow"
     "taskhound"
+    "taskim"
     "taskjuggler"
     "tasknc"
     "taskopen"
@@ -21116,6 +21182,7 @@
     "tauno-monitor"
     "tauon"
     "tautulli"
+    "taws"
     "taxi"
     "taxi-cli"
     "tayga"
@@ -21132,7 +21199,6 @@
     "tcat"
     "tcb"
     "tcl"
-    "tcl-8_5"
     "tcl-8_6"
     "tcl-9_0"
     "tcl2048"
@@ -21347,6 +21413,7 @@
     "tetex"
     "tetgen"
     "tetgen_1_4"
+    "tether"
     "tetragon"
     "tetraproc"
     "tetrd"
@@ -21416,6 +21483,7 @@
     "tf"
     "tf-summarize"
     "tfautomv"
+    "tfctl"
     "tfenv"
     "tfk8s"
     "tflint"
@@ -21449,7 +21517,6 @@
     "theano"
     "theattyr"
     "theclicker"
-    "thedesk"
     "theforceengine"
     "theft"
     "theharvester"
@@ -21635,7 +21702,6 @@
     "tix"
     "tixati"
     "tk"
-    "tk-8_5"
     "tk-8_6"
     "tk-9_0"
     "tk-safe"
@@ -21857,6 +21923,7 @@
     "traefik"
     "traefik-certs-dumper"
     "trafficserver"
+    "trailbase"
     "traitor"
     "trajan"
     "trak"
@@ -21905,7 +21972,6 @@
     "trelby"
     "trellis"
     "tremc"
-    "tremor"
     "tremotesf"
     "trevorproxy"
     "trevorspray"
@@ -22081,6 +22147,7 @@
     "tuntox"
     "tunwg"
     "tup"
+    "tuple"
     "tuptime"
     "turbo"
     "turbo-unwrapped"
@@ -22407,6 +22474,7 @@
     "ultrastardx"
     "umami"
     "umap"
+    "umbriel"
     "umka-lang"
     "umlet"
     "umoci"
@@ -23157,6 +23225,7 @@
     "vwifi"
     "vwsfriend"
     "vxl"
+    "vxwm"
     "vym"
     "vyper"
     "vyxal"
@@ -23238,6 +23307,7 @@
     "wasm-bindgen-cli_0_2_122"
     "wasm-bindgen-cli_0_2_125"
     "wasm-bindgen-cli_0_2_126"
+    "wasm-bindgen-cli_0_2_127"
     "wasm-bindgen-cli_0_2_93"
     "wasm-bindgen-cli_0_2_95"
     "wasm-bindgen-cli_0_2_99"
@@ -23411,6 +23481,7 @@
     "welle-io"
     "wemeet"
     "wemux"
+    "wepwolf"
     "werf"
     "wesher"
     "wesnoth"
@@ -23693,6 +23764,7 @@
     "wpa_supplicant"
     "wpa_supplicant_gui"
     "wpaperd"
+    "wpawolf"
     "wpcleaner"
     "wpgtk"
     "wpm"
@@ -23917,6 +23989,7 @@
     "xdg-desktop-portal-phosh"
     "xdg-desktop-portal-shana"
     "xdg-desktop-portal-termfilechooser"
+    "xdg-desktop-portal-umbriel"
     "xdg-desktop-portal-wlr"
     "xdg-desktop-portal-xapp"
     "xdg-launch"
@@ -24346,6 +24419,8 @@
     "xsos"
     "xspim"
     "xss-lock"
+    "xssearch"
+    "xsser"
     "xssproxy"
     "xssstate"
     "xsstrike"
@@ -24537,6 +24612,7 @@
     "yofi"
     "yoink"
     "yokadi"
+    "yopass"
     "yor"
     "yoshimi"
     "yosys"
@@ -24915,8 +24991,8 @@
     "zzuf"
     "zzz"
   ];
-  nixpkgsNarHash = "sha256-J7KXtwDdkt+S/mLWJWqXnyeD8RBJR4n9lKXGfrscQDA=";
-  nixpkgsRev = "71e6f02e44c381d82a862956085b96cbe4ace3b9";
+  nixpkgsNarHash = "sha256-2zf+ONQet9gpvBtwSeeuH/ds16U5SiVv+ohQLAiDgVc=";
+  nixpkgsRev = "7bc504b77831ef86265b4cd68a08d8efe2ec6bf5";
   pnames = {
     AMB-plugins = "amb-plugins";
     ArchiSteamFarm = "archisteamfarm";
@@ -25111,6 +25187,7 @@
     attic-server = "attic";
     audacious-bare = "audacious";
     auditbeat7 = "auditbeat";
+    authenticodeCheckHook = "authenticode-check-hook";
     autoAddDriverRunpath = "auto-add-driver-runpath-hook";
     autoFixElfFiles = "auto-fix-elf-files";
     autoPatchcilHook = "auto-patchcil-hook";
@@ -25579,11 +25656,7 @@
     elixir_1_19 = "elixir";
     emacs-gtk = "emacs-gtk3";
     emacs-macport = "emacs-mac-macport";
-    emacs30 = "emacs";
-    emacs30-gtk3 = "emacs-gtk3";
     emacs30-macport = "emacs-mac-macport";
-    emacs30-nox = "emacs-nox";
-    emacs30-pgtk = "emacs-pgtk";
     emacs31 = "emacs";
     emacs31-gtk3 = "emacs-gtk3";
     emacs31-nox = "emacs-nox";
@@ -25840,6 +25913,7 @@
     geekbench_4 = "geekbench";
     geekbench_5 = "geekbench";
     geekbench_6 = "geekbench";
+    geekbench_7 = "geekbench";
     gem = "gem-unstable";
     geoclue2 = "geoclue";
     geoclue2-with-demo-agent = "geoclue";
@@ -25970,8 +26044,6 @@
     gqrx-portaudio = "gqrx";
     gradescope-submit = "gradescope_submit";
     gradle-unwrapped = "gradle";
-    gradle_7 = "gradle";
-    gradle_7-unwrapped = "gradle";
     gradle_8 = "gradle";
     gradle_8-unwrapped = "gradle";
     gradle_9 = "gradle";
@@ -26060,7 +26132,6 @@
     heretic = "heretic-llm";
     hermitcli = "hermit";
     hexdump = "util-linux-minimal";
-    hol = "hol4";
     home-assistant = "homeassistant";
     home-assistant-cli = "homeassistant-cli";
     host = "bind";
@@ -26205,7 +26276,6 @@
     juno-theme = "juno";
     jupyter-all = "jupyter";
     jupyterlite = "jupyterlite-core";
-    k3s_1_33 = "k3s";
     k3s_1_34 = "k3s";
     k3s_1_35 = "k3s";
     k3s_1_36 = "k3s";
@@ -26548,6 +26618,7 @@
     liquidwar = "liquidwar6";
     lixStatic = "lix";
     lklWithFirewall = "lkl";
+    llama-cpp-cuda = "llama-cpp";
     llama-cpp-rocm = "llama-cpp";
     llama-cpp-vulkan = "llama-cpp";
     llama-swap-minimal = "llama-swap";
@@ -26786,8 +26857,7 @@
     nestopia-ue = "nestopia";
     netbird = "netbird-client";
     netbootxyz-efi = "netboot.xyz-efi";
-    netbox_4_4 = "netbox";
-    netbox_4_5 = "netbox";
+    netbox_4_6 = "netbox";
     netcap-nodpi = "netcap";
     netcat = "libressl";
     netcdfcxx4 = "netcdf-cxx4";
@@ -27036,11 +27106,11 @@
     pcmciaUtils = "pcmciautils";
     pcsc-scm-scl011 = "pcsc-scm-scl";
     pcscliteWithPolkit = "pcsclite-with-polkit";
-    pdfium-binaries-v8 = "pdfium-binaries";
+    pdfium-binaries = "pdfium";
     pdfminer = "pdfminer-six";
     pdk-ciel = "ciel";
     percona-server_8_4 = "percona-server";
-    percona-toolkit = "perl5.42.0-Percona-Toolkit-3.7.0";
+    percona-toolkit = "perl5.42.3-Percona-Toolkit-3.7.0";
     percona-xtrabackup_8_4 = "percona-xtrabackup";
     perf = "perf-linux";
     perl5 = "perl";
@@ -27356,6 +27426,7 @@
     rtaudio_5 = "rtaudio";
     rtaudio_6 = "rtaudio";
     rtl-sdr = "rtl-sdr-blog";
+    rtl_wmbus = "rtl-wmbus";
     rtmpdump_gnutls = "rtmpdump";
     ruby_3_3 = "ruby";
     ruby_3_4 = "ruby";
@@ -27504,6 +27575,7 @@
     spire-agent = "spire";
     spire-server = "spire";
     spirv-llvm-translator = "SPIRV-LLVM-Translator";
+    splayer = "splayer-next";
     splix = "splix-svn";
     spoofdpi = "SpoofDPI";
     spoofer-gui = "spoofer";
@@ -27511,6 +27583,8 @@
     sqitchPg = "sqitch-pg";
     sqitchSqlite = "sqitch-sqlite";
     sqlboiler-crdb = "sqlboiler-crbd";
+    sqlitestudio = "letos";
+    sqlitestudio-plugins = "letos-plugins";
     squashfsTools = "squashfs-tools";
     srtp = "libsrtp";
     ssb-patchwork = "patchwork";
@@ -27600,7 +27674,6 @@
     taxi-cli = "taxi";
     tbb = "onetbb";
     tbb_2022 = "onetbb";
-    tcl-8_5 = "tcl";
     tcl-8_6 = "tcl";
     tcl-9_0 = "tcl";
     tclap_1_2 = "tclap";
@@ -27673,7 +27746,6 @@
     tiny8086 = "8086tiny";
     tinycc = "tcc";
     tinyxml-2 = "tinyxml2";
-    tk-8_5 = "tk";
     tk-8_6 = "tk";
     tk-9_0 = "tk";
     tkmm = "Tkmm";
@@ -27911,6 +27983,7 @@
     wasm-bindgen-cli_0_2_122 = "wasm-bindgen-cli";
     wasm-bindgen-cli_0_2_125 = "wasm-bindgen-cli";
     wasm-bindgen-cli_0_2_126 = "wasm-bindgen-cli";
+    wasm-bindgen-cli_0_2_127 = "wasm-bindgen-cli";
     wasm-bindgen-cli_0_2_93 = "wasm-bindgen-cli";
     wasm-bindgen-cli_0_2_95 = "wasm-bindgen-cli";
     wasm-bindgen-cli_0_2_99 = "wasm-bindgen-cli";

@@ -1,5 +1,5 @@
 {
-  anchorCount = 274;
+  anchorCount = 276;
   buildOnly = [
     "ccache"
     "mold"
@@ -43,6 +43,8 @@
     "moonlight-qt"
     "kdenlive"
     "hop"
+    "globaltun"
+    "gtk3-immodules.cache"
     "easyeffects"
     "libva-utils"
     "powertop"
@@ -196,7 +198,7 @@
     "gemma-claude"
     "dummy-xdg-mime-dirs1"
     "dummy-xdg-mime-dirs2"
-    "emacs-pgtk-x86_64-unknown-linux-gnu-with-doom-30.2"
+    "emacs-pgtk-x86_64-unknown-linux-gnu-with-doom-31.1"
     "starship"
     "quickshell"
     "kitty"
@@ -218,9 +220,11 @@
     "libdrm"
     "systemd-minimal-libs"
     "pybind11"
+    "libyuv"
     "libyaml"
     "gtest"
     "lttng-ust"
+    "libglvnd"
     "json-c"
     "libbpf"
     "libelf"
@@ -454,7 +458,6 @@
     "ocl-icd"
     "opencl-headers"
     "opencore-amr"
-    "libglvnd"
     "openh264"
     "openjpeg"
     "libopenmpt"
@@ -924,7 +927,6 @@
     "harfbuzz-icu"
     "hyphen"
     "libgpg-error"
-    "libidn"
     "libbacktrace"
     "nettle"
     "libmanette"
@@ -1088,6 +1090,7 @@
     "nftables"
     "publicsuffix-list"
     "libqrtr-glib"
+    "rdma-core"
     "openfec"
     "audiofile"
     "libassuan"
@@ -1134,7 +1137,6 @@
     "libvoikko"
     "hspell"
     "aspell"
-    "libyuv"
     "libass"
     "libnice"
     "neon"
@@ -1261,10 +1263,10 @@
     "pycparser"
     "die-hook"
   ];
-  capturedAt = "2026-09-01T11:24:20Z";
+  capturedAt = "2026-09-06T18:25:36Z";
   host = "galaxybook4-pro360";
-  nixpkgsNarHash = "sha256-J7KXtwDdkt+S/mLWJWqXnyeD8RBJR4n9lKXGfrscQDA=";
-  nixpkgsRev = "71e6f02e44c381d82a862956085b96cbe4ace3b9";
+  nixpkgsNarHash = "sha256-2zf+ONQet9gpvBtwSeeuH/ds16U5SiVv+ohQLAiDgVc=";
+  nixpkgsRev = "7bc504b77831ef86265b4cd68a08d8efe2ec6bf5";
   runtimeNames = [
     "runtime-cache-refresh"
     "camera-relay"
@@ -1291,6 +1293,8 @@
     "moonlight-qt"
     "kdenlive"
     "hop"
+    "globaltun"
+    "gtk3-immodules.cache"
     "easyeffects"
     "libva-utils"
     "powertop"
@@ -1444,7 +1448,7 @@
     "gemma-claude"
     "dummy-xdg-mime-dirs1"
     "dummy-xdg-mime-dirs2"
-    "emacs-pgtk-x86_64-unknown-linux-gnu-with-doom-30.2"
+    "emacs-pgtk-x86_64-unknown-linux-gnu-with-doom-31.1"
     "starship"
     "quickshell"
     "kitty"
@@ -1466,9 +1470,11 @@
     "libdrm"
     "systemd-minimal-libs"
     "pybind11"
+    "libyuv"
     "libyaml"
     "gtest"
     "lttng-ust"
+    "libglvnd"
     "json-c"
     "libbpf"
     "libelf"
@@ -1702,7 +1708,6 @@
     "ocl-icd"
     "opencl-headers"
     "opencore-amr"
-    "libglvnd"
     "openh264"
     "openjpeg"
     "libopenmpt"
@@ -2173,7 +2178,6 @@
     "harfbuzz-icu"
     "hyphen"
     "libgpg-error"
-    "libidn"
     "libbacktrace"
     "nettle"
     "libmanette"
@@ -2340,6 +2344,7 @@
     "nftables"
     "publicsuffix-list"
     "libqrtr-glib"
+    "rdma-core"
     "openfec"
     "audiofile"
     "libassuan"
@@ -2386,7 +2391,6 @@
     "libvoikko"
     "hspell"
     "aspell"
-    "libyuv"
     "libass"
     "libnice"
     "neon"
