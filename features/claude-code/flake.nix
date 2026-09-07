@@ -12,7 +12,7 @@
     URL and in the package's version attr. Bump both with ./update.sh.
   */
   inputs.claude-code-bin = {
-    url = "file+https://downloads.claude.ai/claude-code-releases/2.1.251/linux-x64/claude";
+    url = "file+https://downloads.claude.ai/claude-code-releases/2.1.259/linux-x64/claude";
     flake = false;
   };
 
