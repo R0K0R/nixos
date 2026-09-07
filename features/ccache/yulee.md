@@ -153,32 +153,41 @@ headroom. Peer mount, trim and sandbox config are unaffected.
 
 ## 9. Nix version -- required for content-addressed derivations
 
-Ubuntu ships `nix-bin` 2.18.1, and that version cannot resolve an output
-placeholder inside a reference specifier. Any CA package whose output checks
-name a sibling output fails on yulee with
+Ubuntu ships `nix-bin` 2.18.1 and has nothing newer (`apt-cache policy nix-bin`
+lists it as both Installed and Candidate), so `apt upgrade` cannot help. That
+version cannot resolve an output placeholder inside a reference specifier, so
+any CA package whose output checks name a sibling output fails here with
 
     derivation contains an illegal reference specifier '/1lba4bnb...'
 
 krb5's `lib` output disallowing its own `dev` output was the first to hit it
-(2026-09-07). Every BUILDER needs the newer Nix, not just the evaluator, and
-`my.tuning.ca.contentAddress` cannot be used until this is done.
+(2026-09-07). Every BUILDER needs the newer Nix, not just the evaluator.
+nixpkgs offers 2.34.8, matching victus-15.
 
-    # a newer nix into the default profile, built by the current one
+    # 1. upstream Nix into the SYSTEM profile, built by the current one
     sudo -i nix --extra-experimental-features 'nix-command flakes' \
-      profile install nixpkgs#nix
+      profile install --profile /nix/var/nix/profiles/default nixpkgs#nix
 
-    # point the daemon at it -- Ubuntu's unit runs /usr/bin/nix-daemon
+    # 2. make it win on PATH. THIS is the one that matters: an ssh-ng remote
+    #    build spawns `nix-daemon --stdio` from the SSH session's PATH, not
+    #    from the systemd unit, and that PATH has /usr/local/bin ahead of
+    #    /usr/bin (checked) while ~/.local/bin is earlier still.
+    for b in /nix/var/nix/profiles/default/bin/nix*; do
+      sudo ln -sf "$b" "/usr/local/bin/$(basename "$b")"
+    done
+
+    # 3. the local daemon too -- Ubuntu's unit runs /usr/bin/nix-daemon
     sudo systemctl edit nix-daemon    # add:
     #   [Service]
     #   ExecStart=
     #   ExecStart=/nix/var/nix/profiles/default/bin/nix-daemon --daemon
     sudo systemctl daemon-reload && sudo systemctl restart nix-daemon
 
-    # keep apt from putting 2.18 back, and prefer the new CLI on PATH
+    # 4. stop apt putting 2.18 back under a migrated store
     sudo apt-mark hold nix-bin nix-setup-systemd
-    nix --version
+
+    # 5. verify from GALAXYBOOK, which is what remote builds actually use
+    ssh yulee 'nix --version; command -v nix'
 
 ONE WAY. A newer Nix migrates the store's SQLite schema on first use and 2.18
-will not read it afterwards. The remote-build path is what matters here: an
-ssh-ng connection spawns its own `nix-daemon --stdio` from PATH, so the
-upgraded binary has to win there too, not only in the systemd unit.
+will not read it afterwards, which is why step 4 is not optional.
