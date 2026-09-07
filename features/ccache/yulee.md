@@ -150,3 +150,35 @@ stopping midway; to back out before step 7, restore the old fstab line and
 remount. Sizes afterwards: raise `max_size` in `ccache.conf` and the cron
 `--trim-max-size` freely (it is all runtime); leave the store ~40 G of
 headroom. Peer mount, trim and sandbox config are unaffected.
+
+## 9. Nix version -- required for content-addressed derivations
+
+Ubuntu ships `nix-bin` 2.18.1, and that version cannot resolve an output
+placeholder inside a reference specifier. Any CA package whose output checks
+name a sibling output fails on yulee with
+
+    derivation contains an illegal reference specifier '/1lba4bnb...'
+
+krb5's `lib` output disallowing its own `dev` output was the first to hit it
+(2026-09-07). Every BUILDER needs the newer Nix, not just the evaluator, and
+`my.tuning.ca.contentAddress` cannot be used until this is done.
+
+    # a newer nix into the default profile, built by the current one
+    sudo -i nix --extra-experimental-features 'nix-command flakes' \
+      profile install nixpkgs#nix
+
+    # point the daemon at it -- Ubuntu's unit runs /usr/bin/nix-daemon
+    sudo systemctl edit nix-daemon    # add:
+    #   [Service]
+    #   ExecStart=
+    #   ExecStart=/nix/var/nix/profiles/default/bin/nix-daemon --daemon
+    sudo systemctl daemon-reload && sudo systemctl restart nix-daemon
+
+    # keep apt from putting 2.18 back, and prefer the new CLI on PATH
+    sudo apt-mark hold nix-bin nix-setup-systemd
+    nix --version
+
+ONE WAY. A newer Nix migrates the store's SQLite schema on first use and 2.18
+will not read it afterwards. The remote-build path is what matters here: an
+ssh-ng connection spawns its own `nix-daemon --stdio` from PATH, so the
+upgraded binary has to win there too, not only in the systemd unit.

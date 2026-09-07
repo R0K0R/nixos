@@ -199,14 +199,14 @@
       # daemon, which is what rejects it, so no client flag helps. yulee has it
       # in nix.conf; galaxybook and victus-15 need the transient drop-in in
       # tuning/ca.nix's header before their first switch with this on.
-      # OFF until yulee's Nix is newer. 2.18.1 (Ubuntu's nix-bin) cannot resolve
-      # an output placeholder inside a reference specifier, so any CA package
-      # whose output checks name a sibling output dies there with "illegal
-      # reference specifier" -- krb5's lib output disallowing its dev output was
-      # the first (2026-09-07). Not filterable at eval time: the placeholder
-      # only exists after instantiation, and outputChecks itself is on nearly
-      # every package. Everything else here (mold, ccache) is independent.
-      ca.contentAddress = false;
+      # Needs a modern Nix on EVERY builder, not just the evaluator. Ubuntu's
+      # nix-bin 2.18.1 cannot resolve an output placeholder inside a reference
+      # specifier, so any CA package whose output checks name a sibling output
+      # fails there with "illegal reference specifier" (krb5's lib output
+      # disallowing its dev output, 2026-09-07). Not filterable at eval time:
+      # the placeholder only exists after instantiation, and outputChecks is on
+      # nearly every package. See features/ccache/yulee.md for the upgrade.
+      ca.contentAddress = true;
       # Literal, and it must stay one -- see the note in galaxybook4-pro360.
       enable = true;
       march = "znver3";
