@@ -27,7 +27,7 @@ let
 
   builderSpec =
     name: p:
-    "ssh://${p.sshUser}@${name} x86_64-linux ${cfg.sshKey} "
+    "ssh-ng://${p.sshUser}@${name} x86_64-linux ${cfg.sshKey} "
     + "${toString p.maxJobs} ${toString p.speedFactor} ${lib.concatStringsSep "," p.features}";
 
   /*
@@ -40,13 +40,13 @@ let
     But omitting it does not mean "no override", it means "inherit the SYSTEM
     list", and that list can name a machine that is down. That is what made
     `nixos-rebuild-victus-15` sit in a retry loop against yulee even after yulee
-    was removed from /etc/nix/machines: ssh:// substituters use the same SSH
+    was removed from /etc/nix/machines: ssh-ng:// substituters use the same SSH
     store as builders and fail with the same message, so it reads as a builder
     problem and is not one. Naming the peer explicitly gets both properties.
   */
   substituterArgs =
     name: p:
-    [ ''--option substituters "https://cache.nixos.org ssh://${p.sshUser}@${name}"'' ];
+    [ ''--option substituters "https://cache.nixos.org ssh-ng://${p.sshUser}@${name}"'' ];
 
   /*
     `--option builders` rather than the bare `--builders` flag: it reaches both

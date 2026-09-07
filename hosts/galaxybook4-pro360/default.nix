@@ -154,7 +154,11 @@
       sshKeySecret = ../../age/remote-builder-ssh-key.age;
       enable = true;
       wrappers.enable = true;
-      substituters = [ "ssh://r0k0r@yulee" "ssh://r0k0r@victus-15" ];
+      # ssh-ng, not ssh: nix queries realisations from SUBSTITUTERS to resolve a
+      # content-addressed output, and ssh:// is LegacySSHStore, which has no
+      # queryRealisation. It aborts with a SIGABRT stack trace rather than
+      # skipping the substituter (measured 2026-09-07, nix 2.34.8).
+      substituters = [ "ssh-ng://r0k0r@yulee" "ssh-ng://r0k0r@victus-15" ];
       trustedPublicKeys = [
         "yulee-1:KgdwkCN5m+hewJTk+A05PjwI3BbnZAE9NW2n634N7vM="
         "victus-15-1:W5OP8VVbu7Q7z2o5grHJ5Zp+ynm536+QVv+b8fBQJlQ="
