@@ -36,12 +36,14 @@ rides along.
 ## 4. ccache.conf -- the L2 lever
 
     sudo tee /var/cache/ccache/l1/ccache.conf <<'CONF'
+    max_size = 20G
     direct_mode = false
     remote_storage = file:/var/cache/ccache/stage file:/var/cache/ccache/peer-victus-15|read-only=true|update-mtime=true
     CONF
     sudo chmod 664 /var/cache/ccache/l1/ccache.conf
 
-Read per invocation; edits take effect on the next compile with no rebuild.
+Read per invocation; edits take effect on the next compile with no rebuild --
+`max_size` included (it is deliberately not in the derivation env).
 Drop the `peer-*` backend to go local-only; `disable = true` switches ccache
 off entirely. Never set remote storage through the environment -- env is
 ccache's highest-precedence source and would override this file.
@@ -50,12 +52,15 @@ ccache's highest-precedence source and would override this file.
 
 `/etc/fstab`:
 
-    r0k0r@100.64.0.2:/var/cache/ccache/stage  /var/cache/ccache/peer-victus-15  fuse.sshfs  ro,allow_other,reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,IdentityFile=/home/r0k0r/.ssh/id_ed25519,StrictHostKeyChecking=accept-new,_netdev,nofail,x-systemd.automount,x-systemd.idle-timeout=600,x-systemd.mount-timeout=20s  0 0
+    r0k0r@100.64.0.2:/var/cache/ccache/stage  /var/cache/ccache/peer-victus-15  fuse.sshfs  ro,allow_other,reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,IdentityFile=/home/r0k0r/.ssh/id_ed25519,StrictHostKeyChecking=accept-new,_netdev,x-systemd.automount,x-systemd.idle-timeout=600,x-systemd.mount-timeout=20s  0 0
 
 then `sudo systemctl daemon-reload && sudo mount /var/cache/ccache/peer-victus-15`.
+No `nofail`: util-linux 2.39 passes it through to `mount.fuse3`, which
+rejects it (`fuse: unknown option(s): -o nofail`); it is redundant anyway,
+the automount never blocks boot and `mount-timeout` bounds the wait.
 A ROOT mount, not a user session mount: allow_other alone was not enough for
 the daemon's stat. victus-15 authorizes `~r0k0r/.ssh/id_ed25519.pub` (added
-2026-09-07). `nofail` + automount: victus being down must never block yulee.
+2026-09-07). Automount: victus being down must never block yulee.
 
 Sanity: `tailscale ping 100.64.0.2` must say `via <ip>:41641` (direct), not
 `via DERP` -- a relay multiplies every per-op cost.
@@ -76,9 +81,60 @@ in `/etc/nix/nix.conf`, then restart nix-daemon. The client cannot even
 evaluate a CA derivation unless the DAEMON has the feature; `--extra-experimental-features`
 on the command line does not help (verified).
 
-## Disk
+## 8. Move /var/cache/ccache onto the store NVMe
 
-`/` on yulee is at ~96% with ~39 G free and everything above lives on it
-(`/nix` is on `/`; only `/nix/store` is the 239 G device). Keep L1 at 20G and
-the stage at 40G, or move `/var/cache/ccache` onto the store NVMe (btrfs
-subvolume) before growing them.
+`/` (ext4, 937 G) is at 96% with ~40 G free, so L1 20 G + stage 40 G do not
+fit there. The 239 G btrfs on `nvme2n1` has ~105 G free, BUT it is mounted
+with its TOP LEVEL as `/nix/store` (`subvol=/`). A subvolume created there
+would show up as `/nix/store/<name>`, and Nix's GC deletes store entries it
+cannot parse as store paths -- it would wipe the cache. So the disk is first
+restructured into `@store` + `@ccache`. The snapshot is instant (CoW); the
+only slow part is deleting the old top-level copy afterwards (minutes).
+
+Preconditions: no builds running, nothing else using `/nix/store`.
+
+    # 1. stop the daemon; nix binaries live in the store, so use only Ubuntu tools below
+    sudo systemctl stop nix-daemon.socket nix-daemon.service
+    sudo fuser -vm /nix/store            # must print nothing
+
+    # 2. snapshot the top level into a subvolume, create the cache subvolume
+    sudo btrfs subvolume snapshot /nix/store /nix/store/@store
+    sudo btrfs subvolume create   /nix/store/@ccache
+    sudo btrfs subvolume list /nix/store  # expect: @store, @ccache
+
+    # 3. fstab: the store line gets subvol=@store; the cache gets its own line
+    #    (keep it ABOVE the peer-victus-15 line; systemd orders nested mounts anyway)
+    sudo sed -i 's#^UUID=73d5b9dd-1771-440a-91a8-068af0c2aca9 /nix/store btrfs compress=zstd 0 2#UUID=73d5b9dd-1771-440a-91a8-068af0c2aca9 /nix/store        btrfs subvol=@store,compress=zstd,noatime 0 2\nUUID=73d5b9dd-1771-440a-91a8-068af0c2aca9 /var/cache/ccache btrfs subvol=@ccache,noatime 0 2#' /etc/fstab
+    grep -n 73d5b9dd /etc/fstab            # two lines
+
+    # 4. switch the store mount to the snapshot
+    sudo umount /nix/store && sudo systemctl daemon-reload && sudo mount /nix/store
+    findmnt -no OPTIONS /nix/store         # must contain subvol=/@store
+    ls /nix/store | head -3                # store paths, no @store entry
+
+    # 5. mount the cache subvolume, carry the dirs over, restore perms
+    sudo mv /var/cache/ccache /var/cache/ccache.old
+    sudo mkdir -m2775 /var/cache/ccache && sudo mount /var/cache/ccache
+    sudo cp -a /var/cache/ccache.old/. /var/cache/ccache/
+    sudo chown root:nixbld /var/cache/ccache /var/cache/ccache/l1 /var/cache/ccache/stage
+    sudo chmod 2775        /var/cache/ccache /var/cache/ccache/l1 /var/cache/ccache/stage
+    sudo btrfs property set /var/cache/ccache compression none   # entries are already compressed
+    sudo rm -rf /var/cache/ccache.old
+
+    # 6. daemon back; extra-sandbox-paths is unchanged so no nix.conf edit
+    sudo systemctl start nix-daemon.socket
+    nix store ping && nix build --no-link nixpkgs#hello   # smoke test
+
+    # 7. reclaim: delete the OLD top-level copy (everything except the @-subvolumes)
+    sudo mkdir -p /mnt/nixroot && sudo mount -o subvolid=5 UUID=73d5b9dd-1771-440a-91a8-068af0c2aca9 /mnt/nixroot
+    ls /mnt/nixroot | grep -c '^@'         # 2
+    sudo find /mnt/nixroot -mindepth 1 -maxdepth 1 ! -name '@*' -exec rm -rf {} +
+    ls -A /mnt/nixroot                     # only @store @ccache
+    sudo umount /mnt/nixroot && sudo rmdir /mnt/nixroot
+    df -h /nix/store                       # used should be back to ~125 G
+
+Until step 7 both copies exist and share extents, so nothing is lost by
+stopping midway; to back out before step 7, restore the old fstab line and
+remount. Sizes afterwards: raise `max_size` in `ccache.conf` and the cron
+`--trim-max-size` freely (it is all runtime); leave the store ~40 G of
+headroom. Peer mount, trim and sandbox config are unaffected.

@@ -25,6 +25,7 @@ let
     (below) from evicting entries the peer is actively reading.
   */
   builderConf = pkgs.writeText "ccache.conf" ''
+    max_size = ${cfg.maxSize}
     direct_mode = false
     remote_storage = file:${stage}${lib.concatMapStrings (p: " file:${peerDir p}|read-only=true|update-mtime=true") (lib.attrValues b.peers)}
   '';
@@ -51,7 +52,7 @@ in
     maxSize = lib.mkOption {
       type = lib.types.str;
       default = "20G";
-      description = "CCACHE_MAXSIZE for L1. nixpkgs' programs.ccache never sets this; ccache's 5 GiB default thrashes on webkit-scale objects.";
+      description = "max_size for L1, written to the builder's ccache.conf (not the derivation env, so it is a runtime lever). nixpkgs' programs.ccache never sets this; ccache's 5 GiB default thrashes on webkit-scale objects.";
     };
 
     wrapperConfig = lib.mkOption {
@@ -95,7 +96,6 @@ in
       */
       my.ccache.wrapperConfig = ''
         export CCACHE_DIR=${l1}
-        export CCACHE_MAXSIZE=${cfg.maxSize}
         export CCACHE_COMPRESS=1
         export CCACHE_SLOPPINESS=random_seed
         export CCACHE_UMASK=002
@@ -159,7 +159,9 @@ in
         for the daemon's stat, a root mount was. `ro` at the mount and
         read-only=true at the ccache layer both -- belt and braces, since a
         write to a peer's stage would be a cross-machine write we specifically
-        measured as the expensive path. nofail + automount: a peer being down
+        measured as the expensive path. automount alone (no nofail: util-linux
+        2.39 hands nofail to mount.fuse3, which rejects it; automount already
+        never blocks boot and mount-timeout bounds the wait): a peer being down
         must never block this builder; ccache tolerates an absent backend.
       */
       fileSystems = lib.mapAttrs' (n: p: lib.nameValuePair (peerDir p) {
@@ -168,7 +170,7 @@ in
         options = [
           "ro" "allow_other" "reconnect" "ServerAliveInterval=15" "ServerAliveCountMax=3"
           "IdentityFile=${b.identityFile}" "StrictHostKeyChecking=accept-new"
-          "_netdev" "nofail" "x-systemd.automount" "x-systemd.idle-timeout=600" "x-systemd.mount-timeout=20s"
+          "_netdev" "x-systemd.automount" "x-systemd.idle-timeout=600" "x-systemd.mount-timeout=20s"
         ];
       }) b.peers;
 
