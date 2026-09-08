@@ -140,7 +140,23 @@ in
         "d ${cfg.cacheDir} 2775 root nixbld -"
         "d ${l1}           2775 root nixbld -"
         "d ${stage}        2775 root nixbld -"
-        "L+ ${l1}/ccache.conf - - - - ${builderConf}"
+        /*
+          COPIED, not symlinked into the store. A build sandbox's /nix/store
+          holds only that derivation's own inputs, and this file is nobody's
+          input, so a store symlink DANGLES inside the sandbox: ccache cannot
+          read it, silently falls back to its defaults, and you get direct_mode
+          on, no remote storage and a 5 GiB cache while `ccache --show-config`
+          from a login shell shows the intended settings.
+
+          Measured on victus-15: 3240 Direct hits recorded, which direct_mode =
+          false makes impossible, and no remote-storage section at all, while
+          yulee -- whose conf was written by hand as a regular file -- had the
+          config applied and a populated stage.
+
+          C+ overwrites on each activation, so this file is the module's to own;
+          a runtime edit is an experiment that lasts until the next switch.
+        */
+        "C+ ${l1}/ccache.conf 0664 root nixbld - ${builderConf}"
       ] ++ map (p: "d ${peerDir p} 0755 root root -") (lib.attrValues b.peers);
 
       /*

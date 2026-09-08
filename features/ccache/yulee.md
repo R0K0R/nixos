@@ -45,6 +45,19 @@ rides along.
 
 Read per invocation; edits take effect on the next compile with no rebuild --
 `max_size` included (it is deliberately not in the derivation env).
+
+MUST BE A REAL FILE, never a symlink into the store. A build sandbox's
+/nix/store contains only that derivation's own inputs, so a store symlink
+dangles inside the sandbox and ccache silently falls back to its defaults:
+direct_mode on, no remote storage, 5 GiB cache -- while `ccache --show-config`
+from a login shell still reports the intended values. That is exactly how
+victus-15 ran unnoticed (its NixOS module used a tmpfiles `L+`), and it is why
+the module now uses `C+`.
+
+`max_size` is easy to omit and expensive to omit: without it ccache uses its
+5 GiB default, and on a full-world rebuild the cache thrashes, evicting entries
+as fast as it writes them. Measured on yulee: 5.0/5.0 GiB at 99.86%, 13.9% hit
+rate.
 Drop the `peer-*` backend to go local-only; `disable = true` switches ccache
 off entirely. Never set remote storage through the environment -- env is
 ccache's highest-precedence source and would override this file.

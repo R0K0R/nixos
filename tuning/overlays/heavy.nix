@@ -82,7 +82,29 @@ else
           unwrappedCC = withMold.cc.cc;
         };
         ccacheCC = withMold.cc.override {
-          cc = links.overrideAttrs (_: { version = withMold.cc.cc.version; });
+          /*
+            The cc-wrapper names itself after the cc it wraps, so a bare
+            ccache-links turns "…-clang-wrapper-21.1.8" into
+            "…-ccache-links-wrapper-21.1.8" and loses BOTH the compiler's
+            identity and its version. Two things downstream read that name:
+
+            - tuning/pkgs-config.nix's preHook, which skips its GCC-only
+              -Wno-error=maybe-uninitialized for `*-clang-wrapper-*`. Renamed,
+              the guard misses, clang gets the flag, and its "unknown warning
+              option" reply matches CMake's FAIL_REGEX -- so EVERY
+              check_compiler_flag fails despite exit 0. Measured on webkitgtk:
+              -fcolor-diagnostics reported unsupported, then "Failed to detect
+              support for atomic variables" and configure aborted.
+            - every `versionAtLeast stdenv.cc.version` gate in nixpkgs, which
+              would otherwise see ccache's 4.13.6.
+
+            So keep both. The name has to END in the compiler for the guard's
+            glob to match.
+          */
+          cc = links.overrideAttrs (_: {
+            version = withMold.cc.cc.version;
+            pname = if withMold.cc.isClang then "ccache-links-clang" else "ccache-links-gcc";
+          });
         };
         swapped = if ccache.enable then prev.overrideCC withMold ccacheCC else withMold;
 
