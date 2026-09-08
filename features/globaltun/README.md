@@ -123,7 +123,24 @@ route.
 nowhere to put the second tun `gticmp.py` needs, and `ip rule` needs root. The
 app answers pings itself, as sing-box did before `gticmp` existed.
 
-Give the phone its own `remoteSocksPort` like any other client.
+### Setting one up
+
+On the phone, in Termux (`pkg install openssh python`):
+
+```sh
+mkdir -p ~/globaltun && cd ~/globaltun
+# from this repo: android/globaltun-termux.sh, android/globaltun.env.example,
+#                 android/sing-box-android.json, rsocks.py, gtlocal.py
+cp globaltun.env.example globaltun.env && $EDITOR globaltun.env
+ssh-keygen -t ed25519 -f ~/.ssh/globaltun -N ""      # add the .pub to both hops
+./globaltun-termux.sh up
+```
+
+Then import `sing-box-android.json` into the sing-box app and start the VPN.
+`globaltun.env` is the only file you edit; the script refuses to run without it
+and prints the copy command. Give the phone its own `remoteSocksPort` like any
+other client, and keep `GT_LOCAL_PORT` equal to the `server_port` of the app
+config's socks outbound.
 
 ## Two traps worth knowing
 

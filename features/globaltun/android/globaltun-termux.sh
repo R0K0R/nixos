@@ -30,7 +30,13 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-[ -f "$HERE/globaltun.env" ] && . "$HERE/globaltun.env"
+if [ -f "$HERE/globaltun.env" ]; then
+  . "$HERE/globaltun.env"
+elif [ -f "$HERE/globaltun.env.example" ]; then
+  echo "no globaltun.env beside $0 -- start from the template:" >&2
+  echo "  cp $HERE/globaltun.env.example $HERE/globaltun.env && \$EDITOR $HERE/globaltun.env" >&2
+  exit 1
+fi
 
 RHOST=${GT_RHOST:?set GT_RHOST, e.g. root@gateway}
 KEY=${GT_KEY:?set GT_KEY, path to the ssh private key}
