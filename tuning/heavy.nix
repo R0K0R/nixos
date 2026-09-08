@@ -83,6 +83,11 @@ in
         "clang" "libcxx" "llvm" "compiler-rt"
         "bash" "coreutils" "findutils" "diffutils" "gnused" "gnugrep" "gawk"
         "gnutar" "gzip" "bzip2" "xz" "patch" "file" "ed" "gnumake" "patchelf"
+        # curl-impersonate builds a vendored libidn2 through a nested autotools
+        # configure that cannot link a test program under the ccache wrapper:
+        # "C compiler cannot create executables". Excluding mold alone did not
+        # help, so it is the compiler wrapper, not the linker (2026-09-08).
+        "curl-impersonate"
       ];
       description = "Names left completely untouched: no mold, no ccache. The stdenv's own closure has to be here.";
     };
