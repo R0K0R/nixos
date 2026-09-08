@@ -62,6 +62,24 @@ in
   options.my.tuning.ca = {
     enable = lib.mkEnableOption "step 1: the ca-derivations experimental feature on this host's daemon";
     contentAddress = lib.mkEnableOption "step 2: mark the tuned host set __contentAddressed (only after step 1 is live on galaxybook, victus-15 AND yulee)";
+
+    stripRefChecks = lib.mkEnableOption ''
+      clearing nixpkgs' reference checks on the packages that carry them, so
+      they can be content-addressed too.
+
+      Without this, CA is not usable at all here. A derivation ANYWHERE
+      downstream of a content-addressed one gets a deferred output path, and a
+      check naming it then holds a placeholder that nix rejects: krb5 disallows
+      bashNonInteractive in its lib output and dies with "not a valid output of
+      this derivation" once readline is CA (measured 2026-09-07).
+
+      Measured 2026-09-08: 36 of 919 candidates carry any reference check --
+      age audit curl direnv e2fsprogs exiv2 git iptables kbd krb5 libcap
+      libpcap libpq linux-pam lvm2 man-db mesa nodejs perl python3 shadow
+      systemd tailscale among them. Bounded, but it removes assertions that
+      exist to catch closure creep, on packages as central as systemd and mesa.
+      That is the trade; it is off by default deliberately
+    '';
   };
 
   config = lib.mkMerge [
@@ -83,6 +101,7 @@ in
           # CA outPath is a placeholder and poisons any reference check naming
           # it. One list, one source of truth.
           skip = config.my.tuning.heavy.skip;
+          inherit (cfg) stripRefChecks;
         })
       ];
     })

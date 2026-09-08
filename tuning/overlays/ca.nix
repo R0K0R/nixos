@@ -19,7 +19,7 @@
   suffix. Fixed-output derivations are skipped by make-derivation itself when
   outputHash is set; everything without overrideAttrs is left alone.
 */
-{ lib, hostRuntimeClassifier, skip }:
+{ lib, hostRuntimeClassifier, skip, stripRefChecks }:
 
 final: prev:
 if
@@ -68,6 +68,22 @@ else
     nonEmpty = a: lib.any (k: (a.${k} or [ ]) != [ ]) checkKeys;
     hasRefCheck =
       a: nonEmpty a || lib.any nonEmpty (lib.attrValues (a.outputChecks or { }));
+
+    # With stripRefChecks, such a package is emptied of its checks and THEN
+    # content-addressed, instead of being left input-addressed. Measured
+    # 2026-09-08: 36 of 919 candidates carry any check at all, so this is a
+    # bounded edit, not a sweep. What it gives up is real -- these assertions
+    # catch closure creep, e.g. krb5's lib output must not end up requiring
+    # bash -- so it is off unless asked for.
+    stripChecks =
+      v:
+      v.overrideAttrs (
+        o:
+        lib.optionalAttrs (o ? outputChecks) {
+          outputChecks = lib.mapAttrs (_: oc: removeAttrs oc checkKeys) o.outputChecks;
+        }
+        // lib.genAttrs (builtins.filter (k: o ? ${k}) checkKeys) (_: [ ])
+      );
     # has-attr only: it forces `prev` to WHNF and nothing more.
     candidates = builtins.filter (
       n: (prev ? ${n}) && !(builtins.elem n skip)
@@ -89,9 +105,16 @@ else
             && v ? overrideAttrs
             && !(v ? outputHash)
             && lib.hasInfix tunedSuffix (v.name or "")
-            && !(hasRefCheck (v.drvAttrs or { }))
           );
+          ca = d: d.overrideAttrs (_: { __contentAddressed = true; });
+          checked = builtins.tryEval (hasRefCheck (v.drvAttrs or { }));
+          blocked = !checked.success || checked.value;
         in
-        if t.success && t.value then v.overrideAttrs (_: { __contentAddressed = true; }) else v;
+        if !(t.success && t.value) then
+          v
+        else if blocked then
+          (if stripRefChecks then ca (stripChecks v) else v)
+        else
+          ca v;
     }) candidates
   )
