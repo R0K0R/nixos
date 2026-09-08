@@ -77,7 +77,7 @@ in
 
     maxSize = lib.mkOption {
       type = lib.types.str;
-      default = "20G";
+      default = "40G";
       description = "max_size for L1, written to the builder's ccache.conf (not the derivation env, so it is a runtime lever). nixpkgs' programs.ccache never sets this; ccache's 5 GiB default thrashes on webkit-scale objects.";
     };
 
