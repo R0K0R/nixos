@@ -77,7 +77,27 @@ else
       base:
       let
         withMold = if useMold && mold then prev.stdenvAdapters.useMoldLinker base else base;
-        links = prev.buildPackages.ccache.links {
+        /*
+          Cross-derivation reuse. ccache hashes the include paths it finds in
+          the preprocessed output's line markers, and in Nix those carry a store
+          hash that changes whenever a dependency is rebuilt, even to a
+          byte-identical header. Every dependent then misses. The patch elides
+          just that hash, and only inside line markers; the header's content is
+          still hashed separately, so headers that really differ still miss.
+
+          Validated 2026-09-09 before writing it: the same source preprocessed
+          against two zlib-dev paths with identical headers differs on 158
+          lines, all of them line markers, and hashes identically once those are
+          normalised -- for a trivial C file and for a 38k-line C++ TU alike.
+        */
+        ccachePkg =
+          if ccache.normalize then
+            prev.buildPackages.ccache.overrideAttrs (o: {
+              patches = (o.patches or [ ]) ++ [ ../../features/ccache/nix-store-normalize.patch ];
+            })
+          else
+            prev.buildPackages.ccache;
+        links = ccachePkg.links {
           extraConfig = ccache.extraConfig;
           unwrappedCC = withMold.cc.cc;
         };
@@ -105,10 +125,37 @@ else
 
             The name must END in the compiler for pkgs-config's glob to match.
           */
-          cc = links.overrideAttrs (_: {
-            version = withMold.cc.cc.version;
-            pname = if withMold.cc.isClang then "ccache-links-clang" else "ccache-links-gcc";
-          });
+          cc =
+            (links.overrideAttrs (_: {
+              version = withMold.cc.cc.version;
+              pname = if withMold.cc.isClang then "ccache-links-clang" else "ccache-links-gcc";
+            }))
+            /*
+              ccache.links copies only isClang/isGNU/isCcache and two hardening
+              attributes from the compiler it wraps, dropping the rest of its
+              passthru. cc-wrapper reads more than that: it emits clang's C++
+              include paths only when `cc.langCC` is true (cc-wrapper/default.nix
+              :901), so a ccache'd clang wrapper silently ships no C++ standard
+              library at all. Measured: webkitgtk's configure reported "Failed to
+              detect support for atomic variables", and the underlying error was
+              `fatal error: 'atomic' file not found`.
+
+              Carry the language flags across. intersectAttrs takes only the ones
+              the compiler actually has, so this is a no-op for compilers that
+              lack them.
+            */
+            // builtins.intersectAttrs {
+              langC = null;
+              langCC = null;
+              langAda = null;
+              langD = null;
+              langFortran = null;
+              langGo = null;
+              langObjC = null;
+              langObjCpp = null;
+              langJava = null;
+              langRust = null;
+            } withMold.cc.cc;
         };
         swapped = if ccache.enable then prev.overrideCC withMold ccacheCC else withMold;
 
@@ -118,9 +165,25 @@ else
           cc-intra-isa-cross.sh, injected by pkgs/stdenv/cross/default.nix. It
           affects every intra-ISA cross build, not only the tuned set, so a
           per-flake overlay was the wrong layer for it.
+
+          What DOES belong here is the random seed. nixpkgs'
+          reproducible-builds.sh derives -frandom-seed from $out, so it differs
+          for every derivation, and a cross-derivation cache hit would hand back
+          an object built under a different seed. Measured 2026-09-09: the seed
+          changes nothing for plain -O2 (0 bytes), but does under -flto (136
+          bytes) and -fprofile-arcs (13), and lto.enable is true here. The hook
+          honours NIX_OUTPATH_USED_AS_RANDOM_SEED, so pinning it per package
+          keeps the seed deterministic for rebuilds and distinct between
+          packages -- its stated purpose -- while making it identical across a
+          package's own rebuilds at different store paths. Reproducibility is
+          preserved, which is what lets this coexist with CA derivations.
         */
+        stableSeed =
+          prev.stdenvAdapters.overrideMkDerivationArgs (a: {
+            NIX_OUTPATH_USED_AS_RANDOM_SEED = a.pname or (a.name or "nixpkgs");
+          });
       in
-      if ccache.enable then prev.overrideCC withMold ccacheCC else withMold;
+      if ccache.enable && ccache.normalize then stableSeed swapped else swapped;
 
     # Only swap through an argument the package actually declares. abseil-cpp
     # takes no `stdenv` at all and `.override { stdenv = ...; }` throws

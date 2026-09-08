@@ -26,17 +26,12 @@
       # daemon, which is what rejects it, so no client flag helps. yulee has it
       # in nix.conf; galaxybook and victus-15 need the transient drop-in in
       # tuning/ca.nix's header before their first switch with this on.
-      # OFF, and not for want of trying (2026-09-07). CA is structurally at
-      # odds with nixpkgs' reference checks here. A derivation ANYWHERE
-      # downstream of a content-addressed one gets a deferred output path, so
-      # `disallowedRequisites = [ bashNonInteractive ]` in krb5 resolves to a
-      # placeholder like "/1lba4bnb..." and the build dies with "not a valid
-      # output of this derivation". bash is not CA; readline is, and bash
-      # depends on it. Excluding packages that HAVE checks does not help: the
-      # breakage is in what the check NAMES. Every builder ran Nix 2.34.8 for
-      # this test, so it is not the version. Revisiting means stripping those
-      # checks from affected packages, which trades away a real safety net.
-      ca.contentAddress = false;
+      # ON together: contentAddress needs stripRefChecks, because a derivation
+      # anywhere downstream of a CA one gets a deferred output path and any
+      # reference check naming it then holds a placeholder nix rejects. 36 of
+      # 919 candidates carry such a check; clearing them is the price.
+      ca.contentAddress = true;
+      ca.stripRefChecks = true;
       # Literal, and it must stay one: flake.nix raw-imports this file to pick
       # between the patched fork and plain upstream nixpkgs before the module
       # system exists. false here would substitute the whole package set from
@@ -51,6 +46,11 @@
       refreshTool.enable = true;
     };
     ccache.enable = true;
+    # Cross-derivation reuse: patched ccache + per-package random seed. Pairs
+    # with ca.contentAddress rather than competing with it -- CA cuts off when a
+    # dependency rebuilds to identical BYTES, this one when it rebuilds to
+    # different bytes but identical HEADERS.
+    ccache.crossDerivation.enable = true;
 
     /*
       The people who use this machine. Declaring an account creates it; the

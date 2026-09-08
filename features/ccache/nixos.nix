@@ -27,7 +27,13 @@ let
   builderConf = pkgs.writeText "ccache.conf" ''
     max_size = ${cfg.maxSize}
     direct_mode = false
-    remote_storage = file:${stage}${lib.concatMapStrings (p: " file:${peerDir p}|read-only=true|update-mtime=true") (lib.attrValues b.peers)}
+${lib.optionalString cfg.crossDerivation.enable ''
+    # The include paths themselves must stop mattering too: the patch handles
+    # them inside the preprocessed output, this handles them on the command
+    # line. Sound only because direct_mode is off, so what gets hashed is the
+    # preprocessed text -- which already encodes the resolved header content.
+    ignore_options = -I* -isystem* -idirafter* -iquote*
+''}    remote_storage = file:${stage}${lib.concatMapStrings (p: " file:${peerDir p}|read-only=true|update-mtime=true") (lib.attrValues b.peers)}
   '';
 
   peerType = lib.types.submodule ({ name, ... }: {
@@ -47,6 +53,26 @@ in
       type = lib.types.str;
       default = "/var/cache/ccache";
       description = "Root of L1 (l1/), the write-behind stage (stage/) and peer mounts (peer-*/). Must be the same on every builder: it is baked into the wrapper as CCACHE_DIR.";
+    };
+
+    crossDerivation = {
+      enable = lib.mkEnableOption ''
+        cross-derivation reuse: a patched ccache that elides the store hash from
+        include paths in line markers, plus a per-package random seed.
+
+        Without it ccache only ever helps on rebuilds of the SAME derivation
+        inputs -- an interrupted build, the other builder, a GC, a --check.
+        With it, a dependency rebuilt to different bytes but identical headers
+        no longer forces its dependents to recompile, which is the common case
+        under toolchain and flag churn.
+
+        Validated 2026-09-09 before implementing: the same source preprocessed
+        against two zlib-dev paths with byte-identical headers differs on 158
+        lines, every one a line marker, and hashes identically once those are
+        normalised. See features/ccache/nix-store-normalize.patch for why the
+        rewrite must be narrow -- a blanket one collides packages that embed
+        their own $out in a string literal
+      '';
     };
 
     maxSize = lib.mkOption {
@@ -99,7 +125,7 @@ in
         export CCACHE_COMPRESS=1
         export CCACHE_SLOPPINESS=random_seed
         export CCACHE_UMASK=002
-        # Degrade, don't die: a builder without the cache dir in its sandbox
+${lib.optionalString cfg.crossDerivation.enable "        export CCACHE_NIX_STORE_NORMALIZE=1\n"}        # Degrade, don't die: a builder without the cache dir in its sandbox
         # (not yet switched to this config; yulee before yulee.md is done)
         # compiles uncached instead of failing every C/C++ derivation --
         # otherwise the first switch that enables this can never evaluate,

@@ -1,0 +1,87 @@
+--- a/src/ccache/ccache.cpp	2026-09-09 01:19:51.566422435 +0900
++++ b/src/ccache/ccache.cpp	2026-09-09 01:20:40.044301134 +0900
+@@ -519,6 +519,70 @@
+   return strncmp(str, prefix.data(), prefix.length()) == 0;
+ }
+ 
++// Nix store path normalisation, for cross-derivation cache reuse.
++//
++// In Nix every build input lives at /nix/store/<32-char hash>-<name>, and that
++// hash changes whenever anything about the input's derivation changes, even
++// when the installed headers are byte-identical. The preprocessed output then
++// carries a different `# N "/nix/store/<hash>-foo/include/x.h"` line marker for
++// what is, as far as the compilation is concerned, the same input, so every
++// dependent misses after any dependency is rebuilt, however trivially.
++//
++// Eliding just the hash lets those compilations share a cache entry. It stays
++// sound because the include file's CONTENT is hashed separately, by
++// remember_include_file() below, so headers that actually differ still produce
++// different results. Only the location is forgotten.
++//
++// Deliberately narrow: it rewrites the include path ccache extracts from a line
++// marker and nothing else, notably not string literals, which may legitimately
++// contain a store path. A package compiled with
++// -DDATADIR="/nix/store/<own out>/share" must not share entries with another.
++//
++// Off unless CCACHE_NIX_STORE_NORMALIZE is set, and suppressed when the
++// compilation generates debug info, since DWARF records include directories and
++// a reused object would then name a store path outside the consuming
++// derivation's closure.
++static bool
++nix_store_normalize_enabled()
++{
++  static const bool enabled = getenv("CCACHE_NIX_STORE_NORMALIZE") != nullptr;
++  return enabled;
++}
++
++static std::string
++nix_store_normalize(std::string_view path)
++{
++  static constexpr std::string_view k_prefix = "/nix/store/";
++  static constexpr size_t k_hash_len = 32;
++  static constexpr std::string_view k_placeholder =
++    "00000000000000000000000000000000";
++
++  std::string result;
++  size_t pos = 0;
++  while (pos < path.size()) {
++    const size_t at = path.find(k_prefix, pos);
++    if (at == std::string_view::npos) {
++      result.append(path.substr(pos));
++      break;
++    }
++    result.append(path.substr(pos, at - pos + k_prefix.size()));
++    const size_t hash_start = at + k_prefix.size();
++    size_t i = hash_start;
++    while (i < path.size() && i - hash_start < k_hash_len
++           && ((path[i] >= 'a' && path[i] <= 'z')
++               || (path[i] >= '0' && path[i] <= '9'))) {
++      ++i;
++    }
++    if (i - hash_start == k_hash_len && i < path.size() && path[i] == '-') {
++      result.append(k_placeholder);
++      pos = i;
++    } else {
++      pos = hash_start;
++    }
++  }
++  return result;
++}
++
+ // This function reads and hashes a file. While doing this, it also does these
+ // things:
+ //
+@@ -664,7 +728,12 @@
+       }
+ 
+       if (inc_fs_path != ctx.apparent_cwd || ctx.config.hash_dir()) {
+-        hash.hash(inc_fs_path);
++        if (nix_store_normalize_enabled()
++            && !ctx.args_info.generating_debuginfo) {
++          hash.hash(nix_store_normalize(util::pstr(inc_fs_path).str()));
++        } else {
++          hash.hash(inc_fs_path);
++        }
+       }
+ 
+       TRY(remember_include_file(ctx, inc_fs_path, hash, system, nullptr));

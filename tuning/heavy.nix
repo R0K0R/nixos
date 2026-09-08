@@ -128,6 +128,7 @@ in
         noDebugInfoNames = cfg.noDebugInfo.packages;
         ccache = {
           inherit (config.my.ccache) enable;
+          normalize = config.my.ccache.crossDerivation.enable;
           extraConfig = config.my.ccache.wrapperConfig;
         };
       })
