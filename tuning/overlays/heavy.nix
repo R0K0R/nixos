@@ -84,8 +84,34 @@ else
         ccacheCC = withMold.cc.override {
           cc = links.overrideAttrs (_: { version = withMold.cc.cc.version; });
         };
+        swapped = if ccache.enable then prev.overrideCC withMold ccacheCC else withMold;
+
+        /*
+          Put THIS stdenv's cc-wrapper at the front of PATH for every build.
+
+          Without it, a package that pulls in the build platform's toolchain
+          (`depsBuildBuild = [ buildPackages.stdenv.cc ]`) compiles with an
+          UNWRAPPED gcc. In this pseudo-cross setup the build and host
+          platforms share the triple `x86_64-unknown-linux-gnu`, so both answer
+          to that prefixed name, and depsBuildBuild entries land at the FRONT of
+          PATH (measured: position 1 is the build gcc-wrapper, position 2 the
+          build platform's raw gcc, which is what the name resolves to). The raw
+          gcc then calls its own configured ld.bfd with none of the wrapper's -B
+          and -L paths, and the link dies on "cannot find Scrt1.o", "crti.o",
+          "-lgcc_s". curl-impersonate hits it because its vendored libidn2 runs a
+          nested `--host=` configure that looks the bare prefixed name up.
+
+          postHook, not a setup hook: setup.sh runs `runHook postHook` AFTER
+          _activatePkgs and before any phase, so this wins over depsBuildBuild.
+          A setup-hook package cannot -- measured, it is activated during
+          _activatePkgs and depsBuildBuild prepends in front of it afterwards.
+        */
       in
-      if ccache.enable then prev.overrideCC withMold ccacheCC else withMold;
+      prev.stdenvAdapters.overrideMkDerivationArgs (a: {
+        postHook = (a.postHook or "") + ''
+          export PATH="${swapped.cc}/bin:$PATH"
+        '';
+      }) swapped;
 
     # Only swap through an argument the package actually declares. abseil-cpp
     # takes no `stdenv` at all and `.override { stdenv = ...; }` throws
