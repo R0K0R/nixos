@@ -56,7 +56,17 @@ my.globaltun = {
 
 The same scripts run standalone on a host that is not managed by this flake:
 copy `globaltun*.sh` and the `.py` files somewhere, drop a `globaltun.env`
-beside them exporting the same `GT_*` variables, and run it. A host that reaches
+beside them exporting the same `GT_*` variables, and run it.
+
+If the tools come from a Nix store on that host, **give them GC roots**.
+`nix copy` transfers a path but roots nothing, so the next collection deletes it
+and `up` fails on a missing binary:
+
+```sh
+nix-store --realise --add-root ~/globaltun/.deps/sing-box --indirect /nix/store/...-sing-box
+```
+
+Point `globaltun.env` at those symlinks rather than raw store paths. A host that reaches
 the gateway *without* a jump — one holding the VPN link itself — uses
 `globaltun-direct.sh`.
 
@@ -82,6 +92,38 @@ the tunnel it carries survives only until the next rekey.
 **`icmp.enable`** is separable because it is the only part touching policy
 routing and netfilter: a second tun, an `ipproto icmp` rule, a routing table and
 an interface-scoped exemption.
+
+## Unrooted Android clients
+
+`android/` carries what a phone needs. It cannot run the Linux half at all: no
+`CAP_NET_ADMIN` means no tun and no routes. Android's sanctioned equivalent is
+**`VpnService`**, which only an app may use — so sing-box's Android app owns the
+tun and the routing, and `globaltun-termux.sh` supplies everything beneath it.
+
+```
+sing-box app (VpnService tun)
+     |  socks5 127.0.0.1:1081
+     v
+gtlocal.py in Termux .......... UDP-ASSOCIATE over loopback, no privileges
+     |  one TCP stream
+     v
+ssh -L  ->  rsocks.py on the gateway
+```
+
+Nothing in the relays changes — `rsocks.py` and `gtlocal.py` are the same files,
+referenced from the feature root rather than copied.
+
+**The tun inbound must exclude Termux** (`"exclude_package": ["com.termux"]`, as
+shipped in `sing-box-android.json`). Otherwise ssh's own carrier is captured by
+the tunnel it carries and nothing connects — the same failure as an unpinned VPN
+underlay on a Linux host, expressed through Android's per-app list instead of a
+route.
+
+**ICMP is not carried.** `VpnService` grants one tun to one app, so there is
+nowhere to put the second tun `gticmp.py` needs, and `ip rule` needs root. The
+app answers pings itself, as sing-box did before `gticmp` existed.
+
+Give the phone its own `remoteSocksPort` like any other client.
 
 ## Two traps worth knowing
 
