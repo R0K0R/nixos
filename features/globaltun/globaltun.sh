@@ -100,8 +100,15 @@ pin_prefix(){
   via=$(echo "$line" | awk '{for(i=1;i<=NF;i++) if($i=="via"){print $(i+1); exit}}')
   dev=$(echo "$line" | awk '{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}')
   [ -n "$dev" ] || { echo "no device in route to $label $target" >&2; return 1; }
-  if [ -n "$via" ]; then ip route replace "$target" via "$via" dev "$dev"
-  else                   ip route replace "$target" dev "$dev"; fi
+  # `onlink` because the gateway may not be provably on-link: NetworkManager
+  # sets noprefixroute on DHCP addresses, so the interface has NO connected
+  # route and the kernel rejects any new route via that gateway with
+  # "Nexthop has invalid gateway" -- even though its own default route uses it.
+  # We are copying the path the kernel already takes, so asserting on-link is
+  # exactly true.
+  if [ -n "$via" ]; then ip route replace "$target" via "$via" dev "$dev" onlink
+  else                   ip route replace "$target" dev "$dev"
+  fi || { echo "FAILED to pin $label $target (${via:+via $via }dev $dev)" >&2; return 1; }
   echo "$label $target pinned ${via:+via $via }dev $dev"
 }
 
@@ -204,6 +211,9 @@ start_gticmp(){
   [ -n "$d" ] || { echo "  no default interface; skipping icmp carve-outs" >&2; d=""; }
   lan=""
   [ -n "$d" ] && lan=$(ip -o -4 route show dev "$d" scope link | awk '{print $1; exit}')
+  # noprefixroute (NetworkManager default for DHCP) means there is no
+  # scope-link route to read; derive the subnet from the address instead.
+  [ -z "$lan" ] && [ -n "$d" ] && lan=$(ip -o -4 addr show dev "$d" | awk '{print $4; exit}')
   ip route replace 100.64.0.0/10 dev tailscale0 table $IC_TABLE 2>/dev/null || true
   [ -n "$lan" ] && [ -n "$d" ] && ip route replace "$lan" dev "$d" table $IC_TABLE
   ip route replace default dev "$ICTUN" table $IC_TABLE
@@ -293,7 +303,10 @@ up(){
   ip link show "$TUN" >/dev/null 2>&1 || { echo "$TUN never appeared:"; tail -30 "$LOG"; exit 1; }
 
   echo "--- routing (main table, so tailscale's fwmark rule 5210 lands in the tun too)"
-  pin_carrier
+  # Abort before the default split if the carrier is not pinned: routing
+  # 0.0.0.0/1 into a tun whose own carrier goes through it is a black hole,
+  # and on a headless host nothing is then left able to undo it.
+  pin_carrier || { echo "refusing to install tun routes with an unpinned carrier" >&2; exit 1; }
   ip route replace 0.0.0.0/1   dev "$TUN"
   ip route replace 128.0.0.0/1 dev "$TUN"
   tailscale_bypass
