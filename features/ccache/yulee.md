@@ -37,11 +37,20 @@ rides along.
 ## 4. ccache.conf -- the L2 lever (done)
 
     sudo tee /var/cache/ccache/l1/ccache.conf <<'CONF'
-    max_size = 20G
+    max_size = 30G
     direct_mode = false
+    ignore_options = -I* -isystem* -idirafter* -iquote*
     remote_storage = file:/var/cache/ccache/stage file:/var/cache/ccache/peer-victus-15|read-only=true|update-mtime=true
     CONF
     sudo chmod 664 /var/cache/ccache/l1/ccache.conf
+
+`ignore_options` is half of cross-derivation reuse and must be here, since this
+file is hand-managed and the NixOS module cannot reach it. The other half is the
+patched ccache and the CCACHE_NIX_STORE_NORMALIZE it reads, both of which arrive
+through the derivations themselves (my.ccache.crossDerivation.enable), so yulee
+needs no action for those. Dropping include paths from the hash is sound ONLY
+because direct_mode is off: what gets hashed is the preprocessed text, which
+already encodes the resolved header content.
 
 Read per invocation; edits take effect on the next compile with no rebuild --
 `max_size` included (it is deliberately not in the derivation env).
