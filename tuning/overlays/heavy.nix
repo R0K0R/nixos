@@ -109,10 +109,20 @@ else
           in
           prev.callPackage f (if (lib.functionArgs f) ? ${arg} then a // { ${arg} = tuned; } else a);
       in
-      if takes pkg arg then
+      # callPackage FIRST when both are declared. A version shim like
+      #   mbedtls = { callPackage, lib, stdenv, ... }: callPackage ./generic.nix { }
+      # declares `stdenv` but never forwards it, so overriding that argument is
+      # a no-op -- measured: mbedtls.override { stdenv = clangStdenv; } yields a
+      # byte-identical drvPath. The inner build takes its stdenv from
+      # callPackage's auto-args instead, so that is where it has to be injected.
+      # Both are set when both exist, since the shim may use `stdenv` for a
+      # platform test of its own.
+      if takes pkg "callPackage" then
+        pkg.override (
+          { callPackage = viaCallPackage; } // lib.optionalAttrs (takes pkg arg) { ${arg} = tuned; }
+        )
+      else if takes pkg arg then
         pkg.override { ${arg} = tuned; }
-      else if takes pkg "callPackage" then
-        pkg.override { callPackage = viaCallPackage; }
       else
         pkg;
 
