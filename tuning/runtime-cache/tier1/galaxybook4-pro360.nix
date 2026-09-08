@@ -1,8 +1,8 @@
 {
-  capturedAt = "2026-09-06T18:25:53Z";
+  capturedAt = "2026-09-08T05:52:44Z";
   host = "galaxybook4-pro360";
-  nixpkgsNarHash = "sha256-2zf+ONQet9gpvBtwSeeuH/ds16U5SiVv+ohQLAiDgVc=";
-  nixpkgsRev = "7bc504b77831ef86265b4cd68a08d8efe2ec6bf5";
+  nixpkgsNarHash = "sha256-HazKW/SzGoINukgxMZkbcejGW5bMtqd8rVifPY7e59g=";
+  nixpkgsRev = "b8c9c69058c77753a1e1a6c768d8477902e1e552";
   runtimeNames = [
     "Algorithm-Diff"
     "Authen-SASL"

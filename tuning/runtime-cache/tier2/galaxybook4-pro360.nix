@@ -1,5 +1,5 @@
 {
-  anchorCount = 276;
+  anchorCount = 278;
   buildOnly = [
     "ccache"
     "mold"
@@ -202,6 +202,8 @@
     "starship"
     "quickshell"
     "kitty"
+    "git"
+    "gh"
     "hm-session-vars.fish"
     "direnv"
     "dummy-fc-dir1"
@@ -869,6 +871,7 @@
     "librsync"
     "matplotlib"
     "libunistring"
+    "zlib-ng"
     "libpciaccess"
     "intel-gmmlib"
     "directx-headers"
@@ -1224,7 +1227,6 @@
     "aiodns"
     "cppy"
     "libimagequant"
-    "zlib-ng"
     "tk"
     "hfst-ospell"
     "gupnp-igd"
@@ -1263,10 +1265,10 @@
     "pycparser"
     "die-hook"
   ];
-  capturedAt = "2026-09-06T18:25:36Z";
+  capturedAt = "2026-09-08T05:52:23Z";
   host = "galaxybook4-pro360";
-  nixpkgsNarHash = "sha256-2zf+ONQet9gpvBtwSeeuH/ds16U5SiVv+ohQLAiDgVc=";
-  nixpkgsRev = "7bc504b77831ef86265b4cd68a08d8efe2ec6bf5";
+  nixpkgsNarHash = "sha256-HazKW/SzGoINukgxMZkbcejGW5bMtqd8rVifPY7e59g=";
+  nixpkgsRev = "b8c9c69058c77753a1e1a6c768d8477902e1e552";
   runtimeNames = [
     "runtime-cache-refresh"
     "camera-relay"
@@ -1452,6 +1454,8 @@
     "starship"
     "quickshell"
     "kitty"
+    "git"
+    "gh"
     "hm-session-vars.fish"
     "direnv"
     "dummy-fc-dir1"
@@ -2120,6 +2124,7 @@
     "librsync"
     "matplotlib"
     "libunistring"
+    "zlib-ng"
     "libpciaccess"
     "intel-gmmlib"
     "directx-headers"
@@ -2479,7 +2484,6 @@
     "aiodns"
     "cppy"
     "libimagequant"
-    "zlib-ng"
     "tk"
     "hfst-ospell"
     "gupnp-igd"
