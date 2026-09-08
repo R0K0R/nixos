@@ -83,23 +83,27 @@ else
         };
         ccacheCC = withMold.cc.override {
           /*
-            The cc-wrapper names itself after the cc it wraps, so a bare
-            ccache-links turns "…-clang-wrapper-21.1.8" into
-            "…-ccache-links-wrapper-21.1.8" and loses BOTH the compiler's
-            identity and its version. Two things downstream read that name:
+            cc-wrapper names and versions itself after the cc it wraps, and
+            ccache.links calls itself "ccache-links" at ccache's own version. So
+            a ccache'd wrapper reads "…-ccache-links-wrapper-4.13.6" and loses
+            BOTH the compiler's identity and its version. Two consequences,
+            both measured:
 
-            - tuning/pkgs-config.nix's preHook, which skips its GCC-only
+            - every `versionAtLeast stdenv.cc.version` gate in nixpkgs compares
+              against 4.13.6, useMoldLinker's own gcc >= 12 test included.
+            - tuning/pkgs-config.nix skips its GCC-only
               -Wno-error=maybe-uninitialized for `*-clang-wrapper-*`. Renamed,
-              the guard misses, clang gets the flag, and its "unknown warning
-              option" reply matches CMake's FAIL_REGEX -- so EVERY
-              check_compiler_flag fails despite exit 0. Measured on webkitgtk:
-              -fcolor-diagnostics reported unsupported, then "Failed to detect
-              support for atomic variables" and configure aborted.
-            - every `versionAtLeast stdenv.cc.version` gate in nixpkgs, which
-              would otherwise see ccache's 4.13.6.
+              the guard missed, clang got the flag, and its "unknown warning
+              option" reply matches CMake's FAIL_REGEX -- failing EVERY
+              check_compiler_flag despite exit 0. webkitgtk's configure died on
+              "Failed to detect support for atomic variables".
 
-            So keep both. The name has to END in the compiler for the guard's
-            glob to match.
+            Fixed here rather than in the fork's ccache because THIS FLAKE does
+            not use the fork's ccache: it is build-only, so upstream-tools.nix
+            aliases it to the nixpkgs-upstream input to keep it substitutable.
+            A fork patch to pkgs/by-name/cc/ccache is simply never evaluated.
+
+            The name must END in the compiler for pkgs-config's glob to match.
           */
           cc = links.overrideAttrs (_: {
             version = withMold.cc.cc.version;
