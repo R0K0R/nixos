@@ -137,6 +137,14 @@ ssh-keygen -t ed25519 -f ~/.ssh/globaltun -N ""      # add the .pub to both hops
 ```
 
 Then import `sing-box-android.json` into the sing-box app and start the VPN.
+Keep the Termux session alive; toggle the VPN in the app as needed. Only re-run
+`up` if the carrier drops.
+
+**Android kills Termux's children.** On 12+ the phantom process killer reaps
+them past a count of 32, which looks exactly like the carrier vanishing on its
+own: `up` succeeds, starts the relay on the gateway, and the master is gone by
+the time anything uses it. `termux-wake-lock` before `up` helps; the real fix is
+`adb shell settings put global settings_enable_monitor_phantom_procs false`.
 `globaltun.env` is the only file you edit; the script refuses to run without it
 and prints the copy command. Give the phone its own `remoteSocksPort` like any
 other client, and keep `GT_LOCAL_PORT` equal to the `server_port` of the app

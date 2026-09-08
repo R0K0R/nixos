@@ -70,9 +70,15 @@ SSHOPTS=(-i "$KEY" -p "$RPORT"
 
 have_ctl(){ [ -S "$CTL" ] && ssh -S "$CTL" -O check "$RHOST" >/dev/null 2>&1; }
 
+# Termux ships no iproute2, so `ss` is absent -- and where it exists (proot on
+# the gateway) Android blocks the netlink it needs, so it reports nothing and
+# looks like "not listening". bash's /dev/tcp asks the only question that
+# matters and needs neither.
+port_open(){ (exec 3<>/dev/tcp/127.0.0.1/"$1") 2>/dev/null; }
+
 up(){
   have_ctl || {
-    ss -ltn 2>/dev/null | grep -q ":$LPORT " && { echo "port $LPORT already in use -- run 'down' first" >&2; exit 1; }
+    port_open "$LPORT" && { echo "port $LPORT already in use -- run 'down' first" >&2; exit 1; }
     rm -f "$CTL"
     local n t err; n=0; err=$(mktemp)
     for t in ${GT_TIMEOUTS:-300 600 900}; do
@@ -105,13 +111,15 @@ up(){
   " || exit 1
 
   [ -f "$GLPID" ] && { kill "$(cat "$GLPID")" 2>/dev/null; rm -f "$GLPID"; }
+  # setsid is util-linux, absent from a default Termux; nohup is in coreutils.
+  DETACH=$(command -v setsid || command -v nohup)
   GT_LOCAL_PORT=$LOCAL_PORT GT_REMOTE_PORT=$LPORT \
-    setsid python3 -u "$GT_GTLOCAL" >"$GLLOG" 2>&1 </dev/null &
+    $DETACH python3 -u "$GT_GTLOCAL" >"$GLLOG" 2>&1 </dev/null &
   echo $! > "$GLPID"
   sleep 1
-  ss -ltn 2>/dev/null | grep -q ":$LOCAL_PORT " \
+  port_open "$LOCAL_PORT" \
     && echo "gtlocal up: $(head -1 "$GLLOG")" \
-    || { echo "gtlocal FAILED:"; cat "$GLLOG"; exit 1; }
+    || { echo "gtlocal FAILED (nothing listening on $LOCAL_PORT):"; cat "$GLLOG"; exit 1; }
 
   cat <<EOT
 
@@ -134,9 +142,15 @@ down(){
 
 status(){
   echo "--- carrier";  have_ctl && echo "  connected" || echo "  no control socket"
-  echo "--- forward";  ss -ltn 2>/dev/null | grep ":$LPORT " || echo "  no :$LPORT listener"
-  echo "--- gtlocal";  ss -ltn 2>/dev/null | grep ":$LOCAL_PORT " || echo "  not listening"
-  echo "--- egress";   curl -s --max-time 20 https://1.1.1.1/cdn-cgi/trace 2>/dev/null | grep -E '^(ip|loc)=' || echo "  unreachable"
+  echo "--- forward";  port_open "$LPORT"      && echo "  :$LPORT open" || echo "  no :$LPORT listener"
+  echo "--- gtlocal";  port_open "$LOCAL_PORT" && echo "  :$LOCAL_PORT open" || echo "  not listening"
+  # THROUGH the proxy, not around it. Unlike the Linux hosts, `up` installs no
+  # routes here -- the app owns those -- so a plain curl would report the
+  # phone's own (absent) internet and look like a broken tunnel.
+  echo "--- egress via gtlocal"
+  curl -s --socks5 127.0.0.1:"$LOCAL_PORT" --max-time 30 https://1.1.1.1/cdn-cgi/trace 2>/dev/null \
+    | grep -E '^(ip|loc)=' | sed 's/^/  /' \
+    || echo "  FAILED -- the chain gtlocal -> ssh -L -> gateway relay is broken"
   echo "--- gtlocal log"; tail -3 "$GLLOG" 2>/dev/null
 }
 
