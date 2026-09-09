@@ -11,7 +11,7 @@
 
   # Kernel choice stays in the host file: it is a property of this machine's
   # hardware, not of any feature.
-  boot.kernelPackages = pkgs.linuxPackages_7_1;
+  boot.kernelPackages = pkgs.linuxPackages_7_2;
 
   my = {
     tuning = {
