@@ -1,5 +1,5 @@
 {
-  capturedAt = "2026-09-08T05:51:43Z";
+  capturedAt = "2026-09-09T09:10:34Z";
   names = [
     "AMB-plugins"
     "ArchiSteamFarm"
@@ -566,6 +566,7 @@
     "android-cli"
     "android-file-transfer"
     "android-image-kitchen"
+    "android-mic"
     "android-ota-payload-extractor"
     "android-studio"
     "android-studio-for-platform"
@@ -629,6 +630,7 @@
     "antidote"
     "antigen"
     "antigravity"
+    "antigravity-acp"
     "antigravity-cli"
     "antigravity-fhs"
     "antigravity-ide"
@@ -1089,6 +1091,8 @@
     "audacious-bare"
     "audacious-plugins"
     "audacity"
+    "audacity_3"
+    "audacity_4"
     "audiality2"
     "audible-cli"
     "audiness"
@@ -1188,6 +1192,7 @@
     "avalonia"
     "avalonia-ilspy"
     "avbroot"
+    "avd-fw"
     "avdl"
     "avdump3"
     "avell-unofficial-control-center"
@@ -2246,6 +2251,7 @@
     "caido-desktop"
     "cairo"
     "cairo-lang"
+    "cairomm_1_0"
     "cairomm_1_16"
     "cairosvg"
     "caja"
@@ -2869,6 +2875,7 @@
     "chromium"
     "chromium-bsu"
     "chromium-hsts-preload-list"
+    "chroncal"
     "chrony"
     "chrpath"
     "chruby"
@@ -3090,6 +3097,7 @@
     "cloudflare-ddns"
     "cloudflare-dynamic-dns"
     "cloudflare-dyndns"
+    "cloudflare-speed-cli"
     "cloudflare-utils"
     "cloudflare-warp"
     "cloudflared"
@@ -3636,6 +3644,7 @@
     "cp210x-program"
     "cp2k"
     "cp437"
+    "cpak"
     "cpat"
     "cpc"
     "cpcfs"
@@ -3758,6 +3767,7 @@
     "crossguid"
     "crossmacro"
     "crossmacro-daemon"
+    "crossover"
     "crosspatch"
     "crosspipe"
     "crossplane"
@@ -4164,6 +4174,7 @@
     "dcp9020cdwlpr"
     "dcpj785dw"
     "dcpj785dw-cupswrapper"
+    "dcpomatic"
     "dcraw"
     "dcrctl"
     "dcrd"
@@ -5727,6 +5738,7 @@
     "farstream"
     "fasm"
     "fasm-bin"
+    "fasmarm"
     "fasmg"
     "fasole"
     "fast"
@@ -6032,6 +6044,7 @@
     "finetune"
     "fingerprintx"
     "finit"
+    "finufft"
     "fio"
     "fioctl"
     "fira"
@@ -6606,6 +6619,7 @@
     "fsatrace"
     "fsautocomplete"
     "fscan"
+    "fscrypt"
     "fscrypt-experimental"
     "fscryptctl"
     "fsearch"
@@ -6840,6 +6854,7 @@
     "gcov2lcov"
     "gcovr"
     "gcp-scanner"
+    "gcr_3"
     "gcr_4"
     "gcrane"
     "gcs"
@@ -8078,6 +8093,7 @@
     "gradle"
     "gradle-completion"
     "gradle-dependency-tree-diff"
+    "gradle-native-platform"
     "gradle-unwrapped"
     "gradle_8"
     "gradle_8-unwrapped"
@@ -8456,6 +8472,7 @@
     "h3_4"
     "h5glance"
     "h5utils"
+    "h5v"
     "h8mail"
     "ha-mcp"
     "ha-mqtt-discoverable-cli"
@@ -8500,6 +8517,7 @@
     "hamlib_3"
     "hamlib_4"
     "hammer"
+    "hamr"
     "hamrs"
     "hamrs-pro"
     "hamsket"
@@ -9838,6 +9856,7 @@
     "jerryscript"
     "jet"
     "jet-pilot"
+    "jetbrains-libdbm"
     "jetbrains-mono"
     "jetbrains-runner"
     "jetbrains-toolbox"
@@ -9958,6 +9977,7 @@
     "jpm"
     "jpmml-evaluator"
     "jprofiler"
+    "jprq"
     "jpsxdec"
     "jpylyzer"
     "jq"
@@ -12203,6 +12223,7 @@
     "licensee"
     "licensure"
     "lichess-bot"
+    "lichess-external-engine"
     "licomp-toolkit"
     "lidarr"
     "lie"
@@ -12316,7 +12337,6 @@
     "linux_6_12"
     "linux_6_18"
     "linux_6_6"
-    "linux_7_1"
     "linux_7_2"
     "linux_latest"
     "linux_logo"
@@ -13145,6 +13165,7 @@
     "mcp-language-server"
     "mcp-nixos"
     "mcp-proxy"
+    "mcp-searxng"
     "mcp-server-fetch"
     "mcp-server-filesystem"
     "mcp-server-git"
@@ -14228,6 +14249,7 @@
     "mytetra"
     "mythes"
     "mythtv"
+    "myx"
     "myxer"
     "n-m3u8dl-re"
     "n2"
@@ -14388,7 +14410,6 @@
     "nekoray"
     "nelm"
     "nelua"
-    "nemiver"
     "nemo"
     "nemo-emblems"
     "nemo-fileroller"
@@ -14509,6 +14530,7 @@
     "netsurf-buildsystem"
     "nettee"
     "nettle"
+    "nettle_4"
     "nettools"
     "netwatch"
     "networkaudiod"
@@ -15814,6 +15836,7 @@
     "oranda"
     "orangefs"
     "oras"
+    "orbit"
     "orbiton"
     "orbitron"
     "orbstack"
@@ -16042,6 +16065,7 @@
     "palemoon-bin"
     "palemoon-gtk2-bin"
     "palenight-theme"
+    "palera1n"
     "paleta"
     "palette"
     "palettum"
@@ -16398,6 +16422,7 @@
     "perfect-hash"
     "perfect_dark"
     "perfetto"
+    "perfetto-sdk"
     "performous"
     "periphery"
     "perkeep"
@@ -17156,6 +17181,8 @@
     "pritunl-ssh"
     "privatebin"
     "privoxy"
+    "prjoxide"
+    "prjpeppercorn"
     "prl-tools"
     "prmers"
     "prmt"
@@ -17505,6 +17532,7 @@
     "pulumi-bin"
     "pulumi-esc"
     "pulumictl"
+    "pumpkin"
     "puncia"
     "punes"
     "punes-qt6"
@@ -17662,6 +17690,7 @@
     "qalculate-gtk"
     "qalculate-qt"
     "qarte"
+    "qaseprite"
     "qastools"
     "qbe"
     "qbec"
@@ -18403,6 +18432,7 @@
     "rhodium-libre"
     "rhsrvany"
     "rhttp"
+    "rhuffle"
     "rhvoice"
     "rhythmbox"
     "rich-cli"
@@ -19502,6 +19532,7 @@
     "shellhub-agent"
     "shellify"
     "shellnoob"
+    "shellshot"
     "shellspec"
     "shellz"
     "shelter"
@@ -19674,6 +19705,7 @@
     "simutrans"
     "simutrans_binaries"
     "sing-box"
+    "sing-box-dashboard"
     "sing-geoip"
     "sing-geosite"
     "single-file-cli"
@@ -20597,7 +20629,6 @@
     "streamcontroller"
     "streamdeck-ui"
     "streamlink"
-    "streamlink-twitch-gui-bin"
     "streamlit"
     "streamrip"
     "streamripper"
@@ -21479,6 +21510,7 @@
     "tg-timer"
     "tgeraser"
     "tgpt"
+    "tgrep"
     "tgswitch"
     "tgt"
     "thanos"
@@ -22059,6 +22091,7 @@
     "ttaenc"
     "ttags"
     "ttchat"
+    "ttconv"
     "ttdl"
     "ttf-envy-code-r"
     "ttf-indic"
@@ -22072,6 +22105,7 @@
     "ttl"
     "ttl2c"
     "ttmkfdir"
+    "ttnn-visualizer"
     "ttop"
     "ttp"
     "tts"
@@ -22213,8 +22247,9 @@
     "typeinc"
     "typer"
     "typescript"
-    "typescript-go"
     "typescript-language-server"
+    "typescript_5"
+    "typescript_7"
     "typesense"
     "typesetter"
     "typeshare"
@@ -22583,6 +22618,7 @@
     "unshield"
     "unshieldv3"
     "unsilence"
+    "unsloth-desktop"
     "unstick"
     "unstructured-api"
     "unsure"
@@ -23141,6 +23177,7 @@
     "vscode-css-languageserver"
     "vscode-extension-update"
     "vscode-fhs"
+    "vscode-html-languageserver"
     "vscode-js-debug"
     "vscode-json-languageserver"
     "vscode-langservers-extracted"
@@ -24967,8 +25004,8 @@
     "zzuf"
     "zzz"
   ];
-  nixpkgsNarHash = "sha256-HazKW/SzGoINukgxMZkbcejGW5bMtqd8rVifPY7e59g=";
-  nixpkgsRev = "b8c9c69058c77753a1e1a6c768d8477902e1e552";
+  nixpkgsNarHash = "sha256-lj27EYvj0O6GayjoitFz0hrqeAlc0LCl04kkJrrGXVE=";
+  nixpkgsRev = "2bf611227041f0f3727dd06500424437ef3976c9";
   pnames = {
     AMB-plugins = "amb-plugins";
     ArchiSteamFarm = "archisteamfarm";
@@ -25163,6 +25200,8 @@
     attic-client = "attic";
     attic-server = "attic";
     audacious-bare = "audacious";
+    audacity_3 = "audacity";
+    audacity_4 = "audacity";
     auditbeat7 = "auditbeat";
     authenticodeCheckHook = "authenticode-check-hook";
     autoAddDriverRunpath = "auto-add-driver-runpath-hook";
@@ -25300,6 +25339,7 @@
     caf = "actor-framework";
     caido = "caido-desktop";
     cairo-lang = "cairo";
+    cairomm_1_0 = "cairomm";
     cairomm_1_16 = "cairomm";
     calamares-nixos = "calamares";
     calibre-no-speech = "calibre";
@@ -25879,6 +25919,7 @@
     gcc-arm-embedded-15 = "gcc-arm-embedded";
     gcc-unwrapped = "gcc";
     gccForLibs = "gcc";
+    gcr_3 = "gcr";
     gcr_4 = "gcr";
     gcrane = "go-containerregistry";
     gdalMinimal = "gdal-minimal";
@@ -26576,7 +26617,6 @@
     linux_6_12 = "linux";
     linux_6_18 = "linux";
     linux_6_6 = "linux";
-    linux_7_1 = "linux";
     linux_7_2 = "linux";
     linux_latest = "linux";
     linux_rpi0 = "linux-rpi";
@@ -26844,6 +26884,7 @@
     netkittftp = "netkit-tftp";
     netmaker-full = "netmaker";
     netsurf-browser = "netsurf";
+    nettle_4 = "nettle";
     nettools = "net-tools";
     netwatch = "netwatch-tui";
     networkmanager-fortisslvpn = "NetworkManager-fortisslvpn";
@@ -27086,7 +27127,7 @@
     pdfminer = "pdfminer-six";
     pdk-ciel = "ciel";
     percona-server_8_4 = "percona-server";
-    percona-toolkit = "perl5.42.3-Percona-Toolkit-3.7.0";
+    percona-toolkit = "perl5.42.3-Percona-Toolkit-3.7.1";
     percona-xtrabackup_8_4 = "percona-xtrabackup";
     perf = "perf-linux";
     perl5 = "perl";
@@ -27776,6 +27817,8 @@
     tuxclocker-without-unfree = "tuxclocker";
     twemoji-color-font-src = "twemoji-color-font";
     twinejs = "twine";
+    typescript_5 = "typescript";
+    typescript_7 = "typescript";
     u-root-cmds = "u-root";
     u001-font = "u001";
     ubootA20OlinuxinoLime = "uboot-A20-OLinuXino-Lime_defconfig";

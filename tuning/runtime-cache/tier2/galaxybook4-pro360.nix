@@ -975,8 +975,8 @@
     "hdf5-threadsafe"
     "glog"
     "blas"
-    "suitesparse"
     "metis"
+    "suitesparse"
     "filesystem"
     "tinygltf"
     "libmpg123"
@@ -1160,9 +1160,9 @@
     "libxscrnsaver"
     "ibus"
     "libaec"
+    "gklib"
     "lapack"
     "gfortran"
-    "gklib"
     "swig"
     "markupsafe"
     "libvpx"
@@ -1265,10 +1265,10 @@
     "pycparser"
     "die-hook"
   ];
-  capturedAt = "2026-09-08T05:52:23Z";
+  capturedAt = "2026-09-09T09:11:16Z";
   host = "galaxybook4-pro360";
-  nixpkgsNarHash = "sha256-HazKW/SzGoINukgxMZkbcejGW5bMtqd8rVifPY7e59g=";
-  nixpkgsRev = "b8c9c69058c77753a1e1a6c768d8477902e1e552";
+  nixpkgsNarHash = "sha256-lj27EYvj0O6GayjoitFz0hrqeAlc0LCl04kkJrrGXVE=";
+  nixpkgsRev = "2bf611227041f0f3727dd06500424437ef3976c9";
   runtimeNames = [
     "runtime-cache-refresh"
     "camera-relay"
@@ -2228,8 +2228,8 @@
     "hdf5-threadsafe"
     "glog"
     "blas"
-    "suitesparse"
     "metis"
+    "suitesparse"
     "filesystem"
     "tinygltf"
     "libmpg123"
@@ -2416,9 +2416,9 @@
     "libxscrnsaver"
     "ibus"
     "libaec"
+    "gklib"
     "lapack"
     "gfortran"
-    "gklib"
     "swig"
     "markupsafe"
     "libvpx"

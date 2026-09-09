@@ -1,8 +1,8 @@
 {
-  capturedAt = "2026-09-08T05:52:44Z";
+  capturedAt = "2026-09-09T09:11:38Z";
   host = "galaxybook4-pro360";
-  nixpkgsNarHash = "sha256-HazKW/SzGoINukgxMZkbcejGW5bMtqd8rVifPY7e59g=";
-  nixpkgsRev = "b8c9c69058c77753a1e1a6c768d8477902e1e552";
+  nixpkgsNarHash = "sha256-lj27EYvj0O6GayjoitFz0hrqeAlc0LCl04kkJrrGXVE=";
+  nixpkgsRev = "2bf611227041f0f3727dd06500424437ef3976c9";
   runtimeNames = [
     "Algorithm-Diff"
     "Authen-SASL"
@@ -247,6 +247,8 @@
     "capstone"
     "cattrs"
     "cava"
+    "ccache"
+    "ccache-links-gcc"
     "ccls"
     "cdlatex"
     "cdparanoia-iii"
@@ -559,6 +561,7 @@
     "hicolor-icon-theme"
     "hidapi"
     "highlight-quoted"
+    "hiredis"
     "hl-todo"
     "hop"
     "hostname-debian"
@@ -1007,6 +1010,7 @@
     "lsp-ui"
     "lttng-ust"
     "lua"
+    "lua-mode"
     "luasocket"
     "lv"
     "lvm2"
@@ -1048,6 +1052,7 @@
     "mesa-libgbm"
     "meshoptimizer"
     "metis"
+    "mimalloc"
     "minizip-ng"
     "mjpegtools"
     "mkpasswd"
@@ -1056,6 +1061,7 @@
     "mobile-broadband-provider-info"
     "modemmanager"
     "modemmanager-qt"
+    "mold-unwrapped"
     "moonlight-qt"
     "more-itertools"
     "movit"
@@ -1070,6 +1076,7 @@
     "multidict"
     "muparser"
     "mupdf"
+    "musl"
     "mutagen"
     "mutatormath"
     "mythes"
@@ -1118,6 +1125,7 @@
     "nodejs-slim"
     "nose"
     "noteworthy"
+    "noteworthy-collab"
     "noto-fonts-cjk-sans"
     "noto-fonts-cjk-serif"
     "noto-fonts-color-emoji"
@@ -1178,6 +1186,7 @@
     "ov02c10-26mhz-fix"
     "overseer"
     "ox-clip"
+    "ox-rst"
     "p11-kit"
     "package-lint"
     "packagekit-qt"
@@ -1373,6 +1382,7 @@
     "speex"
     "speexdsp"
     "speg"
+    "sphinx-mode"
     "spice"
     "spidermonkey"
     "spinner"
@@ -1854,6 +1864,7 @@
     "x86_64-unknown-linux-gnu-binutils-wrapper"
     "x86_64-unknown-linux-gnu-gcc"
     "x86_64-unknown-linux-gnu-gfortran"
+    "x86_64-unknown-linux-gnu-mold-unwrapped-wrapper"
     "x86_64-unknown-linux-gnu-pkg-config-wrapper"
     "xauth"
     "xavs"
