@@ -72,7 +72,7 @@ let
       };
       features = lib.mkOption {
         type = lib.types.listOf lib.types.str;
-        default = [ "benchmark" "big-parallel" "kvm" "nixos-test" ];
+        default = [ "benchmark" "big-parallel" "kvm" "nixos-test" "ca-derivations" ];
         description = "system-features the peer advertises, for the generated wrapper scripts.";
       };
     };

@@ -182,7 +182,7 @@
           # buildPlatform.canExecute hostPlatform is false here, so build-time
           # tools come from the untuned pkgsBuildBuild set. A peer only ever
           # compiles meteorlake code, which any x86_64 can do.
-          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" ];
+          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "ca-derivations" ];
         };
         victus-15 = {
           maxJobs = 5;
@@ -209,7 +209,7 @@
             builder capability. Fix it there (qtbase's -mwaitpkg strip is the
             precedent), rather than requiring every peer to be an Intel CPU.
           */
-          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" ];
+          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "ca-derivations" ];
         };
       };
     };
