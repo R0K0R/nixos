@@ -68,6 +68,11 @@ final: prev:
 if
   builtins.match ".*bootstrap.*" (prev.stdenv.name or "") != null
   || ((prev.stdenv.hostPlatform.gcc or { }).arch or "") == ""
+  # pkgsStatic/pkgsMusl rebuild the stdenv with their own cc and bintools. Composing
+  # useMoldLinker on top of that re-enters stdenv.cc while stdenv.cc is being defined,
+  # which is an infinite recursion (nixos/modules/security/wrappers uses pkgsStatic).
+  || (prev.stdenv.hostPlatform.isStatic or false)
+  || (prev.stdenv.hostPlatform.isMusl or false)
 then
   { }
 else
