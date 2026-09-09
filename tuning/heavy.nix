@@ -52,6 +52,14 @@ in
       exclude = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [
+          # quickshell: linked with mold, the Hyprland IPC singleton never
+          # populates focusedWorkspace/focusedMonitor -- both read back as
+          # `undefined` in QML while the workspaces list loads fine, so any
+          # workspace widget loses its active highlight. Identical source,
+          # version and tuning link correctly under ld.bfd, so this is the
+          # linker, not the package. Bisected 2026-09-09 against 0.3.1.
+          "quickshell"
+
           # links with $(LD) itself rather than through the compiler driver
           "linux"
           "linuxPackages"
