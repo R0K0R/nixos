@@ -15,7 +15,7 @@ let
     Arguments are assembled as a LIST and joined, never interpolated as optional
     `\`-continued lines. An omitted optional line left a dangling backslash
     followed by a blank line, which terminates the command early -- the script
-    still ran, but silently dropped "$@", so `nixos-rebuild-victus-15 switch`
+    still ran, but silently dropped "$@", so `nixos-rebuild-<peer> switch`
     rebuilt nothing and reported success.
   */
   mkScript =
@@ -39,10 +39,11 @@ let
 
     But omitting it does not mean "no override", it means "inherit the SYSTEM
     list", and that list can name a machine that is down. That is what made
-    `nixos-rebuild-victus-15` sit in a retry loop against yulee even after yulee
-    was removed from /etc/nix/machines: ssh-ng:// substituters use the same SSH
-    store as builders and fail with the same message, so it reads as a builder
-    problem and is not one. Naming the peer explicitly gets both properties.
+    `nixos-rebuild-<peer>` sit in a retry loop against another peer even after
+    that peer was removed from /etc/nix/machines: ssh-ng:// substituters use
+    the same SSH store as builders and fail with the same message, so it reads
+    as a builder problem and is not one. Naming the peer explicitly gets both
+    properties.
   */
   substituterArgs =
     name: p:
@@ -63,7 +64,7 @@ let
     `builders = @/etc/nix/machines`: the whole peer list, in speedFactor order,
     regardless of what this script says.
 
-    So `nixos-rebuild-victus-15` restricts the BUILD phase to victus-15 and
+    So `nixos-rebuild-<peer>` restricts the BUILD phase to that peer and
     cannot restrict the EVAL phase at all. To genuinely exclude a peer, park it
     with `my.remote-builder.client.peers.<name>.enable = false`, which removes it
     from /etc/nix/machines.
