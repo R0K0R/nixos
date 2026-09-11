@@ -110,6 +110,10 @@ in
         { attr = "webkitgtk_4_1"; stdenvArg = "clangStdenv"; }
         { attr = "webkitgtk_6_0"; stdenvArg = "clangStdenv"; }
         { attr = "hyprland"; stdenvArg = "gcc16Stdenv"; }
+        # Links libhyprlang/libhyprutils, which the hyprland override above
+        # builds with gcc 16. Left on the default gcc 15 stdenv it resolves a
+        # libstdc++ without GLIBCXX_3.4.35/36 and dies at startup.
+        { attr = "xdg-desktop-portal-hyprland"; stdenvArg = "gcc16Stdenv"; }
       ];
       description = "Attributes the classifier's names miss, or that take a non-default stdenv argument.";
     };
