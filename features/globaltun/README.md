@@ -119,6 +119,13 @@ the tunnel it carries and nothing connects — the same failure as an unpinned V
 underlay on a Linux host, expressed through Android's per-app list instead of a
 route.
 
+**Termux's own traffic is not tunnelled**, by the same exclusion. `pkg install`,
+`git`, `curl` in that shell use the phone's direct network. Point them at the
+proxy instead — `apt-proxy.conf.example` for apt, or
+`export ALL_PROXY=socks5h://127.0.0.1:1081` for the rest. Use `socks5h` so the
+proxy resolves names: local DNS is on the network that has no route out. ssh
+ignores `ALL_PROXY`, so the carrier cannot end up looping through itself.
+
 **ICMP is not carried.** `VpnService` grants one tun to one app, so there is
 nowhere to put the second tun `gticmp.py` needs, and `ip rule` needs root. The
 app answers pings itself, as sing-box did before `gticmp` existed.

@@ -123,6 +123,12 @@ up(){
 
   cat <<EOT
 
+Termux itself is excluded from the VPN, so its own traffic does NOT go through
+the tunnel. For pkg/apt, install apt-proxy.conf.example; for anything else in
+this shell:
+  export ALL_PROXY=socks5h://127.0.0.1:$LOCAL_PORT
+(ssh ignores ALL_PROXY, so the carrier cannot loop through itself.)
+
 Now start the sing-box app with sing-box-android.json. Its socks outbound must
 point at 127.0.0.1:$LOCAL_PORT, and the tun inbound must carry
   "exclude_package": ["com.termux"]

@@ -1,0 +1,22 @@
+// Termux `pkg`/`apt` through the tunnel.
+//
+// Install as:
+//   cp apt-proxy.conf.example $PREFIX/etc/apt/apt.conf.d/01globaltun
+//
+// Termux is excluded from the VPN on purpose -- including it would capture
+// ssh's own carrier in the tunnel that carries it -- so Termux traffic never
+// reaches the tun. Pointing apt at the SOCKS endpoint gets it there without
+// touching that exclusion.
+//
+// socks5h, not socks5: the "h" makes the PROXY resolve names. The phone's own
+// DNS is on the network that has no route out, so local resolution would fail
+// before any of this mattered.
+//
+// 1081 is gtlocal (GT_LOCAL_PORT). 11080 also works and is one hop shorter --
+// straight to the gateway relay through ssh -L -- but only carries TCP, which
+// is all apt needs.
+//
+// Remove the file (or `pkg` will hang) when the tunnel is down.
+
+Acquire::http::Proxy  "socks5h://127.0.0.1:1081";
+Acquire::https::Proxy "socks5h://127.0.0.1:1081";
