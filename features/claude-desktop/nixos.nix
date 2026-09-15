@@ -44,6 +44,18 @@ in
       '';
     };
 
+    mcp.tokenFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        A file holding the bearer token for the http servers above.
+
+        Handed to the bridge as `MCP_TOKEN_FILE`, so the token itself never
+        appears in the config, in the store, or in a process listing -- the
+        bridge reads it at startup, and rotating it is a restart.
+      '';
+    };
+
     cowork = {
       enable = lib.mkEnableOption ''
         Cowork ("dispatch") microVM support: QEMU plus the OVMF firmware paths

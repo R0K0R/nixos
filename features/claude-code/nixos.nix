@@ -136,6 +136,22 @@ in
         '';
       };
 
+      tokenFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "/home/me/.config/noteworthy/mcp-token";
+        description = ''
+          A file holding the bearer token for the http servers above.
+
+          Read at switch and written into each project's `.mcp.json`, which is
+          then mode 600 and no longer a store symlink -- a store path is
+          world-readable by construction, so a token cannot live in one.
+
+          `.mcp.json` is meant to be committed, so a project whose token is
+          inlined this way should ignore the file in git.
+        '';
+      };
+
       projects = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];

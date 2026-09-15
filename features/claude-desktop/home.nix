@@ -22,6 +22,9 @@ let
         command = "${bridge}/bin/mcp-http-stdio";
         args = [ def.url ];
       }
+      // lib.optionalAttrs (cfg.mcp.tokenFile != null) {
+        env.MCP_TOKEN_FILE = cfg.mcp.tokenFile;
+      }
     else
       def;
 

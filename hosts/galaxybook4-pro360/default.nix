@@ -8,6 +8,10 @@ let
     url = "http://yulee:8010/mcp";
   };
 
+  # The server refuses anyone without this; it is generated on the server and
+  # copied here, never committed and never in the store.
+  mcpTokenFile = "/home/r0k0r/.config/noteworthy/mcp-token";
+
   # The book's own skill, pinned.  It lives in the noteworthy repo, which is
   # where it is edited and where a clone picks it up by itself; this copy is
   # for sessions run anywhere else.
@@ -183,6 +187,7 @@ in
       mcp = {
         servers = mcpServers;
         projects = [ "noteworthy" ];
+        tokenFile = mcpTokenFile;
       };
       skills.noteworthy = "${noteworthySkill}/.claude/skills/noteworthy";
       watermarksRemover = {
@@ -194,7 +199,10 @@ in
     claude-desktop = {
       enable = true;
       cowork.enable = true;
-      mcp.servers = mcpServers;
+      mcp = {
+        servers = mcpServers;
+        tokenFile = mcpTokenFile;
+      };
     };
 
     remote-builder.client = {

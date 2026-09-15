@@ -18,6 +18,7 @@ framing for the message after it.
 """
 
 import json
+import pathlib
 import sys
 import urllib.error
 import urllib.request
@@ -28,6 +29,21 @@ def main() -> int:
         print("usage: mcp-http-stdio <url>", file=sys.stderr)
         return 2
     url = sys.argv[1]
+
+    # The token comes from a file rather than an argument or a literal in the
+    # config: an argument is in every `ps' listing, and a literal would be in
+    # whatever wrote the config.  MCP_TOKEN_FILE is read fresh each start, so
+    # rotating the token is a restart rather than an edit.
+    import os
+
+    token = None
+    token_file = os.environ.get("MCP_TOKEN_FILE")
+    if token_file:
+        try:
+            token = pathlib.Path(token_file).read_text(encoding="utf-8").strip()
+        except OSError as e:
+            print(f"mcp-http-stdio: cannot read {token_file}: {e}", file=sys.stderr)
+    token = token or os.environ.get("MCP_TOKEN") or None
 
     for line in sys.stdin:
         line = line.strip()
@@ -43,7 +59,8 @@ def main() -> int:
             url,
             data=line.encode("utf-8"),
             headers={"Content-Type": "application/json",
-                     "Accept": "application/json, text/event-stream"},
+                     "Accept": "application/json, text/event-stream",
+                     **({"Authorization": f"Bearer {token}"} if token else {})},
             method="POST",
         )
         try:

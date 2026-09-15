@@ -61,12 +61,36 @@ lib.mkMerge [
     }) cfg.skills;
   })
 
-  (lib.mkIf ((cfg.enable && cfg.mcp.servers != { } && cfg.mcp.projects != [ ]) && inScope) {
+  (lib.mkIf ((cfg.enable && cfg.mcp.servers != { } && cfg.mcp.projects != [ ]
+              && cfg.mcp.tokenFile == null) && inScope) {
     home.file = lib.listToAttrs (
       map (dir: {
         name = "${dir}/.mcp.json";
         value.source = mcpJson;
       }) cfg.mcp.projects
+    );
+  })
+
+  (lib.mkIf ((cfg.enable && cfg.mcp.servers != { } && cfg.mcp.projects != [ ]
+              && cfg.mcp.tokenFile != null) && inScope) {
+    # Written rather than symlinked, because it carries a token now: a store
+    # path is world-readable, so the secret would be readable by every user on
+    # the machine.  Rendered from the same JSON, with the header added.
+    home.activation.claudeCodeMcpProjects = lib.hm.dag.entryAfter [ "writeBoundary" ] (
+      lib.concatMapStringsSep "\n" (dir: ''
+        if [ -r "${cfg.mcp.tokenFile}" ]; then
+          run mkdir -p "$HOME/${dir}"
+          ${pkgs.jq}/bin/jq --arg auth "Bearer $(cat ${cfg.mcp.tokenFile})" \
+            '.mcpServers |= with_entries(
+               if (.value.type // "stdio") == "http" or (.value.type // "stdio") == "sse"
+               then .value.headers.Authorization = $auth else . end)' \
+            ${mcpJson} > "$HOME/${dir}/.mcp.json.tmp"
+          run chmod 600 "$HOME/${dir}/.mcp.json.tmp"
+          run mv "$HOME/${dir}/.mcp.json.tmp" "$HOME/${dir}/.mcp.json"
+        else
+          echo "claude-code: ${cfg.mcp.tokenFile} unreadable; left ${dir}/.mcp.json alone" >&2
+        fi
+      '') cfg.mcp.projects
     );
   })
 
