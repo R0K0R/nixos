@@ -578,6 +578,13 @@ in
       hl.window_rule({ match = { class = "^(org.gnu.emacs)$" }, scrolling_width = 1.0 })
       -- Matplotlib floating
       hl.window_rule({ match = { class = "^(Matplotlib)$" }, float = true })
+      -- KakaoTalk: EVERY window floats, not just the first. Wine gives the
+      -- contact list, each chat room and every dialog the same X11 WM_CLASS
+      -- (kakaotalk.exe, via XWayland), so one class rule covers all of them --
+      -- which is the point, since tiling a pile of small chat windows in the
+      -- scrolling layout is unusable. The dot is left unescaped to match the
+      -- org.gnu.emacs rules above; it matches a literal dot regardless.
+      hl.window_rule({ match = { class = "^(kakaotalk.exe)$" }, float = true })
       -- Waydroid size lock
       hl.window_rule({ match = { class = "^(Waydroid)$" }, scrolling_width = 1.0 })
       -- Glassmorphism: translucent KDE apps; backdrop blur applies to
