@@ -10,23 +10,51 @@ set -euo pipefail
 root="${KAKAOTALK_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/kakaotalk}"
 export WINEPREFIX="$root/prefix"
 export WINEDEBUG="${WINEDEBUG:--all}"
-# KakaoTalk needs no .NET; without this wine offers to download Mono on every
-# fresh prefix and blocks the install behind a dialog.
-export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-mscoree=d}"
+# mscoree=d: KakaoTalk needs no .NET, and without it wine offers to download
+#   Mono on a fresh prefix and BLOCKS the install behind a modal dialog.
+# winemenubuilder.exe=d: stops wine turning the installer's Windows shortcuts
+#   into .desktop files. They would duplicate the entry this package already
+#   ships, point into the prefix rather than at the launcher, and cost time
+#   during install.
+export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-mscoree,winemenubuilder.exe=d}"
 
 mkdir -p "$root"
 stamp="$root/installed-from"
 
-# Korean text renders as boxes without these. Symlinked rather than copied so
-# a font bump follows the store path instead of leaving a stale copy behind.
+# A SMALL curated Korean set, symlinked so a font bump follows the store path.
+#
+# This deliberately does NOT link whole font directories. The first version did,
+# which put 35 files and 176 MB into the prefix -- including two ~30 MB
+# variable-font CJK collections that wine's GDI engine parses poorly -- and wine
+# enumerates everything here at startup. The system fontconfig already serves
+# Noto Sans CJK KR for :lang=ko and wine reads fontconfig, so the bulk of that
+# was redundant as well as expensive. Measured 2026-09-16.
 link_fonts() {
-  local dest="$WINEPREFIX/drive_c/windows/Fonts" src
+  local dest="$WINEPREFIX/drive_c/windows/Fonts" src base want
   mkdir -p "$dest"
-  for d in @fontDirs@; do
-    [ -d "$d" ] || continue
-    while IFS= read -r src; do
-      ln -sfn "$src" "$dest/$(basename "$src")"
-    done < <(find -L "$d" \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' \) -print)
+  want=""
+  for src in @fontFiles@; do
+    [ -e "$src" ] || continue
+    base="$(basename "$src")"
+    want="$want $base"
+    # IDEMPOTENT, and that is the point rather than a nicety: `ln -sfn` over an
+    # already-correct symlink still deletes and recreates it, which moves its
+    # timestamp and invalidates wine's font cache -- so the old unconditional
+    # version forced a full font rescan on EVERY launch.
+    [ "$(readlink "$dest/$base" 2>/dev/null)" = "$src" ] && continue
+    ln -sfn "$src" "$dest/$base"
+  done
+
+  # Drop links this launcher previously made but no longer wants, so a prefix
+  # created by an older version does not keep paying for fonts we dropped.
+  # Only ever removes SYMLINKS INTO THE STORE -- anything the user or the
+  # installer put here is left alone.
+  local f
+  for f in "$dest"/*; do
+    [ -L "$f" ] || continue
+    case "$(readlink "$f")" in /nix/store/*) ;; *) continue ;; esac
+    case " $want " in *" $(basename "$f") "*) continue ;; esac
+    rm -f "$f"
   done
 }
 

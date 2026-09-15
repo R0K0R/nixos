@@ -23,7 +23,6 @@
   coreutils,
   findutils,
   nanum,
-  noto-fonts-cjk-sans,
   /*
     REQUIRED, and it must come from a non-cross package set -- there is no
     sensible default to fall back on here, so this is deliberately not optional.
@@ -59,9 +58,25 @@ let
     hash = "sha256-H3RL8CCEPgwXK7K/TRI+YiByzGdaeTrkSLjsx2LhU/g=";
   };
 
-  fontDirs = [
-    "${nanum}/share/fonts"
-    "${noto-fonts-cjk-sans}/share/fonts"
+  /*
+    A CURATED set of individual faces, not whole directories.
+
+    Linking every .ttf/.otf/.ttc under nanum and noto-fonts-cjk-sans put 35
+    files and 176 MB into the prefix, two of them ~30 MB variable-font CJK
+    collections. Wine enumerates drive_c/windows/Fonts at startup and its GDI
+    engine handles variable fonts poorly, and the host fontconfig already serves
+    Noto Sans CJK KR for :lang=ko -- which wine reads -- so the bulk was
+    redundant as well as slow.
+
+    Four faces, ~17 MB: regular and bold of the two Nanum families that Korean
+    Windows software actually asks for. Anything else still resolves through
+    fontconfig.
+  */
+  fontFiles = [
+    "${nanum}/share/fonts/NanumGothic.ttf"
+    "${nanum}/share/fonts/NanumGothicBold.ttf"
+    "${nanum}/share/fonts/NanumBarunGothic.ttf"
+    "${nanum}/share/fonts/NanumBarunGothicBold.ttf"
   ];
 in
 stdenvNoCC.mkDerivation {
@@ -95,7 +110,7 @@ stdenvNoCC.mkDerivation {
     substituteInPlace $out/bin/kakaotalk \
       --replace-fail '@installer@' '${installer}' \
       --replace-fail '@version@'   '${version}' \
-      --replace-fail '@fontDirs@'  '${lib.concatStringsSep " " fontDirs}'
+      --replace-fail '@fontFiles@' '${lib.concatStringsSep " " fontFiles}'
 
     wrapProgram $out/bin/kakaotalk \
       --prefix PATH : ${lib.makeBinPath [ wine coreutils findutils bash ]}
