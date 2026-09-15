@@ -100,6 +100,28 @@ in
         # were all dead. Verified 2026-09-13 -- `zsh -f -c 'print $module_path'`
         # named a path `nix path-info` could not even resolve.
         "zsh"
+
+        # libcamera SIGNS its IPA modules (lib/libcamera/ipa/*.so.sign) in
+        # postFixup, after strip and RPATH fixup -- and Nix's content-addressed
+        # self-reference rewrite runs after THAT. ipa_soft_simple.so carries its
+        # own $out in its RUNPATH, so the rewrite changed its bytes and the
+        # signature stopped verifying. An unsigned IPA is run in isolation,
+        # which needs the proxy worker, which libcamera then cannot find
+        # (see features/samsung-galaxybook/webcam.nix), so the software ISP
+        # never came up and every app got raw Bayer -- black frames through
+        # camera-relay. The untuned, input-addressed build of the same version
+        # verifies fine. Same hazard class as zsh above: anything that signs or
+        # checksums its own self-referencing output cannot be content-addressed.
+        # Verified 2026-09-16 with `LIBCAMERA_LOG_LEVELS=IPAManager:DEBUG cam -l`.
+        #
+        # NOT LISTED YET, deliberately. Adding "libcamera" is the principled fix
+        # (in-process IPA, valid signatures) but tuned pipewire depends on tuned
+        # libcamera, and pipewire is under most of the desktop: the dry-run was
+        # 850 derivations. features/samsung-galaxybook/webcam.nix instead sets
+        # LIBCAMERA_IPA_PROXY_PATH so the isolated IPA finds its worker, which
+        # makes the camera work with no package rebuild. Uncomment the line
+        # below to ride the correct fix along with the next large rebuild.
+        # "libcamera"
       ];
       description = "Names left completely untouched: no mold, no ccache. The stdenv's own closure has to be here.";
     };
