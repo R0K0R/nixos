@@ -134,7 +134,15 @@ let
     relay needs.
   */
   gstPluginPath = lib.makeSearchPath "lib/gstreamer-1.0" (
-    with pkgs.gst_all_1; [ gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad pkgs.libcamera ]
+    # EXPLICIT `out`. gstreamer declares outputs = [ "bin" "out" "dev" "debug" ],
+    # bin first, so a bare "${gstreamer}" is the bin output -- which has no
+    # lib/gstreamer-1.0 at all. coreelements (queue, identity, fakesink) lives
+    # in out. With the bare form the monitor's gst-launch still failed with
+    # `no element "queue"` while videoconvert and libcamerasrc resolved,
+    # because only the first path component was wrong. Measured 2026-09-16.
+    map (lib.getOutput "out") (
+      (with pkgs.gst_all_1; [ gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad ]) ++ [ pkgs.libcamera ]
+    )
   );
 
   cameraRelay = pkgs.stdenvNoCC.mkDerivation {
