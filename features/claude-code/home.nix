@@ -18,6 +18,13 @@ let
   wmr = pkgs.callPackage ./watermarks-remover.nix { };
   wmrShare = "${wmr}/share/watermarks-remover";
 
+  # One store file, symlinked into every project that asked for it, so the
+  # servers cannot drift apart between projects and a generation switch moves
+  # them together.
+  mcpJson = (pkgs.formats.json { }).generate "claude-mcp.json" {
+    mcpServers = cfg.mcp.servers;
+  };
+
   gemma-claude = pkgs.writeScriptBin "gemma-claude" ''
     #! /bin/sh
     exec env \
@@ -44,6 +51,31 @@ lib.mkMerge [
     run_hook.js) is deliberately NOT wired up: it would run after every file
     write in every session and needs node. Add it consciously if wanted.
   */
+  (lib.mkIf ((cfg.enable && cfg.mcp.servers != { } && cfg.mcp.projects != [ ]) && inScope) {
+    home.file = lib.listToAttrs (
+      map (dir: {
+        name = "${dir}/.mcp.json";
+        value.source = mcpJson;
+      }) cfg.mcp.projects
+    );
+  })
+
+  (lib.mkIf ((cfg.enable && cfg.mcp.servers != { } && cfg.mcp.desktop.enable) && inScope) {
+    # Merged, not symlinked: the file is Claude Desktop's own state, and it
+    # rewrites it whenever a preference changes.  Idempotent, so a switch that
+    # changes nothing leaves the file untouched.
+    home.activation.claudeDesktopMcp = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      desktopConfig="$HOME/.config/Claude/claude_desktop_config.json"
+      run mkdir -p "$(dirname "$desktopConfig")"
+      [ -f "$desktopConfig" ] || run echo '{}' > "$desktopConfig"
+      merged="$(${pkgs.jq}/bin/jq --slurpfile add ${mcpJson} \
+        '.mcpServers = ((.mcpServers // {}) + $add[0].mcpServers)' "$desktopConfig")"
+      if [ "$merged" != "$(cat "$desktopConfig")" ]; then
+        run printf '%s\n' "$merged" > "$desktopConfig"
+      fi
+    '';
+  })
+
   (lib.mkIf ((cfg.enable && cfg.watermarksRemover.enable) && inScope) {
     home.packages = [ wmr ];
 

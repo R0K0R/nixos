@@ -88,9 +88,64 @@ in
         };
       };
     };
+
+    mcp = {
+      servers = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);
+        default = { };
+        example = lib.literalExpression ''
+          {
+            noteworthy = {
+              type = "http";
+              url = "http://yulee:8010/mcp";
+            };
+          }
+        '';
+        description = ''
+          MCP servers to declare, by name, in the shape Claude Code reads
+          (`type` and `url` for HTTP; `command`, `args`, `env` for stdio).
+
+          Written as a `.mcp.json` in each directory `mcp.projects` names,
+          that being the only config file Claude Code reads without being
+          told to on the command line: `--mcp-config` is a global variadic
+          flag, so baking it into a wrapper swallows the subcommand after it,
+          and `~/.claude.json` is state the program rewrites itself.
+
+          Claude Code still asks once, per project, before it will talk to a
+          server declared this way. That prompt is its trust gate and this
+          option does not try to answer it.
+        '';
+      };
+
+      desktop = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            Also declare these servers to Claude Desktop.
+
+            Merged into `~/.config/Claude/claude_desktop_config.json` at
+            switch rather than symlinked over it: that file is the app's own
+            state -- preferences, folder grants -- and a read-only store
+            symlink would stop the app writing its own settings. Only the
+            `mcpServers` key is touched, and only the names declared here.
+          '';
+        };
+      };
+
+      projects = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        example = [ "noteworthy" ];
+        description = ''
+          Directories, relative to the user's home, to write `.mcp.json`
+          into. A project gets the servers only if it is named here: which
+          sessions may act through a server is a decision, not a default.
+        '';
+      };
+    };
   };
 
-  # Accounts this feature applies to; defaults to the primary user.
   options.my.claude-code.users = import ../../lib/user-scope.nix { inherit lib config; };
 
   config = lib.mkIf cfg.enable {

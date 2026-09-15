@@ -159,6 +159,19 @@
       enable = true;
       shareWithRoot = true;
       gemma.enable = true;
+      mcp = {
+        # The book's own server: it edits through the Yjs rooms, so an agent's
+        # change reaches whoever has the file open instead of being written
+        # under them and reverted at the room's next save.
+        servers.noteworthy = {
+          type = "http";
+          url = "http://yulee:8010/mcp";
+        };
+        projects = [ "noteworthy" ];
+        # Desktop bundles the streamable-HTTP transport, so the same entry
+        # serves it; its config is merged rather than owned.
+        desktop.enable = true;
+      };
       watermarksRemover = {
         enable = true;
         service.enable = true;
