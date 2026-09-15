@@ -51,6 +51,16 @@ lib.mkMerge [
     run_hook.js) is deliberately NOT wired up: it would run after every file
     write in every session and needs node. Add it consciously if wanted.
   */
+  (lib.mkIf ((cfg.enable && cfg.skills != { }) && inScope) {
+    # Symlinked into the store for the reason the watermarks-remover skills
+    # are: a generation switch moves them together, and a GC cannot leave a
+    # dangling skill directory behind.
+    home.file = lib.mapAttrs' (name: src: {
+      name = ".claude/skills/${name}";
+      value.source = src;
+    }) cfg.skills;
+  })
+
   (lib.mkIf ((cfg.enable && cfg.mcp.servers != { } && cfg.mcp.projects != [ ]) && inScope) {
     home.file = lib.listToAttrs (
       map (dir: {

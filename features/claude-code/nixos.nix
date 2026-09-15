@@ -89,6 +89,25 @@ in
       };
     };
 
+    skills = lib.mkOption {
+      type = lib.types.attrsOf lib.types.path;
+      default = { };
+      example = lib.literalExpression ''
+        { noteworthy = "''${skillSrc}/.claude/skills/noteworthy"; }
+      '';
+      description = ''
+        Skills to put in `~/.claude/skills`, by the name they take there.
+
+        For skills that should be available in every project. One that belongs
+        to a single project is better committed to that project's own
+        `.claude/skills/`, where Claude Code finds it without any of this and
+        anyone cloning the repo gets it too.
+
+        Claude Desktop is not covered: its skills live in the account, uploaded
+        through `/v1/skills`, so there is no directory here to fill.
+      '';
+    };
+
     mcp = {
       servers = lib.mkOption {
         type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);

@@ -7,6 +7,16 @@ let
     type = "http";
     url = "http://yulee:8010/mcp";
   };
+
+  # The book's own skill, pinned.  It lives in the noteworthy repo, which is
+  # where it is edited and where a clone picks it up by itself; this copy is
+  # for sessions run anywhere else.
+  noteworthySkill = pkgs.fetchFromGitHub {
+    owner = "sihooleebd";
+    repo = "noteworthy";
+    rev = "b5c405b7931d69feee68625b248e2dde5856c25e";
+    hash = "sha256-+F/a0fWpRV1Ti7uOR958Rjdcxhn/jK8MBrhqrqMqlL8=";
+  };
 in
 {
   imports = [
@@ -174,6 +184,7 @@ in
         servers = mcpServers;
         projects = [ "noteworthy" ];
       };
+      skills.noteworthy = "${noteworthySkill}/.claude/skills/noteworthy";
       watermarksRemover = {
         enable = true;
         service.enable = true;
