@@ -13,6 +13,11 @@ let
   # hash-pinned via the claude-code-bin flake input).
   claude-code = pkgs.callPackage ./package.nix { src = inputs.feat-claude-code.src; };
 
+  # Pinned to a commit in watermarks-remover.nix, so the version is the flake's
+  # rather than whatever upstream's install_skill.py copied in at the time.
+  wmr = pkgs.callPackage ./watermarks-remover.nix { };
+  wmrShare = "${wmr}/share/watermarks-remover";
+
   gemma-claude = pkgs.writeScriptBin "gemma-claude" ''
     #! /bin/sh
     exec env \
@@ -25,6 +30,53 @@ let
       ${claude-code}/bin/claude "$@"
   '';
 in
-lib.mkIf ((cfg.enable && cfg.gemma.enable) && inScope) {
-  home.packages = [ gemma-claude ];
-}
+lib.mkMerge [
+  (lib.mkIf ((cfg.enable && cfg.gemma.enable) && inScope) {
+    home.packages = [ gemma-claude ];
+  })
+
+  /*
+    Claude Desktop is not covered: upstream ships a Claude Code plugin, two
+    skills and a Cursor integration, and no MCP server -- Desktop loads only
+    MCP servers, so there is nothing there to install.
+
+    The plugin's PostToolUse hook (Write|Edit|MultiEdit|NotebookEdit -> node
+    run_hook.js) is deliberately NOT wired up: it would run after every file
+    write in every session and needs node. Add it consciously if wanted.
+  */
+  (lib.mkIf ((cfg.enable && cfg.watermarksRemover.enable) && inScope) {
+    home.packages = [ wmr ];
+
+    # Symlinks into the store, so switching generations moves both skills
+    # together and a GC cannot leave a dangling skill directory behind.
+    home.file.".claude/skills/remove-ai-marks".source = "${wmrShare}/skills/remove-ai-marks";
+    home.file.".claude/skills/clean-user-facing-text".source = "${wmrShare}/skills/clean-user-facing-text";
+
+    systemd.user.services.watermarks-remover = lib.mkIf cfg.watermarksRemover.service.enable {
+      Unit.Description = "watermarks-remover local HTTP service";
+      Service = {
+        # Loopback only: it takes file paths and rewrites them in place, so it
+        # must never be reachable off-host.
+        ExecStart = "${pkgs.python3}/bin/python3 ${wmrShare}/service/scripts/server.py"
+          + " --host 127.0.0.1 --port ${toString cfg.watermarksRemover.service.port}";
+        Environment = [
+          "PYTHONPATH=${wmrShare}"
+          # The service shells out to these when present and silently drops the
+          # corresponding capability when not -- /capabilities reports which it
+          # found. A user unit inherits almost no PATH, so name them explicitly.
+          "PATH=${
+            lib.makeBinPath [
+              pkgs.exiftool
+              pkgs.ffmpeg
+              pkgs.ghostscript
+              pkgs.qpdf
+              pkgs.c2patool
+            ]
+          }"
+        ];
+        Restart = "on-failure";
+      };
+      Install.WantedBy = [ "default.target" ];
+    };
+  })
+]

@@ -159,6 +159,10 @@
       enable = true;
       shareWithRoot = true;
       gemma.enable = true;
+      watermarksRemover = {
+        enable = true;
+        service.enable = true;
+      };
     };
 
     claude-desktop = {

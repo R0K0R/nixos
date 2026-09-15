@@ -62,6 +62,32 @@ in
         description = "Model substituted for Opus.";
       };
     };
+
+    watermarksRemover = {
+      enable = lib.mkEnableOption ''
+        watermarks-remover: wm-* CLI tools plus its two Claude Code skills,
+        pinned to a commit in watermarks-remover.nix rather than installed
+        with upstream's install_skill.py
+      '';
+
+      service = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = ''
+            Run the local HTTP service as a user unit. Only the
+            remove-ai-marks skill needs it; clean-user-facing-text is
+            self-contained and the wm-* tools call the scripts directly.
+          '';
+        };
+
+        port = lib.mkOption {
+          type = lib.types.port;
+          default = 8765;
+          description = "Loopback port for the service. Upstream's default.";
+        };
+      };
+    };
   };
 
   # Accounts this feature applies to; defaults to the primary user.
