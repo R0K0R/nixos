@@ -128,6 +128,13 @@ in
       remoteSocksPort = 1080;
     };
     waydroid.enable = true;
+    /*
+      The PC client under wine, NOT the Android one under waydroid above.
+      Kakao allows one phone plus one PC; the Android build registers as a
+      competing primary device and evicts the phone, and that check is
+      server-side, so there is nothing to configure around it.
+    */
+    kakaotalk.enable = true;
     session-env.enable = true;
     # Kept, not deleted: the feature still describes what fish would do here,
     # and re-enabling is a one-line change. systemIntegration goes off with it
