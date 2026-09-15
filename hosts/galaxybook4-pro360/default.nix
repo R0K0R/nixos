@@ -1,5 +1,13 @@
 { inputs, lib, pkgs, ... }:
 
+let
+  # One definition, two programs: Claude Code reads it from a project's
+  # .mcp.json, Claude Desktop from its own config.
+  mcpServers.noteworthy = {
+    type = "http";
+    url = "http://yulee:8010/mcp";
+  };
+in
 {
   imports = [
     ./hardware-configuration.nix
@@ -159,18 +167,12 @@
       enable = true;
       shareWithRoot = true;
       gemma.enable = true;
+      # The book's own server: it edits through the Yjs rooms, so an agent's
+      # change reaches whoever has the file open instead of being written
+      # under them and reverted at the room's next save.
       mcp = {
-        # The book's own server: it edits through the Yjs rooms, so an agent's
-        # change reaches whoever has the file open instead of being written
-        # under them and reverted at the room's next save.
-        servers.noteworthy = {
-          type = "http";
-          url = "http://yulee:8010/mcp";
-        };
+        servers = mcpServers;
         projects = [ "noteworthy" ];
-        # Desktop bundles the streamable-HTTP transport, so the same entry
-        # serves it; its config is merged rather than owned.
-        desktop.enable = true;
       };
       watermarksRemover = {
         enable = true;
@@ -181,6 +183,7 @@
     claude-desktop = {
       enable = true;
       cowork.enable = true;
+      mcp.servers = mcpServers;
     };
 
     remote-builder.client = {

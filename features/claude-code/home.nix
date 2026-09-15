@@ -60,22 +60,6 @@ lib.mkMerge [
     );
   })
 
-  (lib.mkIf ((cfg.enable && cfg.mcp.servers != { } && cfg.mcp.desktop.enable) && inScope) {
-    # Merged, not symlinked: the file is Claude Desktop's own state, and it
-    # rewrites it whenever a preference changes.  Idempotent, so a switch that
-    # changes nothing leaves the file untouched.
-    home.activation.claudeDesktopMcp = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      desktopConfig="$HOME/.config/Claude/claude_desktop_config.json"
-      run mkdir -p "$(dirname "$desktopConfig")"
-      [ -f "$desktopConfig" ] || run echo '{}' > "$desktopConfig"
-      merged="$(${pkgs.jq}/bin/jq --slurpfile add ${mcpJson} \
-        '.mcpServers = ((.mcpServers // {}) + $add[0].mcpServers)' "$desktopConfig")"
-      if [ "$merged" != "$(cat "$desktopConfig")" ]; then
-        run printf '%s\n' "$merged" > "$desktopConfig"
-      fi
-    '';
-  })
-
   (lib.mkIf ((cfg.enable && cfg.watermarksRemover.enable) && inScope) {
     home.packages = [ wmr ];
 

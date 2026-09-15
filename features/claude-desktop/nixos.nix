@@ -11,6 +11,30 @@ in
   options.my.claude-desktop = {
     enable = lib.mkEnableOption "Claude Desktop (official Linux beta), repackaged from Anthropic's .deb";
 
+    mcp.servers = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);
+      default = { };
+      example = lib.literalExpression ''
+        {
+          noteworthy = {
+            type = "http";
+            url = "http://yulee:8010/mcp";
+          };
+        }
+      '';
+      description = ''
+        MCP servers to declare to Claude Desktop, by name.
+
+        This build carries the streamable-HTTP transport as well as stdio, so
+        an `\{ type = "http"; url = ...; \}` server needs no stdio shim.
+
+        Merged into `~/.config/Claude/claude_desktop_config.json` at switch
+        rather than symlinked over it: that file is the app's own state --
+        preferences, folder grants -- and a read-only store symlink would
+        stop it writing its own settings. Only `mcpServers` is touched.
+      '';
+    };
+
     cowork = {
       enable = lib.mkEnableOption ''
         Cowork ("dispatch") microVM support: QEMU plus the OVMF firmware paths

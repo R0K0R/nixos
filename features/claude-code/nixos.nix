@@ -117,22 +117,6 @@ in
         '';
       };
 
-      desktop = {
-        enable = lib.mkOption {
-          type = lib.types.bool;
-          default = false;
-          description = ''
-            Also declare these servers to Claude Desktop.
-
-            Merged into `~/.config/Claude/claude_desktop_config.json` at
-            switch rather than symlinked over it: that file is the app's own
-            state -- preferences, folder grants -- and a read-only store
-            symlink would stop the app writing its own settings. Only the
-            `mcpServers` key is touched, and only the names declared here.
-          '';
-        };
-      };
-
       projects = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
