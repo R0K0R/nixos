@@ -5,6 +5,10 @@ let
   # sharedModules are evaluated once per user; this is what makes the
   # feature apply only to the accounts my.kitty.users names.
   inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "kitty"; };
+  # The account's declared login shell -- users-groups.nix is the one place
+  # that decides it, so kitty reads it instead of keeping a second opinion.
+  loginShell = osConfig.my.users.${config.home.username}.shell;
+  loginShellName = loginShell.meta.mainProgram or loginShell.pname or "";
 in
 let
   # Kitty kittens from https://github.com/end-4/dots-hyprland (dots/.config/kitty/).
@@ -25,10 +29,20 @@ lib.mkIf (osConfig.my.kitty.enable && inScope) {
   programs.kitty = {
     enable = true;
 
-    shellIntegration.enableFishIntegration = true;
+    /*
+      Follow the account's DECLARED login shell rather than naming one here.
+      This line used to hardcode fish, which meant switching shells left kitty
+      still spawning fish -- the shell feature and the terminal disagreeing
+      about what the account uses.
+    */
+    shellIntegration = {
+      enableFishIntegration = loginShellName == "fish";
+      enableZshIntegration = loginShellName == "zsh";
+      enableBashIntegration = loginShellName == "bash";
+    };
 
     settings = {
-      shell = "${pkgs.fish}/bin/fish";
+      shell = lib.getExe loginShell;
 
       font_family = "JetBrainsMono Nerd Font";
       bold_font = "auto";
