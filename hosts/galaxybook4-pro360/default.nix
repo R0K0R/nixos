@@ -69,7 +69,7 @@
       # exist here (mutableUsers = true meant the live shadow entry carried
       # the password and the missing file went unnoticed).
       passwordSecret = ../../age/hashed-password-r0k0r.age;
-      shell = pkgs.fish;
+      shell = pkgs.zsh;
     };
     upower.enable = true;
     fonts.enable = true;
@@ -107,10 +107,17 @@
     };
     waydroid.enable = true;
     session-env.enable = true;
+    # Kept, not deleted: the feature still describes what fish would do here,
+    # and re-enabling is a one-line change. systemIntegration goes off with it
+    # -- its only purpose is vendor completion paths for a fish login shell.
     fish = {
+      enable = false;
+      systemIntegration = false;
+    };
+    zsh = {
       enable = true;
-      # r0k0r's login shell is fish (above), so the NixOS module goes on too --
-      # it is what links system packages' /share/fish/vendor_* into the profile.
+      # r0k0r's login shell is zsh (above), so the NixOS module goes on too --
+      # it is what puts system packages' /share/zsh site-functions on fpath.
       # Without it completions from system packages are silently absent.
       systemIntegration = true;
     };

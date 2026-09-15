@@ -91,6 +91,15 @@ in
         "clang" "libcxx" "llvm" "compiler-rt"
         "bash" "coreutils" "findutils" "diffutils" "gnused" "gnugrep" "gawk"
         "gnutar" "gzip" "bzip2" "xz" "patch" "file" "ed" "gnumake" "patchelf"
+
+        # zsh bakes its own $out into the binary as the default module_path
+        # (lib/zsh/$VERSION, where zle.so and friends live). Content-addressed,
+        # the rewrite left that string pointing at the pre-rewrite path, so the
+        # installed zsh looked for its modules in a store path that does not
+        # exist: every zmodload failed and zle, terminfo, parameter and compinit
+        # were all dead. Verified 2026-09-13 -- `zsh -f -c 'print $module_path'`
+        # named a path `nix path-info` could not even resolve.
+        "zsh"
       ];
       description = "Names left completely untouched: no mold, no ccache. The stdenv's own closure has to be here.";
     };
