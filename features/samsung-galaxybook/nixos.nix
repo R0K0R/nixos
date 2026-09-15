@@ -54,6 +54,36 @@
     '';
   };
 
+  /*
+    UPSTREAM TODO -- samsung-galaxybook logs ACPI notification 0x51 as unknown.
+
+      samsung-galaxybook SAM0430:00: unknown ACPI notification event: 0x51
+
+    It fires on every hinge transition into and out of tablet posture, several
+    times per rotation, so the log fills up. 0x51 and 0x52 are Samsung's own
+    announcement of the SAME transition Intel HID already reports: this
+    machine's DSDT raises both from one branch --
+
+        Notify (HIDD, 0xCD)     -> intel-hid  -> SW_TABLET_MODE
+        NTCA (0x51)             -> Notify (SCAI, 0x51), gated on SCAI.DVLD
+
+    (0x52 is the other direction; NTCA is at DSDT line ~70776, the caller at
+    ~75096, on a Galaxy Book4 Pro 360, BIOS 20260408.)
+
+    Handling it is cosmetic, NOT a fix for the input lock. Measured 2026-09-13:
+    the EC cuts the internal keyboard and touchpad in hardware when the panel
+    passes the transition point. The touchpad ran at ~870 events/s, went to
+    EXACTLY zero for 12s with a finger still moving, and resumed the same
+    second the next 0x51 arrived -- with no kernel-side device change logged.
+    The notification is the EC reporting what it already did.
+
+    So do not reach for libinput quirks (ModelTabletModeNoSuspend,
+    ModelTabletModeSwitchUnreliable) or an EVIOCGRAB on the switch: all three
+    were tried and none can work, because the decision never passes through
+    any layer Linux controls. The only conceivable lever is a sub-function
+    behind the Samsung mailbox (CSFI -> SAWS -> SystemMemory 0x6CF6F029), whose
+    function numbers are not enumerated in ACPI at all.
+  */
   options.my.samsung-galaxybook.enable = lib.mkEnableOption ''
     Samsung Galaxy Book4 Pro 360 hardware support: speakers, internal mic,
     IPU6 webcam, and the ACPI/kernel-param workarounds this chassis needs
