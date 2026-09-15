@@ -1,5 +1,5 @@
 {
-  anchorCount = 278;
+  anchorCount = 277;
   buildOnly = [
     "ccache"
     "mold"
@@ -24,9 +24,7 @@
     "v4l-utils"
     "nixos-rebuild-local"
     "nix-shell-local"
-    "nixos-rebuild-victus-15"
     "nixos-rebuild-yulee"
-    "nix-shell-victus-15"
     "nix-shell-yulee"
     "wl-clipboard"
     "android-tools"
@@ -118,6 +116,8 @@
     "sudo"
     "polkit"
     "linux-pam"
+    "zsh"
+    "nix-zsh-completions"
     "xwayland"
     "uwsm"
     "hyprland"
@@ -126,7 +126,6 @@
     "nano"
     "less"
     "kdeconnect-kde"
-    "fish"
     "firefox-bin"
     "dconf"
     "man-db"
@@ -196,6 +195,7 @@
     "eza"
     "imagemagick"
     "gemma-claude"
+    "watermarks-remover"
     "dummy-xdg-mime-dirs1"
     "dummy-xdg-mime-dirs2"
     "emacs-pgtk-x86_64-unknown-linux-gnu-with-doom-31.1"
@@ -204,7 +204,6 @@
     "kitty"
     "git"
     "gh"
-    "hm-session-vars.fish"
     "direnv"
     "dummy-fc-dir1"
     "dummy-fc-dir2"
@@ -811,7 +810,6 @@
     "modemmanager-qt"
     "plasma-wayland-protocols"
     "pulseaudio-qt"
-    "coreutils"
     "vala"
     "libpipeline"
     "gdbm"
@@ -834,6 +832,7 @@
     "nghttp3"
     "ngtcp2"
     "libssh2"
+    "coreutils"
     "sqlite"
     "popt"
     "xxhash"
@@ -1265,7 +1264,7 @@
     "pycparser"
     "die-hook"
   ];
-  capturedAt = "2026-09-09T09:11:16Z";
+  capturedAt = "2026-09-13T10:12:46Z";
   host = "galaxybook4-pro360";
   nixpkgsNarHash = "sha256-lj27EYvj0O6GayjoitFz0hrqeAlc0LCl04kkJrrGXVE=";
   nixpkgsRev = "2bf611227041f0f3727dd06500424437ef3976c9";
@@ -1276,9 +1275,7 @@
     "v4l-utils"
     "nixos-rebuild-local"
     "nix-shell-local"
-    "nixos-rebuild-victus-15"
     "nixos-rebuild-yulee"
-    "nix-shell-victus-15"
     "nix-shell-yulee"
     "wl-clipboard"
     "android-tools"
@@ -1370,6 +1367,8 @@
     "sudo"
     "polkit"
     "linux-pam"
+    "zsh"
+    "nix-zsh-completions"
     "xwayland"
     "uwsm"
     "hyprland"
@@ -1378,7 +1377,6 @@
     "nano"
     "less"
     "kdeconnect-kde"
-    "fish"
     "firefox-bin"
     "dconf"
     "man-db"
@@ -1448,6 +1446,7 @@
     "eza"
     "imagemagick"
     "gemma-claude"
+    "watermarks-remover"
     "dummy-xdg-mime-dirs1"
     "dummy-xdg-mime-dirs2"
     "emacs-pgtk-x86_64-unknown-linux-gnu-with-doom-31.1"
@@ -1456,7 +1455,6 @@
     "kitty"
     "git"
     "gh"
-    "hm-session-vars.fish"
     "direnv"
     "dummy-fc-dir1"
     "dummy-fc-dir2"
@@ -2063,7 +2061,6 @@
     "modemmanager-qt"
     "plasma-wayland-protocols"
     "pulseaudio-qt"
-    "coreutils"
     "vala"
     "libpipeline"
     "gdbm"
@@ -2087,6 +2084,7 @@
     "nghttp3"
     "ngtcp2"
     "libssh2"
+    "coreutils"
     "sqlite"
     "popt"
     "xxhash"
