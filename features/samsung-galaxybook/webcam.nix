@@ -111,6 +111,32 @@ let
     gst_all_1.gst-plugins-bad
   ];
 
+  /*
+    Where gst-launch finds its plugins. nixpkgs wraps gst-launch-1.0 to build
+    GST_PLUGIN_SYSTEM_PATH_1_0 from $NIX_PROFILES/lib/gstreamer-1.0 -- and a
+    systemd --user unit has no NIX_PROFILES, so inside camera-relay.service the
+    pipeline failed to parse with `no element "queue"` (coreelements lives in
+    gstreamer's own out/lib/gstreamer-1.0; nothing on the unit's PATH implies
+    it). The journal shows the consequence: from the first boot with this
+    service (2026-07-05) to 2026-09-16, 650 pipeline starts and not one lived
+    past two seconds. camera-relay-monitor papers over a dead pipeline with
+    synthetic black frames, so nothing ever said so.
+
+    GST_REGISTRY_1_0 goes with it. GStreamer keeps ONE registry cache per user
+    and rebuilds it whenever the plugin-path set differs from the last run, so
+    a relay with this plugin set and session apps without it would rebuild each
+    other's cache on every start. A private registry file costs nothing and
+    ends that.
+
+    Set explicitly, and ONLY on the relay wrapper: putting it in libcameraEnv
+    would push this tuned plugin set into every GStreamer process in the
+    session via environment.sessionVariables, which is a wider change than the
+    relay needs.
+  */
+  gstPluginPath = lib.makeSearchPath "lib/gstreamer-1.0" (
+    with pkgs.gst_all_1; [ gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad pkgs.libcamera ]
+  );
+
   cameraRelay = pkgs.stdenvNoCC.mkDerivation {
     pname = "camera-relay";
     version = "1.0";
@@ -127,13 +153,47 @@ let
       makeWrapper $out/share/camera-relay/camera-relay $out/bin/camera-relay \
         --prefix PATH : ${lib.makeBinPath cameraRelayRuntimeInputs} \
         --set LIBCAMERA_IPA_MODULE_PATH ${pkgs.libcamera}/lib/libcamera/ipa \
+        --set LIBCAMERA_IPA_PROXY_PATH ${pkgs.libcamera}/libexec/libcamera \
+        --set LIBCAMERA_IPA_CONFIG_PATH ${pkgs.libcamera}/share/libcamera/ipa \
         --prefix GST_PLUGIN_PATH : ${lib.makeSearchPath "lib/gstreamer-1.0" [ pkgs.libcamera ]} \
+        --set GST_PLUGIN_SYSTEM_PATH_1_0 ${gstPluginPath} \
+        --run 'export GST_REGISTRY_1_0="''${XDG_CACHE_HOME:-$HOME/.cache}/camera-relay/gst-registry.bin"; mkdir -p "$(dirname "$GST_REGISTRY_1_0")"' \
         --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ pkgs.libcamera ]}
     '';
   };
 
   libcameraEnv = {
     LIBCAMERA_IPA_MODULE_PATH = "${pkgs.libcamera}/lib/libcamera/ipa";
+    /*
+      Where the IPA proxy workers live. Needed whenever an IPA module runs
+      ISOLATED -- which libcamera does for any module whose signature fails to
+      verify -- and libcamera cannot find them on its own here:
+
+        src/libcamera/source_paths.cpp isLibcameraInstalled() answers "not
+        installed" if libcamera.so carries a DT_RUNPATH. Every Nix library
+        does, so on Nix it is ALWAYS "not installed", and resolvePath() then
+        derives a build-tree root from dirname(libcamera.so)/../../ -- which is
+        /nix/store -- and looks for /nix/store/src/libcamera/proxy/worker.
+        The compiled-in IPA_PROXY_DIR (libexec/libcamera, where the workers
+        really are) is never consulted on that branch.
+
+      With the env var set, resolvePath() checks it FIRST, before either
+      heuristic. This is belt-and-braces: the primary fix is keeping libcamera
+      input-addressed (tuning/heavy.nix skip) so the signatures verify and the
+      IPA runs in-process, but with this in place a future signature break
+      degrades to isolated-but-working instead of "software ISP disabled" and
+      black frames.
+
+      UPSTREAM TODO (nixpkgs): the RUNPATH heuristic is wrong for any distro
+      that keeps RUNPATH on installed libraries. Either patch
+      isLibcameraInstalled() or set LIBCAMERA_IPA_PROXY_PATH in a wrapper.
+    */
+    LIBCAMERA_IPA_PROXY_PATH = "${pkgs.libcamera}/libexec/libcamera";
+    # Same heuristic, same failure, for the IPA tuning files: without this the
+    # isolated worker starts and then fails init with "Configuration file
+    # 'ov02c10.yaml' not found ... falling back to ''". ov02c10.yaml IS shipped,
+    # under share/libcamera/ipa/simple/.
+    LIBCAMERA_IPA_CONFIG_PATH = "${pkgs.libcamera}/share/libcamera/ipa";
     GST_PLUGIN_PATH = lib.makeSearchPath "lib/gstreamer-1.0" [ pkgs.libcamera ];
     LD_LIBRARY_PATH = lib.makeLibraryPath [ pkgs.libcamera ];
     /*
