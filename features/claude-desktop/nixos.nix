@@ -23,10 +23,19 @@ in
         }
       '';
       description = ''
-        MCP servers to declare to Claude Desktop, by name.
+        MCP servers to declare to Claude Desktop, by name, written in the
+        same shape Claude Code takes so a host can hand one attrset to both.
 
-        This build carries the streamable-HTTP transport as well as stdio, so
-        an `\{ type = "http"; url = ...; \}` server needs no stdio shim.
+        Claude Desktop's config file is stdio-only. Its own schema is
+
+          { command, args?, env?, extensionId? }
+
+        and an entry carrying `type`/`url` is rejected on startup -- "not
+        valid MCP server configurations and were skipped". The HTTP
+        transports in the app serve connectors configured against the
+        account, not this file. So an `\{ type = "http"; url = ...; \}`
+        server declared here is translated: Desktop is given a small stdio
+        bridge to run, which posts each line to that URL.
 
         Merged into `~/.config/Claude/claude_desktop_config.json` at switch
         rather than symlinked over it: that file is the app's own state --
