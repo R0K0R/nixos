@@ -218,6 +218,7 @@
       yt-dlp
       mpv
       foliate
+      localsend
     ];
 
     /*
