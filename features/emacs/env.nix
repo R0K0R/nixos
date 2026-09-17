@@ -3,16 +3,18 @@
 
 let
   /*
-    Pin from flake input `nixpkgs-emacs-webkit` — use `.legacyPackages` here, not `import … { config = pkgs.config }`,
-    or NixOS’s nixpkgs options leak into 22.11 and blow up (`replaceStdenv` / stdenv mismatch).
-  */
-  pkgsWebkit = inputs.feat-emacs.webkitPkgs.${pkgs.stdenv.hostPlatform.system};
+    Unstable `emacs-pgtk` + xwidgets, against whatever WebKit nixpkgs ships.
 
-  # Unstable `emacs-pgtk` (e.g. 30.x) + xwidgets, but linked against the older WebKit above.
+    This used to pin webkitgtk from nixos-22.11 (2.38), because Emacs's
+    configure once demanded `webkit2gtk-4.1 < 2.41.92'.  Emacs 31 asks only
+    for `>= 2.12' -- the upper bound is gone from configure.ac -- so the pin
+    now buys a 2022 engine and nothing else.  It cost: the preview stuttered
+    on documents Firefox rendered smoothly, and tinymist's partial rendering
+    drew the last page over the first, neither of which reproduces on a
+    current WebKit.
+  */
   emacsPgtkBase = (
     pkgs.emacs-pgtk.override {
-      webkitgtk_4_1 = pkgsWebkit.webkitgtk_4_1;
-      glib-networking = pkgsWebkit.glib-networking;
       withNativeCompilation = true;
       withTreeSitter = true;
       withSystemd = true;
