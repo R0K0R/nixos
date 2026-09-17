@@ -233,6 +233,39 @@ lib.mkIf (cfg.enable && inScope) {
     WEBKIT_DISABLE_COMPOSITING_MODE = "1";
   };
 
+  /*
+    The same variable again, for Emacs started from the launcher.
+
+    A .desktop launch inherits the graphical session's environment; it does
+    not read `systemd.user.sessionVariables', which is why the daemon can
+    have this and a window opened from the app grid not.  The Exec line is
+    where both agree.
+
+    Written into XDG_DATA_HOME rather than declared with `xdg.desktopEntries':
+    that option installs a package into the profile, which is the very
+    directory the emacs package puts its own emacs.desktop in -- two entries
+    of the same name in one profile, shadowing nothing.  XDG_DATA_HOME comes
+    before the profile in XDG_DATA_DIRS, so a file here wins outright.
+
+    The other fields are the package's own, copied: a desktop entry is
+    replaced entire, not merged, and dropping MimeType would quietly remove
+    Emacs from "Open with" for every type it handles.
+  */
+  xdg.dataFile."applications/emacs.desktop".text = ''
+    [Desktop Entry]
+    Name=Emacs
+    GenericName=Text Editor
+    Comment=Edit text
+    MimeType=text/english;text/plain;text/x-makefile;text/x-c++hdr;text/x-c++src;text/x-chdr;text/x-csrc;text/x-java;text/x-moc;text/x-pascal;text/x-tcl;text/x-tex;application/x-shellscript;text/x-c;text/x-c++;
+    Exec=env WEBKIT_DISABLE_COMPOSITING_MODE=1 emacs %F
+    Icon=emacs
+    Type=Application
+    Terminal=false
+    Categories=Development;TextEditor;
+    StartupNotify=true
+    StartupWMClass=Emacs
+  '';
+
   # Loaded by Doom's config.el when present; empty by default, so a host that
   # says nothing gets no file at all rather than an empty one.
   xdg.configFile."home-manager/doom-machine-local.el" =
