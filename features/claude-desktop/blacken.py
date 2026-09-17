@@ -109,12 +109,41 @@ for _group, old, new in REPLACEMENTS:
     assert len(old) == len(new), (old, new)
 
 
+# Length-CHANGING edits, kept apart from REPLACEMENTS because those carry a
+# same-length assertion. Nothing requires same length any more -- rebuild_asar
+# recomputes every offset, size and integrity record (it must, since it appends
+# the preload) -- but the color table keeps the invariant as a cheap safety net,
+# so anything that genuinely changes length lives here instead.
+RESIZING_EDITS = [
+    # Make the MAIN window's surface per-pixel translucent instead of asking
+    # the compositor to fade the whole thing.
+    #
+    # A Hyprland `opacity 0.65` rule multiplies EVERY pixel -- text, images, the
+    # PDF thumbnail, and the scroll-fade gradient, whose opaque end stops being
+    # opaque so scrolled content bleeds through it and its boundary shows as a
+    # hard step. kitty does the opposite and is the look this was chasing all
+    # along: background #000000 at background_opacity 0.65, alpha in the SURFACE,
+    # content drawn opaque on top. This is that, for Claude.
+    #
+    # transparent+#00000000 only make the window capable of alpha; what actually
+    # paints the glass is the preload's rgba() base below. Both are needed.
+    # Anchored on `opacity:+!!i.earlyWindowShow`, which is unique to the main
+    # window -- the About and 3P-inference windows also call backgroundColor:_P()
+    # and must stay opaque.
+    (
+        "main-window-transparent",
+        b"backgroundColor:_P(),opacity:+!!i.earlyWindowShow",
+        b"backgroundColor:`#00000000`,transparent:!0,opacity:+!!i.earlyWindowShow",
+    ),
+]
+
 GROUP_HITS: dict[str, int] = {g: 0 for g, _o, _n in REPLACEMENTS}
+GROUP_HITS.update({g: 0 for g, _o, _n in RESIZING_EDITS})
 
 
 def patch_bytes(data: bytes) -> tuple[bytes, int]:
     n = 0
-    for group, old, new in REPLACEMENTS:
+    for group, old, new in REPLACEMENTS + RESIZING_EDITS:
         c = data.count(old)
         if c:
             GROUP_HITS[group] += c
@@ -152,19 +181,44 @@ PRELOAD_JS = (
     # it, so overriding it covers the pane, panels and sidebar at once. The
     # explicit element rules stay as a belt-and-braces layer for anything that
     # hardcodes a background instead of reading the variable.
+    # ALPHA lives here, in the surface -- not in a compositor opacity rule.
+    # 0.65 black, identical to kitty's `background #000000` +
+    # `background_opacity 0.65`, which is the parity this whole thing exists to
+    # achieve. Change this one string to reweight the glass.
+    b'const A=".65",G="rgba(0,0,0,"+A+")",S="rgba(15,15,15,"+A+")";'
     b'const d="--bg-000:0 0% 0%!important;--bg-100:0 0% 0%!important;'
     b"--df-bg-page-hsl:0 0% 0%!important;--df-bg-page:#000!important;"
     b"--surface-primary:#000!important;--df-surface-primary:0 0% 0%!important;"
     b'--claude-background-color:#000!important";'
-    b'const e="{background-color:#000!important}";'
-    b'const r=p=>p+" .dframe-content,"+p+" .dframe-content-inner"+e'
-    b'+p+" .dframe-sidebar{background-color:hsl(0 0% 6%)!important}";'
-    # TWO gates, because the app no longer decides dark the way this script
-    # used to assume. 1.40609.1 keys its dark rules off a [data-mode=dark]
-    # attribute (17 occurrences in the bundled CSS, against 1 for
-    # prefers-color-scheme), so a media-query-only gate misses "dark in the
-    # app, light in the OS" entirely. The media block additionally bows out
-    # when the app has explicitly said light.
+    # The layer assignment is MEASURED, not guessed (live probe, 88 sample
+    # points over the real window). Exactly four things paint full-window area:
+    #
+    #   html.cds-root           already transparent
+    #   body.bg-surface-1       rgb(21,21,21)  <- the grey floor, from
+    #                           --cds-surface-1; a THIRD token vocabulary
+    #                           (cds-*) that neither bg-* nor df-* rules reach
+    #   main.dframe-content     opaque
+    #   div.dframe-content-inner opaque   (60 of 88 points)
+    #   aside.dframe-sidebar    opaque    (16 of 88 points)
+    #
+    # Only ONE of them may carry alpha. Stacking two translucent full-area
+    # layers multiplies them and leaves exactly the uneven patches this is
+    # meant to remove -- so body carries the glass and the layers above it go
+    # fully transparent. Everything that is CONTENT rather than chrome (images,
+    # the PDF thumbnail, canvases) is untouched and therefore stays opaque,
+    # which is the point: glass backgrounds, solid content.
+    #
+    # The sidebar keeps its faint separation -- rgb(15,15,15) at the same 0.65
+    # is what the old hsl(0 0% 6%) composited to under whole-window opacity, so
+    # the look is preserved rather than reinvented.
+    b'const r=p=>p+" body,"+p+" .bg-surface-1,"+p+"body{background-color:"+G+"!important}"'
+    b'+p+" .dframe-root,"+p+" .dframe-content,"+p+" .dframe-content-inner'
+    b'{background-color:transparent!important}"'
+    b'+p+" .dframe-sidebar{background-color:"+S+"!important}";'
+    # TWO gates: 1.40609.1 keys its dark rules off a [data-mode=dark] attribute
+    # (17 occurrences in the bundled CSS against 1 for prefers-color-scheme), so
+    # a media-query-only gate misses "dark in the app, light in the OS". The
+    # media block also bows out when the app has explicitly said light.
     b'const css="@media (prefers-color-scheme: dark){"'
     b'+":root:not([data-mode=light]),:root:not([data-mode=light]) *{"+d+"}"'
     b'+r(":root:not([data-mode=light])")+"}"'

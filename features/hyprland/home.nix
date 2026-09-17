@@ -592,12 +592,18 @@ in
       -- covers all its windows (.app, .sms, -indicator, ...).
       hl.window_rule({ match = { class = "^(org\\.kde\\.dolphin)$" }, opacity = "0.65 0.65" })
       hl.window_rule({ match = { class = "^(org\\.kde\\.kdeconnect.*)$" }, opacity = "0.65 0.65" })
-      -- Claude Desktop: app_id from the deb's desktop-file StartupWMClass
-      -- (Chromium derives it from package.json desktopName). Same 0.65 as
-      -- the KDE apps -- the package forces its dark backgrounds to #000
-      -- (see packages/claude-desktop/package.nix), so it composites
-      -- identically to kitty/dolphin.
-      hl.window_rule({ match = { class = "^(com\\.anthropic\\.Claude)$" }, opacity = "0.65 0.65" })
+      -- Claude Desktop deliberately has NO opacity rule. It carries its own
+      -- alpha in the surface instead: features/claude-desktop/blacken.py makes
+      -- the window transparent and paints one rgba(0,0,0,.65) base, exactly
+      -- like kitty's `background #000000` + `background_opacity 0.65`.
+      --
+      -- A compositor opacity rule multiplies EVERY pixel, so images, the PDF
+      -- thumbnail and the message bubbles all went translucent too, and the
+      -- scroll-fade gradient stopped working -- its opaque end was no longer
+      -- opaque, so scrolled text bled through and the boundary read as a hard
+      -- step. Per-surface alpha fixes both: glass background, solid content.
+      -- Blur still applies; decoration.blur blurs behind translucent PIXELS,
+      -- which is what the window now has.
       -- Galaxy Buds client: small settings-style utility, better floating
       -- than as a full tape column. Class from the package's own
       -- makeDesktopItem name (= meta.mainProgram = "GalaxyBudsClient",
