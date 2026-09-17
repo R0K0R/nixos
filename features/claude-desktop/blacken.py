@@ -27,78 +27,99 @@ import struct
 import sys
 from pathlib import Path
 
+# (group, old, new). GROUP is what the build guard counts: a group may hold
+# several spellings of the same declaration (minified vs space-after-colon),
+# and only needs ONE of them to hit. A group that matches NOTHING fails the
+# build -- see main(). That check exists because 1.40609.1 silently moved 13
+# of these and the old "did anything at all match?" guard sailed through it.
 REPLACEMENTS = [
     # claude.ai v1 palette, dark: --bg-000 / --bg-100 (asar .darkTheme
     # blocks and ion-dist alike; bare literals are safe -- they only occur
     # as these properties)
-    (b"60 2.1% 18.4%", b"60 2.1% 00.0%"),
-    (b"60 2.7% 14.5%", b"60 2.7% 00.0%"),
+    ("v1-bg-000", b"60 2.1% 18.4%", b"60 2.1% 00.0%"),
+    ("v1-bg-100", b"60 2.7% 14.5%", b"60 2.7% 00.0%"),
     # v1 dark --bg-200/300: MUST be property-scoped -- the bare colors
     # double as light-theme --border-*/--text-* values. Minified (ion-dist)
     # and space-after-colon (asar window-shared.css) forms.
-    (b"--bg-200:30 3.3% 11.8%", b"--bg-200:30 3.3% 00.0%"),
-    (b"--bg-200: 30 3.3% 11.8%", b"--bg-200: 30 3.3% 00.0%"),
-    (b"--bg-300:60 2.6% 7.6%", b"--bg-300:60 2.6% 0.0%"),
-    (b"--bg-300: 60 2.6% 7.6%", b"--bg-300: 60 2.6% 0.0%"),
+    ("v1-bg-200", b"--bg-200:30 3.3% 11.8%", b"--bg-200:30 3.3% 00.0%"),
+    ("v1-bg-200", b"--bg-200: 30 3.3% 11.8%", b"--bg-200: 30 3.3% 00.0%"),
+    ("v1-bg-300", b"--bg-300:60 2.6% 7.6%", b"--bg-300:60 2.6% 0.0%"),
+    ("v1-bg-300", b"--bg-300: 60 2.6% 7.6%", b"--bg-300: 60 2.6% 0.0%"),
     # v2 palette (ion-dist): remap the semantic var, not the gray ramp --
-    # --_gray-750/800 also feed --pictogram-300/400
-    (b"--bg-000:var(--_gray-750)", b"--bg-000:0 0% 0%         "),
-    (b"--bg-100:var(--_gray-800)", b"--bg-100:0 0% 0%         "),
-    (b"--bg-200:var(--_gray-840)", b"--bg-200:0 0% 0%         "),
-    (b"--bg-300:var(--_gray-860)", b"--bg-300:0 0% 0%         "),
+    # the ramp stops also feed --pictogram-*.
+    #
+    # RENUMBERED in 1.40609.1: 750/800/840/860 -> 800/850/870/890. The light
+    # theme uses --_gray-0/20/40/50 for the same properties, so keying on the
+    # dark stop numbers keeps this dark-only.
+    ("v2-bg-000", b"--bg-000:var(--_gray-800)", b"--bg-000:0 0% 0%         "),
+    ("v2-bg-100", b"--bg-100:var(--_gray-850)", b"--bg-100:0 0% 0%         "),
+    ("v2-bg-200", b"--bg-200:var(--_gray-870)", b"--bg-200:0 0% 0%         "),
+    ("v2-bg-300", b"--bg-300:var(--_gray-890)", b"--bg-300:0 0% 0%         "),
     # flat achromatic dark ramp (Code tab / alternate palette in ion-dist)
-    (b"--bg-000:0 0% 6%", b"--bg-000:0 0% 0%"),
-    (b"--bg-100:0 0% 10%", b"--bg-100:0 0% 00%"),
-    (b"--bg-200:0 0% 14%", b"--bg-200:0 0% 00%"),
-    (b"--bg-300:0 0% 17%", b"--bg-300:0 0% 00%"),
+    ("flat-bg-000", b"--bg-000:0 0% 6%", b"--bg-000:0 0% 0%"),
+    ("flat-bg-100", b"--bg-100:0 0% 10%", b"--bg-100:0 0% 00%"),
+    ("flat-bg-200", b"--bg-200:0 0% 14%", b"--bg-200:0 0% 00%"),
+    ("flat-bg-300", b"--bg-300:0 0% 17%", b"--bg-300:0 0% 00%"),
     # desktop-frame (--df-*) z-layer system, dark ramp: the window shell,
     # sidebar and tab chrome paint from these, NOT from --bg-*. The z2
     # residual (14.9% * 0.65 ~= +25 brightness) was exactly the measured
     # gap vs kitty at the window boundary. z4+ (23.9%+) kept for overlays.
-    (b"--df-z0: 0 0% 3.9%", b"--df-z0: 0 0% 0.0%"),
-    (b"--df-z1: 0 0% 10.2%", b"--df-z1: 0 0% 00.0%"),
-    (b"--df-z2: 0 0% 14.9%", b"--df-z2: 0 0% 00.0%"),
-    (b"--df-z3: 0 0% 20%", b"--df-z3: 0 0% 00%"),
-    (b"--df-z0:0 0% 3.9%", b"--df-z0:0 0% 0.0%"),
-    (b"--df-z1:0 0% 10.2%", b"--df-z1:0 0% 00.0%"),
-    (b"--df-z2:0 0% 14.9%", b"--df-z2:0 0% 00.0%"),
-    (b"--df-z3:0 0% 20%", b"--df-z3:0 0% 00%"),
+    # Values unchanged in 1.40609.1; only the minified spelling now ships.
+    ("df-z0", b"--df-z0: 0 0% 3.9%", b"--df-z0: 0 0% 0.0%"),
+    ("df-z1", b"--df-z1: 0 0% 10.2%", b"--df-z1: 0 0% 00.0%"),
+    ("df-z2", b"--df-z2: 0 0% 14.9%", b"--df-z2: 0 0% 00.0%"),
+    ("df-z3", b"--df-z3: 0 0% 20%", b"--df-z3: 0 0% 00%"),
+    ("df-z0", b"--df-z0:0 0% 3.9%", b"--df-z0:0 0% 0.0%"),
+    ("df-z1", b"--df-z1:0 0% 10.2%", b"--df-z1:0 0% 00.0%"),
+    ("df-z2", b"--df-z2:0 0% 14.9%", b"--df-z2:0 0% 00.0%"),
+    ("df-z3", b"--df-z3:0 0% 20%", b"--df-z3:0 0% 00%"),
+    # NEW in 1.40609.1 -- the "epitaxy" page layer. The main pane paints
+    # `background: var(--df-bg-page)`, --df-bg-page is hsl() of this, and
+    # --surface-primary and .dframe-content-inner's --bg-100 both derive
+    # from it too, so zeroing this one stop blacks all of them. The sidebar
+    # follows as well: --df-sidebar-bg became
+    # `color-mix(in srgb, hsl(var(--df-bg-page-hsl)) 80%, black)`, which is
+    # why the old explicit --df-sidebar-bg patches are gone rather than
+    # updated. The light theme's twin is var(--_gray-10) and is untouched.
+    ("df-bg-page", b"--df-bg-page-hsl:var(--_gray-850)", b"--df-bg-page-hsl:0 0% 0%         "),
     # window frame base color (every renderer html + window-shared.css in
     # the asar): this is what shows as the window's own canvas under the
-    # SPA, and it's what a blank frame paints. #262624 is claude.ai's dark
-    # carbon; the light twin #faf9f5 stays.
-    (
-        b"--claude-background-color: #262624",
-        b"--claude-background-color: #000000",
-    ),
+    # SPA, and it's what a blank frame paints. #262624 in earlier builds,
+    # #151515 since 1.40609.1; the light twin (#faf9f5 -> #fcfcfb) stays.
+    # BOTH spellings -- the .html files minify it, window-shared.css does
+    # not, and only carrying the spaced form left 20 occurrences grey.
+    ("claude-bg-color", b"--claude-background-color: #151515", b"--claude-background-color: #000000"),
+    ("claude-bg-color", b"--claude-background-color:#151515", b"--claude-background-color:#000000"),
     # Electron BrowserWindow.backgroundColor (main-process JS): the native
     # window fill shows through the client-side-decoration caption strip
     # behind the min/max/close buttons -- the web title bar there is a
-    # transparent draggable div, so nothing else paints it. zh() returns
-    # #1f1f1e in dark mode; black it (light branch #fdfdfc kept). Single
-    # occurrence, same length -> safe byte patch.
-    (b'?"#1f1f1e":"#fdfdfc"', b'?"#000000":"#fdfdfc"'),
-    # direct sidebar declarations bypassing the z ramp
-    (b"hsla(0, 0%, 7.8%, .9)", b"hsla(0, 0%, 0.0%, .9)"),
-    (
-        b"--df-sidebar-bg: hsl(var(--_gray-860) / .95)",
-        b"--df-sidebar-bg: hsl(0 0% 0% / .95)         ",
-    ),
-    (
-        b"--df-sidebar-bg:hsl(var(--_gray-860) / .95)",
-        b"--df-sidebar-bg:hsl(0 0% 0% / .95)         ",
-    ),
+    # transparent draggable div, so nothing else paints it.
+    #
+    # SHAPE CHANGED in 1.40609.1: was a double-quoted ternary
+    # `?"#1f1f1e":"#fdfdfc"`, now an object literal with backticks, read by
+    # `function _P(){return nativeTheme.shouldUseDarkColors?fKt.dark:fKt.light}`.
+    # Anchored on the whole literal rather than on `dark:` alone so it stays
+    # unique, and not on the minified name `fKt`, which moves every build.
+    ("electron-window-bg",
+     b"{light:`#fcfcfb`,dark:`#151515`}",
+     b"{light:`#fcfcfb`,dark:`#000000`}"),
 ]
 
-for old, new in REPLACEMENTS:
+for _group, old, new in REPLACEMENTS:
     assert len(old) == len(new), (old, new)
+
+
+GROUP_HITS: dict[str, int] = {g: 0 for g, _o, _n in REPLACEMENTS}
 
 
 def patch_bytes(data: bytes) -> tuple[bytes, int]:
     n = 0
-    for old, new in REPLACEMENTS:
-        n += data.count(old)
-        data = data.replace(old, new)
+    for group, old, new in REPLACEMENTS:
+        c = data.count(old)
+        if c:
+            GROUP_HITS[group] += c
+            n += c
+            data = data.replace(old, new)
     return data, n
 
 
@@ -117,31 +138,45 @@ def patch_bytes(data: bytes) -> tuple[bytes, int]:
 # stock. adoptedStyleSheets first (immune to page CSP style-src), <style>
 # fallback, MutationObserver-free re-assert on each doc.
 PRELOAD_JS = (
-    b'\n;(()=>{try{'
-    b'if(!matchMedia("(prefers-color-scheme: dark)").matches)return;'
-    # Scope, from a live DOM probe (getComputedStyle at each region):
-    #   backdrop  = <body class=bg-bg-100>        -> var(--bg-100)
-    #   chat box  = <div class=bg-bg-000>         -> var(--bg-000)
-    #   main pane = <main class=dframe-content>   -> hardcoded rgb(31,31,30)
-    #   sidebar   = <aside class=dframe-sidebar>  -> rgb(38,38,38)
-    #   title bar = shell (mainWindow) chrome     -> var(--claude-background-color)
-    # backdrop/chat box -> #000. Main pane and title-bar strip are painted by
-    # a hardcoded color / --claude-background-color respectively, so they need
-    # their own overrides. Sidebar is dropped to near-black (0 0% 6%) rather
-    # than pure #000 -- a faint separation from the main pane, matching the
-    # DankMatugenBlack 13,13,13 alternate-surface philosophy.
-    b'const css=":root,:root *{'
-    b'--bg-000:0 0% 0%!important;--bg-100:0 0% 0%!important;'
-    b'--claude-background-color:#000!important}'
-    b'.dframe-content{background-color:#000!important}'
-    b'.dframe-sidebar{background-color:hsl(0 0% 6%)!important}";'
-    b'const a=()=>{try{const s=new CSSStyleSheet();s.replaceSync(css);'
-    b'document.adoptedStyleSheets=[...document.adoptedStyleSheets,s]}'
+    b"\n;(()=>{try{"
+    # Scope, from a live DOM probe plus the 1.40609.1 bundled CSS:
+    #   backdrop   <body class=bg-bg-100>       -> var(--bg-100)
+    #   chat box   <div class=bg-bg-000>        -> var(--bg-000)
+    #   main pane  .dframe-content(-inner)      -> background: var(--df-bg-page)
+    #   panels     .epitaxy-root                -> var(--surface-primary)
+    #   sidebar    .dframe-sidebar              -> color-mix() off --df-bg-page-hsl
+    #   title bar  shell chrome                 -> var(--claude-background-color)
+    #
+    # --df-bg-page-hsl is the NEW root of the dark page ramp: --df-bg-page,
+    # --surface-primary and .dframe-content-inner's --bg-100 all derive from
+    # it, so overriding it covers the pane, panels and sidebar at once. The
+    # explicit element rules stay as a belt-and-braces layer for anything that
+    # hardcodes a background instead of reading the variable.
+    b'const d="--bg-000:0 0% 0%!important;--bg-100:0 0% 0%!important;'
+    b"--df-bg-page-hsl:0 0% 0%!important;--df-bg-page:#000!important;"
+    b"--surface-primary:#000!important;--df-surface-primary:0 0% 0%!important;"
+    b'--claude-background-color:#000!important";'
+    b'const e="{background-color:#000!important}";'
+    b'const r=p=>p+" .dframe-content,"+p+" .dframe-content-inner"+e'
+    b'+p+" .dframe-sidebar{background-color:hsl(0 0% 6%)!important}";'
+    # TWO gates, because the app no longer decides dark the way this script
+    # used to assume. 1.40609.1 keys its dark rules off a [data-mode=dark]
+    # attribute (17 occurrences in the bundled CSS, against 1 for
+    # prefers-color-scheme), so a media-query-only gate misses "dark in the
+    # app, light in the OS" entirely. The media block additionally bows out
+    # when the app has explicitly said light.
+    b'const css="@media (prefers-color-scheme: dark){"'
+    b'+":root:not([data-mode=light]),:root:not([data-mode=light]) *{"+d+"}"'
+    b'+r(":root:not([data-mode=light])")+"}"'
+    b'+"[data-mode=dark],[data-mode=dark] *{"+d+"}"'
+    b'+r("[data-mode=dark]");'
+    b"const a=()=>{try{const s=new CSSStyleSheet();s.replaceSync(css);"
+    b"document.adoptedStyleSheets=[...document.adoptedStyleSheets,s]}"
     b'catch(e){const t=document.createElement("style");t.textContent=css;'
-    b'document.documentElement.appendChild(t)}};'
+    b"document.documentElement.appendChild(t)}};"
     b'document.readyState==="loading"'
     b'?document.addEventListener("DOMContentLoaded",a):a()'
-    b'}catch(e){}})();\n'
+    b"}catch(e){}})();\n"
 )
 PRELOAD_PATHS = (
     "/.vite/build/mainView.js",
@@ -242,11 +277,30 @@ def main(resources: Path) -> None:
         f"blacken: {total} replacements ({patched_asar} inside app.asar), "
         f"preload injected into {sorted(p.rsplit('/', 1)[-1] for p in injected)}"
     )
-    if patched_asar == 0:
-        sys.exit("blacken: no replacements inside app.asar -- palette changed?")
+
     missing = set(PRELOAD_PATHS) - injected
     if missing:
         sys.exit(f"blacken: preload(s) not found -- renamed? {sorted(missing)}")
+
+    # PER-GROUP, not a bare total. Upstream moved 13 of these in 1.40609.1
+    # -- the gray ramp renumbered, --claude-background-color went #262624 ->
+    # #151515, the Electron window color turned from a quoted ternary into a
+    # backtick object literal -- while enough of the rest still matched that a
+    # "did anything hit?" check passed and the window chrome quietly stayed
+    # grey. Every group must land, so the next such drift stops the build with
+    # the name of what moved instead of shipping a half-black theme.
+    dead = sorted(g for g, c in GROUP_HITS.items() if c == 0)
+    if dead:
+        sys.exit(
+            "blacken: these replacement groups matched NOTHING -- upstream "
+            f"changed them: {dead}\n"
+            "  re-derive the current spellings from the unpacked asar before "
+            "editing REPLACEMENTS; every entry is a same-length byte patch."
+        )
+    print(
+        "blacken: groups "
+        + ", ".join(f"{g}={GROUP_HITS[g]}" for g in sorted(GROUP_HITS))
+    )
 
 
 if __name__ == "__main__":
