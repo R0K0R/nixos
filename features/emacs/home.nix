@@ -221,6 +221,16 @@ lib.mkIf (cfg.enable && inScope) {
   # cursor-theme feature's XCURSOR_THEME for the same mechanism.
   systemd.user.sessionVariables = {
     TREESIT_GRAMMAR_DIR = "${treesitGrammars}/lib";
+
+    # xwidget-webkit renders offscreen: WebKit paints into a GL surface and
+    # Emacs reads it back for every frame it blits.  Accelerated compositing
+    # buys nothing against that and costs the readback, which is what makes a
+    # preview stutter while typing beside it.  Painting into a plain CPU
+    # surface skips the round trip.
+    #
+    # This is the knob the pinned WebKit has: 2.38 predates
+    # WEBKIT_DISABLE_DMABUF_RENDERER, which is the one usually quoted.
+    WEBKIT_DISABLE_COMPOSITING_MODE = "1";
   };
 
   # Loaded by Doom's config.el when present; empty by default, so a host that
