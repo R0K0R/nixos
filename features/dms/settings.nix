@@ -327,16 +327,29 @@
     Coordinates are Korea Science Academy of KAIST, Busanjin-gu, Busan.
 
     CAVEAT, and it decides whether editing these here does anything:
-    weatherLocation and weatherCoordinates are NOT settings.json properties --
+    weatherLocation and weatherCoordinates are NOT settings.json properties.
     SettingsData exposes them readonly from SessionData, which persists to
-    $XDG_STATE_HOME/DankMaterialShell/session.json. settings.json only SEEDS
-    them, and SessionData's importer skips any key whose session value is not
-    still the spec default. So this lands on a machine whose session.json has
-    no weather keys (verified true here on 2026-09-18) and is ignored on one
-    where DMS has already written its own. To re-pin later, delete those two
-    keys from session.json and restart the shell -- changing them here alone
-    will not take. useAutoLocation is a real settings.json property and is
-    declarative in the ordinary way.
+    $XDG_STATE_HOME/DankMaterialShell/session.json. settings.json reaches them
+    through exactly ONE path: SessionStore.migrateToVersion, whose weather
+    import is inside `if (currentVersion < 2)`. It bails at the top with
+    `if (currentVersion >= targetVersion) return null`, so on any session that
+    has already migrated the values here are INERT -- they are a v1->v2
+    one-time import, not an ongoing seed.
+
+    That makes them right for a FRESH profile (no session.json means
+    configVersion 0, the migration runs, and these land) and inert on an
+    existing one. Confirmed the hard way on 2026-09-18: this host sat at
+    configVersion 4, the keys below were ignored, and the weather widget fell
+    back to the built-in default -- New York, NY / 40.7128,-74.0060 -- which
+    looks like a config that did nothing rather than one that failed.
+
+    To change it on a live profile, write the two keys into session.json and
+    restart the shell. Note v4's stripDefaults: session.json stores only keys
+    that DIFFER from the spec default, so their absence there is normal and is
+    not evidence that anything is broken.
+
+    useAutoLocation is an ordinary settings.json property and is declarative in
+    the normal way; it is what actually stops the IP lookup.
   */
   useAutoLocation = false;
   weatherLocation = "Busan";
