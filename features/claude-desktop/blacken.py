@@ -211,19 +211,31 @@ PRELOAD_JS = (
     # The sidebar keeps its faint separation -- rgb(15,15,15) at the same 0.65
     # is what the old hsl(0 0% 6%) composited to under whole-window opacity, so
     # the look is preserved rather than reinvented.
-    b'const r=p=>p+" body,"+p+" .bg-surface-1,"+p+"body{background-color:"+G+"!important}"'
-    b'+p+" .dframe-root,"+p+" .dframe-content,"+p+" .dframe-content-inner'
+    # `a` is the ancestor scope, `self` the same scope written as a compound on
+    # body itself -- needed because the app may carry data-mode on <body>, where
+    # a descendant selector cannot reach it.
+    #
+    # They are separate arguments and not `a+"body"` because that spells
+    # `[data-mode=dark]body`, which is INVALID: a type selector has to come
+    # first in a compound. One invalid selector voids the WHOLE comma-separated
+    # rule, so the body declaration was silently dropped while the .dframe-*
+    # rules -- written as their own rules -- kept working. That is exactly how
+    # it failed the first time: everything black except the one surface that
+    # matters. Verified 2026-09-19 by reading computed styles in the live page.
+    b'const r=(a,self)=>a+" body,"+a+" .bg-surface-1"+"{background-color:"+G+"!important}"'
+    b'+(self?self+"{background-color:"+G+"!important}":"")'
+    b'+a+" .dframe-root,"+a+" .dframe-content,"+a+" .dframe-content-inner'
     b'{background-color:transparent!important}"'
-    b'+p+" .dframe-sidebar{background-color:"+S+"!important}";'
+    b'+a+" .dframe-sidebar{background-color:"+S+"!important}";'
     # TWO gates: 1.40609.1 keys its dark rules off a [data-mode=dark] attribute
     # (17 occurrences in the bundled CSS against 1 for prefers-color-scheme), so
     # a media-query-only gate misses "dark in the app, light in the OS". The
     # media block also bows out when the app has explicitly said light.
     b'const css="@media (prefers-color-scheme: dark){"'
     b'+":root:not([data-mode=light]),:root:not([data-mode=light]) *{"+d+"}"'
-    b'+r(":root:not([data-mode=light])")+"}"'
+    b'+r(":root:not([data-mode=light])",null)+"}"'
     b'+"[data-mode=dark],[data-mode=dark] *{"+d+"}"'
-    b'+r("[data-mode=dark]");'
+    b'+r("[data-mode=dark]","body[data-mode=dark]");'
     b"const a=()=>{try{const s=new CSSStyleSheet();s.replaceSync(css);"
     b"document.adoptedStyleSheets=[...document.adoptedStyleSheets,s]}"
     b'catch(e){const t=document.createElement("style");t.textContent=css;'
