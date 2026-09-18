@@ -11,6 +11,7 @@ record of yulee's state and for rebuilding it.
 
     sudo mkdir -p -m2775 /var/cache/ccache /var/cache/ccache/l1 /var/cache/ccache/stage
     sudo chown root:nixbld /var/cache/ccache /var/cache/ccache/l1 /var/cache/ccache/stage
+    sudo mkdir -p -m0755 /var/cache/ccache/peer-victus-15
 
 Group-writable for the ten `nixbld` users, world-readable so `ccache -s` and
 trimming work from outside the group. Do NOT use 0770/umask 007: stats become
@@ -39,7 +40,7 @@ rides along.
     max_size = 30G
     direct_mode = false
     ignore_options = -I* -isystem* -idirafter* -iquote*
-    remote_storage = file:/var/cache/ccache/stage
+    remote_storage = file:/var/cache/ccache/stage file:/var/cache/ccache/peer-victus-15|read-only=true|update-mtime=true
     CONF
     sudo chmod 664 /var/cache/ccache/l1/ccache.conf
 
@@ -70,35 +71,29 @@ Drop the `peer-*` backend to go local-only; `disable = true` switches ccache
 off entirely. Never set remote storage through the environment -- env is
 ccache's highest-precedence source and would override this file.
 
-## 5. Peer mount: OFF (retired 2026-09-11, deliberately left off 2026-09-18)
+## 5. Peer mount: victus-15's stage, read-only, over Tailscale
 
-yulee is local-only: `remote_storage` names just its own stage. The peer
-backend, its `/etc/fstab` sshfs line and the generated
-`var-cache-ccache-peer\x2dvictus\x2d15.{mount,automount}` units were removed
-when victus-15 was decommissioned on 2026-09-11.
+Torn down 2026-09-11 when victus-15 was decommissioned, restored
+2026-09-18 when it came back. The steps below are the whole of it --
+yulee is not NixOS, so nothing here is generated and `nixos-rebuild`
+will not put it back for you. The other direction IS generated:
+victus-15 mounts yulee's stage from `my.ccache.builder.peers.yulee`
+in its host config, which was never removed.
 
-victus-15 came BACK as a build peer on 2026-09-18 and the L2 share was still
-not re-enabled -- that is a choice, not an oversight, so do not "fix" it by
-re-adding the mount. The two are independent: victus-15 being in
-/etc/nix/machines says nothing about whether yulee reads its ccache stage.
-The measurements behind that split are in the L2 findings -- reads are cheap,
-writes are noisy -- and the sshfs mount is the part that has to be
-hand-managed here, outside the module.
+`/etc/fstab`:
 
-Kept for reference, because a second builder would want the same shape: the
-peer stage was mounted ROOT and read-only over Tailscale --
+    r0k0r@100.64.0.2:/var/cache/ccache/stage  /var/cache/ccache/peer-victus-15  fuse.sshfs  ro,allow_other,reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,IdentityFile=/home/r0k0r/.ssh/id_ed25519,StrictHostKeyChecking=accept-new,_netdev,x-systemd.automount,x-systemd.idle-timeout=600,x-systemd.mount-timeout=20s  0 0
 
-    r0k0r@<peer-tailscale-ip>:/var/cache/ccache/stage  /var/cache/ccache/peer-<name>  fuse.sshfs  ro,allow_other,reconnect,...
+then `sudo systemctl daemon-reload && sudo mount /var/cache/ccache/peer-victus-15`.
+No `nofail`: util-linux 2.39 passes it through to `mount.fuse3`, which
+rejects it (`fuse: unknown option(s): -o nofail`); it is redundant anyway,
+the automount never blocks boot and `mount-timeout` bounds the wait.
+A ROOT mount, not a user session mount: allow_other alone was not enough for
+the daemon's stat. victus-15 authorizes `~r0k0r/.ssh/id_ed25519.pub` (added
+2026-09-07). Automount: victus being down must never block yulee.
 
-then `sudo systemctl daemon-reload && sudo mount /var/cache/ccache/peer-<name>`.
-No `nofail`: util-linux 2.39 passes it through to `mount.fuse3`, which rejects
-it (`fuse: unknown option(s): -o nofail`); it is redundant anyway, the automount
-never blocks boot and `mount-timeout` bounds the wait. A ROOT mount, not a user
-session mount: allow_other alone was not enough for the daemon's stat.
-x-systemd.automount matters -- a peer being down must never block yulee.
-
-Sanity for any future peer: `tailscale ping <ip>` must say `via <ip>:41641`
-(direct), not `via DERP` -- a relay multiplies every per-op cost.
+Sanity: `tailscale ping 100.64.0.2` must say `via <ip>:41641` (direct), not
+`via DERP` -- a relay multiplies every per-op cost.
 
 ## 6. Trim the stage (done; ccache never cleans remote storage itself)
 
@@ -138,7 +133,7 @@ Preconditions: no builds running, nothing else using `/nix/store`.
     sudo btrfs subvolume list /nix/store  # expect: @store, @ccache
 
     # 3. fstab: the store line gets subvol=@store; the cache gets its own line
-#    (the peer-victus-15 line it sat above is gone now; see section 5)
+    #    (keep it ABOVE the peer-victus-15 line; systemd orders nested mounts anyway)
     sudo sed -i 's#^UUID=73d5b9dd-1771-440a-91a8-068af0c2aca9 /nix/store btrfs compress=zstd 0 2#UUID=73d5b9dd-1771-440a-91a8-068af0c2aca9 /nix/store        btrfs subvol=@store,compress=zstd,noatime 0 2\nUUID=73d5b9dd-1771-440a-91a8-068af0c2aca9 /var/cache/ccache btrfs subvol=@ccache,noatime 0 2#' /etc/fstab
     grep -n 73d5b9dd /etc/fstab            # two lines
 
