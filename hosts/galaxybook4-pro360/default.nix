@@ -149,6 +149,19 @@ in
       # it is what puts system packages' /share/zsh site-functions on fpath.
       # Without it completions from system packages are silently absent.
       systemIntegration = true;
+      # Plugins and keybinds through programs.zsh rather than home-manager, so
+      # root gets them too -- home-manager cannot reach root. home-manager's
+      # own plugin switches stand down while this is on; see the option.
+      systemPlugins = true;
+      root = {
+        enable = true;
+        # One human on this machine, so `sudo -i` keeping the history of what
+        # was just run is convenience with nobody to leak to. Deliberately NOT
+        # the default, and deliberately naming the account rather than assuming
+        # the primary one -- on a host with a second human this would put root's
+        # commands in someone else's file.
+        shareHistoryWith = "r0k0r";
+      };
     };
     kitty.enable = true;
     starship.enable = true;

@@ -74,13 +74,14 @@
         primary = true;
         extraGroups = [ "networkmanager" "wheel" ];
         passwordSecret = ../../age/hashed-password-r0k0r.age;
-        shell = pkgs.fish;
+        shell = pkgs.zsh;
       };
 
       benjamin = {
         description = "Benjamin S.H. Lee";
         extraGroups = [ "networkmanager" "wheel" ];
         passwordSecret = ../../age/hashed-password-benjamin.age;
+        shell = pkgs.fish;
       };
     };
 
@@ -102,17 +103,49 @@
     };
 
     /*
-      systemIntegration only, without my.fish.enable: r0k0r's login shell here
-      is fish, so the NixOS module is wanted (vendor completion paths), but this
-      host has never taken the home-manager half -- the aliases and prompt
-      config -- and turning it on now would be a change of its own rather than
-      part of enabling the system module. They are separate switches precisely
-      so that distinction can be made.
+      r0k0r's login shell here is zsh (above), matching galaxybook.
 
-      Replaces a bare `programs.fish.enable = true;` that used to sit further
-      down this file, so the NixOS module now has one source across both hosts.
+      BOTH halves, which is a departure from how fish sat on this host. fish
+      ran with systemIntegration only and no my.fish.enable, because fish needs
+      no configuration to be pleasant -- autosuggestions, syntax highlighting,
+      prefix history search and ctrl+arrow word movement are all fish defaults,
+      so the home-manager half was genuinely optional here.
+
+      None of that is true of zsh. Bare zsh has no autosuggestions, no syntax
+      highlighting, up/down walk the whole history instead of filtering on what
+      is typed, and ctrl+arrow is unbound -- the exact gaps that had to be
+      fixed on galaxybook. Taking only the NixOS module would leave this host
+      with a shell meaningfully worse than the fish it replaced, so the
+      preference fish could decline is one zsh has to have.
+
+      fish is dropped rather than left at systemIntegration = true: its only
+      job was vendor completion paths for a fish login shell, and there is no
+      longer one.
     */
-    fish.systemIntegration = true;
+    zsh = {
+      enable = true;
+      systemIntegration = true;
+      systemPlugins = true;
+      root = {
+        enable = true;
+        # shareHistoryWith deliberately unset, unlike galaxybook: benjamin is a
+        # second human here, so root's history stays in /root and out of any
+        # account's home.
+      };
+    };
+
+    /*
+      benjamin keeps fish. He never had the home-manager half either, and fish
+      needs none -- autosuggestions, syntax highlighting, prefix history search
+      and ctrl+arrow are all fish defaults. `users` scopes the home-manager side
+      to him alone, so r0k0r is unaffected; systemIntegration stays on because
+      there is again a fish login shell wanting vendor completion paths.
+    */
+    fish = {
+      enable = true;
+      systemIntegration = true;
+      users = [ "benjamin" ];
+    };
 
     /*
       btop with CUDA, replacing the plain btop that features/base contributes.
