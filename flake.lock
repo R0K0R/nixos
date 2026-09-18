@@ -153,11 +153,11 @@
     "doom-private": {
       "flake": false,
       "locked": {
-        "lastModified": 1789660272,
-        "narHash": "sha256-yc1x2B5EofK4lZ4QYN6UnIIj6xzZ/LAopl5Z7ZBBp8w=",
+        "lastModified": 1789731768,
+        "narHash": "sha256-Gwa0UNYkE0/E3KY8g4lVP1pnxT5mqYv+OnzxP1ZIV0A=",
         "owner": "R0K0R",
         "repo": "doom-emacs",
-        "rev": "24040ea1cce445a93d40f88d7d4a12809f279cd5",
+        "rev": "8c9407cdb3519c99a9141599515da88b9487c756",
         "type": "github"
       },
       "original": {
@@ -340,8 +340,7 @@
         "nix-doom-emacs-unstraightened": "nix-doom-emacs-unstraightened",
         "nixpkgs": [
           "nixpkgs"
-        ],
-        "nixpkgs-emacs-webkit": "nixpkgs-emacs-webkit"
+        ]
       },
       "locked": {
         "path": "./features/emacs",
@@ -586,22 +585,6 @@
       "original": {
         "owner": "R0K0R",
         "ref": "combined-fundamental",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs-emacs-webkit": {
-      "locked": {
-        "lastModified": 1688392541,
-        "narHash": "sha256-lHrKvEkCPTUO+7tPfjIcb7Trk6k31rz18vkyqmkeJfY=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "ea4c80b39be4c09702b0cb3b42eab59e2ba4f24b",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-22.11",
         "repo": "nixpkgs",
         "type": "github"
       }
