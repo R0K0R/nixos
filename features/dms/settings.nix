@@ -311,7 +311,36 @@
   dankLauncherV2IncludeFoldersInAll = false;
   launcherUseOverlayLayer = false;
   launcherStyle = "full";
-  useAutoLocation = true;
+  /*
+    Weather location, pinned. Auto-location is IP geolocation, which resolved
+    to Seoul -- about 270 km off, because it reports where the ISP registers
+    the address rather than where the machine is.
+
+    All three keys together, because of how WeatherService.updateLocation
+    branches: with useAutoLocation false and BOTH a coordinate pair and a city
+    name set, it takes the "trust the configured name and coordinates" path --
+    setLocation() then fetchWeather() directly, no geocoding request at all.
+    Give it coordinates alone and it reverse-geocodes them; give it a name
+    alone and it forward-geocodes that. Either way a lookup can put the label
+    somewhere else again, so both are set and the network never gets a vote.
+
+    Coordinates are Korea Science Academy of KAIST, Busanjin-gu, Busan.
+
+    CAVEAT, and it decides whether editing these here does anything:
+    weatherLocation and weatherCoordinates are NOT settings.json properties --
+    SettingsData exposes them readonly from SessionData, which persists to
+    $XDG_STATE_HOME/DankMaterialShell/session.json. settings.json only SEEDS
+    them, and SessionData's importer skips any key whose session value is not
+    still the spec default. So this lands on a machine whose session.json has
+    no weather keys (verified true here on 2026-09-18) and is ignored on one
+    where DMS has already written its own. To re-pin later, delete those two
+    keys from session.json and restart the shell -- changing them here alone
+    will not take. useAutoLocation is a real settings.json property and is
+    declarative in the ordinary way.
+  */
+  useAutoLocation = false;
+  weatherLocation = "Busan";
+  weatherCoordinates = "35.16583,129.02528";
   weatherEnabled = true;
   networkPreference = "auto";
   iconTheme = "System Default";
