@@ -81,6 +81,7 @@ in
 {
   imports = [
     ./peer-yulee.nix
+    ./peer-victus-15.nix
     ./wrappers.nix
   ];
 

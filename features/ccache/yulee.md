@@ -70,11 +70,20 @@ Drop the `peer-*` backend to go local-only; `disable = true` switches ccache
 off entirely. Never set remote storage through the environment -- env is
 ccache's highest-precedence source and would override this file.
 
-## 5. Peer mount: RETIRED (victus-15 decommissioned 2026-09-11)
+## 5. Peer mount: OFF (retired 2026-09-11, deliberately left off 2026-09-18)
 
-victus-15 is gone, so yulee is local-only: `remote_storage` names just its own
-stage. The peer backend, its `/etc/fstab` sshfs line and the generated
-`var-cache-ccache-peer\x2dvictus\x2d15.{mount,automount}` units were removed.
+yulee is local-only: `remote_storage` names just its own stage. The peer
+backend, its `/etc/fstab` sshfs line and the generated
+`var-cache-ccache-peer\x2dvictus\x2d15.{mount,automount}` units were removed
+when victus-15 was decommissioned on 2026-09-11.
+
+victus-15 came BACK as a build peer on 2026-09-18 and the L2 share was still
+not re-enabled -- that is a choice, not an oversight, so do not "fix" it by
+re-adding the mount. The two are independent: victus-15 being in
+/etc/nix/machines says nothing about whether yulee reads its ccache stage.
+The measurements behind that split are in the L2 findings -- reads are cheap,
+writes are noisy -- and the sshfs mount is the part that has to be
+hand-managed here, outside the module.
 
 Kept for reference, because a second builder would want the same shape: the
 peer stage was mounted ROOT and read-only over Tailscale --

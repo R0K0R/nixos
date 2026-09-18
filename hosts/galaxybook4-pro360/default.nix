@@ -220,9 +220,10 @@ in
       # content-addressed output, and ssh:// is LegacySSHStore, which has no
       # queryRealisation. It aborts with a SIGABRT stack trace rather than
       # skipping the substituter (measured 2026-09-07, nix 2.34.8).
-      substituters = [ "ssh-ng://r0k0r@yulee" ];
+      substituters = [ "ssh-ng://r0k0r@yulee" "ssh-ng://r0k0r@victus-15" ];
       trustedPublicKeys = [
         "yulee-1:KgdwkCN5m+hewJTk+A05PjwI3BbnZAE9NW2n634N7vM="
+        "victus-15-1:W5OP8VVbu7Q7z2o5grHJ5Zp+ynm536+QVv+b8fBQJlQ="
       ];
       peers = {
         yulee = {
@@ -239,6 +240,17 @@ in
           # system smuggling host flags into a build-time tool, not a missing
           # builder capability. Fix it there (qtbase's -mwaitpkg strip is the
           # precedent), rather than requiring every peer to be an Intel CPU.
+          features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "ca-derivations" ];
+        };
+        # Ryzen 5 5600H, headless. Back in the pool 2026-09-18 -- same machine,
+        # not a reinstall: its ed25519 host key still matches the pin in
+        # peer-victus-15.nix and the agenix recipient in secrets.nix, so no
+        # re-keying was needed. Lower maxJobs/speedFactor than yulee (6 cores
+        # against yulee's Zen 5) so the scheduler prefers yulee for big jobs.
+        # The gccarch reasoning above applies here verbatim.
+        victus-15 = {
+          maxJobs = 5;
+          speedFactor = 4;
           features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "ca-derivations" ];
         };
       };
