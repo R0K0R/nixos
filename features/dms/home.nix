@@ -1,4 +1,4 @@
-{ config, lib, osConfig, ... }:
+{ config, lib, osConfig, pkgs, ... }:
 
 
 let
@@ -10,6 +10,23 @@ let
   aiOllamaHost = "yulee";
   /* Must match `ollama list`; adjust if yours differs e.g. `gemma3:27b`. */
   aiOllamaModel = "gemma4-31b";
+
+  # Hoisted out of `settings` below so the weather-pin activation can read the
+  # SAME final values. Deriving the pin from anything else would let the two
+  # drift, which is the failure this whole thing is cleaning up after.
+  dmsSettings =
+    let
+      derived = import ./settings.nix // {
+        enableFprint = osConfig.services.fprintd.enable;
+        greeterEnableFprint = osConfig.services.fprintd.enable;
+      };
+      ov = osConfig.my.dms.settingsOverride;
+    in
+    if builtins.isFunction ov then ov derived else lib.recursiveUpdate derived ov;
+
+  weatherPinJson = (pkgs.formats.json { }).generate "dms-weather-pin.json" {
+    inherit (dmsSettings) weatherLocation weatherCoordinates;
+  };
 in
 {
   /*
@@ -30,6 +47,45 @@ in
   ];
 
   config = lib.mkIf (osConfig.my.dms.enable && inScope) {
+  /*
+    Pin the weather location into session.json.
+
+    settings.nix can only seed these two keys on a FRESH profile: SessionData
+    keeps them, and settings.json reaches them solely through
+    SessionStore.migrateToVersion's `currentVersion < 2` branch, which never
+    runs again once a session has migrated (see the comment in settings.nix).
+    So on any existing profile the declared value is inert and DMS falls back
+    to its built-in New York default -- which is what happened here.
+
+    Merged rather than symlinked, for the same reason as claude-desktop's MCP
+    config: DMS owns this file and rewrites it whenever session state changes,
+    so it cannot be a read-only store path. Idempotent -- a switch that
+    changes nothing leaves the file's mtime alone.
+
+    Only when the file ALREADY EXISTS. Absent means a fresh profile, where
+    DMS's own migration does the right thing from settings.json; creating one
+    here would just race that.
+
+    Skipped entirely when useAutoLocation is on, so turning auto-location back
+    on in settings.nix is sufficient and does not also require deleting this.
+
+    Note v4 stripDefaults: session.json stores only keys that DIFFER from the
+    spec default, so these two being absent from it is normal.
+  */
+  home.activation.dmsWeatherPin =
+    lib.mkIf (!(dmsSettings.useAutoLocation or false))
+      (lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        session="''${XDG_STATE_HOME:-$HOME/.local/state}/DankMaterialShell/session.json"
+        if [ -f "$session" ]; then
+          # `|| true` so a hand-corrupted session.json fails this step shut
+          # instead of truncating the file.
+          merged="$(${pkgs.jq}/bin/jq --slurpfile pin ${weatherPinJson} \
+            '. + $pin[0]' "$session" 2>/dev/null || true)"
+          if [ -n "$merged" ] && [ "$merged" != "$(cat "$session")" ]; then
+            run printf '%s\n' "$merged" > "$session"
+          fi
+        fi
+      '');
   programs.dank-material-shell = {
     enable = true;
 
@@ -51,17 +107,10 @@ in
       that could never succeed. Reading the host's own declaration makes that
       impossible to get wrong.
     */
-    settings =
-      let
-        derived = import ./settings.nix // {
-          enableFprint = osConfig.services.fprintd.enable;
-          greeterEnableFprint = osConfig.services.fprintd.enable;
-        };
-        ov = osConfig.my.dms.settingsOverride;
-      in
-      # A function gets the derived set and returns the final one -- the escape
-      # hatch for list surgery, which recursiveUpdate cannot express.
-      if builtins.isFunction ov then ov derived else lib.recursiveUpdate derived ov;
+    # Assembled in the top-level `let` as dmsSettings. A function override gets
+    # the derived set and returns the final one -- the escape hatch for list
+    # surgery, which recursiveUpdate cannot express.
+    settings = dmsSettings;
 
     systemd = {
       enable = true;
