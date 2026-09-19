@@ -297,18 +297,24 @@ PRELOAD_JS = (
     # and the blur size gate, yet the conversation scrolls directly under them.
     # "Contains an editable" is a positioning-independent way to say "this is
     # the input chrome", and it holds for any chat UI, not just this one.
-    "const hasEdit=el=>!!(el.querySelector&&el.querySelector(\"textarea,[contenteditable=true],[contenteditable=\\\"\\\"],[role=textbox]\"));"
-    "const heavyOf=(cs,el)=>{const p=cs.position;return p===\"fixed\"||p===\"sticky\"||p===\"absolute\"||(el&&hasEdit(el));};"
-    # Blur is applied by size, but size is re-checked on later sweeps for
-    # anything already marked: the first version measured once, at first
-    # sight, so a surface treated before layout kept its alpha and never got
-    # its blur -- which is exactly how the composer ended up see-through.
+    "const heavyOf=(cs,el)=>{const p=cs.position;return p===\"fixed\"||p===\"sticky\"||p===\"absolute\";};"
     "const blurIf=(el,st,cs)=>{if(el.dataset.glassBlur)return;const bb=el.getBoundingClientRect();const hv=heavyOf(cs,el);"
     "if(bb.width>180&&(bb.height>90||(hv&&bb.height>36))){const b=hv?BLURH:BLUR;"
     'st.setProperty("backdrop-filter","blur("+b+")","important");'
     'st.setProperty("-webkit-backdrop-filter","blur("+b+")","important");el.dataset.glassBlur=\"1\";}};'
+    # ONE FROST ROOT PER INPUT AREA. The composer is a stack of rows, each with
+    # its own palette background; frosting them individually produced stacked
+    # rectangles at different alphas with visible seams (rows without the
+    # editable fell into the static tier) and no single blur spanning the
+    # region. The outermost editable-containing element is marked the root and
+    # takes the heavy tier; anything inside a root goes transparent, so one
+    # surface and one blur cover the whole stack.
     "const treat=el=>{if(done.has(el))return;const cs=getComputedStyle(el);const st=el.style;let hit=false;"
-    "const q=pal(cs.backgroundColor);const A2=heavyOf(cs,el)?PH:PA;"
+    "const root=el.closest&&el.closest(\"[data-glass-root]\");"
+    "if(root&&root!==el){const q0=pal(cs.backgroundColor);const bi0=cs.backgroundImage;"
+    "if(q0||(bi0&&bi0!==\"none\"&&bi0.indexOf(\"gradient(\")!==-1)){st.setProperty(\"background-color\",\"transparent\",\"important\");"
+    "st.setProperty(\"background-image\",\"none\",\"important\");done.add(el);el.dataset.glass=\"1\";el.dataset.glassBlur=\"1\";}return;}"
+    "const q=pal(cs.backgroundColor);const hv=heavyOf(cs,el);const A2=hv?PH:PA;"
     'if(q){st.setProperty("background-color","rgba("+q[0]+","+q[1]+","+q[2]+","+A2+")","important");hit=true;}'
     # Gradients too. A gradient's stops are colours in the palette like any
     # other; the bottom scroll-fade is linear-gradient(to top, rgb(21,21,21),
@@ -317,7 +323,25 @@ PRELOAD_JS = (
     "const nb=bi.replace(/rgba?\\([^)]*\\)|color\\((?:srgb|display-p3)[^)]*\\)/g,t=>{const g=pal(t);if(!g)return t;ch=true;return\"rgba(\"+g.join(\",\")+\",\"+A2+\")\";});"
     'if(ch){st.setProperty("background-image",nb,"important");hit=true;}}'
     "if(!hit)return;done.add(el);el.dataset.glass=\"1\";blurIf(el,st,cs);};"
-    "const upgrade=()=>{document.querySelectorAll(\"[data-glass]:not([data-glass-blur])\").forEach(el=>blurIf(el,el.style,getComputedStyle(el)));};"
+    # INPUT CHROME IS FROSTED STRUCTURALLY, not by which element happens to
+    # carry a palette background. For each editable, the root is its OUTERMOST
+    # ancestor under 45% of the viewport height -- the whole composer block:
+    # pill, toolbar row, disclaimer -- painted as one 0.85 surface with one
+    # blur whether or not it had a background of its own. The first attempt
+    # rooted on the first painted ancestor, which was the pill alone; the
+    # toolbar row beneath it is a sibling, got no surface at all, and rendered
+    # its buttons straight over scrolled text. Everything inside a root goes
+    # transparent so there is exactly one edge and no inner seams. Plain
+    # <input> is deliberately excluded so the sidebar search box does not
+    # turn its header into a slab.
+    "const rootFor=ed=>{let el=ed,best=null;while(el&&el!==document.body){if(el.getBoundingClientRect().height>=innerHeight*0.45)break;best=el;el=el.parentElement;}return best;};"
+    "const rootify=()=>{document.querySelectorAll(\"textarea,[contenteditable=true],[contenteditable=\\\"\\\"]\").forEach(ed=>{const r=rootFor(ed);if(!r||r.dataset.glassRoot)return;"
+    "r.dataset.glassRoot=\"1\";r.dataset.glass=\"1\";r.dataset.glassBlur=\"1\";done.add(r);const st=r.style;"
+    'st.setProperty("background-color","rgba(17,17,17,"+PH+")","important");st.setProperty("background-image","none","important");'
+    'st.setProperty("backdrop-filter","blur("+BLURH+")","important");st.setProperty("-webkit-backdrop-filter","blur("+BLURH+")","important");'
+    "r.querySelectorAll(\"[data-glass]\").forEach(c=>{c.style.setProperty(\"background-color\",\"transparent\",\"important\");c.style.setProperty(\"background-image\",\"none\",\"important\");});});};"
+    "const upgrade=()=>{rootify();"
+    "document.querySelectorAll(\"[data-glass]:not([data-glass-blur])\").forEach(el=>blurIf(el,el.style,getComputedStyle(el)));};"
     'const sweep=()=>{try{document.querySelectorAll("*").forEach(treat);upgrade();}catch(e){}};'
     # Debounced: a chat app mutates constantly and an unthrottled observer
     # would walk the whole tree for every streamed token.
