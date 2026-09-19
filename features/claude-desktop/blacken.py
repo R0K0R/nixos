@@ -270,12 +270,13 @@ PRELOAD_JS = (
     # every grey, hardcoded or tokenised, present at load or added later, while
     # leaving colour alone -- the amber banner, buttons and syntax highlighting
     # all fail the neutrality test.
-    # Two frost tiers. Static surfaces (pane, sidebar, cards) get PA/BLUR.
-    # POSITIONED surfaces -- fixed, sticky, absolute: popups, menus, the
-    # composer group, anything laid OVER scrolling content -- get PH/BLURH,
-    # because a 0.55 panel with light blur over body text is unreadable in both
-    # directions (see the composer with the conversation scrolling through it).
-    'const PA=.55,BLUR="14px",PH=.85,BLURH="24px";'
+    # Two alpha tiers, NO backdrop-filter anywhere. Static surfaces (pane,
+    # sidebar, cards) get PA; positioned overlays (popups, menus, anything laid
+    # over other content) get PH. Blur was tried and dropped: measured on the
+    # composer, a backdrop-filter on the sticky root saw the scrolled text
+    # (invert(1) inverted it) yet blur(24px) left it pixel-crisp, so it bought
+    # nothing where it mattered. Hyprland blurs what is behind the window.
+    'const PA=.55,PH=.85;'
     # Parses BOTH serialisations Chromium emits: legacy rgb()/rgba(), and
     # color(srgb r g b / a) with 0-1 floats, which is what any colour authored
     # with color-mix()/oklch()/color() comes back as. The first version only
@@ -291,30 +292,32 @@ PRELOAD_JS = (
     # mx<=64 keeps to dark surfaces; mx-mn<=12 keeps to neutrals.
     "if(mx>64||mx-mn>12)return null;return[R,G2,B];};"
     "const done=new WeakSet();"
-    # Heavy tier: positioned overlays, PLUS anything that contains a text input.
-    # The composer is the case that forced the second clause -- its rows are
-    # position:relative and 48px tall, so they dodge both the positioned test
-    # and the blur size gate, yet the conversation scrolls directly under them.
-    # "Contains an editable" is a positioning-independent way to say "this is
-    # the input chrome", and it holds for any chat UI, not just this one.
-    "const heavyOf=(cs,el)=>{const p=cs.position;return p===\"fixed\"||p===\"sticky\"||p===\"absolute\";};"
-    "const blurIf=(el,st,cs)=>{if(el.dataset.glassBlur)return;const bb=el.getBoundingClientRect();const hv=heavyOf(cs,el);"
-    "if(bb.width>180&&(bb.height>90||(hv&&bb.height>36))){const b=hv?BLURH:BLUR;"
-    'st.setProperty("backdrop-filter","blur("+b+")","important");'
-    'st.setProperty("-webkit-backdrop-filter","blur("+b+")","important");el.dataset.glassBlur=\"1\";}};'
-    # ONE FROST ROOT PER INPUT AREA. The composer is a stack of rows, each with
-    # its own palette background; frosting them individually produced stacked
-    # rectangles at different alphas with visible seams (rows without the
-    # editable fell into the static tier) and no single blur spanning the
-    # region. The outermost editable-containing element is marked the root and
-    # takes the heavy tier; anything inside a root goes transparent, so one
-    # surface and one blur cover the whole stack.
-    "const treat=el=>{if(done.has(el))return;const cs=getComputedStyle(el);const st=el.style;let hit=false;"
+    # Positioned overlays: popups, menus, sticky bars -- laid OVER other
+    # content, so they take the heavier tier or they are unreadable both ways.
+    "const heavyOf=cs=>{const p=cs.position;return p===\"fixed\"||p===\"sticky\"||p===\"absolute\";};"
+    # ONE ROOT PER INPUT AREA. The composer is a stack of sibling rows, each
+    # with its own palette background; treating them one by one produced
+    # stacked rectangles at different alphas with visible seams. Anything
+    # inside a root goes transparent; the root alone paints.
+    # Inside a root, every palette paint goes: background colour, gradient,
+    # and box-shadow. The toolbar row carries a 32px SPREAD shadow in palette
+    # grey -- the stock trick that hides scrolled text under the pill's
+    # rounded bottom -- which read as a wide square behind the input once
+    # the backgrounds around it were gone. Non-palette shadows (the pill's
+    # 1px white ring) are kept.
+    "const shTok=v=>(v&&v!==\"none\"?(v.match(/rgba?\\([^)]*\\)|color\\((?:srgb|display-p3)[^)]*\\)/g)||[]):[]);"
+    "const clearIn=(el,cs,st)=>{let ch=false;const q0=pal(cs.backgroundColor);const bi0=cs.backgroundImage;"
+    "if(q0||(bi0&&bi0!==\"none\"&&bi0.indexOf(\"gradient(\")!==-1)){st.setProperty(\"background-color\",\"transparent\",\"important\");st.setProperty(\"background-image\",\"none\",\"important\");ch=true;}"
+    "if(shTok(cs.boxShadow).some(t=>pal(t))){st.setProperty(\"box-shadow\",\"none\",\"important\");ch=true;}"
+    "if(ch){done.add(el);el.dataset.glass=\"1\";}};"
+    # A root is never re-treated. Setting its style fires the attribute
+    # observer, which un-dones the target and treats it again; the palette
+    # pass then read the solid grey back as "opaque neutral" and rewrote it
+    # to the 0.85 tier. That is why the "opaque" composer measured 0.85.
+    "const treat=el=>{if(done.has(el)||(el.dataset&&el.dataset.glassRoot))return;const cs=getComputedStyle(el);const st=el.style;let hit=false;"
     "const root=el.closest&&el.closest(\"[data-glass-root]\");"
-    "if(root&&root!==el){const q0=pal(cs.backgroundColor);const bi0=cs.backgroundImage;"
-    "if(q0||(bi0&&bi0!==\"none\"&&bi0.indexOf(\"gradient(\")!==-1)){st.setProperty(\"background-color\",\"transparent\",\"important\");"
-    "st.setProperty(\"background-image\",\"none\",\"important\");done.add(el);el.dataset.glass=\"1\";el.dataset.glassBlur=\"1\";}return;}"
-    "const q=pal(cs.backgroundColor);const hv=heavyOf(cs,el);const A2=hv?PH:PA;"
+    "if(root&&root!==el){clearIn(el,cs,st);return;}"
+    "const q=pal(cs.backgroundColor);const A2=heavyOf(cs)?PH:PA;"
     'if(q){st.setProperty("background-color","rgba("+q[0]+","+q[1]+","+q[2]+","+A2+")","important");hit=true;}'
     # Gradients too. A gradient's stops are colours in the palette like any
     # other; the bottom scroll-fade is linear-gradient(to top, rgb(21,21,21),
@@ -322,26 +325,34 @@ PRELOAD_JS = (
     "const bi=cs.backgroundImage;if(bi&&bi!==\"none\"&&bi.indexOf(\"gradient(\")!==-1){let ch=false;"
     "const nb=bi.replace(/rgba?\\([^)]*\\)|color\\((?:srgb|display-p3)[^)]*\\)/g,t=>{const g=pal(t);if(!g)return t;ch=true;return\"rgba(\"+g.join(\",\")+\",\"+A2+\")\";});"
     'if(ch){st.setProperty("background-image",nb,"important");hit=true;}}'
-    "if(!hit)return;done.add(el);el.dataset.glass=\"1\";blurIf(el,st,cs);};"
-    # INPUT CHROME IS FROSTED STRUCTURALLY, not by which element happens to
-    # carry a palette background. For each editable, the root is its OUTERMOST
-    # ancestor under 45% of the viewport height -- the whole composer block:
-    # pill, toolbar row, disclaimer -- painted as one 0.85 surface with one
-    # blur whether or not it had a background of its own. The first attempt
-    # rooted on the first painted ancestor, which was the pill alone; the
-    # toolbar row beneath it is a sibling, got no surface at all, and rendered
-    # its buttons straight over scrolled text. Everything inside a root goes
-    # transparent so there is exactly one edge and no inner seams. Plain
-    # <input> is deliberately excluded so the sidebar search box does not
-    # turn its header into a slab.
+    "if(!hit)return;done.add(el);el.dataset.glass=\"1\";};"
+    # INPUT CHROME IS OPAQUE, and found structurally rather than by which
+    # element happens to carry a palette background. For each editable the
+    # root is its OUTERMOST ancestor under 45% of the viewport height -- the
+    # whole composer block: pill, toolbar row, disclaimer. It is painted solid,
+    # clipped to its content box so the block's own top padding (where the
+    # scroll-to-bottom button floats) stays clear and the conversation shows
+    # right up to the pill's edge. Everything inside goes transparent, so
+    # there is exactly one box with no inner seams. Solid because the text
+    # scrolls directly beneath it and no alpha keeps both sides readable.
+    # Plain <input> is deliberately excluded so the sidebar search box does
+    # not turn its header into a slab.
     "const rootFor=ed=>{let el=ed,best=null;while(el&&el!==document.body){if(el.getBoundingClientRect().height>=innerHeight*0.45)break;best=el;el=el.parentElement;}return best;};"
     "const rootify=()=>{document.querySelectorAll(\"textarea,[contenteditable=true],[contenteditable=\\\"\\\"]\").forEach(ed=>{const r=rootFor(ed);if(!r||r.dataset.glassRoot)return;"
-    "r.dataset.glassRoot=\"1\";r.dataset.glass=\"1\";r.dataset.glassBlur=\"1\";done.add(r);const st=r.style;"
-    'st.setProperty("background-color","rgba(17,17,17,"+PH+")","important");st.setProperty("background-image","none","important");'
-    'st.setProperty("backdrop-filter","blur("+BLURH+")","important");st.setProperty("-webkit-backdrop-filter","blur("+BLURH+")","important");'
-    "r.querySelectorAll(\"[data-glass]\").forEach(c=>{c.style.setProperty(\"background-color\",\"transparent\",\"important\");c.style.setProperty(\"background-image\",\"none\",\"important\");});});};"
-    "const upgrade=()=>{rootify();"
-    "document.querySelectorAll(\"[data-glass]:not([data-glass-blur])\").forEach(el=>blurIf(el,el.style,getComputedStyle(el)));};"
+    "r.dataset.glassRoot=\"1\";r.dataset.glass=\"1\";done.add(r);const st=r.style;"
+    'st.setProperty("background-color","rgb(17,17,17)","important");st.setProperty("background-image","none","important");'
+    'st.setProperty("background-clip","content-box","important");'
+    "r.querySelectorAll(\"[data-glass]\").forEach(c=>{done.delete(c);clearIn(c,getComputedStyle(c),c.style);});"
+    # FLANKS. The composer column is wider than the pill; two narrow absolute
+    # strips at its sides, in background colour, mask scrolled text beside the
+    # pill in the stock UI. Palette-treated they became visible light strips.
+    # Anything narrow, abutting the root within its vertical span, is part of
+    # the composer: painted solid like it and marked a root so no later sweep
+    # touches it.
+    "const rr=r.getBoundingClientRect();document.querySelectorAll(\"[data-glass]:not([data-glass-root])\").forEach(f=>{if(r.contains(f))return;const b=f.getBoundingClientRect();"
+    "if(b.width>0&&b.width<=40&&b.top>=rr.top-1&&b.bottom<=rr.bottom+1&&(Math.abs(b.right-rr.left)<=2||Math.abs(b.left-rr.right)<=2)){"
+    "f.dataset.glassRoot=\"1\";done.add(f);f.style.setProperty(\"background-color\",\"rgb(17,17,17)\",\"important\");f.style.setProperty(\"background-image\",\"none\",\"important\");}});});};"
+    "const upgrade=()=>{rootify();};"
     'const sweep=()=>{try{document.querySelectorAll("*").forEach(treat);upgrade();}catch(e){}};'
     # Debounced: a chat app mutates constantly and an unthrottled observer
     # would walk the whole tree for every streamed token.
