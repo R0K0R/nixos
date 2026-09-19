@@ -17,7 +17,7 @@ PluginSettings {
 
     StyledText {
         width: parent.width
-        text: "Open Hyprland windows with live previews, most recently used first: the focused window, then the one before it. Alt+Tab opens it; arrows move, Enter focuses."
+        text: "Open Hyprland windows with live previews, most recently used first, starting with the window you were in before this one, so Enter switches straight back; the focused window is listed last. Alt+Tab opens it; arrows move, Enter focuses."
         font.pixelSize: Theme.fontSizeSmall
         color: Theme.surfaceVariantText
         wrapMode: Text.WordWrap

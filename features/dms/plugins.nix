@@ -146,7 +146,8 @@ lib.mkIf osConfig.my.dms.enable {
     };
 
     # Windows-style switcher: the launcher's tile view (live previews) over
-    # Hyprland's windows in most-recently-used order. Derived from the
+    # Hyprland's windows in most-recently-used order, previous window first
+    # so Alt+Tab, Enter switches back. Derived from the
     # registry's dankHyprlandWindows, which sorts geometrically; do not
     # enable both, they share the "!" trigger. Bound to Alt+Tab in
     # compositor.nix.

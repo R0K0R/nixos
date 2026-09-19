@@ -15,7 +15,9 @@ import qs.Services
   orders them GEOMETRICALLY -- monitor, workspace, x -- via
   CompositorService.sortedToplevels. A switcher wants recency: the focused
   window first, the one you were in before it second, and so on, which is
-  the one thing changed here.
+  the one thing changed here. The FOCUSED window goes LAST: the first tile
+  is the window you were in before this one, so Alt+Tab, Enter switches
+  straight back, and the focused window is still listed for completeness.
 
   Recency comes from two sources, in this order of trust:
     1. our own MRU list, fed by ToplevelManager.activeToplevel every time
@@ -142,9 +144,13 @@ QtObject {
             Hyprland.dispatch(`hl.dsp.window.close({window = "${selector}"})`);
     }
 
-    // Lower sorts first. MRU rank when we have seen the window take focus;
-    // otherwise Hyprland's own focus history, pushed behind every MRU entry.
-    function recencyKey(address, ipc) {
+    // Lower sorts first. The focused window is sent to the very end so the
+    // first tile is the previous one. Otherwise: MRU rank when we have seen
+    // the window take focus, else Hyprland's own focus history, pushed
+    // behind every MRU entry.
+    function recencyKey(address, ipc, focused) {
+        if (focused)
+            return 1e9;
         const i = mru.indexOf(address);
         if (i >= 0)
             return i;
@@ -215,7 +221,7 @@ QtObject {
                 attribution: iconPath,
                 hyprAddress: address,
                 _isFocused: toplevel.activated || false,
-                _recency: recencyKey(address, ipc)
+                _recency: recencyKey(address, ipc, toplevel.activated || false)
             });
         }
 

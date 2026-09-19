@@ -1,7 +1,7 @@
 {
     "id": "altTab",
     "name": "Alt-Tab",
-    "description": "Hyprland windows in most-recently-used order with live previews; Alt+Tab opens it",
+    "description": "Hyprland windows in most-recently-used order with live previews, previous window first; Alt+Tab opens it",
     "version": "1.0.0",
     "author": "r0k0r (derived from Avenge Media's DankHyprlandWindows 1.0.0, MIT)",
     "icon": "view_carousel",
