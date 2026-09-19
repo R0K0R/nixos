@@ -291,6 +291,10 @@ PRELOAD_JS = (
     "if(al<1)return null;const mx=Math.max(R,G2,B),mn=Math.min(R,G2,B);"
     # mx<=64 keeps to dark surfaces; mx-mn<=12 keeps to neutrals.
     "if(mx>64||mx-mn>12)return null;return[R,G2,B];};"
+    # rgbOf: the same two parsers, alpha ignored -- for reading back a colour
+    # that an earlier sweep already turned translucent.
+    "const rgbOf=c=>{let m=/^rgba?\\((\\d+), ?(\\d+), ?(\\d+)/.exec(c||\"\");if(m)return[+m[1],+m[2],+m[3]];"
+    "m=/^color\\((?:srgb|display-p3) ([\\d.]+) ([\\d.]+) ([\\d.]+)/.exec(c||\"\");return m?[Math.round(+m[1]*255),Math.round(+m[2]*255),Math.round(+m[3]*255)]:null;};"
     "const done=new WeakSet();"
     # Positioned overlays: popups, menus, sticky bars -- laid OVER other
     # content, so they take the heavier tier or they are unreadable both ways.
@@ -306,15 +310,15 @@ PRELOAD_JS = (
     # the backgrounds around it were gone. Non-palette shadows (the pill's
     # 1px white ring) are kept.
     "const shTok=v=>(v&&v!==\"none\"?(v.match(/rgba?\\([^)]*\\)|color\\((?:srgb|display-p3)[^)]*\\)/g)||[]):[]);"
-    "const clearIn=(el,cs,st)=>{let ch=false;const q0=pal(cs.backgroundColor);const bi0=cs.backgroundImage;"
-    "if(q0||(bi0&&bi0!==\"none\"&&bi0.indexOf(\"gradient(\")!==-1)){st.setProperty(\"background-color\",\"transparent\",\"important\");st.setProperty(\"background-image\",\"none\",\"important\");ch=true;}"
+    "const clearIn=(el,cs,st)=>{if(el.dataset&&el.dataset.glassPill)return;let ch=false;const q0=pal(cs.backgroundColor);const bi0=cs.backgroundImage;"
+    "if(el.dataset.glass||q0||(bi0&&bi0!==\"none\"&&bi0.indexOf(\"gradient(\")!==-1)){st.setProperty(\"background-color\",\"transparent\",\"important\");st.setProperty(\"background-image\",\"none\",\"important\");ch=true;}"
     "if(shTok(cs.boxShadow).some(t=>pal(t))){st.setProperty(\"box-shadow\",\"none\",\"important\");ch=true;}"
     "if(ch){done.add(el);el.dataset.glass=\"1\";}};"
     # A root is never re-treated. Setting its style fires the attribute
     # observer, which un-dones the target and treats it again; the palette
     # pass then read the solid grey back as "opaque neutral" and rewrote it
     # to the 0.85 tier. That is why the "opaque" composer measured 0.85.
-    "const treat=el=>{if(done.has(el)||(el.dataset&&el.dataset.glassRoot))return;const cs=getComputedStyle(el);const st=el.style;let hit=false;"
+    "const treat=el=>{if(done.has(el)||(el.dataset&&(el.dataset.glassRoot||el.dataset.glassFlank||el.dataset.glassPill)))return;const cs=getComputedStyle(el);const st=el.style;let hit=false;"
     "const root=el.closest&&el.closest(\"[data-glass-root]\");"
     "if(root&&root!==el){clearIn(el,cs,st);return;}"
     "const q=pal(cs.backgroundColor);const A2=heavyOf(cs)?PH:PA;"
@@ -326,33 +330,35 @@ PRELOAD_JS = (
     "const nb=bi.replace(/rgba?\\([^)]*\\)|color\\((?:srgb|display-p3)[^)]*\\)/g,t=>{const g=pal(t);if(!g)return t;ch=true;return\"rgba(\"+g.join(\",\")+\",\"+A2+\")\";});"
     'if(ch){st.setProperty("background-image",nb,"important");hit=true;}}'
     "if(!hit)return;done.add(el);el.dataset.glass=\"1\";};"
-    # INPUT CHROME IS OPAQUE, and found structurally rather than by which
-    # element happens to carry a palette background. For each editable the
-    # root is its OUTERMOST ancestor under 45% of the viewport height -- the
-    # whole composer block: pill, toolbar row, disclaimer. It is painted solid,
-    # clipped to its content box so the block's own top padding (where the
-    # scroll-to-bottom button floats) stays clear and the conversation shows
-    # right up to the pill's edge. Everything inside goes transparent, so
-    # there is exactly one box with no inner seams. Solid because the text
-    # scrolls directly beneath it and no alpha keeps both sides readable.
+    # NO SQUARES IN THE INPUT AREA. User's call ("just remove all squares.
+    # idc about the readability of the toolbar"): the composer paints nothing
+    # but the pill. For each editable the root is its OUTERMOST ancestor under
+    # 45% of the viewport height -- pill, toolbar row, disclaimer -- and every
+    # palette paint inside it (backgrounds, gradients, the toolbar row's 32px
+    # spread shadow) is cleared. The PILL -- the nearest rounded, painted
+    # ancestor of the editable -- keeps its body, made fully opaque in its own
+    # grey, since a see-through text box over scrolled text is unusable.
     # Plain <input> is deliberately excluded so the sidebar search box does
-    # not turn its header into a slab.
+    # not lose its header.
     "const rootFor=ed=>{let el=ed,best=null;while(el&&el!==document.body){if(el.getBoundingClientRect().height>=innerHeight*0.45)break;best=el;el=el.parentElement;}return best;};"
-    "const rootify=()=>{document.querySelectorAll(\"textarea,[contenteditable=true],[contenteditable=\\\"\\\"]\").forEach(ed=>{const r=rootFor(ed);if(!r||r.dataset.glassRoot)return;"
-    "r.dataset.glassRoot=\"1\";r.dataset.glass=\"1\";done.add(r);const st=r.style;"
-    'st.setProperty("background-color","rgb(17,17,17)","important");st.setProperty("background-image","none","important");'
-    'st.setProperty("background-clip","content-box","important");'
-    "r.querySelectorAll(\"[data-glass]\").forEach(c=>{done.delete(c);clearIn(c,getComputedStyle(c),c.style);});"
+    "const pillFor=(ed,r)=>{let el=ed;while(el&&el!==r){const cs=getComputedStyle(el);if(parseFloat(cs.borderTopLeftRadius)>0&&(el.dataset.glass||pal(cs.backgroundColor)))return el;el=el.parentElement;}return null;};"
+    "const rootify=()=>{document.querySelectorAll(\"textarea,[contenteditable=true],[contenteditable=\\\"\\\"]\").forEach(ed=>{const r=rootFor(ed);if(!r)return;"
+    "if(!r.dataset.glassRoot){r.dataset.glassRoot=\"1\";r.dataset.glass=\"1\";done.add(r);"
+    'r.style.setProperty("background-color","transparent","important");r.style.setProperty("background-image","none","important");}'
+    "const pl=pillFor(ed,r);if(pl&&!pl.dataset.glassPill){const q=rgbOf(getComputedStyle(pl).backgroundColor);pl.dataset.glassPill=\"1\";done.add(pl);"
+    'if(q)pl.style.setProperty("background-color","rgb("+q.join(",")+")","important");}'
+    "r.querySelectorAll(\"[data-glass]:not([data-glass-pill])\").forEach(c=>{done.delete(c);clearIn(c,getComputedStyle(c),c.style);});"
+    "});};"
     # FLANKS. The composer column is wider than the pill; two narrow absolute
     # strips at its sides, in background colour, mask scrolled text beside the
-    # pill in the stock UI. Palette-treated they became visible light strips.
-    # Anything narrow, abutting the root within its vertical span, is part of
-    # the composer: painted solid like it and marked a root so no later sweep
-    # touches it.
-    "const rr=r.getBoundingClientRect();document.querySelectorAll(\"[data-glass]:not([data-glass-root])\").forEach(f=>{if(r.contains(f))return;const b=f.getBoundingClientRect();"
-    "if(b.width>0&&b.width<=40&&b.top>=rr.top-1&&b.bottom<=rr.bottom+1&&(Math.abs(b.right-rr.left)<=2||Math.abs(b.left-rr.right)<=2)){"
-    "f.dataset.glassRoot=\"1\";done.add(f);f.style.setProperty(\"background-color\",\"rgb(17,17,17)\",\"important\");f.style.setProperty(\"background-image\",\"none\",\"important\");}});});};"
-    "const upgrade=()=>{rootify();};"
+    # pill in the stock UI. They mount after the root, so this runs every
+    # sweep. Anything narrow, abutting a root within its vertical span, goes
+    # transparent.
+    "const flanks=()=>{document.querySelectorAll(\"[data-glass-root]\").forEach(r=>{const rr=r.getBoundingClientRect();if(!rr.width)return;"
+    "document.querySelectorAll(\"[data-glass]:not([data-glass-root]):not([data-glass-flank])\").forEach(f=>{if(r.contains(f))return;const b=f.getBoundingClientRect();"
+    "if(!(b.width>0&&b.width<=40&&b.top>=rr.top-1&&b.bottom<=rr.bottom+1))return;if(Math.abs(b.right-rr.left)>2&&Math.abs(b.left-rr.right)>2)return;"
+    "f.dataset.glassFlank=\"1\";done.add(f);f.style.setProperty(\"background-color\",\"transparent\",\"important\");f.style.setProperty(\"background-image\",\"none\",\"important\");});});};"
+    "const upgrade=()=>{rootify();flanks();};"
     'const sweep=()=>{try{document.querySelectorAll("*").forEach(treat);upgrade();}catch(e){}};'
     # Debounced: a chat app mutates constantly and an unthrottled observer
     # would walk the whole tree for every streamed token.
@@ -366,12 +372,17 @@ PRELOAD_JS = (
     "const treatTree=(n,cap)=>{if(!n||n.nodeType!==1)return;treat(n);"
     "if(!n.querySelectorAll)return;const l=n.querySelectorAll(\"*\");"
     "for(let i=0;i<l.length&&i<cap;i++)treat(l[i]);};"
-    "const onMut=ms=>{for(const m of ms){"
-    'if(m.type==="childList"){for(const n of m.addedNodes)treatTree(n,500);}'
+    "const onMut=ms=>{let added=false;for(const m of ms){"
+    'if(m.type==="childList"){for(const n of m.addedNodes){if(n.nodeType===1)added=true;treatTree(n,500);}}'
     # A class/style change can swap in a new opaque colour on an element we
     # already treated. Forget it and look again; our inline !important still
     # wins when the computed colour is already ours, so this cannot compound.
-    "else if(m.target&&m.target.nodeType===1){done.delete(m.target);treat(m.target);}}kick();};"
+    "else if(m.target&&m.target.nodeType===1){done.delete(m.target);treat(m.target);}}"
+    # Root, pill and flank handling runs SYNCHRONOUSLY whenever elements were
+    # added, in the same microtask that tinted them. Left to the debounced
+    # sweep, the composer mounted with its rows at 0.85 and lost them 220ms
+    # later -- a visible flash of squares on every open.
+    "if(added){try{upgrade();}catch(e){}}kick();};"
     "const obs=()=>{try{new MutationObserver(onMut).observe(document.documentElement,"
     '{childList:!0,subtree:!0,attributes:!0,attributeFilter:["class","style"]});}catch(e){}};'
 
