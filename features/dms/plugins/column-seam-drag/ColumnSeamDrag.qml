@@ -34,10 +34,13 @@ PluginComponent {
 
     property var popoutService: null
 
-    // Handle width (px). User asked for a comfortably wide grab zone rather
-    // than a hard-to-hit sliver, accepting that it covers a little of the
-    // window edges underneath.
-    readonly property int handleW: 28
+    // Handle width (px). Wide on purpose: it must exceed Hyprland's
+    // extend_border_grab_area (15px each side of the seam) so a press anywhere
+    // near the seam lands on THIS handle -- which always resizes BOTH columns
+    // -- instead of leaking to native resize_on_border, which would resize just
+    // the one window whose border you happened to catch. 40px = seam +/-20 >
+    // the 15px native zone. Cost: it covers ~20px of each window edge.
+    readonly property int handleW: 40
 
     // Frozen while a drag is in flight so the model does not rebuild under it.
     property bool dragging: false
@@ -213,7 +216,8 @@ PluginComponent {
                 height: parent.height
                 radius: 1
                 color: "#ffffff"
-                opacity: area.containsMouse || area.pressed ? 0.35 : 0.0
+                // Invisible while dragging (per request); a faint hint on hover.
+                opacity: area.pressed ? 0.0 : (area.containsMouse ? 0.3 : 0.0)
                 Behavior on opacity { NumberAnimation { duration: 120 } }
             }
 
