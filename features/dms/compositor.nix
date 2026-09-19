@@ -130,6 +130,11 @@ in
 
         -- Shell surfaces.
         hl.bind("${mod} + space", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
+        -- Alt+Tab = Spotlight pre-filled with the altTab plugin's trigger
+        -- (plugins.nix, ./plugins/alt-tab): windows in MRU order, live
+        -- previews. openQuery rather than toggleQuery so a second Alt+Tab
+        -- while it is up re-asserts instead of closing. Arrows/Enter inside.
+        hl.bind("ALT + Tab", hl.dsp.exec_cmd("dms ipc call spotlight openQuery !"))
         hl.bind("${mod} + I", hl.dsp.exec_cmd("dms ipc call settings toggle"))
         hl.bind("${mod} + A", hl.dsp.exec_cmd("dms ipc call plugins toggle aiAssistant"))
         hl.bind("${mod} + N", hl.dsp.exec_cmd("dms ipc call notifications toggle"))

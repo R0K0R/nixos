@@ -145,6 +145,16 @@ lib.mkIf osConfig.my.dms.enable {
       src = ./plugins/no-sleep;
     };
 
+    # Windows-style switcher: the launcher's tile view (live previews) over
+    # Hyprland's windows in most-recently-used order. Derived from the
+    # registry's dankHyprlandWindows, which sorts geometrically; do not
+    # enable both, they share the "!" trigger. Bound to Alt+Tab in
+    # compositor.nix.
+    altTab = {
+      enable = true;
+      src = ./plugins/alt-tab;
+    };
+
     rotationLock = {
       enable = true;
       src = ./plugins/rotation-lock;
