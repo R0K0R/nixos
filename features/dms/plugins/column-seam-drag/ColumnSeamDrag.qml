@@ -34,13 +34,14 @@ PluginComponent {
 
     property var popoutService: null
 
-    // Handle width (px). Wide on purpose: it must exceed Hyprland's
-    // extend_border_grab_area (15px each side of the seam) so a press anywhere
-    // near the seam lands on THIS handle -- which always resizes BOTH columns
-    // -- instead of leaking to native resize_on_border, which would resize just
-    // the one window whose border you happened to catch. 40px = seam +/-20 >
-    // the 15px native zone. Cost: it covers ~20px of each window edge.
-    readonly property int handleW: 40
+    // Handle width (px) and the width of its central "both" band. Narrow now:
+    // the left/right thirds resize a single column, which is exactly what
+    // Hyprland's native resize_on_border does just beyond the handle, so the
+    // two agree and the handle no longer needs to out-reach the 15px native
+    // zone. The pen still needs the handle (native ignores the tablet). Centre
+    // band kept small so the two single-column zones are the easy target.
+    readonly property int handleW: 22
+    readonly property int centerW: 8
 
     // Frozen while a drag is in flight so the model does not rebuild under it.
     property bool dragging: false
@@ -149,22 +150,41 @@ PluginComponent {
             + ', relative = false, window = "address:' + addr + '" })');
     }
 
-    // Apply a conserved resize for one seam given the pixel delta the seam has
-    // been dragged (positive = drag right = left column grows).
-    function applyDrag(s, dx) {
-        const total = s.leftW + s.rightW;
-        const minW = Math.round(s.screen.width / s.screen.devicePixelRatio * 0.1);
-        let lw = s.leftW + dx;
-        lw = Math.max(minW, Math.min(lw, total - minW));
-        const rw = total - lw;
-        // Shrink side first so no intermediate state overflows the usable width
-        // (which would trip the scrolling layout's fit-to-width scaling).
-        if (dx > 0) {
-            setW(s.rightAddr, rw, s.rightH);
-            setW(s.leftAddr, lw, s.leftH);
+    function minW(s) {
+        return Math.round(s.screen.width / s.screen.devicePixelRatio * 0.1);
+    }
+
+    // THREE ZONES, chosen at grab time from where on the handle you press:
+    //   centre third -> conserved, both columns (a tiling divider);
+    //   left third   -> resize the LEFT column only (right keeps its width,
+    //                   the tape takes up the slack -- normal scrolling);
+    //   right third  -> resize the RIGHT column only.
+    // In every zone dragging right moves the seam right; the zone only decides
+    // which column(s) absorb it. dx is the total drag from the press point, so
+    // widths are set absolutely from their grab-time values -- live, no drift.
+
+    // zone: -1 left-only, 0 both, 1 right-only
+    function applyDrag(s, dx, zone) {
+        if (zone === 0) {
+            const total = s.leftW + s.rightW;
+            let lw = Math.max(minW(s), Math.min(s.leftW + dx, total - minW(s)));
+            const rw = total - lw;
+            // Shrink side first so no intermediate state overflows the usable
+            // width (which would trip the layout's fit-to-width scaling).
+            if (dx > 0) {
+                setW(s.rightAddr, rw, s.rightH);
+                setW(s.leftAddr, lw, s.leftH);
+            } else {
+                setW(s.leftAddr, lw, s.leftH);
+                setW(s.rightAddr, rw, s.rightH);
+            }
+        } else if (zone < 0) {
+            // Left column only. Growing it past the screen is fine -- the tape
+            // just scrolls, which is what the scrolling layout is for.
+            setW(s.leftAddr, Math.max(minW(s), s.leftW + dx), s.leftH);
         } else {
-            setW(s.leftAddr, lw, s.leftH);
-            setW(s.rightAddr, rw, s.rightH);
+            // Right column only. Seam right = right's left edge right = shrink.
+            setW(s.rightAddr, Math.max(minW(s), s.rightW - dx), s.rightH);
         }
     }
 
@@ -209,16 +229,27 @@ PluginComponent {
             implicitHeight: Math.round(modelData.height)
             color: "transparent"
 
-            // Subtle hover cue; invisible at rest so it does not clutter.
+            // Centre seam line, plus a faint highlight over the third under the
+            // cursor so the three zones are discoverable. All invisible while
+            // dragging (per request) and at rest.
             Rectangle {
                 anchors.centerIn: parent
                 width: 2
                 height: parent.height
                 radius: 1
                 color: "#ffffff"
-                // Invisible while dragging (per request); a faint hint on hover.
                 opacity: area.pressed ? 0.0 : (area.containsMouse ? 0.3 : 0.0)
                 Behavior on opacity { NumberAnimation { duration: 120 } }
+            }
+            Rectangle {
+                // Which third the cursor is over: left | centre | right.
+                visible: area.containsMouse && !area.pressed
+                height: parent.height
+                color: "#ffffff"
+                opacity: 0.12
+                property real lo: (parent.width - root.centerW) / 2
+                x: area.hoverX < lo ? 0 : (area.hoverX > parent.width - lo ? parent.width - lo : lo)
+                width: area.hoverX < lo ? lo : (area.hoverX > parent.width - lo ? lo : root.centerW)
             }
 
             MouseArea {
@@ -230,16 +261,26 @@ PluginComponent {
                 preventStealing: true
 
                 property real pressX: 0
+                property real hoverX: 0
+                property int zone: 0 // -1 left-only, 0 both, 1 right-only
 
+                function zoneAt(x) {
+                    const lo = (width - root.centerW) / 2;
+                    return x < lo ? -1 : (x > width - lo ? 1 : 0);
+                }
+
+                onPositionChanged: mouse => {
+                    if (pressed) {
+                        // Live: apply the grab-time zone on every move.
+                        root.applyDrag(handle.modelData, Math.round(mouse.x - pressX), zone);
+                    } else {
+                        hoverX = mouse.x;
+                    }
+                }
                 onPressed: mouse => {
                     pressX = mouse.x;
+                    zone = zoneAt(mouse.x); // lock the zone for the whole drag
                     root.dragging = true; // freeze the model for the drag
-                }
-                onPositionChanged: mouse => {
-                    if (!pressed)
-                        return;
-                    // Live: resize both columns on every move.
-                    root.applyDrag(handle.modelData, Math.round(mouse.x - pressX));
                 }
                 onReleased: mouse => {
                     root.dragging = false;
