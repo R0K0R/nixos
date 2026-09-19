@@ -58,7 +58,13 @@ lib.mkIf (osConfig.my.zsh.enable && inScope) {
         cat ~/.local/state/quickshell/user/generated/terminal/sequences.txt
       fi
 
-      if [ "$TERM" != linux ]; then
+      # Guarded on the binary, not just on TERM: this alias used to assume eza
+      # was installed, which held only because the one host with the
+      # home-manager half also enabled features/eza. Turning zsh on for
+      # victus-15 broke `ls` there outright -- "command not found: eza" -- so
+      # the alias now checks rather than assumes, and a host without eza simply
+      # keeps coreutils ls.
+      if [ "$TERM" != linux ] && command -v eza >/dev/null 2>&1; then
         alias ls='eza --icons'
       fi
       if [ "$TERM" = xterm-kitty ]; then

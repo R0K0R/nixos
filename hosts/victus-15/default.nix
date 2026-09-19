@@ -122,6 +122,11 @@
       job was vendor completion paths for a fish login shell, and there is no
       longer one.
     */
+    # eza, so the `ls` alias the zsh half sets has its binary. galaxybook has
+    # had this on all along; victus-15 only needed it once it grew the
+    # home-manager shell config.
+    eza.enable = true;
+
     zsh = {
       enable = true;
       systemIntegration = true;
