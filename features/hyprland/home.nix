@@ -695,6 +695,14 @@ in
       -- colresize +conf, which cycles through scrolling:explicit_column_widths.
       hl.bind(mod .. " + R", hl.dsp.layout("colresize +conf"))
 
+      -- end-4/dots-hyprland's Super+;/' (splitratio -/+ 0.1, "adjust split
+      -- ratio"). end-4 runs dwindle; here the scrolling layout's equivalent is
+      -- colresize with a relative delta, which adds to the focused column's
+      -- width proportion (verified: -0.1 shrinks, +0.1 restores). Repeating so
+      -- holding the key keeps resizing, as end-4's do.
+      hl.bind(mod .. " + Semicolon", hl.dsp.layout("colresize -0.1"), { repeating = true })
+      hl.bind(mod .. " + Apostrophe", hl.dsp.layout("colresize +0.1"), { repeating = true })
+
       -- Focus movement (h/j/k/l + arrows). hl.dsp.focus is the single
       -- dispatcher covering movefocus/focusmonitor/focus-workspace by
       -- which field its table has -- direction here.
