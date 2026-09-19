@@ -130,6 +130,41 @@ RESIZING_EDITS = [
     # Anchored on `opacity:+!!i.earlyWindowShow`, which is unique to the main
     # window -- the About and 3P-inference windows also call backgroundColor:_P()
     # and must stay opaque.
+    # The claude.ai content is a WebContentsView laid over the window, and it is
+    # created with no setBackgroundColor at all -- so it keeps Electron's
+    # default view background and the transparent window behind it never shows
+    # through. No amount of page CSS can fix that: the fill is the VIEW's, not
+    # the document's. It is why the pane stayed a flat #111111 that the palette
+    # sweep could not touch, while regions outside the view showed through.
+    (
+        "claude-view-transparent",
+        b"return V=new o.WebContentsView(e),ui(V.webContents,li.CLAUDE_AI_WEB)",
+        b"return V=new o.WebContentsView(e),V.setBackgroundColor(`#00000000`),"
+        b"ui(V.webContents,li.CLAUDE_AI_WEB)",
+    ),
+    # And the window's own transparency was being undone after the fact. A
+    # nativeTheme `updated` handler calls setBackgroundColor(_P()), and _P()
+    # returns the patched-to-opaque #000000, so the window is created
+    # transparent and then made opaque again on the first theme update. Pinned
+    # to the transparent literal here rather than changing _P(), which the
+    # About and 3P-inference windows also use and which must stay opaque.
+    (
+        "theme-update-keeps-transparent",
+        b"Ra?.setBackgroundColor(_P())",
+        b"Ra?.setBackgroundColor(`#00000000`)",
+    ),
+    # The window-controls strip (min/max/close) is Electron's native
+    # titleBarOverlay, painted outside any document, so no preload CSS reaches
+    # it. Its colour comes from gP(): `t = gKt ? EKt(_P()) : _P()`, and gKt is
+    # !1, so t is just _P() -- the fKt.dark we patched to opaque #000000. That
+    # is the black box in the corner. Pinning t to a transparent literal changes
+    # the overlay and nothing else: both theme branches read `t`, and _P()
+    # itself is untouched for the windows that must stay opaque.
+    (
+        "title-bar-overlay-transparent",
+        b"t=gKt?EKt(_P()):_P()",
+        b"t=`#00000000`",
+    ),
     (
         "main-window-transparent",
         b"backgroundColor:_P(),opacity:+!!i.earlyWindowShow",
@@ -166,84 +201,107 @@ def patch_bytes(data: bytes) -> tuple[bytes, int]:
 # preload -- do not target it.) Gated on dark mode so light theme stays
 # stock. adoptedStyleSheets first (immune to page CSP style-src), <style>
 # fallback, MutationObserver-free re-assert on each doc.
+# Written as str pieces and encoded once at the end. The historical style here
+# was concatenated bytes literals, which made a single mistyped prefix fail with
+# "cannot mix bytes and nonbytes literals" pointing at the closing paren rather
+# than at the bad line.
 PRELOAD_JS = (
-    b"\n;(()=>{try{"
-    # Scope, from a live DOM probe plus the 1.40609.1 bundled CSS:
-    #   backdrop   <body class=bg-bg-100>       -> var(--bg-100)
-    #   chat box   <div class=bg-bg-000>        -> var(--bg-000)
-    #   main pane  .dframe-content(-inner)      -> background: var(--df-bg-page)
-    #   panels     .epitaxy-root                -> var(--surface-primary)
-    #   sidebar    .dframe-sidebar              -> color-mix() off --df-bg-page-hsl
-    #   title bar  shell chrome                 -> var(--claude-background-color)
+    "\n;(()=>{try{"
+    # ALPHA lives in the surface, not in a compositor opacity rule. 0.65 black
+    # is kitty's `background #000000` + `background_opacity 0.65`.
+    'const A=".65",G="rgba(0,0,0,"+A+")";'
+    'const d="--bg-000:0 0% 0%!important;--bg-100:0 0% 0%!important;'
+    "--df-bg-page-hsl:0 0% 0%!important;--df-bg-page:#000!important;"
+    "--surface-primary:#000!important;--df-surface-primary:0 0% 0%!important;"
+    '--claude-background-color:#000!important";'
+
+    # EXACTLY ONE LAYER MAY CARRY THE BASE ALPHA, and this window has more
+    # layers than it looks: the shell page (file://) and the claude.ai
+    # WebContentsView laid over it, both of which get this preload. Giving both
+    # a 0.65 body composited to 1-0.35^2 = 0.88, and the sidebar's own 0.65 on
+    # top made three -- 0.96, visually opaque. So the SHELL carries the base,
+    # since it is the one surface spanning the whole window, and the remote
+    # document goes transparent on top of it.
+    'const shell=location.protocol==="file:";'
+    # background-IMAGE too. A full-window overlay --
+    # div.pointer-events-none.absolute.inset-0.bg-surface-1 -- paints a
+    # linear-gradient that is opaque over the sidebar and fades across the pane.
+    # Its background-COLOR was already transparent, so resetting only that did
+    # nothing, and pointer-events:none kept it out of elementsFromPoint.
+    'const T="{background-color:transparent!important;background-image:none!important}";'
+    # In the SHELL, body carries the glass AND everything inside it goes
+    # transparent. Those children are the boot placeholder -- the fake chrome
+    # the shell paints so the window is not empty while claude.ai loads: a
+    # sidebar with skeleton rows, and the strip behind the window controls.
     #
-    # --df-bg-page-hsl is the NEW root of the dark page ramp: --df-bg-page,
-    # --surface-primary and .dframe-content-inner's --bg-100 all derive from
-    # it, so overriding it covers the pane, panels and sidebar at once. The
-    # explicit element rules stay as a belt-and-braces layer for anything that
-    # hardcodes a background instead of reading the variable.
-    # ALPHA lives here, in the surface -- not in a compositor opacity rule.
-    # 0.65 black, identical to kitty's `background #000000` +
-    # `background_opacity 0.65`, which is the parity this whole thing exists to
-    # achieve. Change this one string to reweight the glass.
-    b'const A=".65",G="rgba(0,0,0,"+A+")",S="rgba(15,15,15,"+A+")";'
-    b'const d="--bg-000:0 0% 0%!important;--bg-100:0 0% 0%!important;'
-    b"--df-bg-page-hsl:0 0% 0%!important;--df-bg-page:#000!important;"
-    b"--surface-primary:#000!important;--df-surface-primary:0 0% 0%!important;"
-    b'--claude-background-color:#000!important";'
-    # The layer assignment is MEASURED, not guessed (live probe, 88 sample
-    # points over the real window). Exactly four things paint full-window area:
+    # It is drawn UNDER the claude.ai view, so it was invisible until the view
+    # became transparent -- at which point we started seeing through the real
+    # sidebar to the fake one behind it. That is why every probe of the
+    # claude.ai document truthfully reported nothing painting there, and why
+    # the skeleton rows persist long after sign-in: they were never the live
+    # app's skeletons.
+    "const r=(a,self)=>shell"
+    '?(a+" body"+(self?","+self:"")+"{background-color:"+G+"!important}"'
+    '+a+" body *"+T)'
+    ':(a+","+a+" body,"+a+" .bg-surface-1,"+a+" .dframe-root,"'
+    '+a+" .dframe-content,"+a+" .dframe-content-inner,"+a+" .dframe-sidebar"+T);'
+
+    # TWO gates: 1.40609.1 keys dark off a [data-mode=dark] attribute (17
+    # occurrences in the bundled CSS against 1 for prefers-color-scheme), so a
+    # media-query-only gate misses "dark in the app, light in the OS".
+    'const css="@media (prefers-color-scheme: dark){"'
+    '+":root:not([data-mode=light]),:root:not([data-mode=light]) *{"+d+"}"'
+    '+r(":root:not([data-mode=light])",null)+"}"'
+    '+"[data-mode=dark],[data-mode=dark] *{"+d+"}"'
+    '+r("[data-mode=dark]","body[data-mode=dark]");'
+
+    # PALETTE SWEEP. Enumerating selectors does not converge -- there is always
+    # another element, with another class, painting through another property.
+    # The design tokens cannot be overridden ahead of time either: --cds-* is
+    # defined in the REMOTE stylesheet, not in anything this package patches.
     #
-    #   html.cds-root           already transparent
-    #   body.bg-surface-1       rgb(21,21,21)  <- the grey floor, from
-    #                           --cds-surface-1; a THIRD token vocabulary
-    #                           (cds-*) that neither bg-* nor df-* rules reach
-    #   main.dframe-content     opaque
-    #   div.dframe-content-inner opaque   (60 of 88 points)
-    #   aside.dframe-sidebar    opaque    (16 of 88 points)
-    #
-    # Only ONE of them may carry alpha. Stacking two translucent full-area
-    # layers multiplies them and leaves exactly the uneven patches this is
-    # meant to remove -- so body carries the glass and the layers above it go
-    # fully transparent. Everything that is CONTENT rather than chrome (images,
-    # the PDF thumbnail, canvases) is untouched and therefore stays opaque,
-    # which is the point: glass backgrounds, solid content.
-    #
-    # The sidebar keeps its faint separation -- rgb(15,15,15) at the same 0.65
-    # is what the old hsl(0 0% 6%) composited to under whole-window opacity, so
-    # the look is preserved rather than reinvented.
-    # `a` is the ancestor scope, `self` the same scope written as a compound on
-    # body itself -- needed because the app may carry data-mode on <body>, where
-    # a descendant selector cannot reach it.
-    #
-    # They are separate arguments and not `a+"body"` because that spells
-    # `[data-mode=dark]body`, which is INVALID: a type selector has to come
-    # first in a compound. One invalid selector voids the WHOLE comma-separated
-    # rule, so the body declaration was silently dropped while the .dframe-*
-    # rules -- written as their own rules -- kept working. That is exactly how
-    # it failed the first time: everything black except the one surface that
-    # matters. Verified 2026-09-19 by reading computed styles in the live page.
-    b'const r=(a,self)=>a+" body,"+a+" .bg-surface-1"+"{background-color:"+G+"!important}"'
-    b'+(self?self+"{background-color:"+G+"!important}":"")'
-    b'+a+" .dframe-root,"+a+" .dframe-content,"+a+" .dframe-content-inner'
-    b'{background-color:transparent!important}"'
-    b'+a+" .dframe-sidebar{background-color:"+S+"!important}";'
-    # TWO gates: 1.40609.1 keys its dark rules off a [data-mode=dark] attribute
-    # (17 occurrences in the bundled CSS against 1 for prefers-color-scheme), so
-    # a media-query-only gate misses "dark in the app, light in the OS". The
-    # media block also bows out when the app has explicitly said light.
-    b'const css="@media (prefers-color-scheme: dark){"'
-    b'+":root:not([data-mode=light]),:root:not([data-mode=light]) *{"+d+"}"'
-    b'+r(":root:not([data-mode=light])",null)+"}"'
-    b'+"[data-mode=dark],[data-mode=dark] *{"+d+"}"'
-    b'+r("[data-mode=dark]","body[data-mode=dark]");'
-    b"const a=()=>{try{const s=new CSSStyleSheet();s.replaceSync(css);"
-    b"document.adoptedStyleSheets=[...document.adoptedStyleSheets,s]}"
-    b'catch(e){const t=document.createElement("style");t.textContent=css;'
-    b"document.documentElement.appendChild(t)}};"
-    b'document.readyState==="loading"'
-    b'?document.addEventListener("DOMContentLoaded",a):a()'
-    b"}catch(e){}})();\n"
-)
+    # So detect rather than enumerate. A surface belongs to the dark palette if
+    # its computed background is OPAQUE, NEAR-NEUTRAL and DARK. That catches
+    # every grey, hardcoded or tokenised, present at load or added later, while
+    # leaving colour alone -- the amber banner, buttons and syntax highlighting
+    # all fail the neutrality test.
+    'const PA=.55,BLUR="14px";'
+    "const pal=c=>{const m=/^rgba?\\((\\d+), ?(\\d+), ?(\\d+)(?:, ?([\\d.]+))?\\)$/.exec(c||\"\");"
+    "if(!m)return null;const R=+m[1],G2=+m[2],B=+m[3],al=m[4]===undefined?1:+m[4];"
+    # al<1 means something already made it glass -- ours or theirs. Leave it,
+    # otherwise repeated sweeps would compound the alpha every pass.
+    "if(al<1)return null;const mx=Math.max(R,G2,B),mn=Math.min(R,G2,B);"
+    # mx<=64 keeps to dark surfaces; mx-mn<=12 keeps to neutrals.
+    "if(mx>64||mx-mn>12)return null;return[R,G2,B];};"
+    "const done=new WeakSet();"
+    "const treat=el=>{if(done.has(el))return;const cs=getComputedStyle(el);"
+    "const q=pal(cs.backgroundColor);if(!q)return;done.add(el);const st=el.style;"
+    'st.setProperty("background-color","rgba("+q[0]+","+q[1]+","+q[2]+","+PA+")","important");'
+    # Blur only on panel-sized surfaces: backdrop-filter creates a stacking
+    # context and costs a compositor pass, so putting it on every small chip is
+    # expensive for no visible gain.
+    "const bb=el.getBoundingClientRect();if(bb.width>180&&bb.height>90){"
+    'st.setProperty("backdrop-filter","blur("+BLUR+")","important");'
+    'st.setProperty("-webkit-backdrop-filter","blur("+BLUR+")","important");}};'
+    'const sweep=()=>{try{document.querySelectorAll("*").forEach(treat);}catch(e){}};'
+    # Debounced: a chat app mutates constantly and an unthrottled observer
+    # would walk the whole tree for every streamed token.
+    "let tm=0;const kick=()=>{clearTimeout(tm);tm=setTimeout(sweep,220);};"
+    "const obs=()=>{try{new MutationObserver(kick).observe(document.documentElement,"
+    '{childList:!0,subtree:!0,attributes:!0,attributeFilter:["class","style"]});}catch(e){}};'
+
+    "const a=()=>{try{const s=new CSSStyleSheet();s.replaceSync(css);"
+    "document.adoptedStyleSheets=[...document.adoptedStyleSheets,s]}"
+    'catch(e){const t=document.createElement("style");t.textContent=css;'
+    "document.documentElement.appendChild(t)}};"
+    # Re-sweeps because the app paints late: skeletons first, real surfaces
+    # after the session resolves.
+    "const boot=()=>{a();sweep();obs();setTimeout(sweep,1200);setTimeout(sweep,4000);};"
+    'document.readyState==="loading"'
+    '?document.addEventListener("DOMContentLoaded",boot):boot()'
+    "}catch(e){}})();\n"
+).encode()
+
 PRELOAD_PATHS = (
     "/.vite/build/mainView.js",
     "/.vite/build/mainWindow.js",
