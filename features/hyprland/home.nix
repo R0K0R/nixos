@@ -185,6 +185,30 @@ let
     fi
   '';
 
+  /*
+    Conserved column resize for the scrolling layout: move the seam between the
+    focused column and its visible neighbour so one shrinks by exactly what the
+    other grows -- like a tiling divider, which the scrolling layout otherwise
+    is not. Argument is a signed fraction of the monitor width applied to the
+    FOCUSED column (its neighbour gets the opposite).
+
+    Why a script and not `colresize`. colresize only ever touches the focused
+    column, and the freed/taken space is absorbed by the scroll offset (the
+    neighbour keeps its width and the tape re-centres). Measured: shrinking one
+    column left the other unchanged. The only primitive that resizes a SPECIFIC
+    column is `hl.dsp.window.resize({ ..., window = "address:..." })`, so this
+    resizes BOTH by address (+d and -d). With both outer edges pinned by their
+    own resize the seam moves and nothing drifts (verified: A +150 / B -150 kept
+    A's left and B's right edges, total constant).
+
+    The seam is the focused column's right neighbour if it has one, else its
+    left neighbour, among columns on the focused monitor's active workspace.
+    Same primitive the screen-seam drag overlay uses. Floating focus is a no-op.
+  */
+  columnResizeSplit = pkgs.writeShellScript "hypr-column-resize-split" ''
+    exec ${pkgs.python3.interpreter} ${./column-resize-split.py} "$1"
+  '';
+
 in
 {
   /*
@@ -695,13 +719,15 @@ in
       -- colresize +conf, which cycles through scrolling:explicit_column_widths.
       hl.bind(mod .. " + R", hl.dsp.layout("colresize +conf"))
 
-      -- end-4/dots-hyprland's Super+;/' (splitratio -/+ 0.1, "adjust split
-      -- ratio"). end-4 runs dwindle; here the scrolling layout's equivalent is
-      -- colresize with a relative delta, which adds to the focused column's
-      -- width proportion (verified: -0.1 shrinks, +0.1 restores). Repeating so
-      -- holding the key keeps resizing, as end-4's do.
-      hl.bind(mod .. " + Semicolon", hl.dsp.layout("colresize -0.1"), { repeating = true })
-      hl.bind(mod .. " + Apostrophe", hl.dsp.layout("colresize +0.1"), { repeating = true })
+      -- end-4/dots-hyprland's Super+;/' ("adjust split ratio"). end-4 runs
+      -- dwindle; on this scrolling layout the same feel is a CONSERVED seam
+      -- move -- the focused column shrinks/grows and its visible neighbour does
+      -- the opposite, total constant, like a tiling divider. columnResizeSplit
+      -- resizes both columns by address (colresize alone only touches the
+      -- focused one and lets the tape absorb the difference). Repeating so a
+      -- held key keeps moving the seam, as end-4's do.
+      hl.bind(mod .. " + Semicolon", hl.dsp.exec_cmd("${columnResizeSplit} -0.1"), { repeating = true })
+      hl.bind(mod .. " + Apostrophe", hl.dsp.exec_cmd("${columnResizeSplit} 0.1"), { repeating = true })
 
       -- Focus movement (h/j/k/l + arrows). hl.dsp.focus is the single
       -- dispatcher covering movefocus/focusmonitor/focus-workspace by
