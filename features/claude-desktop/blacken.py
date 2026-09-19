@@ -209,7 +209,7 @@ PRELOAD_JS = (
     "\n;(()=>{try{"
     # ALPHA lives in the surface, not in a compositor opacity rule. 0.65 black
     # is kitty's `background #000000` + `background_opacity 0.65`.
-    'const A=".65",G="rgba(0,0,0,"+A+")";'
+    'const A=".65",G="rgba(0,0,0,"+A+")",SB="rgba(255,255,255,.05)";'
     'const d="--bg-000:0 0% 0%!important;--bg-100:0 0% 0%!important;'
     "--df-bg-page-hsl:0 0% 0%!important;--df-bg-page:#000!important;"
     "--surface-primary:#000!important;--df-surface-primary:0 0% 0%!important;"
@@ -244,7 +244,12 @@ PRELOAD_JS = (
     '?(a+" body"+(self?","+self:"")+"{background-color:"+G+"!important}"'
     '+a+" body *"+T)'
     ':(a+","+a+" body,"+a+" .bg-surface-1,"+a+" .dframe-root,"'
-    '+a+" .dframe-content,"+a+" .dframe-content-inner,"+a+" .dframe-sidebar"+T);'
+    '+a+" .dframe-content,"+a+" .dframe-content-inner,"+a+" .dframe-sidebar"+T'
+    # The sidebar gets its own surface -- a faint WHITE lift, not another dark
+    # 0.65 layer. Same alpha stacked twice reads opaque (0.88); a 5% lift over
+    # the shell's 0.65 base leaves total opacity at ~0.67, visibly a different
+    # panel, still glass. One constant to retune.
+    '+a+" .dframe-sidebar{background-color:"+SB+"!important}");'
 
     # TWO gates: 1.40609.1 keys dark off a [data-mode=dark] attribute (17
     # occurrences in the bundled CSS against 1 for prefers-color-scheme), so a
@@ -265,29 +270,74 @@ PRELOAD_JS = (
     # every grey, hardcoded or tokenised, present at load or added later, while
     # leaving colour alone -- the amber banner, buttons and syntax highlighting
     # all fail the neutrality test.
-    'const PA=.55,BLUR="14px";'
-    "const pal=c=>{const m=/^rgba?\\((\\d+), ?(\\d+), ?(\\d+)(?:, ?([\\d.]+))?\\)$/.exec(c||\"\");"
-    "if(!m)return null;const R=+m[1],G2=+m[2],B=+m[3],al=m[4]===undefined?1:+m[4];"
-    # al<1 means something already made it glass -- ours or theirs. Leave it,
-    # otherwise repeated sweeps would compound the alpha every pass.
+    # Two frost tiers. Static surfaces (pane, sidebar, cards) get PA/BLUR.
+    # POSITIONED surfaces -- fixed, sticky, absolute: popups, menus, the
+    # composer group, anything laid OVER scrolling content -- get PH/BLURH,
+    # because a 0.55 panel with light blur over body text is unreadable in both
+    # directions (see the composer with the conversation scrolling through it).
+    'const PA=.55,BLUR="14px",PH=.85,BLURH="24px";'
+    # Parses BOTH serialisations Chromium emits: legacy rgb()/rgba(), and
+    # color(srgb r g b / a) with 0-1 floats, which is what any colour authored
+    # with color-mix()/oklch()/color() comes back as. The first version only
+    # read rgb(), so every modern-syntax surface was silently skipped -- the
+    # probe reported them as "unparsed".
+    "const pal=c=>{let m=/^rgba?\\((\\d+), ?(\\d+), ?(\\d+)(?:, ?([\\d.]+))?\\)$/.exec(c||\"\"),R,G2,B,al;"
+    "if(m){R=+m[1];G2=+m[2];B=+m[3];al=m[4]===undefined?1:+m[4];}"
+    "else{m=/^color\\((?:srgb|display-p3) ([\\d.]+) ([\\d.]+) ([\\d.]+)(?: \\/ ([\\d.]+))?\\)$/.exec(c||\"\");"
+    "if(!m)return null;R=Math.round(+m[1]*255);G2=Math.round(+m[2]*255);B=Math.round(+m[3]*255);al=m[4]===undefined?1:+m[4];}"
+    # al<1: something already made it glass -- ours or theirs. Leave it, or
+    # repeated sweeps would compound the alpha every pass.
     "if(al<1)return null;const mx=Math.max(R,G2,B),mn=Math.min(R,G2,B);"
     # mx<=64 keeps to dark surfaces; mx-mn<=12 keeps to neutrals.
     "if(mx>64||mx-mn>12)return null;return[R,G2,B];};"
     "const done=new WeakSet();"
-    "const treat=el=>{if(done.has(el))return;const cs=getComputedStyle(el);"
-    "const q=pal(cs.backgroundColor);if(!q)return;done.add(el);const st=el.style;"
-    'st.setProperty("background-color","rgba("+q[0]+","+q[1]+","+q[2]+","+PA+")","important");'
-    # Blur only on panel-sized surfaces: backdrop-filter creates a stacking
-    # context and costs a compositor pass, so putting it on every small chip is
-    # expensive for no visible gain.
-    "const bb=el.getBoundingClientRect();if(bb.width>180&&bb.height>90){"
-    'st.setProperty("backdrop-filter","blur("+BLUR+")","important");'
-    'st.setProperty("-webkit-backdrop-filter","blur("+BLUR+")","important");}};'
-    'const sweep=()=>{try{document.querySelectorAll("*").forEach(treat);}catch(e){}};'
+    # Heavy tier: positioned overlays, PLUS anything that contains a text input.
+    # The composer is the case that forced the second clause -- its rows are
+    # position:relative and 48px tall, so they dodge both the positioned test
+    # and the blur size gate, yet the conversation scrolls directly under them.
+    # "Contains an editable" is a positioning-independent way to say "this is
+    # the input chrome", and it holds for any chat UI, not just this one.
+    "const hasEdit=el=>!!(el.querySelector&&el.querySelector(\"textarea,[contenteditable=true],[contenteditable=\\\"\\\"],[role=textbox]\"));"
+    "const heavyOf=(cs,el)=>{const p=cs.position;return p===\"fixed\"||p===\"sticky\"||p===\"absolute\"||(el&&hasEdit(el));};"
+    # Blur is applied by size, but size is re-checked on later sweeps for
+    # anything already marked: the first version measured once, at first
+    # sight, so a surface treated before layout kept its alpha and never got
+    # its blur -- which is exactly how the composer ended up see-through.
+    "const blurIf=(el,st,cs)=>{if(el.dataset.glassBlur)return;const bb=el.getBoundingClientRect();const hv=heavyOf(cs,el);"
+    "if(bb.width>180&&(bb.height>90||(hv&&bb.height>36))){const b=hv?BLURH:BLUR;"
+    'st.setProperty("backdrop-filter","blur("+b+")","important");'
+    'st.setProperty("-webkit-backdrop-filter","blur("+b+")","important");el.dataset.glassBlur=\"1\";}};'
+    "const treat=el=>{if(done.has(el))return;const cs=getComputedStyle(el);const st=el.style;let hit=false;"
+    "const q=pal(cs.backgroundColor);const A2=heavyOf(cs,el)?PH:PA;"
+    'if(q){st.setProperty("background-color","rgba("+q[0]+","+q[1]+","+q[2]+","+A2+")","important");hit=true;}'
+    # Gradients too. A gradient's stops are colours in the palette like any
+    # other; the bottom scroll-fade is linear-gradient(to top, rgb(21,21,21),
+    # transparent), and its opaque stop survived every colour-only pass.
+    "const bi=cs.backgroundImage;if(bi&&bi!==\"none\"&&bi.indexOf(\"gradient(\")!==-1){let ch=false;"
+    "const nb=bi.replace(/rgba?\\([^)]*\\)|color\\((?:srgb|display-p3)[^)]*\\)/g,t=>{const g=pal(t);if(!g)return t;ch=true;return\"rgba(\"+g.join(\",\")+\",\"+A2+\")\";});"
+    'if(ch){st.setProperty("background-image",nb,"important");hit=true;}}'
+    "if(!hit)return;done.add(el);el.dataset.glass=\"1\";blurIf(el,st,cs);};"
+    "const upgrade=()=>{document.querySelectorAll(\"[data-glass]:not([data-glass-blur])\").forEach(el=>blurIf(el,el.style,getComputedStyle(el)));};"
+    'const sweep=()=>{try{document.querySelectorAll("*").forEach(treat);upgrade();}catch(e){}};'
     # Debounced: a chat app mutates constantly and an unthrottled observer
     # would walk the whole tree for every streamed token.
     "let tm=0;const kick=()=>{clearTimeout(tm);tm=setTimeout(sweep,220);};"
-    "const obs=()=>{try{new MutationObserver(kick).observe(document.documentElement,"
+    # Added subtrees are treated SYNCHRONOUSLY in the observer callback, which
+    # runs as a microtask before the next paint -- so a popup never gets a
+    # frame in its opaque colour. The debounced full sweep stays as the
+    # catch-all. Capped per record so a streaming reply (hundreds of tiny
+    # spans) cannot turn into hundreds of forced style recalcs; anything past
+    # the cap is picked up by the debounced pass.
+    "const treatTree=(n,cap)=>{if(!n||n.nodeType!==1)return;treat(n);"
+    "if(!n.querySelectorAll)return;const l=n.querySelectorAll(\"*\");"
+    "for(let i=0;i<l.length&&i<cap;i++)treat(l[i]);};"
+    "const onMut=ms=>{for(const m of ms){"
+    'if(m.type==="childList"){for(const n of m.addedNodes)treatTree(n,500);}'
+    # A class/style change can swap in a new opaque colour on an element we
+    # already treated. Forget it and look again; our inline !important still
+    # wins when the computed colour is already ours, so this cannot compound.
+    "else if(m.target&&m.target.nodeType===1){done.delete(m.target);treat(m.target);}}kick();};"
+    "const obs=()=>{try{new MutationObserver(onMut).observe(document.documentElement,"
     '{childList:!0,subtree:!0,attributes:!0,attributeFilter:["class","style"]});}catch(e){}};'
 
     "const a=()=>{try{const s=new CSSStyleSheet();s.replaceSync(css);"
