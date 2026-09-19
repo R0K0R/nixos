@@ -47,6 +47,8 @@ def main():
         return
     # Logical width; window widths from hyprctl are already logical too.
     mon_w = mon["width"] / mon["scale"]
+    vis_lo = mon["x"]
+    vis_hi = mon["x"] + mon_w
     delta = round(frac * mon_w)
     if delta == 0:
         return
@@ -71,6 +73,21 @@ def main():
         key = round(c["at"][0] / 8) * 8
         cols.setdefault(key, []).append(c)
     ordered = sorted(cols.items(), key=lambda kv: kv[0])
+
+    # Only columns actually on screen can be a seam partner. Resizing against an
+    # off-screen column is the "inconsistent" case: the conserved resize lands
+    # on a column you cannot see, so on screen only the focused one appears to
+    # change and the tape shifts. Keep to what is visible, like the seam drag.
+    def on_screen(win_list):
+        left = min(w["at"][0] for w in win_list)
+        right = max(w["at"][0] + w["size"][0] for w in win_list)
+        # Require a real slice on screen, not a 1-2px sliver at the edge: a
+        # barely-visible column is effectively off-screen and resizing it at the
+        # tape edge misbehaves (it collapsed to 1px in testing).
+        overlap = min(right, vis_hi) - max(left, vis_lo)
+        return overlap >= 100
+
+    ordered = [kv for kv in ordered if on_screen(kv[1])]
     if len(ordered) < 2:
         return
 
@@ -79,7 +96,7 @@ def main():
     if idx is None:
         return
 
-    # Neighbour: prefer the column to the right, else the one to the left.
+    # Neighbour: the visible column to the right, else the visible one to the left.
     if idx + 1 < len(ordered):
         neighbour = ordered[idx + 1][1]
     elif idx - 1 >= 0:
