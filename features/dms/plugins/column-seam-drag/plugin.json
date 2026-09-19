@@ -1,0 +1,13 @@
+{
+    "id": "columnSeamDrag",
+    "name": "Column Seam Drag",
+    "description": "Drag the seam between two columns to resize both (conserved), with mouse, finger, or S Pen",
+    "version": "1.0.0",
+    "author": "r0k0r",
+    "type": "daemon",
+    "component": "./ColumnSeamDrag.qml",
+    "settings": "./ColumnSeamDragSettings.qml",
+    "icon": "drag_pan",
+    "capabilities": [],
+    "permissions": ["settings_read"]
+}

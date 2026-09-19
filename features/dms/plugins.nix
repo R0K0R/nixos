@@ -167,6 +167,16 @@ lib.mkIf osConfig.my.dms.enable {
       src = ./plugins/screen-snip;
     };
 
+    # Drag the seam between two columns to resize both (conserved), with mouse,
+    # finger, or S Pen -- an in-shell overlay because the pen cannot reach
+    # Hyprland's native border resize (tablet tip is not a pointer button) and
+    # the scrolling layout is not conserved on its own. Same primitive as
+    # Super+;/' (features/hyprland/column-resize-split.py).
+    columnSeamDrag = {
+      enable = true;
+      src = ./plugins/column-seam-drag;
+    };
+
     rotationLock = {
       enable = true;
       src = ./plugins/rotation-lock;
@@ -189,6 +199,14 @@ lib.mkIf osConfig.my.dms.enable {
   # Same one-time guard as altTab, for the live-staged screenSnip symlink.
   home.activation.screenSnipStagedLink = lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
     l="$HOME/.config/DankMaterialShell/plugins/screenSnip"
+    if [ -L "$l" ] && ! readlink "$l" | grep -q -- '-home-manager-files/'; then
+      run rm -f "$l"
+    fi
+  '';
+
+  # Same one-time guard as altTab, for the live-staged columnSeamDrag symlink.
+  home.activation.columnSeamDragStagedLink = lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
+    l="$HOME/.config/DankMaterialShell/plugins/columnSeamDrag"
     if [ -L "$l" ] && ! readlink "$l" | grep -q -- '-home-manager-files/'; then
       run rm -f "$l"
     fi
