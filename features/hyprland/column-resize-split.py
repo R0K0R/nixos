@@ -29,6 +29,20 @@ def resize_exact(address, width, height):
     )
 
 
+def width_of(address):
+    for c in hypr("clients"):
+        if c.get("address") == address:
+            return c["size"][0]
+    return None
+
+
+def focus(address):
+    subprocess.run(
+        ["hyprctl", "eval", 'hl.dispatch(hl.dsp.focus({ window = "address:%s" }))' % address],
+        check=False,
+    )
+
+
 def main():
     try:
         frac = float(sys.argv[1])
@@ -107,32 +121,43 @@ def main():
     focused_w = active["size"][0]
     neighbour_w = neighbour[0]["size"][0]
 
-    # Keep both columns usable: clamp the delta so neither drops below 10% of
-    # the monitor (grow is naturally bounded by the neighbour's shrink).
+    # Keep both columns usable: clamp so neither drops below 10% of the monitor.
     min_w = round(mon_w * 0.1)
-    if delta > 0:
-        delta = min(delta, neighbour_w - min_w)
-    else:
-        delta = -min(-delta, focused_w - min_w)
-    if delta == 0:
-        return
-
-    # Set EXACT target widths, not relative deltas. Exact widths are idempotent
-    # and land precisely (measured); two independent RELATIVE resizes instead
-    # drift, because the scrolling layout re-fits after each one so the applied
-    # deltas do not compose. The targets sum to the old sum (which already fit),
-    # so nothing overflows. Apply the SHRINK side first anyway: growing first
-    # would transiently exceed the usable width and trip fit-to-width scaling.
+    total = focused_w + neighbour_w
     f_win = active
     n_win = neighbour[0]
-    f_new = focused_w + delta
-    n_new = neighbour_w - delta
+
+    # Move the seam without leaving a gap. Two facts about the scrolling layout
+    # drive the order:
+    #   - Shrinking a column always lands exactly (no clamp).
+    #   - Growing only lands cleanly on the FOCUSED column with ROOM to grow:
+    #     it centres/keeps the focused column visible and lets the far side
+    #     overflow. Growing a non-focused column, or growing into no free space,
+    #     hits centre-and-fit and clamps short -- the total drops and a gap
+    #     appears (what looked like "both shrink").
+    # So: shrink the shrinking side first to free the room, then focus the
+    # growing side and grow it into that room, then restore focus. A read-back
+    # gives any shortfall back to the shrunk side so the pair always sums to the
+    # original total.
     if delta > 0:
-        resize_exact(n_win["address"], n_new, n_win["size"][1])
-        resize_exact(f_win["address"], f_new, f_win["size"][1])
+        grow, shrink = f_win, n_win  # focused grows, neighbour shrinks
     else:
-        resize_exact(f_win["address"], f_new, f_win["size"][1])
-        resize_exact(n_win["address"], n_new, n_win["size"][1])
+        grow, shrink = n_win, f_win  # focused shrinks, neighbour grows
+    grow_w = grow["size"][0]
+    shrink_w = shrink["size"][0]
+    grow_target = max(min_w, min(grow_w + abs(delta), total - min_w))
+    shrink_target = total - grow_target
+
+    resize_exact(shrink["address"], shrink_target, shrink["size"][1])  # free room
+    hopped = grow["address"] != active["address"]
+    if hopped:
+        focus(grow["address"])
+    resize_exact(grow["address"], grow_target, grow["size"][1])
+    actual = width_of(grow["address"]) or grow_target
+    if actual != grow_target:
+        resize_exact(shrink["address"], max(min_w, total - actual), shrink["size"][1])
+    if hopped:
+        focus(active["address"])
 
 
 if __name__ == "__main__":
