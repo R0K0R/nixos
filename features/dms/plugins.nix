@@ -156,6 +156,17 @@ lib.mkIf osConfig.my.dms.enable {
       src = ./plugins/alt-tab;
     };
 
+    # Region screenshot as an in-shell Quickshell overlay instead of a slurp
+    # region, because slurp ignores tablet input and Hyprland routes the S Pen
+    # tip only through the tablet protocol -- so the pen cannot drag a slurp
+    # selection. A Quickshell (qtwayland) overlay gets Qt's tablet->mouse
+    # synthesis, so the pen works. Bound to Print in features/hyprland (with
+    # hyprshot as the shell-down fallback) and to the Screenshot bar widget.
+    screenSnip = {
+      enable = true;
+      src = ./plugins/screen-snip;
+    };
+
     rotationLock = {
       enable = true;
       src = ./plugins/rotation-lock;
@@ -175,6 +186,14 @@ lib.mkIf osConfig.my.dms.enable {
   # make, so that would fail the next switch. Drop it, but only while it
   # is still the foreign one -- a link into a home-manager-files tree is
   # ours and stays. Harmless once it has run; delete after the first switch.
+  # Same one-time guard as altTab, for the live-staged screenSnip symlink.
+  home.activation.screenSnipStagedLink = lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
+    l="$HOME/.config/DankMaterialShell/plugins/screenSnip"
+    if [ -L "$l" ] && ! readlink "$l" | grep -q -- '-home-manager-files/'; then
+      run rm -f "$l"
+    fi
+  '';
+
   home.activation.altTabStagedLink = lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
     l="$HOME/.config/DankMaterialShell/plugins/altTab"
     if [ -L "$l" ] && ! readlink "$l" | grep -q -- '-home-manager-files/'; then

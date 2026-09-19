@@ -1,0 +1,13 @@
+{
+    "id": "screenSnip",
+    "name": "Screen Snip",
+    "description": "Region screenshot to clipboard via an in-shell overlay; works with the S Pen (slurp does not)",
+    "version": "1.0.0",
+    "author": "r0k0r (mechanism after end-4/dots-hyprland, GPL-3.0)",
+    "type": "daemon",
+    "component": "./ScreenSnip.qml",
+    "settings": "./ScreenSnipSettings.qml",
+    "icon": "screenshot_region",
+    "capabilities": ["ipc"],
+    "permissions": ["process", "settings_read"]
+}

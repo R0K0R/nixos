@@ -8,18 +8,14 @@ import qs.Modules.Plugins
 PluginComponent {
     id: root
 
-    // hyprshot, not grimblast: grimblast's `area` always runs slurp in
-    // snap-to-window mode (`slurp -o` with window rects on stdin) and that mode
-    // does not accept touch input. hyprshot's region mode is a plain `slurp -d`,
-    // which does. See the comment in features/hyprland/home.nix for the full
-    // measurement -- including the S Pen, which works in neither.
+    // Region snip via the screenSnip plugin's in-shell overlay, which the
+    // S Pen can drive; slurp (hyprshot's region backend) ignores tablet
+    // input. Same IPC the Print keybind uses; hyprshot stays only as the
+    // compositor-side fallback for when the shell is down.
     Process {
         id: screenshotProcess
         command: [
-            "hyprshot",
-            "-m", "region",
-            "--clipboard-only",
-            "--silent"
+            "dms", "ipc", "call", "screenSnip", "region"
         ]
         running: false
     }

@@ -188,37 +188,37 @@ let
 in
 {
   /*
-    Screenshots are a COMPOSITOR concern here, not a shell one. DMS does ship a
-    screenshot IPC, but it is documented as niri-only (`dms ipc call niri
-    screenshot*`, niri 25.11+) with no hyprland equivalent, so this feature
-    carries a standalone slurp-based wrapper and every shell gets the same
-    behaviour.
+    Screenshots. The region snip is now an IN-SHELL Quickshell overlay
+    (features/dms/plugins/screen-snip), not slurp, because the S Pen cannot
+    drive slurp:
 
-    HYPRSHOT RATHER THAN GRIMBLAST, because grimblast's area mode is unusable by
-    touch. Both wrap the same slurp, but they call it differently:
+      - slurp is a bare wlr client -- it binds only wl_pointer and wl_touch,
+        never zwp_tablet_manager_v2 (slurp 1.5.0 carries no tablet symbols at
+        all; the old "it has the symbols" note here was wrong).
+      - Hyprland 0.56 routes a tablet tip ONLY through the tablet protocol
+        (Tablets.cpp onTabletTip -> PROTO::tablet->down, no pointer-button
+        emulation), so the pen warps the cursor over slurp but a tap/drag
+        arrives as nothing. No slurp or Hyprland option bridges it. Touch
+        (a finger) works because Hyprland emulates pointer for touch; the pen
+        it does not.
 
-      grimblast  echo "$rects" | slurp -o ... -f '%x,%y %wx%h|%l'   snap-to-window
-      hyprshot   slurp -d                                          free-form
+    A Quickshell window is a qtwayland client: it binds the tablet protocol
+    and Qt synthesizes a mouse press from the tip, so a MouseArea selection
+    just works with the pen. Same idea as end-4/dots-hyprland's screenSnip.
+    Print calls `dms ipc call screenSnip region` and falls back to hyprshot
+    only when the shell is down; the DMS Screenshot bar widget calls the same
+    IPC.
 
-    grimblast's `area` has no free-form path at all -- it always feeds slurp the
-    window rectangles on stdin and passes -o, i.e. selection is constrained to
-    snapping onto an existing window. Measured on this machine: bare `slurp`
-    accepts finger input, grimblast's area mode does not.
-
-    S PEN DOES NOT WORK IN EITHER, and that is not what this change fixes.
-    Tested against slurp directly and against hyprshot: touch works, stylus does
-    not, so the gap is below both wrappers -- either slurp's zwp_tablet_v2
-    handling or Hyprland's routing of tablet events to a layer surface. Ruled
-    out rather than assumed: slurp 1.5.0 does carry the tablet protocol symbols,
-    so it is not simply built without support. Accepted as a limitation: a
-    finger is always present, the pen is not.
-
-    NOTE a real behaviour change on CTRL+Print. `grimblast copy screen` captured
-    ALL monitors into one image; hyprshot has no such mode, and `-m output`
-    captures the focused output only. Nothing else moves.
+    CTRL+Print (output) and ALT+Print (window) stay on hyprshot -- they need
+    no pen drag. NOTE from the grimblast->hyprshot switch that still holds:
+    grimblast copy screen captured ALL monitors into one image; `-m output`
+    captures the focused output only.
   */
   home.packages = lib.mkIf (osConfig.my.desktop.compositor == "hyprland") [
     pkgs.hyprshot
+    # The DMS screen-snip overlay shells out to grim (magick and wl-copy are
+    # already present); hyprshot wraps its own grim and does not expose it.
+    pkgs.grim
     iioHyprlandWithTransformFix
     # iio-hyprland shells out to `hyprctl -j monitors | jq` internally; without
     # jq in PATH it fails immediately and aborts uncleanly (dbus_disconnect
@@ -802,7 +802,12 @@ in
       hl.bind(mod .. " + SHIFT + E", hl.dsp.exit())
       -- --clipboard-only skips writing a file at all (hyprshot otherwise saves
       -- AND copies); --silent matches grimblast's old no-notification default.
-      hl.bind("Print", hl.dsp.exec_cmd("hyprshot -m region --clipboard-only --silent"))
+      -- Region snip via the DMS in-shell overlay (features/dms/plugins/screen-snip),
+      -- which the S Pen can drive; slurp -- what hyprshot wraps -- ignores tablet
+      -- input, so the pen cannot drag its selection. hyprshot stays as the
+      -- fallback for when the shell is not running. CTRL/ALT+Print stay on
+      -- hyprshot: output and window shots need no pen drag.
+      hl.bind("Print", hl.dsp.exec_cmd("dms ipc call screenSnip region 2>/dev/null || hyprshot -m region --clipboard-only --silent"))
       hl.bind("CTRL + Print", hl.dsp.exec_cmd("hyprshot -m output --clipboard-only --silent"))
       hl.bind("ALT + Print", hl.dsp.exec_cmd("hyprshot -m window -m active --clipboard-only --silent"))
       hl.bind(mod .. " + SHIFT + P", hl.dsp.dpms({ action = "off" }))
