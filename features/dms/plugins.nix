@@ -168,4 +168,17 @@ lib.mkIf osConfig.my.dms.enable {
       };
     };
   };
+  # altTab was staged live on 2026-09-20 as a hand-made symlink in the plugin
+  # dir (pointing at the plugin's bare store path) so it could be tried
+  # before a rebuild. home-manager refuses to clobber a link it did not
+  # make, so that would fail the next switch. Drop it, but only while it
+  # is still the foreign one -- a link into a home-manager-files tree is
+  # ours and stays. Harmless once it has run; delete after the first switch.
+  home.activation.altTabStagedLink = lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
+    l="$HOME/.config/DankMaterialShell/plugins/altTab"
+    if [ -L "$l" ] && ! readlink "$l" | grep -q -- '-home-manager-files/'; then
+      run rm -f "$l"
+    fi
+  '';
+
 }
