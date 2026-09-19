@@ -90,7 +90,11 @@ PluginComponent {
             // grab so nothing of ours is in the shot.
             property bool capturing: false
 
-            WlrLayershell.namespace: "dms-screensnip"
+            // Namespace deliberately NOT "dms-*": features/dms/compositor.nix
+            // enables Hyprland blur for layers matching ^(dms.*)$, which would
+            // blur the whole dimmed backdrop and leave only the (transparent,
+            // ignore_alpha-skipped) selection sharp.
+            WlrLayershell.namespace: "screensnip"
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
             // Ignore the bar's exclusive zone; cover the ENTIRE output. Without
