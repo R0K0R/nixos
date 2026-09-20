@@ -305,6 +305,30 @@ in
         input.touchpad.natural_scroll = true;
 
         /*
+          The SAME setting for plain pointers, so an external trackpad scrolls
+          the same way as the built-in one.
+
+          touchpad.natural_scroll only reaches devices libinput classes as
+          touchpads. The X-Folding RGB bluetooth keyboard/trackpad is not one:
+          its evdev node advertises REL_X/REL_Y/REL_WHEEL/REL_HWHEEL and NO
+          ABS_MT_* axes, i.e. the firmware turns its own two-finger swipe into
+          literal wheel clicks and hands those over. libinput therefore sees a
+          mouse with a wheel, that obeys input:natural_scroll (default false),
+          and it scrolled opposite to the built-in touchpad.
+
+          Global rather than a `device` section: a per-device rule keyed on
+          "x-folding-rgb-1" did not take (hyprctl reported no such option), and
+          the name carries a connection-order suffix that is not worth relying
+          on. The cost is that a conventional external MOUSE would also get
+          natural scrolling; flip this to a device rule if that ever matters.
+
+          Same reason >2-finger gestures do nothing on that trackpad: with no
+          multitouch axes libinput cannot synthesise them. Firmware-side, not
+          configurable here.
+        */
+        input.natural_scroll = true;
+
+        /*
           Ask 1, root cause (verified against 0.56.0 source, not guessed):
           Super+H/L (movefocus l/r) direction-queries "is there a window to
           my left/right?" -- a maximized window fills the screen, so the
