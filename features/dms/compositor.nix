@@ -77,7 +77,13 @@ let
   '';
   lidOpen = pkgs.writeShellScript "dms-lid-open" ''
     if ${pkgs.procps}/bin/pgrep -f -- "--who=DMS No Sleep plugin" >/dev/null; then
-      hyprctl eval 'hl.monitor({ output = "${internalOutput}", disabled = false })'
+      # Re-assert the FULL rule, not just disabled=false: re-enabling merges
+      # into the stored rule but does not reliably bring back mode and scale,
+      # so restate them (mode/position/scale mirror features/hyprland's own
+      # eDP-1 rule). Then DPMS the panel on -- a bare re-enable leaves the
+      # backlight off after a real lid close, so the screen stayed black.
+      hyprctl eval 'hl.monitor({ output = "${internalOutput}", mode = "preferred", position = "auto", scale = "${osConfig.my.desktop.primaryOutputScale}", disabled = false })'
+      hyprctl dispatch 'hl.dsp.dpms({ action = "on" })'
     fi
   '';
 in
