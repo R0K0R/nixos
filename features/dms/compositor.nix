@@ -55,16 +55,46 @@ let
     proceeds untouched. That gating is exactly why this is DMS's to own: with no
     DMS there is no inhibitor, and logind needs no help.
   */
+  /*
+    CLAMSHELL. With No Sleep on, closing the lid takes one of two paths
+    depending on whether an external monitor is attached:
+
+      - external present -> clamshell: DISABLE the internal panel
+        (${osConfig.my.desktop.primaryOutput}) so its workspaces move to the
+        external and it stops rendering into a closed lid, and do NOT lock --
+        you are still working, just on the other screen.
+      - no external -> the old behaviour: lock and DPMS the screens off (still
+        no suspend, since the inhibitor holds).
+
+    "External present" is any enabled Hyprland monitor whose name is not the
+    internal panel; `hyprctl monitors` only lists enabled outputs, and at
+    lid-close time nothing is disabled yet, so a count > 0 means a real second
+    screen. Disable/enable go through `hyprctl eval hl.monitor` (the keyword
+    parser is gone under configType = "lua"); re-enabling merges disabled=false
+    into the output's existing rule, so its mode and scale come back.
+  */
+  internalOutput = osConfig.my.desktop.primaryOutput;
   lidClose = pkgs.writeShellScript "dms-lid-close" ''
     if ${pkgs.procps}/bin/pgrep -f -- "--who=DMS No Sleep plugin" >/dev/null; then
-      dms ipc call lock lock
-      # Lua dispatch form -- legacy "dpms off" no longer parses under
-      # configType = "lua", same as the lisgd commands in touch-gestures.
-      hyprctl dispatch 'hl.dsp.dpms({ action = "off" })'
+      ext=$(hyprctl monitors -j \
+        | ${pkgs.jq}/bin/jq -r --arg i "${internalOutput}" '[.[] | select(.name != $i)] | length')
+      if [ "''${ext:-0}" -gt 0 ]; then
+        # Clamshell: external in use, drop the internal panel, stay unlocked.
+        hyprctl eval 'hl.monitor({ output = "${internalOutput}", disabled = true })'
+      else
+        # Lid closed with no external: lock and blank (inhibitor still blocks
+        # suspend). Lua dispatch form -- legacy "dpms off" no longer parses
+        # under configType = "lua", same as the lisgd touch-gesture commands.
+        dms ipc call lock lock
+        hyprctl dispatch 'hl.dsp.dpms({ action = "off" })'
+      fi
     fi
   '';
   lidOpen = pkgs.writeShellScript "dms-lid-open" ''
     if ${pkgs.procps}/bin/pgrep -f -- "--who=DMS No Sleep plugin" >/dev/null; then
+      # Undo either state: re-enable the internal panel (idempotent if it was
+      # never disabled) and wake the screens.
+      hyprctl eval 'hl.monitor({ output = "${internalOutput}", disabled = false })'
       hyprctl dispatch 'hl.dsp.dpms({ action = "on" })'
     fi
   '';
