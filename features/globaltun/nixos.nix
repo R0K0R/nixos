@@ -273,7 +273,8 @@ in
 
         Assigned so far: 1080 galaxybook4-pro360, 1081 yulee (standalone
         bundle), 1082 victus-15, 1083 (peer outside this flake), 1084 (Android
-        client, see android/). Next free: 1085. Check the gateway before claiming one -- `pgrep -f rsocks` there
+        client, see android/), 1085 (Windows client, see windows/). Next free:
+        1086. Check the gateway before claiming one -- `pgrep -f rsocks` there
         lists what is actually running, since `ss` is blind under proot.
       '';
     };

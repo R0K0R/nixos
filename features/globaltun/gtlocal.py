@@ -144,7 +144,11 @@ def handle(c):
         except Exception: pass
 
 def main():
-    signal.signal(signal.SIGPIPE, signal.SIG_IGN)
+    # SIGPIPE does not exist on Windows, where this also runs as the local
+    # half. getattr rather than a platform test: the point is whether the
+    # signal exists, not which OS we are on.
+    if hasattr(signal, "SIGPIPE"):
+        signal.signal(signal.SIGPIPE, signal.SIG_IGN)
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(LISTEN); srv.listen(128)

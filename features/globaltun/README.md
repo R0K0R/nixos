@@ -157,6 +157,41 @@ and prints the copy command. Give the phone its own `remoteSocksPort` like any
 other client, and keep `GT_LOCAL_PORT` equal to the `server_port` of the app
 config's socks outbound.
 
+## Windows clients
+
+`windows/` carries what a Windows machine needs. Unlike Android this is close to
+the Linux path: sing-box has a native build that drives a **Wintun** device and
+the routing table, and Administrator is obtainable — so one process does what
+`sing-box` + `ip route` do on Linux, and `globaltun-windows.ps1` supplies the
+carrier and the mux around it.
+
+```
+sing-box (Wintun tun, auto_route)
+     |  socks5 127.0.0.1:1081
+     v
+gtlocal.py ......... UDP-ASSOCIATE over loopback
+     |  one TCP stream
+     v
+ssh -L  ->  rsocks.py on the gateway
+```
+
+Two differences from the Linux scripts, both load-bearing:
+
+**Windows OpenSSH has no `ControlMaster`.** There is no control socket to check
+or to close, so the carrier is a plain `ssh -N -L` tracked by PID, and stopping
+the remote relay needs its own connection.
+
+**The carrier is pinned with a real route, not a sing-box rule.** sing-box's
+`direct` outbound only covers traffic it sees; `ssh.exe` is a separate process
+whose packets `auto_route` would capture. The script adds a `/32` via the
+current next hop *before* anything creates the tun, into `ActiveStore` so a
+reboot clears it. `status` reports `MISSING` if that pin is gone.
+
+Requires: `sing-box.exe` with **`wintun.dll` beside it** (without it sing-box
+exits immediately), Python for `gtlocal.py`, and an elevated shell. ICMP is not
+carried — `gticmp.py` needs a second tun and `ip rule`, neither of which exists
+here.
+
 ## Two traps worth knowing
 
 **`ssh -J` does not pass `-i` to the jump host.** ssh(1) applies command-line
