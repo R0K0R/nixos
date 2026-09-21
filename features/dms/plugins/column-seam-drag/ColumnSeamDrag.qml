@@ -76,7 +76,13 @@ PluginComponent {
                 name: io.name,
                 ws: io.activeWorkspace ? io.activeWorkspace.id : -1,
                 x: io.x,
-                y: io.y
+                y: io.y,
+                // Logical width, from the same IPC data as every other
+                // coordinate here. ShellScreen.width/devicePixelRatio is NOT
+                // usable for this: it came back undefined, so the viewport
+                // bound went NaN and the visibility filter rejected every
+                // column (no handles at all).
+                logicalW: io.width / (io.scale || 1)
             };
         }
 
@@ -122,8 +128,20 @@ PluginComponent {
                 return { left, right, top, bot, addr: rep.address, w: rep.size[0], h: rep.size[1] };
             });
 
-            for (let i = 0; i + 1 < colInfo.length; i++) {
-                const a = colInfo[i], b = colInfo[i + 1];
+            // Only columns with a real slice ON SCREEN can own a seam. Without
+            // this, maximising one column (Mod+D, colresize to fill) left a
+            // handle at the screen edge: the neighbour is still on the
+            // workspace, merely scrolled out of view, and it still counted as
+            // adjacent. A sliver a few pixels wide is not something you can
+            // drag against either, hence a minimum rather than "> 0".
+            const visLo = m.x, visHi = m.x + m.logicalW;
+            const onScreen = c => Math.min(c.right, visHi) - Math.max(c.left, visLo) >= 100;
+            const visible = colInfo.filter(onScreen);
+            if (visible.length < 2)
+                continue;
+
+            for (let i = 0; i + 1 < visible.length; i++) {
+                const a = visible[i], b = visible[i + 1];
                 // Adjacent only: the gap between them is small.
                 if (b.left - a.right > 24)
                     continue;
@@ -134,6 +152,7 @@ PluginComponent {
                     continue;
                 out.push({
                     screen: scr,
+                    monW: m.logicalW,
                     localX: seamGlobalX - m.x,
                     localTop: top - m.y,
                     height: bot - top,
@@ -150,8 +169,12 @@ PluginComponent {
             + ', relative = false, window = "address:' + addr + '" })');
     }
 
+    // Smallest a column may be driven to, 10% of the monitor. Uses the logical
+    // width carried on the seam (from Hyprland's IPC), NOT
+    // ShellScreen.width/devicePixelRatio -- that came back undefined here and
+    // would make every clamp NaN.
     function minW(s) {
-        return Math.round(s.screen.width / s.screen.devicePixelRatio * 0.1);
+        return Math.round((s.monW || 1920) * 0.1);
     }
 
     // THREE ZONES, chosen at grab time from where on the handle you press:
@@ -188,26 +211,51 @@ PluginComponent {
         }
     }
 
+    /*
+      Geometry comes from each toplevel's lastIpcObject, and Quickshell only
+      refills those when someone asks -- Hyprland.refreshToplevels(). Without
+      the refresh the handle was computed once and then never moved again: it
+      sat at a stale seam while columns resized underneath it, which is what
+      made it look like it "appears even when one window is maximised".
+      So: ask for fresh data, then recompute a beat later once the reply has
+      landed (refresh is asynchronous -- recomputing in the same tick just
+      re-reads the old values).
+    */
+    function resync() {
+        if (dragging)
+            return;
+        Hyprland.refreshToplevels();
+        Hyprland.refreshMonitors();
+        settle.restart();
+    }
+
+    Timer {
+        id: settle
+        interval: 120
+        repeat: false
+        onTriggered: root.recompute()
+    }
+
     Connections {
         target: Hyprland
         function onRawEvent(event) {
-            root.recompute();
+            root.resync();
         }
     }
     Connections {
         target: CompositorService
         function onToplevelsChanged() {
-            root.recompute();
+            root.resync();
         }
     }
-    // Fallback resync (e.g. first paint before any event).
+    // Fallback resync: catches the first paint, and anything the events miss.
     Timer {
-        interval: 1500
+        interval: 1000
         running: true
         repeat: true
-        onTriggered: root.recompute()
+        onTriggered: root.resync()
     }
-    Component.onCompleted: recompute()
+    Component.onCompleted: resync()
 
     Variants {
         model: root.seams
