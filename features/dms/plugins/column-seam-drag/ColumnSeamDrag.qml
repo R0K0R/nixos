@@ -82,7 +82,13 @@ PluginComponent {
                 // usable for this: it came back undefined, so the viewport
                 // bound went NaN and the visibility filter rejected every
                 // column (no handles at all).
-                logicalW: io.width / (io.scale || 1)
+                logicalW: io.width / (io.scale || 1),
+                logicalH: io.height / (io.scale || 1),
+                // reserved = [left, top, right, bottom]: the exclusive zones
+                // the shell has claimed (the bar's 42px here). Handles stay
+                // out of them so they never sit on top of shell surfaces.
+                resTop: (io.reserved && io.reserved[1]) || 0,
+                resBottom: (io.reserved && io.reserved[3]) || 0
             };
         }
 
@@ -146,8 +152,12 @@ PluginComponent {
                 if (b.left - a.right > 24)
                     continue;
                 const seamGlobalX = (a.right + b.left) / 2;
-                const top = Math.max(a.top, b.top);
-                const bot = Math.min(a.bot, b.bot);
+                // Clamp to the monitor's unreserved band so a handle can never
+                // overlap the bar (or any other exclusive-zone shell surface).
+                const safeTop = m.y + m.resTop;
+                const safeBot = m.y + m.logicalH - m.resBottom;
+                const top = Math.max(Math.max(a.top, b.top), safeTop);
+                const bot = Math.min(Math.min(a.bot, b.bot), safeBot);
                 if (bot - top < 40)
                     continue;
                 out.push({
@@ -266,7 +276,12 @@ PluginComponent {
             screen: modelData.screen
 
             WlrLayershell.namespace: "seamdrag"
-            WlrLayershell.layer: WlrLayer.Overlay
+            // TOP, not Overlay: still above ordinary windows (which is all a
+            // resize handle needs), but below everything the shell puts on the
+            // Overlay layer -- popouts, tooltips, OSD, toasts. As an Overlay
+            // surface this full-height strip swallowed touches aimed at those,
+            // e.g. the media/music popout.
+            WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
             WlrLayershell.exclusionMode: ExclusionMode.Ignore
 
@@ -304,7 +319,17 @@ PluginComponent {
                 id: area
                 anchors.fill: parent
                 hoverEnabled: true
-                cursorShape: Qt.SizeHorCursor
+                /*
+                  Zone-dependent cursor. A true one-sided resize cursor
+                  (w-resize / e-resize, what Hyprland shows on its own window
+                  borders) is NOT expressible from a client: Qt::CursorShape
+                  has no such value and Quickshell exposes no way to name an
+                  xcursor, so the compositor-side look cannot be reproduced
+                  here. SplitHCursor is the closest honest distinction -- the
+                  divider cursor for the one-sided zones, the plain
+                  double-arrow for the centre band that moves both columns.
+                */
+                cursorShape: (pressed ? zone : zoneAt(hoverX)) === 0 ? Qt.SizeHorCursor : Qt.SplitHCursor
                 acceptedButtons: Qt.LeftButton
                 preventStealing: true
 
