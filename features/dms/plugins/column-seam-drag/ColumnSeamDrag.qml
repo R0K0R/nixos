@@ -7,22 +7,13 @@ import qs.Services
 import qs.Modules.Plugins
 
 /*
-  Drag the seam between two adjacent columns to resize BOTH at once -- one
-  grows by exactly what the other loses, total constant, like a tiling divider.
-
-  This is only the CENTRE band of the seam. Either side of it, Hyprland's own
-  resize_on_border does the one-sided resizes (features/hyprland widens
-  extend_border_grab_area to 32 for exactly that), which also gets the proper
-  directional w-/e-resize cursor -- something a client cannot ask for. Splitting
-  it this way keeps this strip narrow, so it stops sitting on top of shell
-  surfaces, and leaves the compositor doing what it already does well.
-
-  What it does that native cannot: the conserved drag (native resizes one
-  window and lets the tape absorb the difference), and the S Pen -- each handle
+  Drag the seam between two adjacent columns to resize both at once -- the one
+  you drag from shrinks by exactly what its neighbour grows, total constant,
+  like a tiling divider. Works with mouse, finger, AND the S Pen: each handle
   is a Quickshell (qtwayland) window, which receives tablet events and
-  synthesizes a mouse press from the tip, whereas Hyprland routes a tablet tip
-  only through the tablet protocol, never as a pointer button, so the pen
-  cannot drive the native border path at all.
+  synthesizes a mouse press from the tip, so the pen drives it like a click --
+  unlike Hyprland's native resize_on_border, which the tablet tip cannot reach
+  (it is routed only through the tablet protocol, never as a pointer button).
 
   The scrolling layout is not tiling: resizing one column feeds the freed space
   to the scroll offset and leaves the neighbour alone. So each drag sets BOTH
@@ -43,17 +34,14 @@ PluginComponent {
 
     property var popoutService: null
 
-    // The handle is ONLY the centre band now. The one-sided resizes are
-    // Hyprland's job: features/hyprland widens extend_border_grab_area to 32,
-    // so the native hitbox either side of the seam resizes the single window
-    // whose border you caught -- and shows the proper directional w-/e-resize
-    // cursor, which a client cannot request. This strip does the one thing
-    // native cannot: the CONSERVED drag, both columns at once.
-    //
-    // Staying narrow is also what keeps it from obscuring shell surfaces: it
-    // is a thin line down the seam rather than a full-width band over the
-    // window edges.
-    readonly property int handleW: 12
+    // Handle width (px) and the width of its central "both" band. Narrow now:
+    // the left/right thirds resize a single column, which is exactly what
+    // Hyprland's native resize_on_border does just beyond the handle, so the
+    // two agree and the handle no longer needs to out-reach the 15px native
+    // zone. The pen still needs the handle (native ignores the tablet). Centre
+    // band kept small so the two single-column zones are the easy target.
+    readonly property int handleW: 22
+    readonly property int centerW: 8
 
     // Frozen while a drag is in flight so the model does not rebuild under it.
     property bool dragging: false
@@ -199,22 +187,37 @@ PluginComponent {
         return Math.round((s.monW || 1920) * 0.1);
     }
 
-    // CONSERVED drag: the seam moves, one column grows by exactly what the
-    // other loses, total constant -- a tiling divider, which the scrolling
-    // layout has no notion of. dx is the total drag from the press point, so
-    // widths are set absolutely from their grab-time values: live, no drift.
-    function applyDrag(s, dx) {
-        const total = s.leftW + s.rightW;
-        const lw = Math.max(minW(s), Math.min(s.leftW + dx, total - minW(s)));
-        const rw = total - lw;
-        // Shrink side first so no intermediate state overflows the usable
-        // width (which would trip the layout's fit-to-width scaling).
-        if (dx > 0) {
-            setW(s.rightAddr, rw, s.rightH);
-            setW(s.leftAddr, lw, s.leftH);
+    // THREE ZONES, chosen at grab time from where on the handle you press:
+    //   centre third -> conserved, both columns (a tiling divider);
+    //   left third   -> resize the LEFT column only (right keeps its width,
+    //                   the tape takes up the slack -- normal scrolling);
+    //   right third  -> resize the RIGHT column only.
+    // In every zone dragging right moves the seam right; the zone only decides
+    // which column(s) absorb it. dx is the total drag from the press point, so
+    // widths are set absolutely from their grab-time values -- live, no drift.
+
+    // zone: -1 left-only, 0 both, 1 right-only
+    function applyDrag(s, dx, zone) {
+        if (zone === 0) {
+            const total = s.leftW + s.rightW;
+            let lw = Math.max(minW(s), Math.min(s.leftW + dx, total - minW(s)));
+            const rw = total - lw;
+            // Shrink side first so no intermediate state overflows the usable
+            // width (which would trip the layout's fit-to-width scaling).
+            if (dx > 0) {
+                setW(s.rightAddr, rw, s.rightH);
+                setW(s.leftAddr, lw, s.leftH);
+            } else {
+                setW(s.leftAddr, lw, s.leftH);
+                setW(s.rightAddr, rw, s.rightH);
+            }
+        } else if (zone < 0) {
+            // Left column only. Growing it past the screen is fine -- the tape
+            // just scrolls, which is what the scrolling layout is for.
+            setW(s.leftAddr, Math.max(minW(s), s.leftW + dx), s.leftH);
         } else {
-            setW(s.leftAddr, lw, s.leftH);
-            setW(s.rightAddr, rw, s.rightH);
+            // Right column only. Seam right = right's left edge right = shrink.
+            setW(s.rightAddr, Math.max(minW(s), s.rightW - dx), s.rightH);
         }
     }
 
@@ -289,8 +292,9 @@ PluginComponent {
             implicitHeight: Math.round(modelData.height)
             color: "transparent"
 
-            // A faint line marking the seam, on hover only; invisible while
-            // dragging and at rest so it never clutters the screen.
+            // Centre seam line, plus a faint highlight over the third under the
+            // cursor so the three zones are discoverable. All invisible while
+            // dragging (per request) and at rest.
             Rectangle {
                 anchors.centerIn: parent
                 width: 2
@@ -300,28 +304,56 @@ PluginComponent {
                 opacity: area.pressed ? 0.0 : (area.containsMouse ? 0.3 : 0.0)
                 Behavior on opacity { NumberAnimation { duration: 120 } }
             }
+            Rectangle {
+                // Which third the cursor is over: left | centre | right.
+                visible: area.containsMouse && !area.pressed
+                height: parent.height
+                color: "#ffffff"
+                opacity: 0.12
+                property real lo: (parent.width - root.centerW) / 2
+                x: area.hoverX < lo ? 0 : (area.hoverX > parent.width - lo ? parent.width - lo : lo)
+                width: area.hoverX < lo ? lo : (area.hoverX > parent.width - lo ? lo : root.centerW)
+            }
 
             MouseArea {
                 id: area
                 anchors.fill: parent
                 hoverEnabled: true
-                // Always the both-columns divider: the one-sided resizes are
-                // Hyprland's native border grab either side of this strip, and
-                // it draws its own directional cursor there.
-                cursorShape: Qt.SizeHorCursor
+                /*
+                  Zone-dependent cursor. A true one-sided resize cursor
+                  (w-resize / e-resize, what Hyprland shows on its own window
+                  borders) is NOT expressible from a client: Qt::CursorShape
+                  has no such value and Quickshell exposes no way to name an
+                  xcursor, so the compositor-side look cannot be reproduced
+                  here. SplitHCursor is the closest honest distinction -- the
+                  divider cursor for the one-sided zones, the plain
+                  double-arrow for the centre band that moves both columns.
+                */
+                cursorShape: (pressed ? zone : zoneAt(hoverX)) === 0 ? Qt.SizeHorCursor : Qt.SplitHCursor
                 acceptedButtons: Qt.LeftButton
                 preventStealing: true
 
                 property real pressX: 0
+                property real hoverX: 0
+                property int zone: 0 // -1 left-only, 0 both, 1 right-only
 
+                function zoneAt(x) {
+                    const lo = (width - root.centerW) / 2;
+                    return x < lo ? -1 : (x > width - lo ? 1 : 0);
+                }
+
+                onPositionChanged: mouse => {
+                    if (pressed) {
+                        // Live: apply the grab-time zone on every move.
+                        root.applyDrag(handle.modelData, Math.round(mouse.x - pressX), zone);
+                    } else {
+                        hoverX = mouse.x;
+                    }
+                }
                 onPressed: mouse => {
                     pressX = mouse.x;
+                    zone = zoneAt(mouse.x); // lock the zone for the whole drag
                     root.dragging = true; // freeze the model for the drag
-                }
-                onPositionChanged: mouse => {
-                    if (!pressed)
-                        return;
-                    root.applyDrag(handle.modelData, Math.round(mouse.x - pressX));
                 }
                 onReleased: mouse => {
                     root.dragging = false;
