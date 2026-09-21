@@ -96,7 +96,7 @@ let
     iw hostapd dnsmasq
   ];
 
-  globaltun = pkgs.writeShellScriptBin "globaltun" ''
+  globaltun = pkgs.writeShellScriptBin "globaltun" (''
     export PATH=${lib.makeBinPath runtimeDeps}:$PATH
     export GT_JUMP=${lib.escapeShellArg cfg.jump}
     export GT_RHOST=${lib.escapeShellArg cfg.remote}
@@ -114,15 +114,20 @@ let
     export GT_SINGBOX=${pkgs.sing-box}/bin/sing-box
     export GT_DNS=${lib.escapeShellArg cfg.dns}
     export GT_SHARE=${if cfg.share.enable then "1" else "0"}
-    export GT_SHARE_SSID=${lib.escapeShellArg cfg.share.ssid}
-    export GT_SHARE_PSK_FILE=${lib.escapeShellArg cfg.share.passwordFile}
-    export GT_SHARE_STA=${lib.escapeShellArg cfg.share.stationInterface}
-    export GT_SHARE_AP=${lib.escapeShellArg cfg.share.apInterface}
-    export GT_SHARE_ADDR=${lib.escapeShellArg cfg.share.address}
-    export GT_SHARE_DHCP=${lib.escapeShellArg cfg.share.dhcpRange}
-    export GT_SHARE_COUNTRY=${lib.escapeShellArg cfg.share.countryCode}
+    '' + lib.optionalString cfg.share.enable ''
+      # Emitted only when sharing is on. passwordFile, stationInterface and
+      # countryCode deliberately have no defaults, so interpolating them
+      # unconditionally makes every host without sharing fail to evaluate.
+      export GT_SHARE_SSID=${lib.escapeShellArg cfg.share.ssid}
+      export GT_SHARE_PSK_FILE=${lib.escapeShellArg cfg.share.passwordFile}
+      export GT_SHARE_STA=${lib.escapeShellArg cfg.share.stationInterface}
+      export GT_SHARE_AP=${lib.escapeShellArg cfg.share.apInterface}
+      export GT_SHARE_ADDR=${lib.escapeShellArg cfg.share.address}
+      export GT_SHARE_DHCP=${lib.escapeShellArg cfg.share.dhcpRange}
+      export GT_SHARE_COUNTRY=${lib.escapeShellArg cfg.share.countryCode}
+    '' + ''
     ${builtins.readFile ./globaltun.sh}
-  '';
+  '');
   /*
     Decides, on every network event and on a timer, whether the tunnel should be
     carrying traffic. Kept OUT of globaltun.sh: that script is a manual tool and

@@ -41,6 +41,31 @@
       remoteSocksPort = 1082;
       # Headless -- keep the admin LAN off the tunnel.
       keepDirect = [ "172.20.0.0/21" ];
+
+      /*
+        This host is the better router of the two: its MT7921 allows
+        `#{ managed, P2P-client } <= 2, #{ AP } <= 1`, where galaxybook's Intel
+        allows only one managed interface -- the limit that makes a second vif
+        fail with EBUSY there.
+
+        Distinct SSID and subnet from galaxybook's AP so the two never look
+        like one roaming network while handing out addresses on different
+        subnets.
+
+        The passphrase lives outside the store, in a root-only file ON THIS
+        HOST:
+          printf '%s' 'the-passphrase' | sudo tee /etc/globaltun-psk
+          sudo chmod 600 /etc/globaltun-psk
+      */
+      share = {
+        enable = true;
+        ssid = "gt-router";
+        passwordFile = "/etc/globaltun-psk";
+        stationInterface = "wlo1";
+        countryCode = "KR";
+        address = "10.43.0.1/24";
+        dhcpRange = "10.43.0.50,10.43.0.150,12h";
+      };
     };
 
     /*
