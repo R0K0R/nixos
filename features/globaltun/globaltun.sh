@@ -410,6 +410,11 @@ share_up(){
   [ ${#psk} -ge 8 ] || { echo "the PSK in $GT_SHARE_PSK_FILE must be at least 8 characters" >&2; exit 1; }
 
   ip link show "$GT_SHARE_AP" >/dev/null 2>&1 || iw dev "$GT_SHARE_STA" interface add "$GT_SHARE_AP" type __ap
+  # Belt and braces alongside networking.networkmanager.unmanaged: NM matches
+  # saved profiles against any wifi device, and on a card allowing two managed
+  # interfaces it will autoconnect this one to the upstream network and move
+  # the default route onto it.
+  command -v nmcli >/dev/null && nmcli dev set "$GT_SHARE_AP" managed no >/dev/null 2>&1 || true
   if [ "$(iw dev "$GT_SHARE_AP" info | awk '/type/{print $2}')" != AP ]; then
     ip link set "$GT_SHARE_AP" down
     iw dev "$GT_SHARE_AP" set type __ap

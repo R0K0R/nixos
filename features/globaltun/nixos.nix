@@ -484,6 +484,18 @@ in
 
   config = lib.mkIf cfg.enable {
     /*
+      NetworkManager must never touch the AP interface. It matches saved
+      profiles against ANY available wifi device, so on a card that permits two
+      managed interfaces (MediaTek does; Intel does not) it will happily
+      autoconnect the newly created ap0 to the upstream network and move the
+      default route onto it -- leaving the machine online via the interface
+      that was supposed to be serving clients, with hostapd running against a
+      device NM has taken over.
+    */
+    networking.networkmanager.unmanaged =
+      lib.mkIf cfg.share.enable [ "interface-name:${cfg.share.apInterface}" ];
+
+    /*
       Root-only by construction: no setuid helper and no polkit rule,
       deliberately. Bringing this up rewrites the default route.
     */
