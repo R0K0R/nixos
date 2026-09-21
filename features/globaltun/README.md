@@ -172,7 +172,13 @@ No NAT is involved: sing-box terminates each flow and re-originates it, then
 writes the reply back to the tun addressed to the original client. Forwarding
 plus two FORWARD rules is the whole data path.
 
-Four things make AP+STA on one radio harder than it looks, and all are handled:
+**The card decides how hard this is.** Intel (iwlwifi) advertises
+`#{ managed } <= 1, #{ AP, ... } <= 1`; MediaTek (mt7921) advertises
+`#{ managed, P2P-client } <= 2, #{ AP } <= 1`. That one difference changes the
+failure mode completely, and the *more* capable card fails in the worse way —
+see the NetworkManager point below.
+
+Five things make AP+STA on one radio harder than it looks, and all are handled:
 
 **`iw ... interface add <n> type __ap` silently creates a *managed* vif.** That
 trips `#{ managed } <= 1`, link-up fails with `EBUSY`, and it reads as the
@@ -189,7 +195,22 @@ route.
 **Clients must reach the host before they can route through it** — DHCP `:67`
 and DNS `:53`. Without an INPUT rule for the AP interface those are dropped
 silently: hostapd completes the WPA handshake, the client shows "connected",
-and dnsmasq never logs a DISCOVER because it never receives one.
+and dnsmasq never logs a DISCOVER because it never receives one. The client
+then self-assigns an APIPA address, which is why DHCP is served rather than
+left to static configuration — Windows has no static fallback.
+
+**NetworkManager will steal the AP interface.** It matches saved profiles
+against *any* wifi device, so the moment the AP vif appears NM may autoconnect
+the upstream network to it — leaving the machine online through the interface
+that was meant to serve clients, default route and all, with hostapd running
+against a device NM has taken over. Only cards allowing two managed interfaces
+can get into this state, so it is invisible on Intel and immediate on MediaTek.
+Handled by `networking.networkmanager.unmanaged`, plus an `nmcli dev set …
+managed no` in `share` for hosts that have not rebuilt.
+
+Recovering a machine already in that state, in this order so the uplink never
+drops: bring the upstream profile up on the station interface *first*, then set
+the AP interface unmanaged.
 
 `#channels <= 1` means the AP sits on the station's *current* channel, read when
 `share` runs — so it drops whenever the upstream roams, and `share` must be run
