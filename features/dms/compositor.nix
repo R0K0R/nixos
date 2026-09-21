@@ -192,10 +192,20 @@ in
         -- AND both edges get delivered.
         --
         -- Both physical Super keys, since either can start the hold.
+        --
+        -- The seam-drag plugin takes the same hold, for the opposite reason:
+        -- Super+drag moves a window, but its handles sit on the window edges
+        -- and would eat the drag, so they unmap while Super is down. Same
+        -- ignore_mods/transparent/release shape, and transparent means several
+        -- globals can share one key without shadowing each other.
         for _, k in ipairs({ "SUPER_L", "SUPER_R" }) do
           hl.bind(k, hl.dsp.global("dms-workspaces:peek"),
                   { ignore_mods = true, transparent = true })
           hl.bind(k, hl.dsp.global("dms-workspaces:peek"),
+                  { ignore_mods = true, transparent = true, release = true })
+          hl.bind(k, hl.dsp.global("dms-seamdrag:suppress"),
+                  { ignore_mods = true, transparent = true })
+          hl.bind(k, hl.dsp.global("dms-seamdrag:suppress"),
                   { ignore_mods = true, transparent = true, release = true })
         end
 

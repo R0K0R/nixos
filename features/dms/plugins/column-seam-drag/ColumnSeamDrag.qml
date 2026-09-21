@@ -47,6 +47,46 @@ PluginComponent {
     property bool dragging: false
     property var seams: []
 
+    /*
+      Held-Super suppression, the same shape as the workspaces plugin's peek.
+
+      Super+drag moves a window (features/hyprland binds mouse:272 with
+      drag = true), but these handles sit on top of the window edges, so a
+      drag that starts on one is eaten by the handle instead. While Super is
+      down the handles get out of the way entirely.
+
+      Bound to the `pressed` PROPERTY, not the pressed/released signals:
+      Hyprland does not deliver a modifier's release when the hold was USED
+      for a combo, so an edge-driven flag latches. The property is corrected
+      for us. The safety timer is the belt-and-braces half -- if a release is
+      ever missed outright, handles come back on their own rather than
+      staying invisible until the next Super tap.
+    */
+    readonly property bool suppressed: superHold.pressed && !holdExpired
+    property bool holdExpired: false
+
+    GlobalShortcut {
+        id: superHold
+        appid: "dms-seamdrag"
+        name: "suppress"
+        description: "Hide the column seam handles while Super is held"
+        onPressed: {
+            root.holdExpired = false;
+            holdSafety.restart();
+        }
+        onReleased: {
+            root.holdExpired = false;
+            holdSafety.stop();
+        }
+    }
+
+    Timer {
+        id: holdSafety
+        interval: 15000
+        repeat: false
+        onTriggered: root.holdExpired = true
+    }
+
     function screenFor(name) {
         for (const s of Quickshell.screens) {
             if (s.name === name)
@@ -284,6 +324,10 @@ PluginComponent {
             WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
             WlrLayershell.exclusionMode: ExclusionMode.Ignore
+
+            // Unmapped while Super is held: a layer surface always takes input
+            // over its own area, so hiding it is what actually frees the drag.
+            visible: !root.suppressed
 
             anchors { left: true; top: true }
             margins.left: Math.round(modelData.localX - root.handleW / 2)
