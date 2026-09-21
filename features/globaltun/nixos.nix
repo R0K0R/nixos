@@ -93,6 +93,7 @@ let
   runtimeDeps = with pkgs; [
     openssh iproute2 iptables nftables python3 sing-box
     coreutils gnugrep gnused gawk procps iputils curl
+    iw hostapd dnsmasq
   ];
 
   globaltun = pkgs.writeShellScriptBin "globaltun" ''
@@ -111,6 +112,15 @@ let
     export GT_VERIFY=${./verify.py}
     export GT_SBCONF=${clientConfig}
     export GT_SINGBOX=${pkgs.sing-box}/bin/sing-box
+    export GT_DNS=${lib.escapeShellArg cfg.dns}
+    export GT_SHARE=${if cfg.share.enable then "1" else "0"}
+    export GT_SHARE_SSID=${lib.escapeShellArg cfg.share.ssid}
+    export GT_SHARE_PSK_FILE=${lib.escapeShellArg cfg.share.passwordFile}
+    export GT_SHARE_STA=${lib.escapeShellArg cfg.share.stationInterface}
+    export GT_SHARE_AP=${lib.escapeShellArg cfg.share.apInterface}
+    export GT_SHARE_ADDR=${lib.escapeShellArg cfg.share.address}
+    export GT_SHARE_DHCP=${lib.escapeShellArg cfg.share.dhcpRange}
+    export GT_SHARE_COUNTRY=${lib.escapeShellArg cfg.share.countryCode}
     ${builtins.readFile ./globaltun.sh}
   '';
   /*
@@ -379,6 +389,79 @@ in
       };
     };
 
+    share = {
+      enable = lib.mkEnableOption ''
+        `globaltun share`, which hosts a Wi-Fi AP on this machine's own card and
+        routes its clients through the tunnel. Nothing starts automatically;
+        `share` is a separate verb from `up` because the tunnel is useful
+        without it and this touches the radio, the firewall and forwarding
+      '';
+
+      ssid = lib.mkOption {
+        type = lib.types.str;
+        default = "globaltun";
+        description = "SSID of the hosted network.";
+      };
+
+      passwordFile = lib.mkOption {
+        type = lib.types.str;
+        example = "/run/agenix/globaltun-psk";
+        description = ''
+          File holding the WPA2 passphrase, read at runtime. A STRING path, not
+          a path literal, and never the passphrase itself: either would put a
+          shared secret in the world-readable Nix store.
+
+          Minimum 8 characters; `share` refuses shorter ones rather than letting
+          hostapd fail obscurely later.
+        '';
+      };
+
+      stationInterface = lib.mkOption {
+        type = lib.types.str;
+        example = "wlo1";
+        description = ''
+          The interface that stays connected upstream. The AP is created as a
+          second virtual interface on the same radio and MUST use this one's
+          current channel -- the phy allows `#channels <= 1` -- so the channel
+          is read when `share` runs. If this roams, the AP drops and `share`
+          has to be run again.
+        '';
+      };
+
+      apInterface = lib.mkOption {
+        type = lib.types.str;
+        default = "ap0";
+        description = "Name of the virtual AP interface to create.";
+      };
+
+      address = lib.mkOption {
+        type = lib.types.str;
+        default = "10.42.0.1/24";
+        description = "Address on the AP interface; also the clients' gateway.";
+      };
+
+      dhcpRange = lib.mkOption {
+        type = lib.types.str;
+        default = "10.42.0.50,10.42.0.150,12h";
+        description = ''
+          dnsmasq `--dhcp-range` for AP clients.
+
+          DHCP is not optional in practice: Windows has no static fallback, so
+          without a server it self-assigns an APIPA address and reports "no
+          internet" while remaining happily associated.
+        '';
+      };
+
+      countryCode = lib.mkOption {
+        type = lib.types.str;
+        example = "KR";
+        description = ''
+          Regulatory domain for hostapd. Required: without it the 5 GHz
+          channels the station is likely using are unavailable to the AP.
+        '';
+      };
+    };
+
     icmp.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -402,6 +485,18 @@ in
     environment.systemPackages = [ globaltun ] ++ lib.optional cfg.auto.enable autoScript;
 
     assertions = [
+      {
+        assertion = !cfg.share.enable || cfg.share.passwordFile != "";
+        message = "my.globaltun.share.enable requires my.globaltun.share.passwordFile";
+      }
+      {
+        assertion = !cfg.share.enable || cfg.share.stationInterface != "";
+        message = "my.globaltun.share.enable requires my.globaltun.share.stationInterface (the upstream Wi-Fi interface whose channel the AP must follow)";
+      }
+      {
+        assertion = !cfg.share.enable || cfg.share.countryCode != "";
+        message = "my.globaltun.share.enable requires my.globaltun.share.countryCode (hostapd needs a regulatory domain for 5 GHz)";
+      }
       {
         assertion = !cfg.auto.enable || cfg.auto.ssids != [ ];
         message = "my.globaltun.auto.enable requires at least one my.globaltun.auto.ssids entry";

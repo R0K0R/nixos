@@ -9,6 +9,8 @@
 #   reload  : restart only the local sing-box (keeps ssh master + phone relay)
 #   reicmp  : restart only the ICMP relay and its policy routing
 #   is-up   : exit 0 if the tunnel is carrying traffic (for automation)
+#   share   : host a Wi-Fi AP on this card and route its clients through the tunnel
+#   unshare : stop it
 #
 set -euo pipefail
 
@@ -378,6 +380,107 @@ verify(){
   echo "=== remote log tail"; have_ctl && ssh -S "$CTL" "$RHOST" "tail -n 8 /tmp/globaltun-server-$RPORT_SS.log" || echo "(no master)"
 }
 
+# --- sharing the tunnel over a Wi-Fi AP on the same card -------------------
+#
+# AP+STA on one iwlwifi radio, which the phy advertises as
+#   #{ managed } <= 1, #{ AP, ... } <= 1, total <= 3, #channels <= 1
+# and which is more fragile than it looks:
+#
+#   * `iw ... interface add <n> type __ap` silently creates a MANAGED vif. That
+#     trips #{ managed } <= 1 and link-up fails with EBUSY, which reads as the
+#     driver refusing AP mode. The type must be set AFTER creation, while down.
+#   * NetworkManager cannot drive this at all. It does AP mode by asking
+#     wpa_supplicant to flip a *managed* interface, which the same limit
+#     forbids; hand it a ready-made AP vif and the supplicant will not grab it.
+#     hostapd directly is the only route.
+#   * #channels <= 1 means the AP must sit on the STA's CURRENT channel, so it
+#     is read at start. If the station roams, the AP drops and this needs
+#     re-running.
+SHARE_CONF=/run/globaltun-ap.conf
+SHARE_PID=/run/globaltun-hostapd.pid
+SHARE_DNS_PID=/run/globaltun-dnsmasq.pid
+
+share_up(){
+  need_root
+  [ "${GT_SHARE:-0}" = 1 ] || { echo "sharing is not enabled (my.globaltun.share.enable)" >&2; exit 1; }
+  is_up || { echo "refusing: the tunnel is not up, so there is nothing to share" >&2; exit 1; }
+
+  local psk ch
+  psk=$(cat "$GT_SHARE_PSK_FILE" 2>/dev/null) || { echo "cannot read $GT_SHARE_PSK_FILE" >&2; exit 1; }
+  [ ${#psk} -ge 8 ] || { echo "the PSK in $GT_SHARE_PSK_FILE must be at least 8 characters" >&2; exit 1; }
+
+  ip link show "$GT_SHARE_AP" >/dev/null 2>&1 || iw dev "$GT_SHARE_STA" interface add "$GT_SHARE_AP" type __ap
+  if [ "$(iw dev "$GT_SHARE_AP" info | awk '/type/{print $2}')" != AP ]; then
+    ip link set "$GT_SHARE_AP" down
+    iw dev "$GT_SHARE_AP" set type __ap
+  fi
+  ip link set "$GT_SHARE_AP" up
+
+  ch=$(iw dev "$GT_SHARE_STA" info | awk '/channel/{print $2}')
+  [ -n "$ch" ] || { echo "$GT_SHARE_STA is not associated; the AP needs its channel" >&2; exit 1; }
+
+  ( umask 077; cat > "$SHARE_CONF" <<CONF
+interface=$GT_SHARE_AP
+driver=nl80211
+ssid=$GT_SHARE_SSID
+country_code=$GT_SHARE_COUNTRY
+hw_mode=a
+channel=$ch
+ieee80211n=1
+ieee80211ac=1
+wmm_enabled=1
+auth_algs=1
+wpa=2
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+wpa_passphrase=$psk
+CONF
+  )
+
+  ip addr replace "$GT_SHARE_ADDR" dev "$GT_SHARE_AP"
+
+  # Clients must reach THIS HOST (DHCP :67, DNS :53) before they can route
+  # through it. Without this the firewall drops those silently: hostapd
+  # completes the WPA handshake, the client shows "connected", and dnsmasq
+  # never logs a DISCOVER because it never receives one.
+  iptables -C INPUT -i "$GT_SHARE_AP" -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -i "$GT_SHARE_AP" -j ACCEPT
+  iptables -C FORWARD -i "$GT_SHARE_AP" -o "$TUN" -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i "$GT_SHARE_AP" -o "$TUN" -j ACCEPT
+  iptables -C FORWARD -i "$TUN" -o "$GT_SHARE_AP" -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i "$TUN" -o "$GT_SHARE_AP" -j ACCEPT
+  # No NAT: sing-box terminates each flow and re-originates it, then writes the
+  # reply back to the tun addressed to the original client. Masquerading would
+  # only add work.
+  echo 1 > /proc/sys/net/ipv4/ip_forward
+
+  hostapd -B -P "$SHARE_PID" "$SHARE_CONF"
+  dnsmasq --interface="$GT_SHARE_AP" --bind-interfaces \
+          --dhcp-range="$GT_SHARE_DHCP" \
+          --dhcp-option=3,"${GT_SHARE_ADDR%%/*}" --dhcp-option=6,"$GT_DNS" \
+          --no-resolv --no-hosts --pid-file="$SHARE_DNS_PID"
+  echo "sharing on $GT_SHARE_SSID, channel $ch (following $GT_SHARE_STA), clients get $GT_SHARE_DHCP"
+}
+
+share_down(){
+  need_root
+  [ -f "$SHARE_DNS_PID" ] && { kill "$(cat "$SHARE_DNS_PID")" 2>/dev/null || true; rm -f "$SHARE_DNS_PID"; }
+  [ -f "$SHARE_PID" ]     && { kill "$(cat "$SHARE_PID")" 2>/dev/null || true; rm -f "$SHARE_PID"; }
+  rm -f "$SHARE_CONF"
+  iptables -D INPUT -i "$GT_SHARE_AP" -j ACCEPT 2>/dev/null || true
+  iptables -D FORWARD -i "$GT_SHARE_AP" -o "$TUN" -j ACCEPT 2>/dev/null || true
+  iptables -D FORWARD -i "$TUN" -o "$GT_SHARE_AP" -j ACCEPT 2>/dev/null || true
+  ip link set "$GT_SHARE_AP" down 2>/dev/null || true
+  echo "sharing stopped"
+}
+
+share_status(){
+  echo "--- ap";       ip -br addr show "$GT_SHARE_AP" 2>/dev/null || echo "  no $GT_SHARE_AP"
+  iw dev "$GT_SHARE_AP" info 2>/dev/null | grep -E 'type|channel|ssid' | sed 's/^/  /'
+  echo "--- hostapd";  pgrep -a hostapd >/dev/null && echo "  running" || echo "  not running"
+  echo "--- dnsmasq";  [ -f "$SHARE_DNS_PID" ] && echo "  running" || echo "  not running"
+  echo "--- clients";  iw dev "$GT_SHARE_AP" station dump 2>/dev/null | grep -c '^Station' | sed 's/^/  associated: /'
+  echo "--- leases";   ip neigh show dev "$GT_SHARE_AP" 2>/dev/null | sed 's/^/  /' || echo "  none with an IP"
+}
+
+
 # Quiet predicate for automation: 0 = carrying traffic, 1 = not.
 is_up(){ have_ctl && ip link show "$TUN" >/dev/null 2>&1; }
 
@@ -404,5 +507,8 @@ case "${1:-}" in
   reload)  reload_local ;;
   reicmp)  need_root; start_gticmp ;;
   is-up)   need_root; is_up ;;
-  *) echo "usage: $0 {up|down|status|verify|reload|reicmp|is-up}" >&2; exit 2 ;;
+  share)      share_up ;;
+  unshare)    share_down ;;
+  share-status) share_status ;;
+  *) echo "usage: $0 {up|down|status|verify|reload|reicmp|is-up|share|unshare|share-status}" >&2; exit 2 ;;
 esac

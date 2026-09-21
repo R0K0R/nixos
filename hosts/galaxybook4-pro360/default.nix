@@ -126,6 +126,23 @@ in
       # One relay per client on the gateway; see the option's description for
       # the current assignment across hosts.
       remoteSocksPort = 1080;
+
+      /*
+        `sudo globaltun share` hosts an AP on this machine's own card and routes
+        its clients through the tunnel. The AP is a second vif on wlo1 and must
+        follow its channel, so it drops whenever wlo1 roams.
+
+        The passphrase lives outside the store, in a root-only file:
+          printf '%s' 'the-passphrase' | sudo tee /etc/globaltun-psk
+          sudo chmod 600 /etc/globaltun-psk
+      */
+      share = {
+        enable = true;
+        ssid = "gt-share";
+        passwordFile = "/etc/globaltun-psk";
+        stationInterface = "wlo1";
+        countryCode = "KR";
+      };
     };
     waydroid.enable = true;
     /*

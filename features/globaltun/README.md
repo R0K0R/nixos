@@ -157,6 +157,45 @@ and prints the copy command. Give the phone its own `remoteSocksPort` like any
 other client, and keep `GT_LOCAL_PORT` equal to the `server_port` of the app
 config's socks outbound.
 
+## Sharing the tunnel over Wi-Fi
+
+`my.globaltun.share` adds `globaltun share`, which hosts an AP on this machine's
+own card and routes its clients through the tunnel. A separate verb from `up`,
+because the tunnel is useful without it and this touches the radio, the firewall
+and forwarding.
+
+```
+sudo globaltun share          sudo globaltun share-status          sudo globaltun unshare
+```
+
+No NAT is involved: sing-box terminates each flow and re-originates it, then
+writes the reply back to the tun addressed to the original client. Forwarding
+plus two FORWARD rules is the whole data path.
+
+Four things make AP+STA on one radio harder than it looks, and all are handled:
+
+**`iw ... interface add <n> type __ap` silently creates a *managed* vif.** That
+trips `#{ managed } <= 1`, link-up fails with `EBUSY`, and it reads as the
+driver refusing AP mode. The type has to be set *after* creation, while down.
+
+**A too-old `iw` cannot parse `__ap` at all** and prints a usage dump. The
+wrapper pins its own `iw`, so whatever is installed on the host is irrelevant.
+
+**NetworkManager cannot drive this.** It does AP mode by asking wpa_supplicant
+to flip a *managed* interface, which the same limit forbids; give it a ready
+made AP vif and the supplicant refuses to grab it. hostapd directly is the only
+route.
+
+**Clients must reach the host before they can route through it** — DHCP `:67`
+and DNS `:53`. Without an INPUT rule for the AP interface those are dropped
+silently: hostapd completes the WPA handshake, the client shows "connected",
+and dnsmasq never logs a DISCOVER because it never receives one.
+
+`#channels <= 1` means the AP sits on the station's *current* channel, read when
+`share` runs — so it drops whenever the upstream roams, and `share` must be run
+again. `passwordFile` is a runtime path, never the passphrase, so the shared
+secret stays out of the store.
+
 ## Windows clients
 
 `windows/` carries what a Windows machine needs. Unlike Android this is close to
