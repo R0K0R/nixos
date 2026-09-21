@@ -1,5 +1,5 @@
 {
-  anchorCount = 277;
+  anchorCount = 282;
   buildOnly = [
     "ccache"
     "mold"
@@ -24,7 +24,9 @@
     "v4l-utils"
     "nixos-rebuild-local"
     "nix-shell-local"
+    "nixos-rebuild-victus-15"
     "nixos-rebuild-yulee"
+    "nix-shell-victus-15"
     "nix-shell-yulee"
     "wl-clipboard"
     "android-tools"
@@ -40,6 +42,7 @@
     "blender"
     "moonlight-qt"
     "kdenlive"
+    "kakaotalk"
     "hop"
     "globaltun"
     "gtk3-immodules.cache"
@@ -118,6 +121,7 @@
     "linux-pam"
     "zsh"
     "nix-zsh-completions"
+    "zsh-syntax-highlighting"
     "xwayland"
     "uwsm"
     "hyprland"
@@ -191,6 +195,7 @@
     "khal"
     "wvkbd"
     "hyprshot"
+    "grim"
     "iio-hyprland"
     "eza"
     "imagemagick"
@@ -1264,7 +1269,7 @@
     "pycparser"
     "die-hook"
   ];
-  capturedAt = "2026-09-13T10:12:46Z";
+  capturedAt = "2026-09-21T03:18:06Z";
   host = "galaxybook4-pro360";
   nixpkgsNarHash = "sha256-lj27EYvj0O6GayjoitFz0hrqeAlc0LCl04kkJrrGXVE=";
   nixpkgsRev = "2bf611227041f0f3727dd06500424437ef3976c9";
@@ -1275,7 +1280,9 @@
     "v4l-utils"
     "nixos-rebuild-local"
     "nix-shell-local"
+    "nixos-rebuild-victus-15"
     "nixos-rebuild-yulee"
+    "nix-shell-victus-15"
     "nix-shell-yulee"
     "wl-clipboard"
     "android-tools"
@@ -1291,6 +1298,7 @@
     "blender"
     "moonlight-qt"
     "kdenlive"
+    "kakaotalk"
     "hop"
     "globaltun"
     "gtk3-immodules.cache"
@@ -1369,6 +1377,7 @@
     "linux-pam"
     "zsh"
     "nix-zsh-completions"
+    "zsh-syntax-highlighting"
     "xwayland"
     "uwsm"
     "hyprland"
@@ -1442,6 +1451,7 @@
     "khal"
     "wvkbd"
     "hyprshot"
+    "grim"
     "iio-hyprland"
     "eza"
     "imagemagick"
