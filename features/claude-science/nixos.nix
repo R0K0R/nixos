@@ -109,5 +109,29 @@ in
       path, no /etc/static hop. It is a copy of ~200KB, rewritten on switch.
     */
     environment.etc."ssl/certs/ca-certificates.crt".mode = "0444";
+
+    /*
+      /bin/bash, because the bundled MCP connectors are launched as exactly
+      that -- an absolute path, not a PATH lookup, so nothing the wrapper puts
+      on PATH can answer it:
+
+        [mcp] genomes: failed to start (bwrap: execvp /bin/bash: No such file
+        or directory)
+
+      ... and so on for all twenty. NixOS populates /bin with `sh` alone
+      (environment.binsh) and has no option for bash there, so this is a
+      tmpfiles symlink. It is enough for the sandbox too: the app binds the
+      host's /bin into the namespace, and a symlink into the store resolves
+      there because the store is bound as well -- verified by running
+      /bin/bash inside a namespace built the same way.
+
+      Narrow on purpose. This is one symlink, not an FHS userenv, and it is
+      the same trade already made by environment.ldso above: give the foreign
+      program the two absolute paths it cannot be configured out of, rather
+      than wrap the whole system in an FHS image.
+    */
+    systemd.tmpfiles.rules = [
+      "L+ /bin/bash - - - - ${lib.getExe pkgs.bashInteractive}"
+    ];
   };
 }

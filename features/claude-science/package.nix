@@ -1,6 +1,7 @@
 {
   lib,
   stdenvNoCC,
+  stdenv,
   makeWrapper,
   bubblewrap,
   xdg-utils,
@@ -65,7 +66,15 @@ stdenvNoCC.mkDerivation {
 
     install -Dm755 "$src" "$out/libexec/claude-science"
 
+    # libstdc++ for the bundled `sharp` image module, which is a prebuilt
+    # native node addon inside the executable:
+    #   [SharpImageProvider] backend load failed -- image processing disabled:
+    #   ERR_DLOPEN_FAILED: libstdc++.so.6: cannot open shared object file
+    # This is the one job nix-ld would have done that ./nixos.nix's plain
+    # loader does not (it injects no libraries), so the app's own wrapper
+    # supplies it -- scoped to this program rather than set system-wide.
     makeWrapper "$out/libexec/claude-science" "$out/bin/claude-science" \
+      --suffix LD_LIBRARY_PATH : "${lib.makeLibraryPath [ stdenv.cc.cc.lib ]}" \
       --prefix PATH : ${
         lib.makeBinPath [
           # The daemon sandboxes Claude's tool calls with bubblewrap when the
