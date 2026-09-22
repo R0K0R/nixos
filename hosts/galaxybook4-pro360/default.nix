@@ -242,6 +242,10 @@ in
       };
     };
 
+    # Beta; `claude-science serve` then the browser. Cheap to carry: one
+    # prebuilt binary and a wrapper, no Electron (see the feature's package.nix).
+    claude-science.enable = true;
+
     remote-builder.client = {
       sshKeySecret = ../../age/remote-builder-ssh-key.age;
       enable = true;

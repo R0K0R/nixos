@@ -52,6 +52,18 @@
         "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.40609.1_amd64.deb"
       }
     },
+    "claude-science-bin": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-8/8N6aagaDu8DGO8miD3W3DLwogrCWcgvJ6IqjBDbhE=",
+        "type": "file",
+        "url": "https://downloads.claude.ai/claude-science/0.1.50/linux-x64"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://downloads.claude.ai/claude-science/0.1.50/linux-x64"
+      }
+    },
     "dank-greeter": {
       "inputs": {
         "dank-qml-common": "dank-qml-common",
@@ -297,6 +309,20 @@
       },
       "original": {
         "path": "./features/claude-desktop",
+        "type": "path"
+      },
+      "parent": []
+    },
+    "feat-claude-science": {
+      "inputs": {
+        "claude-science-bin": "claude-science-bin"
+      },
+      "locked": {
+        "path": "./features/claude-science",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/claude-science",
         "type": "path"
       },
       "parent": []
@@ -643,6 +669,7 @@
         "feat-agenix": "feat-agenix",
         "feat-claude-code": "feat-claude-code",
         "feat-claude-desktop": "feat-claude-desktop",
+        "feat-claude-science": "feat-claude-science",
         "feat-dms": "feat-dms",
         "feat-easyeffects": "feat-easyeffects",
         "feat-emacs": "feat-emacs",

@@ -1,0 +1,23 @@
+{
+  "nodes": {
+    "claude-science-bin": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-8/8N6aagaDu8DGO8miD3W3DLwogrCWcgvJ6IqjBDbhE=",
+        "type": "file",
+        "url": "https://downloads.claude.ai/claude-science/0.1.50/linux-x64"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://downloads.claude.ai/claude-science/0.1.50/linux-x64"
+      }
+    },
+    "root": {
+      "inputs": {
+        "claude-science-bin": "claude-science-bin"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

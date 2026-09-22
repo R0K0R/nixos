@@ -22,6 +22,7 @@
     feat-claude-code.url = "path:./features/claude-code";
     feat-hop.url = "path:./features/hop";
     feat-claude-desktop.url = "path:./features/claude-desktop";
+    feat-claude-science.url = "path:./features/claude-science";
     feat-samsung-galaxybook.url = "path:./features/samsung-galaxybook";
     feat-easyeffects.url = "path:./features/easyeffects";
 
