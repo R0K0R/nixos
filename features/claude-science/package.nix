@@ -6,6 +6,7 @@
   xdg-utils,
   bash,
   coreutils,
+  socat,
   src,
   version,
 }:
@@ -87,6 +88,15 @@ stdenvNoCC.mkDerivation {
           # 0 bwrap errors afterwards, against 8 before.
           bash
           coreutils
+          # Hard requirement, not a fallback: the daemon refuses to boot
+          # without it -- "socat is required for Linux sandbox networking but
+          # was not found in PATH. Install it with: sudo apt-get install
+          # socat". It scans PATH itself (accessSync X_OK) and runs socat as
+          # the HTTP and SOCKS bridges between the sandbox's AF_UNIX sockets
+          # in the data dir and localhost, which is how Claude's tool calls
+          # reach the network under approval. It is not in the default system
+          # profile here, so PATH must carry it.
+          socat
         ]
       }
 

@@ -76,5 +76,38 @@ in
       is glibc.
     */
     environment.ldso = "${pkgs.glibc}/lib/ld-linux-x86-64.so.2";
+
+    /*
+      Make the system CA bundle a real file instead of a symlink.
+
+      The daemon's sandbox replaces /etc with a tmpfs and then binds a fixed
+      list of paths back over it -- /etc/ssl, /etc/pki, /etc/ca-certificates
+      among them -- which is how conda reaches the network on an ordinary
+      distro. On NixOS that list is not enough, because /etc is built out of
+      indirection:
+
+        /etc/ssl/certs/ca-certificates.crt -> /etc/static/ssl/certs/...
+        /etc/static                        -> /nix/store/<hash>-etc/etc
+
+      /etc/static is NOT in the app's bind list and the fresh tmpfs does not
+      have it, so binding /etc/ssl carries in a symlink that dangles the moment
+      it is followed. micromamba then aborts with "error libmamba No CA
+      certificates found on system", which reads like a missing package and is
+      really a broken link.
+
+      Measured both ways, running micromamba against conda-forge inside a
+      namespace built to match the app's (tmpfs /etc, /nix and /lib64 bound):
+      with /etc/ssl bound from the host it failed with exactly that message,
+      and with /etc/ssl holding a real bundle file it got through TLS and on to
+      the package solve. Setting SSL_CERT_FILE on the daemon does NOT fix it --
+      tried, measured, removed again -- because the sandbox does not carry the
+      daemon's environment through, which is the same reason nix-ld could not
+      work above.
+
+      environment.etc copies rather than symlinks whenever mode is not
+      "symlink", so naming a mode here is the whole fix: same content, same
+      path, no /etc/static hop. It is a copy of ~200KB, rewritten on switch.
+    */
+    environment.etc."ssl/certs/ca-certificates.crt".mode = "0444";
   };
 }
