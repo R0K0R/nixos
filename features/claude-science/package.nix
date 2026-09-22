@@ -1,7 +1,6 @@
 {
   lib,
   stdenvNoCC,
-  glibc,
   makeWrapper,
   bubblewrap,
   xdg-utils,
@@ -66,8 +65,6 @@ stdenvNoCC.mkDerivation {
     install -Dm755 "$src" "$out/libexec/claude-science"
 
     makeWrapper "$out/libexec/claude-science" "$out/bin/claude-science" \
-      --set-default NIX_LD "${glibc}/lib/ld-linux-x86-64.so.2" \
-      --suffix NIX_LD_LIBRARY_PATH : "${lib.makeLibraryPath [ glibc ]}" \
       --prefix PATH : ${
         lib.makeBinPath [
           # The daemon sandboxes Claude's tool calls with bubblewrap when the
@@ -103,7 +100,6 @@ stdenvNoCC.mkDerivation {
     # no licence file accompanies it.
     license = lib.licenses.unfree;
     sourceProvenance = [ lib.sourceTypes.binaryNativeCode ];
-    # meta.platforms pins the loader soname named above.
     platforms = [ "x86_64-linux" ];
     mainProgram = "claude-science";
   };
