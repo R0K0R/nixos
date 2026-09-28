@@ -3,11 +3,11 @@
     "doom-private": {
       "flake": false,
       "locked": {
-        "lastModified": 1790594432,
-        "narHash": "sha256-ecnDVBxPVOeAIhhlaopf+nFiWj6ex4M1OpwTzdYhPAs=",
+        "lastModified": 1790598762,
+        "narHash": "sha256-QqLZvCVD11QHr7/O4Lha7BwV/qbKkFpnhcEa2GkwBvg=",
         "owner": "R0K0R",
         "repo": "doom-emacs",
-        "rev": "c735e2907f7ec5343e84936b2fee139ede740c67",
+        "rev": "69ac4a67a7636d24a0c970f02bf52beb54969bf5",
         "type": "github"
       },
       "original": {
