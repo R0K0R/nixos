@@ -232,6 +232,13 @@ lib.mkIf (cfg.enable && inScope) {
       # file" -- when neither gs nor mutool is on its PATH.  poppler's
       # pdftoppm, which the system does have, is not one doc-view can use.
       ghostscript
+      # ...and mutool is the one it should actually use.  doc-view prefers
+      # mutool whenever it is on PATH, and with Ghostscript alone every PDF
+      # first gets a synchronous whole-document password check: a 90 MB
+      # textbook froze Emacs for 46 s before showing page 1 (0.5 s with
+      # mutool, whose check draws only page 1).  Ghostscript stays for
+      # doc-view's bounding-box slicing, which only it does.
+      mupdf
     ];
   };
 
