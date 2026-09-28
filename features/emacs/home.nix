@@ -209,6 +209,10 @@ lib.mkIf (cfg.enable && inScope) {
       # two different things, and the next person reading it could not tell
       # which entries are claims about behaviour and which are cost dodges.
       pandoc
+      # kitty-graphics.el's inline browser, which the Doom config uses to show
+      # the tinymist preview inside `emacs -nw'.  Here for the daemon-PATH
+      # reason above: kitty-graphics looks it up with `executable-find'.
+      (pkgs.callPackage ./casty.nix { })
     ];
   };
 
