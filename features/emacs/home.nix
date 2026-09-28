@@ -213,6 +213,12 @@ lib.mkIf (cfg.enable && inScope) {
       # the tinymist preview inside `emacs -nw'.  Here for the daemon-PATH
       # reason above: kitty-graphics looks it up with `executable-find'.
       (pkgs.callPackage ./casty.nix { })
+      # doc-view's PDF-to-PNG converter.  In a terminal frame kitty-graphics
+      # shows PDFs through doc-view (the Doom config hands pdf-view over to
+      # it there), and doc-view refuses a PDF outright -- "Unable to render
+      # file" -- when neither gs nor mutool is on its PATH.  poppler's
+      # pdftoppm, which the system does have, is not one doc-view can use.
+      ghostscript
     ];
   };
 
