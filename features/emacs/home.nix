@@ -26,6 +26,25 @@ let
   # compile grammars at runtime -- there is no "just let Emacs download it"
   # under a Nix-managed profile.
   treesitGrammars = pkgs.emacsPackages.treesit-grammars.with-all-grammars;
+
+  # Kitty's xterm-kitty terminfo entry with one change: `clear' is
+  # ESC[H ESC[J (erase from the top-left) instead of ESC[H ESC[2J.  Kitty
+  # deletes every image on screen for ESC[2J but keeps them through ESC[J,
+  # and Emacs clears a terminal frame with `clear' -- on C-l
+  # (`recenter-redisplay' is `tty'), on `redraw-display', on resize and on
+  # resume -- so each of those wiped kitty-graphics' images (the doc-view
+  # PDF page, the preview) while kitty-graphics still believed them placed.
+  # The screen looks the same after either erase.  Used only for Emacs, by
+  # the zsh `emacs' function below.
+  kittyTerminfoForEmacs = pkgs.runCommand "kitty-terminfo-for-emacs" {
+    nativeBuildInputs = [ pkgs.ncurses ];
+  } ''
+    infocmp -x -A ${pkgs.kitty.terminfo}/share/terminfo xterm-kitty > xterm-kitty.src
+    sed 's|clear=\\E\[H\\E\[2J,|clear=\\E[H\\E[J,|' xterm-kitty.src > xterm-kitty.mod
+    grep -q 'clear=\\E\[H\\E\[J,' xterm-kitty.mod
+    mkdir -p $out/share/terminfo
+    tic -x -o $out/share/terminfo xterm-kitty.mod
+  '';
 in
 lib.mkIf (cfg.enable && inScope) {
   # Doom owns Emacs startup; skipping this avoids an emacsWithPackages
@@ -241,6 +260,23 @@ lib.mkIf (cfg.enable && inScope) {
       mupdf
     ];
   };
+
+  # `emacs' in a Kitty window reads the terminfo entry above.  Kitty exports
+  # TERMINFO (its own directory, which ncurses searches first), so that is
+  # unset and the patched entry put at the front of TERMINFO_DIRS; every
+  # other terminal type still resolves from the usual directories, which
+  # matters for what Emacs itself starts (vterm, compilation).
+  programs.zsh.initContent = lib.mkIf config.programs.zsh.enable (lib.mkAfter ''
+    emacs() {
+      if [[ $TERM == xterm-kitty ]]; then
+        env -u TERMINFO \
+          TERMINFO_DIRS="${kittyTerminfoForEmacs}/share/terminfo''${TERMINFO_DIRS:+:$TERMINFO_DIRS}" \
+          emacs "$@"
+      else
+        command emacs "$@"
+      fi
+    }
+  '');
 
   home.packages = [
     pkgs.imagemagick # PGTK Emacs cannot enable --with-imagemagick in nixpkgs; use CLI / scripts.
