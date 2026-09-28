@@ -41,6 +41,19 @@ lib.mkIf (cfg.enable && inScope) {
     # per-package fetches; fetchTree does not have that problem.
     experimentalFetchTree = true;
 
+    # The tree-sitter grammars, built into Emacs itself.  nixpkgs' Emacs
+    # wrapper links a grammars package's .so files into its own lib/ and adds
+    # that to `treesit-extra-load-path' from site-start.el, so every Emacs
+    # started from this build finds them -- the daemon, the GUI, and an
+    # `emacs -nw' typed into a Kitty shell alike.
+    #
+    # TREESIT_GRAMMAR_DIR (below) only ever reached the systemd user
+    # environment, so a terminal Emacs started from a shell had no grammars
+    # and every Typst buffer warned "language grammar for typst failed to
+    # load (not-found)".  The variable stays for what still reads it, but
+    # this is what makes the grammars independent of how Emacs was launched.
+    extraPackages = epkgs: [ epkgs.treesit-grammars.with-all-grammars ];
+
     /*
       typst-ts-mode's generated autoloads are not loadable under Emacs 31, and
       that one package takes the whole daemon down.
