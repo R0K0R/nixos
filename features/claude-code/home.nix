@@ -11,7 +11,10 @@ let
 
   # Same pinned claude-code the NixOS half installs (vendored package; binary
   # hash-pinned via the claude-code-bin flake input).
-  claude-code = pkgs.callPackage ./package.nix { src = inputs.feat-claude-code.src; };
+  claude-code = pkgs.callPackage ./package.nix {
+    src = inputs.feat-claude-code.src;
+    inherit (cfg) extraBinPackages;
+  };
 
   # Pinned to a commit in watermarks-remover.nix, so the version is the flake's
   # rather than whatever upstream's install_skill.py copied in at the time.

@@ -17,6 +17,8 @@
   writableTmpDirAsHomeHook,
   # the claude-code-bin flake input (a raw binary file in the store)
   src,
+  # more programs for Claude to find on PATH (my.claude-code.extraBinPackages)
+  extraBinPackages ? [ ],
 }:
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "claude-code";
@@ -48,14 +50,17 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       --set USE_BUILTIN_RIPGREP 0 \
       --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ alsa-lib ]} \
       --prefix PATH : ${
-        lib.makeBinPath [
-          # node-tree-kill needs ps on linux
-          procps
-          ripgrep
-          # sandbox support
-          bubblewrap
-          socat
-        ]
+        lib.makeBinPath (
+          [
+            # node-tree-kill needs ps on linux
+            procps
+            ripgrep
+            # sandbox support
+            bubblewrap
+            socat
+          ]
+          ++ extraBinPackages
+        )
       }
 
     runHook postInstall

@@ -11,11 +11,25 @@ let
 
     Bump: features/claude-code/update.sh [version], then rebuild.
   */
-  claude-code = pkgs.callPackage ./package.nix { src = inputs.feat-claude-code.src; };
+  claude-code = pkgs.callPackage ./package.nix {
+    src = inputs.feat-claude-code.src;
+    inherit (cfg) extraBinPackages;
+  };
 in
 {
   options.my.claude-code = {
     enable = lib.mkEnableOption "claude-code, pinned to an exact release via flake.lock";
+
+    extraBinPackages = lib.mkOption {
+      type = lib.types.listOf lib.types.package;
+      default = [ ];
+      example = lib.literalExpression "[ pkgs.pandoc ]";
+      description = ''
+        Packages whose programs claude-code finds on its PATH, whatever
+        PATH it was started with -- put there by its wrapper, not installed
+        system-wide.
+      '';
+    };
 
     shareWithRoot = lib.mkOption {
       type = lib.types.bool;

@@ -216,6 +216,11 @@ in
 
     claude-code = {
       enable = true;
+      # rhwp's CLI, so Claude can read HWP/HWPX documents: export-text,
+      # export-markdown, export-svg, info and the rest.
+      extraBinPackages = [
+        (pkgs.callPackage ../../features/hop/rhwp.nix { rhwpSrc = inputs.feat-hop.rhwp; })
+      ];
       shareWithRoot = true;
       gemma.enable = true;
       # The book's own server: it edits through the Yjs rooms, so an agent's
