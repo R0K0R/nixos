@@ -258,6 +258,9 @@ lib.mkIf (cfg.enable && inScope) {
       # mutool, whose check draws only page 1).  Ghostscript stays for
       # doc-view's bounding-box slicing, which only it does.
       mupdf
+      # The Doom dashboard's banner is fastfetch's output, run afresh each
+      # time the dashboard is shown (the Doom config's dashboard section).
+      fastfetch
     ];
   };
 
