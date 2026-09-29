@@ -35,7 +35,7 @@ let
   # resume -- so each of those wiped kitty-graphics' images (the doc-view
   # PDF page, the preview) while kitty-graphics still believed them placed.
   # The screen looks the same after either erase.  Used only for Emacs, by
-  # the zsh `emacs' function below.
+  # the wrapper below.
   kittyTerminfoForEmacs = pkgs.runCommand "kitty-terminfo-for-emacs" {
     nativeBuildInputs = [ pkgs.ncurses ];
   } ''
@@ -45,6 +45,33 @@ let
     mkdir -p $out/share/terminfo
     tic -x -o $out/share/terminfo xterm-kitty.mod
   '';
+
+  # Doom's Emacs with `bin/emacs' wrapped to read that entry, on every path
+  # Emacs starts by: a shell, a launcher, a keybinding, and the daemon, whose
+  # unit runs Emacs by store path.  The daemon is what matters for
+  # `emacsclient -t': a client's terminal is set up inside the daemon, which
+  # looks its type up in its own environment, not the client's.
+  #
+  # The entry goes first in TERMINFO_DIRS always.  It holds xterm-kitty and
+  # nothing else, so every other terminal type resolves as before; the
+  # trailing empty element keeps ncurses' default directories when
+  # TERMINFO_DIRS was unset.  Kitty also exports TERMINFO, its own directory,
+  # which ncurses searches before TERMINFO_DIRS -- so that is unset, but only
+  # when the terminal is Kitty.
+  emacsForKitty = pkgs.symlinkJoin {
+    name = "emacs-for-kitty";
+    paths = [ config.programs.doom-emacs.finalEmacsPackage ];
+    postBuild = ''
+      rm $out/bin/emacs
+      cat > $out/bin/emacs <<EOF
+      #!${pkgs.runtimeShell}
+      export TERMINFO_DIRS="${kittyTerminfoForEmacs}/share/terminfo:\''${TERMINFO_DIRS-}"
+      if [ "\''${TERM-}" = xterm-kitty ]; then unset TERMINFO; fi
+      exec ${config.programs.doom-emacs.finalEmacsPackage}/bin/emacs "\$@"
+      EOF
+      chmod +x $out/bin/emacs
+    '';
+  };
 in
 lib.mkIf (cfg.enable && inScope) {
   # Doom owns Emacs startup; skipping this avoids an emacsWithPackages
@@ -264,24 +291,12 @@ lib.mkIf (cfg.enable && inScope) {
     ];
   };
 
-  # `emacs' in a Kitty window reads the terminfo entry above.  Kitty exports
-  # TERMINFO (its own directory, which ncurses searches first), so that is
-  # unset and the patched entry put at the front of TERMINFO_DIRS; every
-  # other terminal type still resolves from the usual directories, which
-  # matters for what Emacs itself starts (vterm, compilation).
-  programs.zsh.initContent = lib.mkIf config.programs.zsh.enable (lib.mkAfter ''
-    emacs() {
-      if [[ $TERM == xterm-kitty ]]; then
-        env -u TERMINFO \
-          TERMINFO_DIRS="${kittyTerminfoForEmacs}/share/terminfo''${TERMINFO_DIRS:+:$TERMINFO_DIRS}" \
-          emacs "$@"
-      else
-        command emacs "$@"
-      fi
-    }
-  '');
+  # The wrapped Emacs above, in place of the one programs.doom-emacs
+  # provides: ahead of it in the profile, and as the daemon's package.
+  services.emacs.package = lib.mkForce emacsForKitty;
 
   home.packages = [
+    (lib.hiPrio emacsForKitty)
     pkgs.imagemagick # PGTK Emacs cannot enable --with-imagemagick in nixpkgs; use CLI / scripts.
   ];
 
