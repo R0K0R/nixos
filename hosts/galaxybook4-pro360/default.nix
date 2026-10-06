@@ -261,10 +261,11 @@ in
     # Toggle for the built-in keyboard, driven from the control centre. serio0
     # here is the i8042 KBD port; the option's description says how to confirm.
     embedded-keyboard.enable = true;
-    # Right-edge side dock (from sihooleebd/nixos). Keys: SUPER+ALT+D show/park,
-    # SUPER+ALT+SHIFT+D dock/undock the focused window, SUPER+ALT+left/right shift
-    # the pile, SUPER+ALT+T dock terminal. keystone = the 3D trapezoid look,
-    # a Hyprland patch.
+    # Right-edge side dock (from sihooleebd/nixos). Keys: SUPER+S show/park,
+    # SUPER+CTRL+S dock/undock the focused window, SUPER+ALT+left/right or a
+    # 3-finger swipe on a card shift the pile, SUPER+P picture-in-picture,
+    # SUPER+ALT+T dock terminal. keystone = the 3D trapezoid look (plus
+    # scale-to-fit and the swipe), a Hyprland patch.
     sidedock.enable = true;
     # Cast to Miracast TVs/monitors (Wi-Fi Direct) and Chromecasts.
     wireless-display.enable = true;

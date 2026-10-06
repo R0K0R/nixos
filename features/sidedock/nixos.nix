@@ -2,7 +2,7 @@
 
 /*
   Right-edge side dock for Hyprland, imported 2026-10-05 from sihooleebd/nixos
-  (features/sidedock, commit 1d5e9bf). Adapted here: keys are options (his
+  (features/sidedock, commits 1d5e9bf and 0a7686c). Adapted here: keys are options (his
   SUPER+D / SUPER+left/right collide with this config's column toggle and focus
   binds), dock.sh's geometry is in logical pixels and honours rotation and the
   monitor's reserved area (his assumed scale 1 and a 56px waybar), and the
@@ -33,11 +33,12 @@ in
     };
     # Key combos after the mod key, in Hyprland's "A + B" form.
     keys = {
-      toggle = keyOpt "ALT + D" "Show / park the whole pile.";
-      dockToggle = keyOpt "ALT + SHIFT + D" "Move the focused window into the dock, or back out.";
+      toggle = keyOpt "S" "Show / park the whole pile.";
+      dockToggle = keyOpt "CTRL + S" "Move the focused window into the dock, or back out (the dock as a workspace).";
       terminal = keyOpt "ALT + T" "A terminal that opens straight into the dock.";
       prev = keyOpt "ALT + left" "Shift the pile back one window.";
       next = keyOpt "ALT + right" "Shift the pile forward one window.";
+      pip = keyOpt "P" "Toggle the focused window as a keystoned picture-in-picture card.";
     };
   };
 
