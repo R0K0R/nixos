@@ -205,6 +205,15 @@ ${lib.optionalString cfg.crossDerivation.enable "        export CCACHE_NIX_STORE
         2.39 hands nofail to mount.fuse3, which rejects it; automount already
         never blocks boot and mount-timeout bounds the wait): a peer being down
         must never block this builder; ccache tolerates an absent backend.
+
+        NO idle timeout, and a watchdog timer below. Build sandboxes get a
+        private copy of the mount table when they start, and an autofs trigger
+        inside that copy cannot mount anything: while the peer sat idle-
+        unmounted, a fresh sandbox got "Operation not permitted" on it and the
+        host mount stayed down (probed on yulee 2026-09-30). Every build that
+        started in such a window missed the peer entirely -- yulee held ~12-29k
+        compiles victus's stage already had. So the mount is kept up from the
+        host side instead of waiting for a sandbox to ask (ccache-peer-watchdog).
       */
       fileSystems = lib.mapAttrs' (n: p: lib.nameValuePair (peerDir p) {
         device = "${p.user}@${p.host}:${p.stage}";
@@ -212,9 +221,53 @@ ${lib.optionalString cfg.crossDerivation.enable "        export CCACHE_NIX_STORE
         options = [
           "ro" "allow_other" "reconnect" "ServerAliveInterval=15" "ServerAliveCountMax=3"
           "IdentityFile=${b.identityFile}" "StrictHostKeyChecking=accept-new"
-          "_netdev" "x-systemd.automount" "x-systemd.idle-timeout=600" "x-systemd.mount-timeout=20s"
+          "_netdev" "x-systemd.automount" "x-systemd.mount-timeout=20s"
         ];
       }) b.peers;
+
+      /*
+        Peer watchdog, every minute. sshfs over WiFi drops often, and a dropped
+        connection usually HANGS rather than failing: `reconnect` does not
+        always recover, and a hung mount would stall every ccache lookup into
+        it. So each peer is probed from the host namespace with a timeout:
+          - responsive                 -> nothing to do
+          - sshfs mounted but hung/dead -> lazy-unmount it so the automount
+                                           can mount a fresh connection
+          - not mounted                -> the probe itself triggers the
+                                           automount (also the post-boot mount)
+        A peer that is simply down fails the re-trigger (mount-timeout bounds
+        it) and is retried next minute. The host-side trigger is also what
+        keeps sandboxes working: see the fileSystems comment above.
+      */
+      systemd.services.ccache-peer-watchdog = lib.mkIf (b.peers != { }) {
+        description = "Check the ccache peer sshfs mounts and remount dead ones";
+        path = [ pkgs.coreutils pkgs.util-linux ];
+        serviceConfig = {
+          Type = "oneshot";
+          TimeoutStartSec = "2min";
+        };
+        script = lib.concatMapStrings (p: ''
+          dir=${peerDir p}
+          if timeout 10 ls "$dir" >/dev/null 2>&1; then
+            :
+          elif findmnt -n -t fuse.sshfs "$dir" >/dev/null 2>&1; then
+            echo "peer ${p.name}: sshfs mount unresponsive, remounting"
+            umount -l "$dir" || true
+            timeout 30 ls "$dir" >/dev/null 2>&1 \
+              && echo "peer ${p.name}: remounted" \
+              || echo "peer ${p.name}: still unreachable"
+          else
+            echo "peer ${p.name}: not reachable"
+          fi
+        '') (lib.attrValues b.peers);
+      };
+      systemd.timers.ccache-peer-watchdog = lib.mkIf (b.peers != { }) {
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "1min";
+          OnUnitActiveSec = "1min";
+        };
+      };
 
       systemd.services.ccache-trim-stage = {
         description = "Trim the ccache write-behind stage to ${b.stageMaxSize}";

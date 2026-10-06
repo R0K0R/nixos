@@ -246,7 +246,7 @@ in
 
         The claim was false for victus-15 (Zen 3), and nothing needed it to
         be true. buildPlatform.canExecute hostPlatform is FALSE under
-        pseudo-cross -- build and host share a config string but differ in
+        IntraISACross -- build and host share a config string but differ in
         gcc.arch -- so nixpkgs takes build-time tools from the untuned
         pkgsBuildBuild set and never asks a peer to execute meteorlake code.
         A peer only COMPILES it, which any x86_64 can do.

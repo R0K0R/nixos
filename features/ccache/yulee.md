@@ -82,7 +82,7 @@ in its host config, which was never removed.
 
 `/etc/fstab`:
 
-    r0k0r@100.64.0.2:/var/cache/ccache/stage  /var/cache/ccache/peer-victus-15  fuse.sshfs  ro,allow_other,reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,IdentityFile=/home/r0k0r/.ssh/id_ed25519,StrictHostKeyChecking=accept-new,_netdev,x-systemd.automount,x-systemd.idle-timeout=600,x-systemd.mount-timeout=20s  0 0
+    r0k0r@100.64.0.2:/var/cache/ccache/stage  /var/cache/ccache/peer-victus-15  fuse.sshfs  ro,allow_other,reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,IdentityFile=/home/r0k0r/.ssh/id_ed25519,StrictHostKeyChecking=accept-new,_netdev,x-systemd.automount,x-systemd.mount-timeout=20s  0 0
 
 then `sudo systemctl daemon-reload && sudo mount /var/cache/ccache/peer-victus-15`.
 No `nofail`: util-linux 2.39 passes it through to `mount.fuse3`, which
@@ -91,6 +91,51 @@ the automount never blocks boot and `mount-timeout` bounds the wait.
 A ROOT mount, not a user session mount: allow_other alone was not enough for
 the daemon's stat. victus-15 authorizes `~r0k0r/.ssh/id_ed25519.pub` (added
 2026-09-07). Automount: victus being down must never block yulee.
+
+NO `x-systemd.idle-timeout`, plus a watchdog timer (same as the NixOS
+module's `ccache-peer-watchdog`). A build sandbox copies the mount table when
+it starts, and an autofs trigger inside that copy cannot mount: with the peer
+idle-unmounted, a fresh sandbox got "Operation not permitted" and every
+lookup in that build missed (probed 2026-09-30). And sshfs over WiFi drops
+often, usually by HANGING rather than failing, which would stall every ccache
+lookup into it. The watchdog probes from the host every minute, lazy-unmounts
+a hung sshfs so the automount mounts a fresh one, and re-triggers it:
+
+    # /usr/local/sbin/ccache-peer-watchdog
+    #!/bin/sh
+    dir=/var/cache/ccache/peer-victus-15
+    if timeout 10 ls "$dir" >/dev/null 2>&1; then
+      :
+    elif findmnt -n -t fuse.sshfs "$dir" >/dev/null 2>&1; then
+      echo "peer victus-15: sshfs mount unresponsive, remounting"
+      umount -l "$dir" || true
+      timeout 30 ls "$dir" >/dev/null 2>&1 \
+        && echo "peer victus-15: remounted" \
+        || echo "peer victus-15: still unreachable"
+    else
+      echo "peer victus-15: not reachable"
+    fi
+
+    # /etc/systemd/system/ccache-peer-watchdog.service
+    [Unit]
+    Description=Check the ccache peer sshfs mount and remount it if dead
+    [Service]
+    Type=oneshot
+    TimeoutStartSec=2min
+    ExecStart=/usr/local/sbin/ccache-peer-watchdog
+
+    # /etc/systemd/system/ccache-peer-watchdog.timer
+    [Timer]
+    OnBootSec=1min
+    OnUnitActiveSec=1min
+    [Install]
+    WantedBy=timers.target
+
+then `sudo chmod +x /usr/local/sbin/ccache-peer-watchdog && sudo systemctl
+daemon-reload && sudo systemctl restart
+'var-cache-ccache-peer\x2dvictus\x2d15.automount' && sudo systemctl enable
+--now ccache-peer-watchdog.timer`. `journalctl -u ccache-peer-watchdog` shows
+every remount.
 
 Sanity: `tailscale ping 100.64.0.2` must say `via <ip>:41641` (direct), not
 `via DERP` -- a relay multiplies every per-op cost.
