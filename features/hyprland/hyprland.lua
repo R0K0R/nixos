@@ -167,6 +167,9 @@ hl.config({
 
   decoration = {
     rounding = 16,
+    -- No dimming behind a shown special workspace (default 0.2): the side dock is the
+    -- `scratch` special workspace, and opening a dock must not darken the whole screen.
+    dim_special = 0,
     -- Glassmorphism: true backdrop blur behind translucent surfaces.
     -- Compositor-side half only. Blur applies to translucent WINDOWS
     -- automatically, but a layer surface has to opt in with a
