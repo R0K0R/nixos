@@ -1,8 +1,8 @@
 { lib, inputs }:
 
 /*
-  Generic pseudo-cross and build-load fixes -- everything any intra-ISA
-  pseudo-cross host needs, as opposed to anything about one machine's hardware.
+  Generic IntraISACross and build-load fixes -- everything any IntraISACross
+  host needs, as opposed to anything about one machine's hardware.
 
   These lived in hosts/galaxybook4-pro360/default.nix, reachable by exactly one
   host. Most are not meteorlake-specific at all: test suites that fail under
@@ -125,7 +125,7 @@
           '';
         });
 
-        # In pseudo-cross, qmlcachegen (from qtdeclarative.dev/bin) is not found
+        # In IntraISACross, qmlcachegen (from qtdeclarative.dev/bin) is not found
         # via QT_HOST_BINS (which points to qtbase, not qtdeclarative).  qtPrepareTool
         # resolves to an empty path → Makefile recipe is just "-o output.qmlc source.qml"
         # → bash: o: command not found (Error 127, ignored during build) → install step
@@ -160,7 +160,7 @@
       sdl3 = prev.sdl3.overrideAttrs (_: { doCheck = false; });
 
       # perl-Tk's PNG/Makefile.PL calls `pkg-config libpng` directly.  In
-      # pseudo-cross the setup hook for libpng.dev adds to PKG_CONFIG_PATH
+      # IntraISACross the setup hook for libpng.dev adds to PKG_CONFIG_PATH
       # but the value isn't visible when Makefile.PL shells out.  Set it
       # explicitly so pkg-config finds the HOST libpng and generates the
       # correct Makefile (without this, it falls back to /usr/local/include
@@ -258,7 +258,7 @@
         /*
           foliate, for the same "take the BUILD-platform build" reason again,
           but the failure is a genuine mixed-platform CRASH rather than a build
-          error -- it is the first place the pseudo-cross wrapper-salt collision
+          error -- it is the first place the IntraISACross wrapper-salt collision
           became visible at runtime.
 
               GLib-GObject-CRITICAL: g_boxed_type_register_static:
@@ -274,9 +274,9 @@
              actually loads the untuned libglib/libgobject/libgio.
 
              Why: gtk4 has gobject-introspection-wrapped in nativeBuildInputs,
-             which under pseudo-cross is the buildPlatform (untuned) one, and
+             which under IntraISACross is the buildPlatform (untuned) one, and
              it propagates untuned glib. cc-wrapper/bintools-wrapper name their
-             env vars after the platform's `config` string -- and pseudo-cross
+             env vars after the platform's `config` string -- and IntraISACross
              deliberately makes buildPlatform.config == hostPlatform.config
              (both x86_64-unknown-linux-gnu), so the BUILD and HOST wrappers
              share one NIX_LDFLAGS namespace. setup.sh walks hostOffset -1
@@ -307,7 +307,7 @@
           A real fix is one of two things, both wildly out of proportion to an
           ebook reader:
             - give buildPlatform a distinct config string, re-salting every
-              wrapper var -- i.e. rebuild the entire pseudo-cross store; or
+              wrapper var -- i.e. rebuild the entire IntraISACross store; or
             - stop the buildPlatform GI's propagated -L from reaching the host
               link line, which changes the hash of every package that has
               gobject-introspection in nativeBuildInputs (all of GNOME/GTK).
@@ -361,7 +361,7 @@
         # rnnoise-plugin depends on webkitgtk_4_1 only because JUCE bundles a
         # WebBrowserComponent in juce_gui_extra.  The LADSPA/LV2/VST audio plugins
         # have no need for a web browser.  webkitgtk_4_1 cannot be built in a
-        # pseudo-cross setup: JSC/Inspector/WTF typeinfo symbols are hidden by
+        # IntraISACross setup: JSC/Inspector/WTF typeinfo symbols are hidden by
         # -fvisibility=hidden and can't cross DSO boundaries (ld.bfd requires export;
         # lld also errors on STV_HIDDEN symbols in shared libs it links).
         # Fix: drop webkitgtk_4_1 from rnnoise-plugin's inputs and define
@@ -375,7 +375,7 @@
           # same thing unconditionally whenever hostPlatform != buildPlatform.
           #
           # LV2 requires juce_lv2_helper, a HOST-compiled post-processor that cmake
-          # runs on the BUILD machine (yulee/znver5).  In pseudo-cross, the binary
+          # runs on the BUILD machine (yulee/znver5).  In IntraISACross, the binary
           # is -march=meteorlake-tuned and SIGILLs on yulee.  We only need LADSPA
           # for kdenlive; disable LV2 to skip the helper entirely.
           cmakeFlags = (old.cmakeFlags or [ ]) ++ [
@@ -416,7 +416,7 @@
         #
         # Qt6Graphs (in qtgraphs), Qt6Quick/Qt6Qml (in qtdeclarative), and
         # Qt6Quick3D (in qtquick3d) are split into separate store paths. Two cmake
-        # fixes are required to build against them in pseudo-cross:
+        # fixes are required to build against them in IntraISACross:
         #
         #   1. QT_ADDITIONAL_PACKAGES_PREFIX_PATH — tells Qt6Config.cmake's prefix
         #      validation that those extra prefixes are allowed for components.
@@ -441,16 +441,16 @@
           ];
         });
 
-        # zam-plugins marks itself broken for cross-builds, but pseudo-cross here is
+        # zam-plugins marks itself broken for cross-builds, but IntraISACross here is
         # x86_64→x86_64 (meteorlake tuning only), so the binaries execute fine on yulee.
         zam-plugins = prev.zam-plugins.overrideAttrs (old: {
           meta = old.meta // { broken = false; };
         });
       })
 
-    # F8: Fresh native i686 stdenv, bypassing the pseudo-cross overlay. Pattern D.
+    # F8: Fresh native i686 stdenv, bypassing the IntraISACross overlay. Pattern D.
     # Without this, pkgsi686Linux inherits the meteorlake hostPlatform overlay →
-    # triple-cross (BUILD=x86_64 → HOST=i686 → TARGET=i686 pseudo-cross) which
+    # triple-cross (BUILD=x86_64 → HOST=i686 → TARGET=i686 IntraISACross) which
     # breaks 32-bit compat packages (mesa i686, libgcrypt i686, etc.).
     (final: prev:
       let isTuned = ((prev.stdenv.hostPlatform.gcc or { }).arch or "") != "";

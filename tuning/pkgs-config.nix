@@ -98,16 +98,16 @@ lib.mkIf config.my.tuning.qtPatches.enable {
           xdg-desktop-portal = "portal tests need a session DBus";
           xdg-desktop-portal-gnome = "portal tests need a session DBus";
           openssl = "70-test_quic_multistream.t timing-flaky in deterministic sandbox";
-          # pseudo-cross: ispc's test runner invokes clang.cc (raw, no cc-wrapper env);
+          # IntraISACross: ispc's test runner invokes clang.cc (raw, no cc-wrapper env);
           # linker can't find Scrt1.o/crti.o/-lstdc++ without LIBRARY_PATH, and
           # gnu/stubs-32.h is missing on pure 64-bit glibc-dev. ispc binary itself builds fine.
-          ispc = "test runner uses raw clang.cc lacking LIBRARY_PATH in pseudo-cross";
+          ispc = "test runner uses raw clang.cc lacking LIBRARY_PATH in IntraISACross";
         };
         killCheck = pkg: pkg.overrideAttrs (_: { doCheck = false; doInstallCheck = false; });
         killedDrvs = lib.mapAttrs (n: _: killCheck prev.${n}) testsKilled;
 
         # musl, glibc, and libgcc all use stdenvNoLibc whose bintools-wrapper only ships
-        # the prefixed ld (x86_64-unknown-linux-gnu-ld), not bare `ld`. In pseudo-cross
+        # the prefixed ld (x86_64-unknown-linux-gnu-ld), not bare `ld`. In IntraISACross
         # the build and target triples share the same config string, so collect2 treats
         # the link as native and calls bare `ld` — which doesn't exist in that wrapper.
         #
@@ -135,12 +135,12 @@ lib.mkIf config.my.tuning.qtPatches.enable {
         # ---- Per-package overrides not covered by the testsKilled map ----
 
         # guile 3.0.11 already incorporates the cross-compilation patch that nixpkgs
-        # applies conditionally when hostPlatform != buildPlatform. In pseudo-cross
+        # applies conditionally when hostPlatform != buildPlatform. In IntraISACross
         # that condition fires but the patch is already in the tarball → "already applied".
         # patchFlags --forward silently skips already-applied patches.
         # guile 3.0.11 already incorporates the cross-compilation patch
         # (c117f8edc471d3362043d88959d73c6a37e7e1e9) that nixpkgs conditionally applies
-        # when hostPlatform != buildPlatform. In pseudo-cross that condition fires but
+        # when hostPlatform != buildPlatform. In IntraISACross that condition fires but
         # the patch is already in the tarball → "already applied" failure.
         # Filter it out by its commit hash in the store path name.
         guile = prev.guile.overrideAttrs (old: {
@@ -151,7 +151,7 @@ lib.mkIf config.my.tuning.qtPatches.enable {
         });
 
         # wcslib postInstall does `rm $out/share/doc/wcslib/wcslib` to clean up a
-        # self-referential symlink the Makefile creates in native builds. In pseudo-cross
+        # self-referential symlink the Makefile creates in native builds. In IntraISACross
         # the Makefile creates a proper wcslib -> wcslib-<platform> symlink instead,
         # so the nested path never exists and bare rm fails. Use rm -f.
         wcslib = prev.wcslib.overrideAttrs (_: {
@@ -170,7 +170,7 @@ lib.mkIf config.my.tuning.qtPatches.enable {
           Test2Harness = prev.perl5Packages.Test2Harness.overrideAttrs (_: { doCheck = false; doInstallCheck = false; });
           WWWRobotRules = prev.perl5Packages.WWWRobotRules.overrideAttrs (_: { doCheck = false; doInstallCheck = false; });
           # MIME-Charset bundles Module::Install in inc/ which requires Fcntl (dynamic
-          # loading). In pseudo-cross the build uses a static perl without dynamic loading.
+          # loading). In IntraISACross the build uses a static perl without dynamic loading.
           # Removing inc forces use of system ExtUtils::MakeMaker instead.
           MIMECharset = prev.perl5Packages.MIMECharset.overrideAttrs (old: {
             postPatch = (old.postPatch or "") + "rm -rf inc";
@@ -178,9 +178,9 @@ lib.mkIf config.my.tuning.qtPatches.enable {
         };
 
         # NOTE: musl/glibc/libgcc fixNoLibcLD workarounds removed — testing upstream
-        # bintools-wrapper fix (bare-ld symlink for pseudo-cross) via --override-input.
+        # bintools-wrapper fix (bare-ld symlink for IntraISACross) via --override-input.
 
-        # (The gfortran/gccgo pseudo-cross --disable-bootstrap overrides that
+        # (The gfortran/gccgo IntraISACross --disable-bootstrap overrides that
         # used to live here were removed -- fixed at the root in the fork's
         # gcc/common/configure-flags.nix, where disableBootstrap' now honours
         # --disable-bootstrap for langFortran/langGo when
@@ -201,7 +201,7 @@ lib.mkIf config.my.tuning.qtPatches.enable {
           "--without-docs"
         ];
         # `make install` uses INSTALL_BIN_FLAGS=-s which invokes bare `strip`.
-        # In pseudo-cross only the prefixed strip exists; clear the flag so
+        # In IntraISACross only the prefixed strip exists; clear the flag so
         # coreutils install doesn't call strip. stdenv strips after install.
         preInstall = (old.preInstall or "") + ''
           sed -i 's/^INSTALL_BIN_FLAGS=.*/INSTALL_BIN_FLAGS=/' Makefile2
@@ -250,7 +250,7 @@ lib.mkIf config.my.tuning.qtPatches.enable {
                 ;;
             esac
           ''
-          # Pseudo-cross root fix: raw cross gcc invocations (Go's bootstrap, GCC's
+          # IntraISACross root fix: raw cross gcc invocations (Go's bootstrap, GCC's
           # internal stage2-bubble, anything that bypasses the nixpkgs cc-wrapper) lack
           # the wrapper's runtime -B/-L for glibc startfiles and libgcc_s. LIBRARY_PATH
           # and CPATH are honoured by gcc itself (raw or wrapped), so exporting them

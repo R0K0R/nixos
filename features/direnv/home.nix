@@ -16,7 +16,7 @@ lib.mkIf (osConfig.my.direnv.enable && inScope) {
       a file read rather than an evaluation.
 
       That matters more here than on a stock machine: a devShell evaluated
-      against this fork can pull the pseudo-cross package set, and re-doing that
+      against this fork can pull the IntraISACross package set, and re-doing that
       per shell invocation is exactly the cost worth caching away.
     */
     nix-direnv.enable = true;

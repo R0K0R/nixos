@@ -34,7 +34,7 @@
        or carry WoW64. `wine64` alone cannot run it.
     2. Non-cross. 32-bit support pulls in pkgsi686Linux, whose gcc wants
        multilib, and gcc's builder asserts `!(enableMultilib && isCross)`. This
-       tree is pseudo-cross -- build and host share the config triple, differing
+       tree is IntraISACross -- build and host share the config triple, differing
        only by -march -- so isCross is true and evaluation fails outright.
 
     pkgsBuildBuild satisfies (2) but is still this tree's stdenv, so wine there

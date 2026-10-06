@@ -12,7 +12,7 @@ in
 
   config = lib.mkIf cfg.enable {
     /*
-      THE GTK3 IMMODULES CACHE, synthesized -- because under pseudo-cross the
+      THE GTK3 IMMODULES CACHE, synthesized -- because under IntraISACross the
       tuned gtk3 ships none, and without it no GTK3 app has an IME at all.
 
       Measured, not inferred, on Firefox 154 and Emacs PGTK (both tuned GTK3):
@@ -33,7 +33,7 @@ in
       gtk-query-immodules-3.0, guarded by `buildPlatform == hostPlatform` --
       false here, since the platforms differ by gcc.arch. i18n.inputMethod's
       enableGtk3 would regenerate it under hostPlatform.emulator, which is
-      qemu-x86_64 under pseudo-cross and cannot run the tuned tool either.
+      qemu-x86_64 under IntraISACross and cannot run the tuned tool either.
 
       SO: TEXT SUBSTITUTION, NO EXECUTION. The cache is plain text whose only
       store path is gtk3's own `out`, and the build- and host-platform gtk3
@@ -108,7 +108,7 @@ in
         OFF, and replaced by the synthesized cache below -- read that comment.
 
         enableGtk3 builds a GTK3 immodules.cache by RUNNING gtk-query-immodules-3.0
-        under stdenv.hostPlatform.emulator. Under pseudo-cross that emulator
+        under stdenv.hostPlatform.emulator. Under IntraISACross that emulator
         resolves to qemu-x86_64 (nixpkgs sees an x86_64 -> x86_64 "cross" and
         offers qemu-user for it), and TCG does not implement the meteorlake
         instructions the tuned tool is compiled with. That is the "fails in

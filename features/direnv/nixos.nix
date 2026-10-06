@@ -37,7 +37,7 @@ in
       exactly the cost direnv existed to remove.
 
       Latent rather than urgent HERE: my.nix-settings.gc.automatic is false on
-      this machine by deliberate policy (the pseudo-cross store is expensive to
+      this machine by deliberate policy (the IntraISACross store is expensive to
       reproduce). But a manual `nix-collect-garbage` still collects, and the
       note in nix-settings says automatic GC comes back once the store stops
       being expensive -- at which point an unset keep-outputs would quietly

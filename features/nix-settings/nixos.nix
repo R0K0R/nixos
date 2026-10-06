@@ -71,7 +71,7 @@ in
       type = lib.types.bool;
       default = false;
       description = ''
-        Automatic garbage collection. Off while the pseudo-cross fork project is
+        Automatic garbage collection. Off while the IntraISACross fork project is
         active: failed switch attempts leave days' worth of build artifacts
         unrooted by design, and persistent=true meant a reboot fired the missed
         weekly timer -- one boot GC'd ~3-4k locally built paths (2026-07-08).

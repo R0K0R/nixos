@@ -98,7 +98,7 @@ in
       list is not guessable and was grown twice by being bitten:
 
         <pkg>                                the bare package
-        <pkg>-x86_64-unknown-linux-gnu       its pseudo-cross spliced form
+        <pkg>-x86_64-unknown-linux-gnu       its IntraISACross spliced form
         <pkg>-...-with-packages              emacsWithPackages, which
                                              Unstraightened builds via
                                              emacsPackagesFor

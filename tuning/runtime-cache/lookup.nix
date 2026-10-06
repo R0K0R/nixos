@@ -128,7 +128,7 @@ let
   # package outright, potentially discarding a genuine functional patch
   # (confirmed concretely: on a cold cache, both `mesa` and `libfprint` --
   # the latter carrying a fingerprint-auth-enabling patch, not just a
-  # pseudo-cross compatibility fix -- come back false under Tier 3 alone).
+  # IntraISACross compatibility fix -- come back false under Tier 3 alone).
   hasWarmCache = tier1Valid || tier2Valid;
 
   tier1Names = if tier1Valid then dropBuildOnly tier1.runtimeNames else [ ];

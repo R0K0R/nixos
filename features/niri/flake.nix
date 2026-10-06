@@ -23,7 +23,7 @@
 
     niri = {
       # Local copy patched to use nativeBuildInputs in validated-config-for so
-      # the niri validate binary is in PATH under strictDeps / pseudo-cross.
+      # the niri validate binary is in PATH under strictDeps / IntraISACross.
       url = "path:./niri-flake-patch";
       inputs.nixpkgs.follows = "nixpkgs";
     };

@@ -262,7 +262,7 @@ lib.mkIf (cfg.enable && inScope) {
       # tuning/runtime-cache/lookup.nix would keep the prebuilt upstream binary
       # and skip the Haskell build, and there is a real argument for it (GHC
       # does not autovectorize -- see the nixfmt note in
-      # tuning/overlays/pseudo-cross.nix). Rejected anyway: buildOnly means
+      # tuning/overlays/intra-isa-cross.nix). Rejected anyway: buildOnly means
       # "this never runs on the host", and pandoc does. Putting a genuine
       # runtime package there to dodge a build cost would make that list mean
       # two different things, and the next person reading it could not tell

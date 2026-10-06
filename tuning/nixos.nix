@@ -53,7 +53,7 @@ in
         (plain upstream) build.
 
         Setting it declares buildPlatform WITHOUT gcc.arch so that it differs
-        from hostPlatform, which is what makes this an intra-ISA pseudo-cross
+        from hostPlatform, which is what makes this an IntraISACross
         build rather than a native one.
 
         That split is not tuning for its own sake -- it is what
@@ -66,9 +66,9 @@ in
       '';
     };
 
-    pseudoCross.enable = lib.mkEnableOption ''
-      the generic pseudo-cross and build-load fixes in
-      overlays/pseudo-cross.nix -- cross-build configure defects, test suites
+    intraISACross.enable = lib.mkEnableOption ''
+      the generic IntraISACross and build-load fixes in
+      overlays/intra-isa-cross.nix -- cross-build configure defects, test suites
       that fail under builder load, and the i686 escape hatch. Wanted by any
       tuned host; nothing in it is specific to one machine
     '';
@@ -151,7 +151,7 @@ in
 
     /*
       Overlay ORDER is preserved exactly as it was when these shared one list:
-      o3, lto, then the pseudo-cross pair, then extraOverlays at the default
+      o3, lto, then the IntraISACross pair, then extraOverlays at the default
       priority -- mkMerge concatenates same-priority definitions in the order
       written -- and upstream-tools last at mkOrder 1600, so it sees fork
       packages and aliases last.
@@ -169,10 +169,10 @@ in
       nixpkgs.overlays = [ (import ./overlays/gentoo-lto.nix { inherit hostRuntimeClassifier; }) ];
     })
 
-    (lib.mkIf cfg.pseudoCross.enable {
+    (lib.mkIf cfg.intraISACross.enable {
       nixpkgs.overlays =
         [ (import ./overlays/perl-tk-stub.nix) ]
-        ++ import ./overlays/pseudo-cross.nix { inherit lib inputs; };
+        ++ import ./overlays/intra-isa-cross.nix { inherit lib inputs; };
     })
 
     (lib.mkIf cfg.upstreamTools.enable {
@@ -237,7 +237,7 @@ in
           Everything here hangs off `enable`, because with it off the host is on
           plain upstream nixpkgs and none of these can do what they claim.
           march is called out separately from the overlays: it is the one that
-          silently produces a WORKING but fully-rebuilt system (a pseudo-cross
+          silently produces a WORKING but fully-rebuilt system (an IntraISACross
           split against an unpatched tree), which is the outcome hardest to
           notice and most expensive to sit through.
         */
@@ -246,7 +246,7 @@ in
             assertion = cfg.march == null || cfg.enable;
             message =
               "my.tuning.march is set to ${toString cfg.march} but my.tuning.enable is false. "
-              + "flake.nix has given this host plain upstream nixpkgs, so the pseudo-cross "
+              + "flake.nix has given this host plain upstream nixpkgs, so the IntraISACross "
               + "split would rebuild the entire package set against an unpatched tree instead "
               + "of substituting it from cache.nixos.org. Add my.tuning.enable = true;";
           }
@@ -279,8 +279,8 @@ in
               why = "without the split it aliases everything to upstream, deleting all tuning";
             }
             {
-              name = "pseudoCross";
-              enabled = cfg.pseudoCross.enable;
+              name = "intraISACross";
+              enabled = cfg.intraISACross.enable;
               why = "its fixes only apply to cross builds, and there is no split without march";
             }
           ];

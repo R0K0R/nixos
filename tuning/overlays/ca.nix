@@ -15,7 +15,7 @@
   webkit-scale confirmation is still owed.
 
   "Tuned" is decided the way upstream-tools.nix decides the inverse: a
-  host-runtime name (classifier) whose derivation name carries the pseudo-cross
+  host-runtime name (classifier) whose derivation name carries the IntraISACross
   suffix. Fixed-output derivations are skipped by make-derivation itself when
   outputHash is set; everything without overrideAttrs is left alone.
 */

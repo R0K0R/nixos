@@ -9,7 +9,7 @@ let
 
     KakaoTalk PC is a 32-bit binary, so wine has to carry 32-bit support, which
     pulls in pkgsi686Linux, whose gcc wants multilib. gcc's builder asserts
-    `!(enableMultilib && isCross)` -- and this tree is pseudo-cross, build and
+    `!(enableMultilib && isCross)` -- and this tree is IntraISACross, build and
     host sharing the config triple and differing only by -march, so isCross is
     true. `pkgs.wineWowPackages.stable` therefore fails at EVALUATION, before
     anything is built.

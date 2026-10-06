@@ -21,9 +21,9 @@
   for "without it", not between two different trees. There is no version skew.
 
   Discarding the fork's patches on the BUILD side is safe because those patches
-  exist to make packages *build* under pseudo-cross -- and here we are not
+  exist to make packages *build* under IntraISACross -- and here we are not
   building them, we are substituting them prebuilt. Even on a cache miss,
-  upstream's package set is plain native, so pseudo-cross never enters into it.
+  upstream's package set is plain native, so IntraISACross never enters into it.
   Patches that shape *other* packages' builds live in wrappers, stdenv, and
   builder functions (mk-python-derivation, qtModule, mk-kde-derivation), none of
   which are aliasable top-level derivations, and the wrappers are excluded below.
@@ -41,7 +41,7 @@
   WHY THE HOST SPLICE NEEDS A RUNTIME CHECK (packages this file merged in
   from the former host-upstream-substitute-overlay.nix)
   --------------------------------------------------------------
-  Host-splice packages ARE genuinely part of the pseudo-cross build graph
+  Host-splice packages ARE genuinely part of the IntraISACross build graph
   (unlike the build splice, hostPlatform.gcc.arch is set here), so they can't
   be aliased unconditionally the way build-splice packages can -- only the
   ones that gain nothing from staying in the patched tree, i.e. aren't
@@ -49,17 +49,17 @@
   tune isHostRuntime=true candidates, so an isHostRuntime=false package pays
   the "must build through the patched toolchain" cost for zero benefit).
 
-  WHY THIS IS SAFE: every concrete pseudo-cross bug hit in this fork --
+  WHY THIS IS SAFE: every concrete IntraISACross bug hit in this fork --
   Qt6 native-tool lookups, kdsoap SIGILL, embree's ISA-dispatch confusion,
   Qt5's F16C detection, jasper's C17 sentinel -- is about the BUILD PROCESS
-  failing or misbehaving under pseudo-cross conditions, never about the
+  failing or misbehaving under IntraISACross conditions, never about the
   finished artifact behaving differently at runtime. Substituting sidesteps
   that whole bug class structurally: the package is never built under
-  pseudo-cross at all, not even on a cache miss (falls back to building from
+  IntraISACross at all, not even on a cache miss (falls back to building from
   nixpkgs-upstream, plain native, no gcc.arch, no fork patches). Host-splice
   packages also carry identical --host=/--build= strings (same triple; this
   fork's whole intra-ISA premise), so a package that DID successfully build
-  under pseudo-cross would take the same native-detection code path as plain
+  under IntraISACross would take the same native-detection code path as plain
   upstream anyway.
 
   TRADEOFF ACCEPTED: closure duplication. A substituted package's own
@@ -88,7 +88,7 @@
      rather than from memory: mesa, libfprint, xapian_1_4, libosinfo,
      openldap, embree, jasper, nodejs-slim_24, nodejs_24, sdl3, frei0r,
      nixfmt, rnnoise-plugin, easyeffects, zam-plugins). Some of these carry
-     GENUINE FUNCTIONAL patches, not just pseudo-cross build fixes --
+     GENUINE FUNCTIONAL patches, not just IntraISACross build fixes --
      libfprint's is the concrete example: it adds SDCP support so fingerprint
      enrollment actually persists to the sensor, which upstream's driver
      silently fails to do. A false-negative from isHostRuntime on a package
@@ -135,7 +135,7 @@
                       the sole cause of the "infinite recursion encountered"
                       that made an earlier attempt look structurally impossible;
                       bisection pinned it to gccCrossLibcStdenv.
-      *EmulatorHook*  asserts on canExecute, which pseudo-cross inverts:
+      *EmulatorHook*  asserts on canExecute, which IntraISACross inverts:
                       "mesonEmulatorHook may only be added to nativeBuildInputs
                       when the target binaries can't be executed".
   */
@@ -218,10 +218,10 @@
     NOT THE WHOLE STORY, and this exclusion does not on its own make a GJS app
     work. A later teardown of that exact foliate crash found a second, deeper
     source of the same duplication that has nothing to do with aliasing: tuned
-    gtk4 links the UNTUNED glib outright, because pseudo-cross gives the build
+    gtk4 links the UNTUNED glib outright, because IntraISACross gives the build
     and host wrappers the same NIX_LDFLAGS variable and the buildPlatform
     gobject-introspection's propagated -L is emitted first. See the `foliate`
-    entry in tuning/overlays/pseudo-cross.nix for the measurement. Keeping the
+    entry in tuning/overlays/intra-isa-cross.nix for the measurement. Keeping the
     hooks unaliased is still right -- it removes one of the two sources -- it
     just is not sufficient.
 

@@ -128,7 +128,7 @@ and byte-identical to upstream (build tools come from cache.nixos.org) while
 ```nix
 my.tuning = {
   march = "meteorlake";        # or "znver3"; null for an untuned host
-  pseudoCross.enable = true;   # generic cross/build-load fixes
+  intraISACross.enable = true;   # generic cross/build-load fixes
   o3.enable = true;
   lto.enable = true;
   upstreamTools.enable = true;
