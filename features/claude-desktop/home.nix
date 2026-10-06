@@ -8,6 +8,11 @@ let
 
   cfg = osConfig.my.claude-desktop;
 
+  # Absolute, or relative to the home directory (see the option).
+  tokenPath =
+    let f = cfg.mcp.tokenFile; in
+    if f == null || lib.hasPrefix "/" f then f else "${config.home.homeDirectory}/${f}";
+
   # Desktop speaks MCP over stdio only -- see the option's own note -- so an
   # HTTP server is given to it as a command that speaks stdio and posts.
   bridge = pkgs.writeScriptBin "mcp-http-stdio" ''
@@ -23,7 +28,7 @@ let
         args = [ def.url ];
       }
       // lib.optionalAttrs (cfg.mcp.tokenFile != null) {
-        env.MCP_TOKEN_FILE = cfg.mcp.tokenFile;
+        env.MCP_TOKEN_FILE = tokenPath;
       }
     else
       def;

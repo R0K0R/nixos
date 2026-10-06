@@ -153,9 +153,11 @@ in
       tokenFile = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
-        example = "/home/me/.config/noteworthy/mcp-token";
+        example = ".config/noteworthy/mcp-token";
         description = ''
           A file holding the bearer token for the http servers above.
+          Absolute, or relative to the user's home -- the relative form keeps
+          a host file free of `/home/<name>` paths.
 
           Read at switch and written into each project's `.mcp.json`, which is
           then mode 600 and no longer a store symlink -- a store path is
@@ -166,10 +168,27 @@ in
         '';
       };
 
+      userScope = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Also declare the servers at user scope, so every session sees them,
+          not only sessions started inside one of `projects`.
+
+          User scope lives in `~/.claude.json`, which is Claude Code's own
+          state file -- the reason `projects` exists at all. It is therefore
+          MERGED at switch, touching only `mcpServers` (the same approach
+          claude-desktop takes with its config), never symlinked over: a
+          read-only store path would stop the program writing its own state.
+          With `tokenFile` set, the merged entries carry the token, and the
+          file is kept at mode 600.
+        '';
+      };
+
       projects = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [ ];
-        example = [ "noteworthy" ];
+        example = [ "git_shit/noteworthy" ];
         description = ''
           Directories, relative to the user's home, to write `.mcp.json`
           into. A project gets the servers only if it is named here: which

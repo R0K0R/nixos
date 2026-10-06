@@ -49,6 +49,7 @@ in
       default = null;
       description = ''
         A file holding the bearer token for the http servers above.
+        Absolute, or relative to the user's home.
 
         Handed to the bridge as `MCP_TOKEN_FILE`, so the token itself never
         appears in the config, in the store, or in a process listing -- the

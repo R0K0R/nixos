@@ -28,6 +28,17 @@ let
     mcpServers = cfg.mcp.servers;
   };
 
+  # tokenFile may be relative to the home directory; resolve it here so no
+  # host has to spell out /home/<name>.
+  tokenPath =
+    let f = cfg.mcp.tokenFile; in
+    if f == null || lib.hasPrefix "/" f then f else "${config.home.homeDirectory}/${f}";
+
+  # jq filter adding the bearer header to http/sse servers; $auth is bound by the caller.
+  withAuth = ''.mcpServers |= with_entries(
+    if (.value.type // "stdio") == "http" or (.value.type // "stdio") == "sse"
+    then .value.headers.Authorization = $auth else . end)'';
+
   gemma-claude = pkgs.writeScriptBin "gemma-claude" ''
     #! /bin/sh
     exec env \
@@ -81,20 +92,43 @@ lib.mkMerge [
     # the machine.  Rendered from the same JSON, with the header added.
     home.activation.claudeCodeMcpProjects = lib.hm.dag.entryAfter [ "writeBoundary" ] (
       lib.concatMapStringsSep "\n" (dir: ''
-        if [ -r "${cfg.mcp.tokenFile}" ]; then
+        if [ -r "${tokenPath}" ]; then
           run mkdir -p "$HOME/${dir}"
-          ${pkgs.jq}/bin/jq --arg auth "Bearer $(cat ${cfg.mcp.tokenFile})" \
-            '.mcpServers |= with_entries(
-               if (.value.type // "stdio") == "http" or (.value.type // "stdio") == "sse"
-               then .value.headers.Authorization = $auth else . end)' \
+          ${pkgs.jq}/bin/jq --arg auth "Bearer $(cat ${tokenPath})" '${withAuth}' \
             ${mcpJson} > "$HOME/${dir}/.mcp.json.tmp"
           run chmod 600 "$HOME/${dir}/.mcp.json.tmp"
           run mv "$HOME/${dir}/.mcp.json.tmp" "$HOME/${dir}/.mcp.json"
         else
-          echo "claude-code: ${cfg.mcp.tokenFile} unreadable; left ${dir}/.mcp.json alone" >&2
+          echo "claude-code: ${tokenPath} unreadable; left ${dir}/.mcp.json alone" >&2
         fi
       '') cfg.mcp.projects
     );
+  })
+
+  (lib.mkIf ((cfg.enable && cfg.mcp.servers != { } && cfg.mcp.userScope) && inScope) {
+    # Merged into Claude Code's own state file, touching only mcpServers --
+    # see the option's note.  Idempotent: an unchanged merge rewrites nothing.
+    home.activation.claudeCodeMcpUser = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      state="$HOME/.claude.json"
+      [ -f "$state" ] || { run echo '{}' > "$state"; run chmod 600 "$state"; }
+      ${if tokenPath == null then ''
+        servers="$(cat ${mcpJson})"
+      '' else ''
+        if [ -r "${tokenPath}" ]; then
+          servers="$(${pkgs.jq}/bin/jq --arg auth "Bearer $(cat ${tokenPath})" '${withAuth}' ${mcpJson})"
+        else
+          echo "claude-code: ${tokenPath} unreadable; user-scope MCP servers left alone" >&2
+          servers=""
+        fi
+      ''}
+      if [ -n "$servers" ]; then
+        merged="$(${pkgs.jq}/bin/jq --argjson add "$servers" \
+          '.mcpServers = ((.mcpServers // {}) + $add.mcpServers)' "$state")"
+        if [ "$merged" != "$(cat "$state")" ]; then
+          run install -m 600 /dev/stdin "$state" <<< "$merged"
+        fi
+      fi
+    '';
   })
 
   (lib.mkIf ((cfg.enable && cfg.watermarksRemover.enable) && inScope) {
