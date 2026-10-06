@@ -1,0 +1,72 @@
+--- a/crates/rnote-engine/src/strokes/vectorimage.rs
++++ b/crates/rnote-engine/src/strokes/vectorimage.rs
+@@ -10,7 +10,7 @@
+ use anyhow::anyhow;
+ use hayro::{hayro_interpret, hayro_syntax};
+ use kurbo::Shape;
+-use p2d::bounding_volume::Aabb;
++use p2d::bounding_volume::{Aabb, BoundingVolume};
+ use rayon::iter::{IntoParallelIterator, ParallelIterator};
+ use rnote_compose::ext::AabbExt;
+ use rnote_compose::shapes::Rectangle;
+@@ -77,16 +77,40 @@
+ 
+     fn gen_images(
+         &self,
+-        _viewport: Aabb,
++        viewport: Aabb,
+         image_scale: f64,
+     ) -> Result<GeneratedContentImages, anyhow::Error> {
+         let bounds = self.bounds();
+-        // always generate full stroke images for vectorimages, they are too expensive to be repeatedly rendered
+-        Ok(GeneratedContentImages::Full(vec![Image::gen_with_piet(
+-            |piet_cx| self.draw(piet_cx, image_scale),
+-            bounds,
+-            image_scale,
+-        )?]))
++        let full_pixels = (bounds.extents()[0] * image_scale) * (bounds.extents()[1] * image_scale);
++
++        if full_pixels <= Self::FULL_IMAGE_MAX_PIXELS {
++            // generate full stroke images for vectorimages when affordable,
++            // they are too expensive to be repeatedly rendered
++            return Ok(GeneratedContentImages::Full(vec![Image::gen_with_piet(
++                |piet_cx| self.draw(piet_cx, image_scale),
++                bounds,
++                image_scale,
++            )?]));
++        }
++
++        // When zoomed in far, a full image grows with the square of the zoom and quickly reaches
++        // gigabytes per stroke (an imported A4 pdf page at deep zoom is a ~1GB buffer). Only render
++        // the part inside the viewport then, drawing the svg directly with cairo so the full-size
++        // image is never rasterized.
++        match viewport.intersection(&bounds) {
++            Some(intersection_bounds) => Ok(GeneratedContentImages::Partial {
++                images: vec![Image::gen_with_cairo(
++                    |cairo_cx| self.draw_to_cairo(cairo_cx, image_scale),
++                    intersection_bounds,
++                    image_scale,
++                )?],
++                viewport,
++            }),
++            None => Ok(GeneratedContentImages::Partial {
++                images: vec![],
++                viewport,
++            }),
++        }
+     }
+ 
+     fn update_geometry(&mut self) {}
+@@ -137,6 +161,12 @@
+ }
+ 
+ impl VectorImage {
++    /// Upper bound of pixels for which a full stroke image is generated (16 Mpx, ~64MiB as RGBA).
++    ///
++    /// That covers a full A4 page on a 4K display at well above 100% zoom. Beyond it, only the
++    /// part inside the viewport is rendered, so memory stays bounded by the viewport size.
++    const FULL_IMAGE_MAX_PIXELS: f64 = 16.0 * 1024.0 * 1024.0;
++
+     pub fn from_svg_str(
+         svg_data: &str,
+         pos: na::Vector2<f64>,

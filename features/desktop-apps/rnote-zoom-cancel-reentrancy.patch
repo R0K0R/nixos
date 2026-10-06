@@ -1,0 +1,17 @@
+--- a/crates/rnote-ui/src/canvaswrapper.rs
++++ b/crates/rnote-ui/src/canvaswrapper.rs
+@@ -604,8 +604,12 @@
+                 self.canvas_zoom_gesture.connect_cancel(clone!(
+                     #[weak(rename_to=canvaswrapper)]
+                     obj,
+-                    move |gesture, _event_sequence| {
+-                        gesture.set_state(EventSequenceState::Denied);
++                    move |_gesture, _event_sequence| {
++                        // No set_state() here: GTK emits the cancel signal while already denying
++                        // this sequence (another gesture, e.g. the scrolled window's drag, claimed
++                        // it). Setting the state from inside the handler re-enters
++                        // gtk_widget_propagate_event_sequence_state on a sequence being torn down,
++                        // and gdk_event_get_event_type then reads a dangling event (SIGSEGV).
+ 
+                         // workaround for https://gitlab.gnome.org/GNOME/gtk/-/issues/187
+                         canvaswrapper.imp().workaround_restore_kinetic_scrolling();
