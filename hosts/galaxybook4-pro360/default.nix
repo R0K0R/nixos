@@ -198,6 +198,10 @@ in
     opencode.enable = true;
     direnv.enable = true;
     nix-settings.enable = true;
+    # Lets r0k0r pass privileged nix options, e.g. `--builders` to pin a build to
+    # one machine (without it the daemon silently uses /etc/nix/machines). Same
+    # as victus-15; trusted users are root-equivalent to the store.
+    nix-settings.trustedUsers = [ "r0k0r" ];
     emacs.enable = true;
     # Package sets, each owning its own list (features/<name>/packages.nix).
     base.enable = true;
