@@ -163,6 +163,19 @@ in
   */
   "age/nix-signing-key-victus-15.age".publicKeys = [ victus15 ];
 
+  /*
+    GitHub account recovery codes. Storage only: no host declares it in
+    age.secrets, so it is never decrypted to /run/agenix. It is for a human
+    who is locked out, not for a service, and a plaintext copy on disk at
+    every boot would defeat the point. Read it with:
+
+      sudo age -d -i /etc/agenix/identity-ed25519 age/github-recovery-codes.age
+
+    galaxybook only. Its identity is the one that can be recovered from the
+    melt seed phrase, which matters most exactly when this file is needed.
+  */
+  "age/github-recovery-codes.age".publicKeys = [ galaxybook ];
+
   # OpenVPN profile, credentials inline -- features/openvpn/nixos.nix.
   "age/openvpn-profile.age".publicKeys = [ galaxybook ];
 
