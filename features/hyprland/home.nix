@@ -22,136 +22,19 @@ let
   '';
 
   /*
-    Run every my.hyprland.rotationHooks entry with the new transform.
-
-    A generated script rather than a loop inlined twice: the shim reaches the
-    real hyprctl through `exec`, which replaces the process, so hooks have to
-    run BEFORE it at both exit paths and there is no "after" to put them in.
-    One script means the two call sites cannot drift.
-
-    Best-effort per hook -- a shell that has not started yet, or has no bar to
-    swap, must not turn a physical rotation into a screen that never rotates.
+    Rotation shim, hooks runner and the flocked iio-hyprland wrapper. Moved to
+    ./rotation.nix so features/dms/plugins.nix can hand the SAME shim to the
+    vehicle-motion-cues plugin: that plugin must own the accelerometer's IIO
+    buffer for its motion cues, only one process can hold that buffer, and so
+    it serves orientation from the same reader instead of competing with
+    iio-hyprland for the sensor. Both emit the identical keyword batch, so the
+    translation and every workaround live in one place still.
   */
-  runRotationHooks = pkgs.writeShellScript "hypr-rotation-hooks" (
-    ''
-      xform="''${1:-0}"
-    ''
-    + lib.concatMapStrings (h: ''
-      ${h} "$xform" >/dev/null 2>&1 || true
-    '') osConfig.my.hyprland.rotationHooks
-  );
-
-  /*
-    iio-hyprland speaks legacy hyprctl -- a four-command keyword batch per
-    rotation (monitor transform, touchdevice transform, tablet transform,
-    workspace orientation). Under configType = "lua" the keyword parser is
-    gone entirely, so this shim (PATH-shadowed for iio-hyprland only,
-    below) translates the whole batch into one `hyprctl eval` of the
-    equivalent hl.* calls. History worth keeping: the shim originally
-    existed for a different bug -- keyword-era Hyprland applied a bare
-    "monitor X,transform,N" without recomputing the swapped w/h box, so the
-    shim restated the full rule from live monitor state. hl.monitor's
-    merge-with-existing-rule application makes that original problem moot.
-  */
-  hyprctlTransformShim = pkgs.writeShellScriptBin "hyprctl" ''
-    real=${pkgs.hyprland}/bin/hyprctl
-    if [ "$1" = "--batch" ] && [[ "$2" == *"keyword monitor "*",transform,"* ]]; then
-      if [[ "$2" =~ keyword\ monitor\ ([^,]+),transform,([0-9]+) ]]; then
-        mon="''${BASH_REMATCH[1]}"
-        xform="''${BASH_REMATCH[2]}"
-        if [ "$xform" = "0" ]; then
-          # Returning to transform 0 is its own separate bug: even a full
-          # monitor rule leaves layer-shell clients stuck at the rotated
-          # geometry here, though hyprctl monitors correctly reports
-          # transform:0 -- verified live. `reload` reliably forces the
-          # resync; under the Lua config it also re-runs the whole script,
-          # which resets input:touchdevice/tablet transforms to their
-          # config defaults (0) and clears the workspace orientation rule
-          # -- exactly the landscape state wanted, and the same net effect
-          # the pre-Lua reload had.
-          # Back to landscape. Hooks BEFORE exec -- exec replaces this
-          # process, so anything after it never runs.
-          ${runRotationHooks} "$xform"
-          exec "$real" reload
-        fi
-        # configType = "lua" killed `hyprctl keyword` outright ("keyword
-        # can't work with non-legacy parsers. Use eval."), so every part of
-        # iio-hyprland's batch must be translated, not just patched. The
-        # batch is FOUR commands (main.c, system_fmt):
-        #   keyword monitor <out>,transform,N
-        #   keyword input:touchdevice:transform N   <- touch mapping
-        #   keyword input:tablet:transform N        <- pen mapping
-        #   keyword workspace m[ID], layoutopt:orientation:<dir>
-        # An earlier version of this shim translated only the monitor line
-        # and silently dropped the rest -- display rotated, touch/pen
-        # coordinates did not. All four go in one eval now:
-        #   - hl.monitor merges into the output's existing rule
-        #     (hlMonitor: parser.rule() = *existing), which also obsoletes
-        #     the original partial-rule bug this shim was born for
-        #   - input transforms are plain config values
-        #     (input:touchdevice:transform, input:tablet:transform)
-        #   - the orientation keyword is NOT forwarded as-is; it names a
-        #     master-layout option this layout ignores, so it is remapped to
-        #     scrolling:direction below
-        lua="hl.monitor({ output = \"$mon\", transform = $xform }) hl.config({ input = { touchdevice = { transform = $xform }, tablet = { transform = $xform } } })"
-        # THE LAYOUT AXIS. iio-hyprland's fourth command is
-        #
-        #   keyword workspace m[<ID>], layoutopt:orientation:<left|top|right|bottom>
-        #
-        # which is a MASTER-layout option. general:layout here is "scrolling",
-        # and that algorithm never reads `orientation` -- it reads `direction`:
-        #
-        #   if (WORKSPACERULE->m_layoutopts.contains("direction"))
-        #     -- src/layout/algorithm/tiled/scrolling/ScrollingAlgorithm.cpp:1942
-        #
-        # So the orientation this shim used to forward was translated
-        # faithfully and then silently discarded, which is why rotating left
-        # windows side by side instead of stacking them.
-        #
-        # Derived from $xform rather than from iio's orientation word: the
-        # transform is unambiguous, and it keeps the mapping readable as
-        # "which way is the long axis now".
-        #
-        #   0 normal    -> right  tape runs across the wide axis
-        #   1 90 deg    -> down   long axis is now vertical, so stack
-        #   2 180 deg   -> left   horizontal again, reversed
-        #   3 270 deg   -> up     vertical again, reversed
-        #
-        # Set globally rather than per workspace so it applies to workspaces
-        # that do not exist yet. Returning to landscape needs no counterpart:
-        # the transform-0 branch above execs `reload`, which drops back to the
-        # configured default.
-        case "$xform" in
-          1) _dir=down ;;
-          2) _dir=left ;;
-          3) _dir=up ;;
-          *) _dir=right ;;
-        esac
-        lua="$lua hl.config({ scrolling = { direction = \"$_dir\" } })"
-        # Same reason: hooks before exec, not after.
-        ${runRotationHooks} "$xform"
-        exec "$real" eval "$lua"
-      fi
-    fi
-    exec "$real" "$@"
-  '';
-
-  # Only iio-hyprland's own hyprctl calls go through the shim -- everything
-  # else in the session (DMS, terminal, keybinds) keeps using the real one.
-  #
-  # flock singleton: hard cap of one instance per session, enforced at the
-  # wrapper regardless of who spawns it. This is the second half of the
-  # 4068-process fork bomb fix (see the hl.on("hyprland.start") comment in
-  # extraConfig for the first half): even if some future path re-executes
-  # the spawn, the lock makes the duplicate exit instead of joining a
-  # rotation -> reload -> respawn feedback loop.
-  iioHyprlandWithTransformFix = pkgs.writeShellScriptBin "iio-hyprland" ''
-    exec ${pkgs.util-linux}/bin/flock -n "''${XDG_RUNTIME_DIR:-/tmp}/iio-hyprland.lock" \
-      ${pkgs.writeShellScript "iio-hyprland-locked" ''
-        export PATH="${hyprctlTransformShim}/bin:$PATH"
-        exec ${pkgs.iio-hyprland}/bin/iio-hyprland "$@"
-      ''} "$@"
-  '';
+  rotation = import ./rotation.nix {
+    inherit pkgs lib;
+    rotationHooks = osConfig.my.hyprland.rotationHooks;
+  };
+  inherit (rotation) runRotationHooks hyprctlTransformShim iioHyprlandWithTransformFix;
 
   /*
     Page-relative workspace navigation.
@@ -207,6 +90,35 @@ let
   */
   columnResizeSplit = pkgs.writeShellScript "hypr-column-resize-split" ''
     exec ${pkgs.python3.interpreter} ${./column-resize-split.py} "$1"
+  '';
+
+
+  /*
+    Blank the panel WITHOUT suspending, and wake it on the next input.
+
+    The two misc:*_enables_dpms options below turn any keypress or pointer
+    motion back into "monitors on" -- but the chord that runs this script is
+    itself input. Its key releases (and the pointer nudge of letting go of the
+    touchpad) land AFTER the dispatch, so with the options already armed the
+    panel lights back up the instant it goes dark. Hence: disarm, blank, wait
+    out the chord, re-arm. The window only has to outlast the release of keys
+    you were already holding, so it is short; anything you press after it wakes
+    the panel as intended.
+
+    hl.config merges -- it is the same partial-table call DMS's colors.lua
+    makes -- so restating just these two options leaves the rest of the config
+    alone. Nothing here touches sleep: the machine stays fully awake, which is
+    the point (lid close is the separate path, see features/dms/compositor.nix).
+  */
+  dpmsOff = pkgs.writeShellScript "hypr-dpms-off" ''
+    armWake() {
+      ${pkgs.hyprland}/bin/hyprctl eval \
+        "hl.config({ misc = { key_press_enables_dpms = $1, mouse_move_enables_dpms = $1 } })" >/dev/null
+    }
+    armWake false
+    ${pkgs.hyprland}/bin/hyprctl dispatch 'hl.dsp.dpms({ action = "off" })'
+    ${pkgs.coreutils}/bin/sleep 1.5
+    armWake true
   '';
 
 in
@@ -278,8 +190,24 @@ in
           resize_on_border = true;
           # border_size = 0 above means there is no visible border to grab;
           # this extends the invisible hitbox around the window edge instead
-          # (general:extend_border_grab_area, px, default 15 -- kept at
-          # default, generous enough for a finger).
+          # (general:extend_border_grab_area, px, default 15).
+          #
+          # KEPT AT THE DEFAULT, because raising it does NOT help between two
+          # tiled columns. Hyprland only starts a border resize when the cursor
+          # is inside the extended box AND *outside* the window's real box:
+          #
+          #   const CBox grab = {real.x - BORDER_GRAB_AREA, ...};
+          #   if (grab.containsPoint(mouse) && !real.containsPoint(mouse)) ...
+          #     -- InputManager.cpp, onMouseButton
+          #
+          # so the area only extends OUTWARD. Between adjacent columns the only
+          # space outside both windows is the gaps_in gap (4px here); a few px
+          # further and you are already inside the neighbour's real box, which
+          # disqualifies the resize no matter how large this value is. Raising
+          # it only widens grabbing at screen edges and around floating
+          # windows. The column seam is therefore owned entirely by
+          # features/dms/plugins/column-seam-drag, which is also the only way
+          # the S Pen can resize at all.
           extend_border_grab_area = 15;
           hover_icon_on_border = true;
         };
@@ -326,7 +254,11 @@ in
           multitouch axes libinput cannot synthesise them. Firmware-side, not
           configurable here.
         */
-        input.natural_scroll = true;
+        #
+        # Off when features/x-folding-trackpad is enabled: its filter does the
+        # inversion at the device, where it can tell a pinch (Ctrl + wheel)
+        # from a scroll. Inverting here as well would flip the wheel back.
+        input.natural_scroll = !(osConfig.my.x-folding-trackpad.enable or false);
 
         /*
           Ask 1, root cause (verified against 0.56.0 source, not guessed):
@@ -430,6 +362,20 @@ in
         # hl.animation calls below for why).
         animations.enabled = true;
 
+        # Wake the panel on any input. SUPER + SHIFT + P (dpmsOff above)
+        # blanks it without suspending -- the machine keeps running, so a
+        # build or a download survives -- and nothing else here ever turns
+        # it back on: DMS's idle timeouts are all 0 (never blank, never
+        # suspend) and the dpms dispatcher is one-way. These two are the
+        # way back. dpmsOff flips them off for the length of its grace
+        # window and restores them to the values below, so this is the
+        # resting state, not a one-shot. Note the waking event is still
+        # delivered to the focused surface: a stray key can type into it.
+        misc = {
+          key_press_enables_dpms = true;
+          mouse_move_enables_dpms = true;
+        };
+
         # XWayland surfaces on this 1.5-scaled panel get upscaled by the
         # compositor and look pixelated (first seen on galaxy-buds-client,
         # an Avalonia/X11 app). force_zero_scaling makes XWayland render at
@@ -456,13 +402,12 @@ in
           direction = "swipe";
           action = "move";
         }
-        # 4-finger vertical swipe: workspace switch, matching the touchscreen
-        # gesture direction above and the "slidevert" animation style.
-        {
-          fingers = 4;
-          direction = "vertical";
-          action = "workspace";
-        }
+        # NOTE: the 4-finger VERTICAL swipe is not here. It needs to run
+        # HyprFocusOrWorkspace (walk the column, then change workspace),
+        # and a script is not expressible in this attrset: hl.gesture's string
+        # actions are a fixed set (workspace/resize/move/special/close/float/
+        # fullscreen/cursor_zoom/scroll_move/unset -- no dispatcher), so it is
+        # declared as a Lua *function* action in the extraConfig block below.
         # scroll_move (snake_case -- verified against source, NOT the legacy
         # dispatcher's "scrollMove" spelling, which errors here:
         # "hl.gesture: unknown action \"scrollMove\""): purpose-built gesture
@@ -577,12 +522,40 @@ in
       -- smaller, hence text/buttons looking oversized after switching). Pin
       -- explicitly so it doesn't depend on Hyprland's auto-detection. Output name
       -- and scale both come from the host -- see my.desktop.primaryOutput.
+      --
+      -- Rotation survives a reload. A rebuild rewrites this file and Hyprland
+      -- re-runs it, which used to drop the output back to transform 0 --
+      -- the rotation source only emits on an orientation CHANGE, so nothing
+      -- put it back. The rotation shim (rotation.nix) records every transform
+      -- it applies under $XDG_STATE_HOME, and this re-applies the same four
+      -- pieces the shim sets: output, touch, pen and the scrolling axis.
+      -- State dir, so it also outlives a logout or reboot. If the machine is
+      -- held differently by then, the rotation source corrects it: the
+      -- vehicleMotionCues patch makes it read the real transform at start
+      -- instead of assuming 0.
+      local rotation = nil
+      do
+        local state = os.getenv("XDG_STATE_HOME")
+        if not state or state == "" then state = (os.getenv("HOME") or "") .. "/.local/state" end
+        local f = io.open(state .. "/hypr/transform-${osConfig.my.desktop.primaryOutput}")
+        if f then
+          local t = tonumber(f:read("l"))
+          f:close()
+          if t and t >= 1 and t <= 3 then rotation = t end
+        end
+      end
       hl.monitor({
         output = "${osConfig.my.desktop.primaryOutput}",
         mode = "preferred",
         position = "auto",
         scale = "${osConfig.my.desktop.primaryOutputScale}",
+        transform = rotation or 0,
       })
+      if rotation then
+        hl.config({ input = { touchdevice = { transform = rotation }, tablet = { transform = rotation } } })
+        -- Same transform -> axis mapping as the shim.
+        hl.config({ scrolling = { direction = ({ "down", "left", "up" })[rotation] } })
+      end
 
       -- iio-hyprland: reads iio-sensor-proxy orientation over D-Bus, rotates the
       -- eDP-1 output and touch input transform automatically (accel_3d + hinge
@@ -608,7 +581,8 @@ in
       -- own systemd activation block). The wrapper also carries a flock
       -- singleton as defense in depth.
       hl.on("hyprland.start", function()
-        hl.exec_cmd("iio-hyprland ${osConfig.my.desktop.primaryOutput}")
+        ${lib.optionalString (osConfig.my.desktop.autorotate != "iio")
+            "-- autorotate source is \"${osConfig.my.desktop.autorotate}\", not iio-hyprland: "}hl.exec_cmd("iio-hyprland ${osConfig.my.desktop.primaryOutput}")
       end)
 
       -- Emacs opens as a FULL-WIDTH COLUMN, not maximized. `maximize` is a
@@ -750,6 +724,13 @@ in
       -- resizes both columns by address (colresize alone only touches the
       -- focused one and lets the tape absorb the difference). Repeating so a
       -- held key keeps moving the seam, as end-4's do.
+      -- Super + left-drag moves the focused window: the pointer equivalent of
+      -- the 3-finger touchpad swipe (gesture `action = "move"` above).
+      -- `drag = true` is the bindm equivalent in the Lua API, and the
+      -- dispatcher is window.drag -- window.move needs a direction and rejects
+      -- an empty call, so it cannot serve as the mouse-drag verb.
+      hl.bind(mod .. " + mouse:272", hl.dsp.window.drag(), { drag = true })
+
       hl.bind(mod .. " + Semicolon", hl.dsp.exec_cmd("${columnResizeSplit} -0.1"), { repeating = true })
       hl.bind(mod .. " + Apostrophe", hl.dsp.exec_cmd("${columnResizeSplit} 0.1"), { repeating = true })
 
@@ -774,8 +755,29 @@ in
       -- focus-column semantics, which is what H/L meant here originally.
       -- Arrows stay movefocus: layoutmsg only knows tiled tape members, so
       -- arrows remain the way to reach floating windows.
-      hl.bind(mod .. " + H", hl.dsp.layout("focus l"))
-      hl.bind(mod .. " + L", hl.dsp.layout("focus r"))
+      --
+      -- `focus l/r/u/d` is NOT screen-relative. It means previous/next column
+      -- (l/r) and previous/next window in the column (u/d) -- swapped to u/d
+      -- and l/r when the tape runs vertically -- and the rotation shim turns
+      -- the tape with the screen (rotation.nix: 180 deg -> "left", 90 ->
+      -- "down", 270 -> "up"). At 180 deg the next column sits on the screen's
+      -- LEFT, so L went left. Hyprland's own movewindow already translates
+      -- (ScrollingAlgorithm.cpp, moveTargetTo's rotateDir); layoutmsg focus
+      -- does not, so this does the same translation. Worked through that
+      -- table, only two cases differ from the literal key: "left" swaps l/r,
+      -- "up" swaps u/d. "down" needs nothing -- l/r are then within-column
+      -- steps, which run left to right.
+      function HyprLayoutFocusArg(dir)
+        local tape = hl.get_config("scrolling.direction")
+        if tape == "left" and (dir == "l" or dir == "r") then
+          return dir == "l" and "r" or "l"
+        elseif tape == "up" and (dir == "u" or dir == "d") then
+          return dir == "u" and "d" or "u"
+        end
+        return dir
+      end
+      hl.bind(mod .. " + H", function() hl.dispatch(hl.dsp.layout("focus " .. HyprLayoutFocusArg("l"))) end)
+      hl.bind(mod .. " + L", function() hl.dispatch(hl.dsp.layout("focus " .. HyprLayoutFocusArg("r"))) end)
       -- Workspace cycle among EXISTING workspaces ("e±1"), same string
       -- syntax as the legacy `workspace, e-1` dispatcher -- hl.dsp.focus's
       -- workspace-selector overload hands it to the identical parser.
@@ -789,8 +791,113 @@ in
       -- 10 -> 11 -> 12, which rolls the page over as intended. "-1" clamps at
       -- workspace 1 rather than running negative, so the low end needs no
       -- special case.
-      hl.bind(mod .. " + K", hl.dsp.focus({ workspace = "-1" }))
-      hl.bind(mod .. " + J", hl.dsp.focus({ workspace = "+1" }))
+      --[[
+        Vertical focus that falls through to a workspace switch at the end of
+        the column. ONE implementation for all three input paths -- Mod+J/K,
+        the touchpad's vertical swipe, and the touchscreen's (which calls this
+        same global through `hyprctl eval`, see features/touch-gestures) -- so
+        they cannot drift. They used to: the keys and the touchscreen stepped
+        workspaces with focus{workspace="+1"/"-1"} (creating empty ones on
+        demand) while the touchpad used the built-in `workspace` gesture, which
+        only walks workspaces that already EXIST. A blank workspace therefore
+        behaved differently depending on how you asked for it.
+
+        IN-PROCESS, deliberately. The first version shelled out to a Python
+        script, which meant an interpreter start plus two `hyprctl` round-trips
+        per keypress -- a noticeable lag on a keybind. hl.bind takes a Lua
+        function directly, so this runs inside the compositor with no spawn.
+
+        The end of a column is found by POSITION, not by "focus didn't move":
+        the scrolling layout WRAPS to the other end of the column when it runs
+        out (ScrollingAlgorithm.cpp falls back to targetDatas.front()/back()
+        unless general:no_focus_fallback), so a no-move signal is not readable.
+      ]]
+      function HyprFocusOrWorkspace(dir)
+        local down = dir == "down"
+        local function switchWorkspace()
+          hl.dispatch(hl.dsp.focus({ workspace = down and "+1" or "-1" }))
+        end
+
+        local active = hl.get_active_window()
+        -- Nothing focused (blank workspace) or floating: no column to walk.
+        if not active or active.floating or not active.workspace then
+          switchWorkspace()
+          return
+        end
+
+        local wins = hl.get_workspace_windows(active.workspace.id)
+        if not wins then
+          switchWorkspace()
+          return
+        end
+
+        -- Tape running vertically (portrait): up/down is between columns,
+        -- which are stacked rows now, so the edge is simply "no tiled window
+        -- further that way" -- a same-x test would miss a row split
+        -- differently from this one.
+        local tape = hl.get_config("scrolling.direction")
+        if tape == "down" or tape == "up" then
+          local beyond = false
+          for _, w in ipairs(wins) do
+            if w.mapped and not w.hidden and not w.floating and w.address ~= active.address
+                and ((down and w.at.y > active.at.y + 4) or (not down and w.at.y < active.at.y - 4)) then
+              beyond = true
+            end
+          end
+          if beyond then
+            hl.dispatch(hl.dsp.layout("focus " .. HyprLayoutFocusArg(down and "d" or "u")))
+          else
+            switchWorkspace()
+          end
+          return
+        end
+
+        -- The focused window's column: tiled windows sharing its x, top down.
+        local function colX(w) return math.floor(w.at.x / 8 + 0.5) * 8 end
+        local ax, col = colX(active), {}
+        for _, w in ipairs(wins) do
+          if w.mapped and not w.hidden and not w.floating and colX(w) == ax then
+            col[#col + 1] = w
+          end
+        end
+        table.sort(col, function(a, b) return a.at.y < b.at.y end)
+
+        local idx
+        for i, w in ipairs(col) do
+          if w.address == active.address then idx = i end
+        end
+        if not idx then
+          switchWorkspace()
+          return
+        end
+
+        if (down and idx == #col) or (not down and idx == 1) then
+          switchWorkspace()
+        else
+          hl.dispatch(hl.dsp.layout("focus " .. HyprLayoutFocusArg(down and "d" or "u")))
+        end
+      end
+
+      -- The Page keys below stay pure workspace paging, which is what they are for.
+      hl.bind(mod .. " + K", function() HyprFocusOrWorkspace("up") end, { repeating = true })
+      hl.bind(mod .. " + J", function() HyprFocusOrWorkspace("down") end, { repeating = true })
+
+      -- The touchpad's 4-finger vertical swipe, same function as J/K. Declared
+      -- here rather than in the `gesture` attrset because only the Lua form
+      -- takes a FUNCTION as the action; a plain function is registered as the
+      -- gesture's END callback (LuaFunctionGesture's legacy-end-only ctor), so
+      -- it fires once per completed swipe rather than continuously -- discrete,
+      -- like the keybind. That does give up the built-in gesture's live
+      -- follow-the-finger animation, which is the price of the three paths
+      -- behaving identically.
+      --
+      -- Swipe UP maps to "down" (focus down the column, then workspace +1),
+      -- matching both Mod+J and the touchscreen's DU spec in
+      -- features/touch-gestures.
+      hl.gesture({ fingers = 4, direction = "up",
+        action = function() HyprFocusOrWorkspace("down") end })
+      hl.gesture({ fingers = 4, direction = "down",
+        action = function() HyprFocusOrWorkspace("up") end })
       hl.bind(mod .. " + Page_Down", hl.dsp.focus({ workspace = "-1" }))
       hl.bind(mod .. " + Page_Up", hl.dsp.focus({ workspace = "+1" }))
       hl.bind(mod .. " + CTRL + U", hl.dsp.window.move({ workspace = "-1", follow = true }))
@@ -868,7 +975,10 @@ in
       hl.bind("Print", hl.dsp.exec_cmd("dms ipc call screenSnip region 2>/dev/null || hyprshot -m region --clipboard-only --silent"))
       hl.bind("CTRL + Print", hl.dsp.exec_cmd("hyprshot -m output --clipboard-only --silent"))
       hl.bind("ALT + Print", hl.dsp.exec_cmd("hyprshot -m window -m active --clipboard-only --silent"))
-      hl.bind(mod .. " + SHIFT + P", hl.dsp.dpms({ action = "off" }))
+      -- Blank the panel, stay awake, wake on the next input: the grace
+      -- window in the script is what keeps this chord's own key releases
+      -- from waking it immediately (see dpmsOff above).
+      hl.bind(mod .. " + SHIFT + P", hl.dsp.exec_cmd("${dpmsOff}"))
 
     '';
   };

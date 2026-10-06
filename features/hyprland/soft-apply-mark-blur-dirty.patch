@@ -1,0 +1,31 @@
+monitor: re-blur the background after a soft rule apply
+
+applyMonitorRuleSoft installs a new transform (transform is a soft
+prop, so rotating an output through monitor rules lands here) and
+recomputes the matrix and damage size, but never marks the monitor's
+pre-blurred background cache dirty. With decoration:blur:new_optimizations
+(the default), tiled windows blur from that cache, so after a rotation
+the wallpaper itself re-renders in the new orientation while the blur
+behind every window keeps showing the old one.
+
+Confirmed on a rotated laptop panel: the stale blur persisted until a
+blur config change (which sets m_blurFBDirty) was made, at which point
+it matched immediately. Mark it dirty on every soft apply.
+
+--- a/src/output/Monitor.cpp	2026-09-28 16:55:13.560695212 +0900
++++ b/src/output/Monitor.cpp	2026-09-28 16:55:13.649737099 +0900
+@@ -712,6 +712,14 @@
+ 
+     m_damage.setSize(m_transformedSize);
+ 
++    // The pre-blurred background cache (decoration:blur:new_optimizations)
++    // was rendered under the previous transform, and nothing on this path
++    // invalidates it -- after a transform-only rule apply (rotation), windows
++    // kept blurring an un-rotated wallpaper until some unrelated event
++    // happened to dirty it. Soft applies are rare, so re-blurring on every
++    // one costs nothing measurable.
++    m_blurFBDirty = true;
++
+     setMirror(m_activeMonitorRule.m_mirrorOf);
+ 
+     return true;

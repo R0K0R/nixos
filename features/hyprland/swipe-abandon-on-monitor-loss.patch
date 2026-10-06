@@ -1,0 +1,61 @@
+workspace swipe: abandon the gesture if its monitor goes away
+
+CUnifiedWorkspaceSwipeGesture keeps the monitor the swipe began on as a
+weak reference (m_monitor), and update() and end() dereference it
+unconditionally after checking only isGestureInProgress(), i.e. that
+m_workspaceBegin is set.
+
+If the monitor is removed mid-gesture, the reference expires and the
+next event crashes. Reproduced on a laptop whose lid-close handler
+disables the panel (eDP-1) via a monitor rule: a touchscreen swipe was
+in progress as the lid closed, the panel was disabled and later
+re-enabled as a new monitor, and the pending touch-up on lid-open
+ran end() into a null m_monitor. Debug symbols for the crashed build put
+the fault at end()'s `m_monitor->m_size.x` (SIGSEGV, via
+CInputManager::onTouchUp). update() has the same unguarded dereference
+and is the likely cause of earlier crashes in onTouchMove.
+
+Both now abandon the swipe when the monitor is gone, the same way
+update() already invalidates a swipe elsewhere: reset the starting
+workspace's render offset and clear the gesture state.
+
+--- a/src/managers/input/UnifiedWorkspaceSwipeGesture.cpp	2026-09-28 13:37:35.893324432 +0900
++++ b/src/managers/input/UnifiedWorkspaceSwipeGesture.cpp	2026-09-28 13:37:35.949323217 +0900
+@@ -41,6 +41,18 @@
+     if (!isGestureInProgress())
+         return;
+ 
++    // The monitor this swipe began on can disappear mid-gesture -- disabled by
++    // a monitor rule (a lid-close handler turning the panel off), unplugged --
++    // and m_monitor is only a weak reference, so everything below would
++    // dereference null. Abandon the swipe the way update() already does for an
++    // invalid one, putting the starting workspace back where it was.
++    if UNLIKELY (!m_monitor) {
++        m_workspaceBegin->m_renderOffset->setValueAndWarp(Vector2D(0, 0));
++        m_workspaceBegin   = nullptr;
++        m_initialDirection = 0;
++        return;
++    }
++
+     static auto  PSWIPEDIST             = CConfigValue<Config::INTEGER>("gestures:workspace_swipe_distance");
+     static auto  PSWIPENEW              = CConfigValue<Config::INTEGER>("gestures:workspace_swipe_create_new");
+     static auto  PSWIPEDIRLOCK          = CConfigValue<Config::INTEGER>("gestures:workspace_swipe_direction_lock");
+@@ -186,6 +198,18 @@
+     if (!isGestureInProgress())
+         return;
+ 
++    // The monitor this swipe began on can disappear mid-gesture -- disabled by
++    // a monitor rule (a lid-close handler turning the panel off), unplugged --
++    // and m_monitor is only a weak reference, so everything below would
++    // dereference null. Abandon the swipe the way update() already does for an
++    // invalid one, putting the starting workspace back where it was.
++    if UNLIKELY (!m_monitor) {
++        m_workspaceBegin->m_renderOffset->setValueAndWarp(Vector2D(0, 0));
++        m_workspaceBegin   = nullptr;
++        m_initialDirection = 0;
++        return;
++    }
++
+     static auto PSWIPEPERC    = CConfigValue<Config::FLOAT>("gestures:workspace_swipe_cancel_ratio");
+     static auto PSWIPEDIST    = CConfigValue<Config::INTEGER>("gestures:workspace_swipe_distance");
+     static auto PSWIPEFORC    = CConfigValue<Config::INTEGER>("gestures:workspace_swipe_min_speed_to_force");
