@@ -21,6 +21,12 @@ of cropped. Covers the surface tree's texture boxes and UVs, pointer / touch /
 tablet input (mapped back through the same scale; the letterbox margin is a
 miss) and commit damage (repaints the whole window). Inactive while the client's
 size matches, so well-behaved windows render 1:1 exactly as before.
+Fourth, two dock-card render fixes on top of upstream's warp: the drop shadow is
+no longer clipped to the window's FLAT box (that left a shadow whose inner edge
+was the straight flat-box edge, not the trapezoid's; the shader's own cutout is
+warped and suffices), and the frosted-blur pass samples the blurred framebuffer
+at each fragment's screen position (ksScreenUV) instead of the flat box's UVs,
+so the blur behind a tilted card is the blur of what is really behind it.
 
 diff -ruN a/src/config/legacy/ConfigManager.cpp c/src/config/legacy/ConfigManager.cpp
 --- a/src/config/legacy/ConfigManager.cpp	2026-10-05 19:57:04.433720032 +0900
@@ -731,7 +737,7 @@ diff -ruN a/src/render/ElementRenderer.cpp c/src/render/ElementRenderer.cpp
              const Vector2D PIXELASUV   = Vector2D{1, 1} / pSurface->m_current.bufferSize;
 diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
 --- a/src/render/OpenGL.cpp	2026-10-05 19:57:04.486286784 +0900
-+++ c/src/render/OpenGL.cpp	2026-10-06 15:59:50.449982064 +0900
++++ c/src/render/OpenGL.cpp	2026-10-06 17:10:28.096623595 +0900
 @@ -1498,6 +1498,114 @@
      }
  }
@@ -847,7 +853,7 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
  void CHyprOpenGLImpl::renderTextureInternal(SP<ITexture> tex, const CBox& box, const STextureRenderData& data) {
      RASSERT(g_pHyprRenderer->m_renderData.pMonitor, "Tried to render texture without begin()!");
      RASSERT(tex, "Attempted to draw nullptr texture!");
-@@ -1538,7 +1646,29 @@
+@@ -1538,7 +1646,35 @@
  
      auto shader = renderToOutput ? renderToOutputInternal() : renderToFBInternal(tex, data, tex->m_type, newBox);
  
@@ -874,11 +880,25 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
 +        }
 +        shader->setUniformFloat(SHADER_KEYSTONE_ROUND, ksR);
 +        shader->setUniformFloat2(SHADER_KEYSTONE_SIZE, ksSX, ksSY);
++        // frost pass of a dock card: screen-space sampling of the blurred framebuffer copy
++        const auto KSFB = g_pHyprRenderer->m_renderData.currentFB;
++        if (data.ksScreenUV && ksSX > 0.f && KSFB && KSFB->m_size.x > 0 && KSFB->m_size.y > 0)
++            shader->setUniformFloat2(SHADER_KS_SCREEN_UV, sc<float>(KSFB->m_size.x), sc<float>(KSFB->m_size.y));
++        else
++            shader->setUniformFloat2(SHADER_KS_SCREEN_UV, 0.f, 0.f);
 +    }
      shader->setUniformInt(SHADER_TEX, 0);
      GLCALL(glBindVertexArray(shader->getUniformLocation(SHADER_SHADER_VAO)));
  
-@@ -2362,7 +2492,39 @@
+@@ -2100,6 +2236,7 @@
+ 
+                                   .primarySurfaceUVTopLeft     = monitorSpaceBox.pos() / m_renderData.pMonitor->m_transformedSize,
+                                   .primarySurfaceUVBottomRight = (monitorSpaceBox.pos() + monitorSpaceBox.size()) / m_renderData.pMonitor->m_transformedSize,
++                                  .ksScreenUV                  = true,
+                               });
+ 
+         g_pHyprRenderer->m_renderData.renderModif.enabled = renderModif;
+@@ -2362,7 +2499,39 @@
  
      if (needsCM)
          shader->setUniformInt(SHADER_SOURCE_TF, TF);
@@ -919,7 +939,7 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
  
      CHyprColor color;
      if (!grad1.m_colors.empty())
-@@ -2379,18 +2541,18 @@
+@@ -2379,18 +2548,18 @@
          shader->setUniform4fv(SHADER_GRADIENT2, grad2.m_colorsOkLabA.size() / 4, grad2.m_colorsOkLabA);
      shader->setUniformInt(SHADER_GRADIENT2_LENGTH, grad2.m_colorsOkLabA.size() / 4);
      shader->setUniformFloat(SHADER_ANGLE2, sc<int>(grad2.m_angle / (std::numbers::pi / 180.0)) % 360 * (std::numbers::pi / 180.0));
@@ -942,7 +962,7 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
      shader->setUniformFloat(SHADER_ROUNDING_POWER, roundingPower);
      shader->setUniformFloat(SHADER_RANGE, range);
      shader->setUniformFloat(SHADER_SHADOW_POWER, SHADOWPOWER);
-@@ -2427,7 +2589,10 @@
+@@ -2427,14 +2596,23 @@
                  const auto cutoutTopLeft     = scaledWindowBox.pos() - newBox.pos();
                  const auto cutoutBottomRight = cutoutTopLeft + scaledWindowBox.size();
  
@@ -954,6 +974,35 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
                  cutoutRadius            = std::round(cutoutRadius * m_renderData.renderModif.combinedScale());
  
                  shader->setUniformFloat2(SHADER_WINDOW_TOP_LEFT, sc<float>(cutoutTopLeft.x), sc<float>(cutoutTopLeft.y));
+                 shader->setUniformFloat2(SHADER_WINDOW_BOTTOM_RIGHT, sc<float>(cutoutBottomRight.x), sc<float>(cutoutBottomRight.y));
+                 shader->setUniformFloat(SHADER_THICK, cutoutRadius);
+ 
+-                drawRegion.subtract(scaledWindowBox.copy().expand(-sc<int>(std::round(cutoutRadius))));
++                // Skip the region cut for a dock card: scaledWindowBox is the FLAT window box, but
++                // the card and its shadow are warped to the trapezoid, so cutting the flat box out
++                // clipped the shadow wherever the trapezoid does not cover it -- leaving a shadow
++                // whose inner edge was the straight flat-box edge. The shader's window cutout above
++                // is in box space and warps with the shadow, so it alone hides the card's own area.
++                if (!ksDock)
++                    drawRegion.subtract(scaledWindowBox.copy().expand(-sc<int>(std::round(cutoutRadius))));
+             }
+         }
+     }
+diff -ruN a/src/render/OpenGL.hpp c/src/render/OpenGL.hpp
+--- a/src/render/OpenGL.hpp	2026-10-05 19:57:04.494209944 +0900
++++ c/src/render/OpenGL.hpp	2026-10-06 17:10:28.086003290 +0900
+@@ -187,6 +187,11 @@
+             Vector2D               primarySurfaceUVBottomRight = Vector2D(-1, -1);
+ 
+             SMotionBlurData        motionBlur;
++
++            // dock keystone frost pass: sample `tex` (the blurred framebuffer copy) at the
++            // fragment's own framebuffer position instead of its UV, so the blur behind a
++            // warped card is the blur of what is actually behind each pixel.
++            bool ksScreenUV = false;
+         };
+ 
+         struct SBorderRenderData {
 diff -ruN a/src/render/pass/SurfacePassElement.cpp c/src/render/pass/SurfacePassElement.cpp
 --- a/src/render/pass/SurfacePassElement.cpp	2026-10-05 19:57:04.489462374 +0900
 +++ c/src/render/pass/SurfacePassElement.cpp	2026-10-06 16:30:11.235447044 +0900
@@ -1215,20 +1264,21 @@ diff -ruN a/src/render/Renderer.hpp c/src/render/Renderer.hpp
          virtual void                        endRender(const std::function<void()>& renderingDoneCallback = {}) = 0;
 diff -ruN a/src/render/Shader.cpp c/src/render/Shader.cpp
 --- a/src/render/Shader.cpp	2026-10-05 19:57:04.486286784 +0900
-+++ c/src/render/Shader.cpp	2026-10-06 15:59:50.455982036 +0900
-@@ -187,6 +187,8 @@
++++ c/src/render/Shader.cpp	2026-10-06 17:10:28.086509469 +0900
+@@ -187,6 +187,9 @@
      m_uniformLocations[SHADER_RADIUS]                    = getUniform("radius");
      m_uniformLocations[SHADER_RADIUS_OUTER]              = getUniform("radiusOuter");
      m_uniformLocations[SHADER_ROUNDING_POWER]            = getUniform("roundingPower");
 +    m_uniformLocations[SHADER_KEYSTONE_ROUND]            = getUniform("keystoneRound"); // dock keystone AA/rounding
 +    m_uniformLocations[SHADER_KEYSTONE_SIZE]             = getUniform("keystoneSize");
++    m_uniformLocations[SHADER_KS_SCREEN_UV]              = getUniform("ksScreenUV");
      m_uniformLocations[SHADER_THICK]                     = getUniform("thick");
      m_uniformLocations[SHADER_HALFPIXEL]                 = getUniform("halfpixel");
      m_uniformLocations[SHADER_RANGE]                     = getUniform("range");
 diff -ruN a/src/render/Shader.hpp c/src/render/Shader.hpp
 --- a/src/render/Shader.hpp	2026-10-05 19:57:04.494209944 +0900
-+++ c/src/render/Shader.hpp	2026-10-06 15:59:50.457230080 +0900
-@@ -91,6 +91,11 @@
++++ c/src/render/Shader.hpp	2026-10-06 17:10:28.086326207 +0900
+@@ -91,6 +91,12 @@
      SHADER_BLUR_ALPHA,
      SHADER_TONEMAP_MODE,
  
@@ -1236,13 +1286,14 @@ diff -ruN a/src/render/Shader.hpp c/src/render/Shader.hpp
 +    // anti-aliased trapezoid coverage (keystoneCoverage). 0 radius = off.
 +    SHADER_KEYSTONE_ROUND,
 +    SHADER_KEYSTONE_SIZE,
++    SHADER_KS_SCREEN_UV,
 +
      SHADER_LAST,
  };
  
 diff -ruN a/src/render/shaders/glsl/surface.frag c/src/render/shaders/glsl/surface.frag
 --- a/src/render/shaders/glsl/surface.frag	2026-10-05 19:57:04.491936992 +0900
-+++ c/src/render/shaders/glsl/surface.frag	2026-10-06 15:59:50.457857740 +0900
++++ c/src/render/shaders/glsl/surface.frag	2026-10-06 17:10:28.094955754 +0900
 @@ -6,6 +6,7 @@
  
  precision         highp float;
@@ -1251,7 +1302,7 @@ diff -ruN a/src/render/shaders/glsl/surface.frag c/src/render/shaders/glsl/surfa
  uniform sampler2D tex;
  #if USE_BLUR
  uniform vec2      uvSize;
-@@ -19,6 +20,40 @@
+@@ -19,6 +20,44 @@
  
  uniform float alpha;
  
@@ -1260,6 +1311,10 @@ diff -ruN a/src/render/shaders/glsl/surface.frag c/src/render/shaders/glsl/surfa
 +// non-dock windows, set to 0 from OpenGL.cpp). See keystoneCoverage() below.
 +uniform float keystoneRound;
 +uniform vec2  keystoneSize;
++// keystone frost pass: > 0 = sample tex at gl_FragCoord / ksScreenUV (the framebuffer size)
++// rather than at v_texcoord. tex is then the blurred copy of this same framebuffer, so each
++// pixel of the warped card gets the blur of what is really behind it, not of the flat box.
++uniform vec2  ksScreenUV;
 +
 +// Signed-distance rounded-rect coverage in window-local space. v_boxUV (0..1) is the
 +// surface's unit quad, warped to the trapezoid by the vertex shader's proj, so the
@@ -1292,19 +1347,21 @@ diff -ruN a/src/render/shaders/glsl/surface.frag c/src/render/shaders/glsl/surfa
  #if USE_DISCARD
  uniform bool  discardOpaque;
  uniform bool  discardAlpha;
-@@ -74,9 +109,9 @@
+@@ -74,9 +113,11 @@
  #endif
  #else
  #if USE_RGBA
 -    vec4 pixColor = texture(tex, v_texcoord);
-+    vec4 pixColor = (keystoneSize.x > 0.5) ? ksSampleAA(tex, v_texcoord) : texture(tex, v_texcoord);
++    vec4 pixColor = (ksScreenUV.x > 0.5) ? texture(tex, gl_FragCoord.xy / ksScreenUV) :
++        (keystoneSize.x > 0.5) ? ksSampleAA(tex, v_texcoord) : texture(tex, v_texcoord);
  #else
 -    vec4 pixColor = vec4(texture(tex, v_texcoord).rgb, 1.0);
-+    vec4 pixColor = vec4(((keystoneSize.x > 0.5) ? ksSampleAA(tex, v_texcoord) : texture(tex, v_texcoord)).rgb, 1.0);
++    vec4 pixColor = vec4(((ksScreenUV.x > 0.5) ? texture(tex, gl_FragCoord.xy / ksScreenUV) :
++        (keystoneSize.x > 0.5) ? ksSampleAA(tex, v_texcoord) : texture(tex, v_texcoord)).rgb, 1.0);
  #endif
  #if USE_BLUR_MATTE
      float blurAlphaMask = clamp(texture(blurAlphaMatte, v_texcoord).r, 0.0, 1.0);
-@@ -159,6 +194,15 @@
+@@ -159,6 +200,15 @@
  #endif
  #endif
  
@@ -1320,7 +1377,7 @@ diff -ruN a/src/render/shaders/glsl/surface.frag c/src/render/shaders/glsl/surfa
      fragColor = pixColor;
  #if USE_MIRROR
  #if USE_TINT
-@@ -197,5 +241,6 @@
+@@ -197,5 +247,6 @@
  #endif
  #endif
  

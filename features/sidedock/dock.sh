@@ -84,6 +84,22 @@ pin()  { d "hl.dsp.window.pin({action=\"$2\", window=\"address:$1\"})"; }
 nofocus() { d "hl.dsp.window.set_prop({prop=\"no_focus\", value=\"$2\", window=\"address:$1\"})"; }
 ensure_float() { [ "$(isfloat "$1")" = "false" ] && d "hl.dsp.window.float({window=\"address:$1\"})"; }
 
+# The pile lives on the `scratch` SPECIAL workspace -- the scratchpad features/hyprland
+# opens with Mod+C -- not on a regular one. Pinned-and-parked on a regular workspace,
+# every card still belonged to it, so DMS's workspace strip drew it as an app icon of
+# that workspace even while the dock was hidden. A special workspace is listed nowhere,
+# overlays whatever workspace is live (so no pin is needed), and showing / hiding the
+# dock shows / hides it, with the cards still sliding in and out on top.
+SPECIAL="special:scratch"
+inscratch()    { $J -e --arg a "$1" --arg s "$SPECIAL" 'any(.[]; .address==$a and .workspace.name==$s)' <<<"$CLIENTS" >/dev/null 2>&1; }
+to_scratch()   { inscratch "$1" || d "hl.dsp.window.move({workspace=\"$SPECIAL\", follow=false, window=\"address:$1\"})"; }
+# back to the regular workspace on the focused monitor (undock, PiP)
+to_regular()   { local ws; ws=$($HC monitors -j | $J -r '.[]|select(.focused)|.activeWorkspace.id')
+                 [ -n "$ws" ] && d "hl.dsp.window.move({workspace=\"$ws\", follow=false, window=\"address:$1\"})"; }
+scratch_shown() { [ "$($HC monitors -j | $J -r --arg s "$SPECIAL" '.[]|select(.focused)|.specialWorkspace.name')" = "$SPECIAL" ]; }
+scratch_show()  { scratch_shown || d "hl.dsp.workspace.toggle_special(\"${SPECIAL#special:}\")"; }
+scratch_hide()  { scratch_shown && d "hl.dsp.workspace.toggle_special(\"${SPECIAL#special:}\")"; }
+
 # Lay out the cascade with $1 as the front. Rotates the stable order so the front
 # is depth 0, places each window at its depth (front at base, full opacity; the rest
 # fanned+dimmed), raises deepest->front so the front lands on top, then focuses
@@ -98,7 +114,8 @@ render() {
   for ((i=0; i<${#ord[@]}; i++)); do rot+=("${ord[$(( (fi+i) % ${#ord[@]} ))]}"); done
   # Floating is a prerequisite AND a toggle, so it can't go in the batch; dock
   # windows are already floating, so this is normally a no-op.
-  local a; for a in "${rot[@]}"; do ensure_float "$a"; done
+  local a; for a in "${rot[@]}"; do ensure_float "$a"; to_scratch "$a"; done
+  scratch_show
   # Front card vertical CENTRE -- back cards keep this SAME midline (no diagonal-down);
   # they only shrink and step a little LEFT, so their left edge peeks out to the left.
   local CY0=$(( DOCK_Y + DOCK_H/2 ))
@@ -118,7 +135,6 @@ render() {
     batch+="dispatch hl.dsp.window.set_prop({prop=\"max_size\", value=\"$cw $ch\", window=\"address:$a\"}) ; "
     batch+="dispatch hl.dsp.window.set_prop({prop=\"min_size\", value=\"$cw $ch\", window=\"address:$a\"}) ; "
     batch+="dispatch hl.dsp.window.resize({x=$cw, y=$ch, window=\"address:$a\"}) ; "
-    batch+="dispatch hl.dsp.window.pin({action=\"on\", window=\"address:$a\"}) ; "
     batch+="dispatch hl.dsp.window.set_prop({prop=\"opacity\", value=\"$op\", window=\"address:$a\"}) ; "
     if [ "$d" -eq 0 ]; then batch+="dispatch hl.dsp.window.set_prop({prop=\"no_focus\", value=\"false\", window=\"address:$a\"}) ; "
     else                   batch+="dispatch hl.dsp.window.set_prop({prop=\"no_focus\", value=\"true\", window=\"address:$a\"}) ; "; fi
@@ -143,19 +159,25 @@ render() {
 }
 
 park_all() {
-  # UNPIN as part of hiding: a pinned window follows every workspace, and Hyprland
-  # pulls a pinned off-screen window back on-screen when the workspace changes -- so
-  # a hidden-but-pinned dock would "reopen" on the next workspace switch. Unpinned +
-  # parked, it stays put and out of sight; render() re-pins on show.
-  # Park BACK-to-FRONT with a small stagger so the pile ripples out instead of leaving as
-  # one block (matches the staggered slide-IN on show). order() is front..back, so reverse.
+  # Slide the pile off to the right, BACK-to-FRONT with a small stagger so it ripples out
+  # instead of leaving as one block (matches the staggered slide-IN on show). order() is
+  # front..back, so reverse. The cards stay on the scratchpad; hide_pile closes it after.
   local -a o; mapfile -t o < <(order)
   local a i
   for ((i=${#o[@]}-1; i>=0; i--)); do a="${o[$i]}"; [ -n "$a" ] || continue
-    ensure_float "$a"; pin "$a" off; mv "$a" "$PARKED_X" "$DOCK_Y"
+    ensure_float "$a"; mv "$a" "$PARKED_X" "$DOCK_Y"
     if [ "$i" -gt 0 ]; then sleep "$STAGGER" 2>/dev/null; fi
   done
 }
+# Hide: remember the front, slide the cards out, then close the scratchpad.
+hide_pile() {
+  local cur; cur="$(curfront)"; [ -n "$cur" ] && printf '%s' "$cur" >"$STATE"
+  park_all
+  scratch_hide
+}
+# Shown = the scratchpad is up on this monitor AND a card is on-screen (Mod+C can close
+# the scratchpad with the cards still in place, which counts as hidden).
+pile_shown() { [ "$(shownany)" = "true" ] && scratch_shown; }
 # Show the pile at the remembered front (falling back to the first window).
 show_pile() {
   local -a o; mapfile -t o < <(order); [ ${#o[@]} -eq 0 ] && return 1
@@ -196,6 +218,7 @@ undock() {  # strip the dock shape/tag and return a window to the tiling area
   d "hl.dsp.window.set_prop({prop=\"no_max_size\", value=\"true\", window=\"address:$a\"})"
   pin "$a" off
   nofocus "$a" false
+  to_regular "$a"   # off the scratchpad, onto the workspace you are looking at
   d "hl.dsp.window.set_prop({prop=\"opacity\", value=\"1.0 1.0\", window=\"address:$a\"})"
   # restore the chrome dock_send stripped
   d "hl.dsp.window.set_prop({prop=\"decorate\", value=\"true\", window=\"address:$a\"})"
@@ -218,7 +241,7 @@ undock() {  # strip the dock shape/tag and return a window to the tiling area
   snap
   # Re-lay whatever remains (only if the pile is on-screen), then hand focus back
   # to the just-freed window -- you pulled it out to use it.
-  if [ "$(shownany)" = "true" ]; then
+  if pile_shown; then
     local -a o; mapfile -t o < <(order)
     [ ${#o[@]} -gt 0 ] && render "${o[0]}"
   fi
@@ -249,6 +272,7 @@ pip_make() {  # turn $1 into a keystone PiP: a standalone, pinned, tilted mini-c
   d "hl.dsp.window.set_prop({prop=\"max_size\", value=\"$pw $ph\", window=\"address:$a\"})"
   d "hl.dsp.window.resize({x=$pw, y=$ph, window=\"address:$a\"})"
   d "hl.dsp.window.set_prop({prop=\"min_size\", value=\"$pw $ph\", window=\"address:$a\"})"
+  to_regular "$a"   # a pin needs a regular workspace; a card would be on the scratchpad
   pin "$a" on
   mv "$a" "$px" "$py"
   ztop "$a"
@@ -256,7 +280,7 @@ pip_make() {  # turn $1 into a keystone PiP: a standalone, pinned, tilted mini-c
   # cascade now has a gap -- re-flow the survivors (order() already excludes this +pip window),
   # then hand focus back to the PiP.
   snap
-  if [ "$(shownany)" = "true" ]; then
+  if pile_shown; then
     local -a o; mapfile -t o < <(order)
     [ ${#o[@]} -gt 0 ] && render "${o[0]}"
   fi
@@ -283,25 +307,17 @@ dock_from_pip() {  # SUPER+CTRL+S on a PiP: fold it into the cascade pile instea
 geom; snap
 case "${1:-toggle}" in
   toggle)   # SUPER+S: show the pile if hidden, park it if shown
-    if [ "$(shownany)" = "true" ]; then
-      cur="$(curfront)"; [ -n "$cur" ] && printf '%s' "$cur" >"$STATE"
-      park_all
-    else
-      show_pile
-    fi ;;
+    if pile_shown; then hide_pile; else show_pile; fi ;;
   show)     # directional gesture (3-finger swipe toward the dock): reveal the pile.
             # Idempotent -- a no-op if it is already shown, so repeated swipes don't flicker.
-    [ "$(shownany)" = "true" ] || show_pile ;;
+    pile_shown || show_pile ;;
   hide)     # directional gesture (3-finger swipe away): hide the pile. Remembers the front
             # (like toggle) so the next show restores it. No-op if already hidden.
-    if [ "$(shownany)" = "true" ]; then
-      cur="$(curfront)"; [ -n "$cur" ] && printf '%s' "$cur" >"$STATE"
-      park_all
-    fi ;;
+    pile_shown && hide_pile ;;
   next|prev)   # SUPER+ALT+right / SUPER+ALT+left while focused on the dock: shift the pile
     mapfile -t ORD < <(order)
     [ ${#ORD[@]} -eq 0 ] && exit 0
-    [ "$(shownany)" != "true" ] && { show_pile; exit 0; }   # not shown -> just show it
+    pile_shown || { show_pile; exit 0; }   # not shown -> just show it
     [ ${#ORD[@]} -eq 1 ] && exit 0                          # safeguard: nothing to shift
     cur="$(curfront)"; ci=0
     for i in "${!ORD[@]}"; do [ "${ORD[$i]}" = "$cur" ] && ci=$i && break; done
@@ -361,13 +377,13 @@ case "${1:-toggle}" in
     # Keep the remembered front if it survives; otherwise take the first.
     want=""; [ -f "$STATE" ] && want="$(cat "$STATE" 2>/dev/null)"
     if [ -z "$want" ] || [ "$want" = "$EXCLUDE" ] || ! printf '%s\n' "${ORD[@]}" | grep -qxF "$want"; then want="${ORD[0]}"; fi
-    [ "$(shownany)" = "true" ] && render "$want"
+    pile_shown && render "$want"
     printf '%s' "$want" >"$STATE" ;;
   relayout)  # the monitor layout/scale changed (e.g. wdisplays) -> re-apply the CURRENT
              # geometry in place from the fresh geom(), so a live resolution/scale change
              # auto-adjusts the pile with no keypress. Shown -> re-cascade at the new size/
              # position; parked -> re-park at the new (logical) off-screen x.
-    if [ "$(shownany)" = "true" ]; then
+    if pile_shown; then
       cur="$(curfront)"; { [ -z "$cur" ] || ! exists "$cur"; } && cur="$(order | head -1)"
       [ -n "$cur" ] && render "$cur"
     else

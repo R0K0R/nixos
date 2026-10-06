@@ -1,6 +1,7 @@
 -- features/sidedock: Hyprland half of the side dock (from sihooleebd/nixos 0a7686c).
 --
--- Light apps live on a right-edge panel as a CASCADE STACK. Every placement in
+-- Light apps live on a right-edge panel as a CASCADE STACK, on the `scratch` special
+-- workspace (the scratchpad), so DMS's workspace strip never lists them. Every placement in
 -- dock.sh is by window address, never by focusing, so main-area windows are
 -- left alone. Upstream's wallpaper repaint and opendisplay hooks are left out;
 -- the dock is driven by the keys below and the 3-finger swipe (the patched
@@ -92,6 +93,31 @@ do
   -- Re-apply the geometry when the monitor layout changes -- rotation, scale,
   -- a plugged display: re-cascades if shown, re-parks at the new edge if hidden.
   hl.on("monitor.layout_changed", function() hl.dispatch(hl.dsp.exec_cmd(dock .. " relayout")) end)
+
+  -- Mod+H / Mod+L walk the pile while a pile card has focus (H = previous, L = next,
+  -- as Mod+Alt+left/right); anywhere else they keep features/hyprland's column focus.
+  -- Hyprland appends duplicate binds, hence the unbind; this file loads after that one.
+  local function onPileCard()
+    local w = hl.get_active_window()
+    return w ~= nil and isDockWin(w) and not isPip(w)
+  end
+  for key, step in pairs({ H = { dock = "prev", tape = "l" }, L = { dock = "next", tape = "r" } }) do
+    hl.unbind(mod .. " + " .. key)
+    hl.bind(mod .. " + " .. key, function()
+      if onPileCard() then
+        hl.dispatch(hl.dsp.exec_cmd(dock .. " " .. step.dock))
+      else
+        hl.dispatch(hl.dsp.layout("focus " .. HyprLayoutFocusArg(step.tape)))
+      end
+    end)
+  end
+
+  -- Mod+Ctrl+C on a pile card: the card already lives on the scratchpad, and moving it
+  -- off by hand would strand it still tagged as a card. Undock it properly instead.
+  hl.unbind(mod .. " + CTRL + C")
+  hl.bind(mod .. " + CTRL + C", function()
+    if onPileCard() then hl.dispatch(hl.dsp.exec_cmd(dock .. " dock-toggle")) else HyprScratchToggle() end
+  end)
 
   -- Fullscreening a docked card or dragging one out breaks the cascade, so
   -- the existing SUPER+F and SUPER+drag binds (features/hyprland) are

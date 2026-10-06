@@ -701,8 +701,9 @@ hl.bind(mod .. " + CTRL + I", hl.dsp.window.move({ workspace = "+1", follow = tr
 -- it on Mod+S, which is the side dock here). Mod+C shows/hides it;
 -- Mod+Ctrl+C sends the focused window there without following, or, for a
 -- window already on it, brings it back to the workspace underneath.
+-- Global, so features/sidedock (whose cards also live on the scratchpad) can wrap it.
 hl.bind(mod .. " + C", hl.dsp.workspace.toggle_special("scratch"))
-hl.bind(mod .. " + CTRL + C", function()
+function HyprScratchToggle()
   local w = hl.get_active_window()
   if not w then return end
   if w.workspace and w.workspace.name == "special:scratch" then
@@ -711,7 +712,8 @@ hl.bind(mod .. " + CTRL + C", function()
   else
     hl.dispatch(hl.dsp.window.move({ workspace = "special:scratch", follow = false }))
   end
-end)
+end
+hl.bind(mod .. " + CTRL + C", function() HyprScratchToggle() end)
 
 -- Move window (direction)
 hl.bind(mod .. " + CTRL + left", hl.dsp.window.move({ direction = "left" }))
