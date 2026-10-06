@@ -167,8 +167,9 @@ hl.config({
 
   decoration = {
     rounding = 16,
-    -- No dimming behind a shown special workspace (default 0.2): the side dock is the
+    -- No dimming behind a shown special workspace by default: the side dock is the
     -- `dock` special workspace, and opening a dock must not darken the whole screen.
+    -- The scratchpad turns it on for itself (workspace.special_active handler below).
     dim_special = 0,
     -- Glassmorphism: true backdrop blur behind translucent surfaces.
     -- Compositor-side half only. Blur applies to translucent WINDOWS
@@ -312,6 +313,9 @@ hl.animation({ leaf = "fade", enabled = true, speed = 3, bezier = "default" })
 -- slidevert: vertical slide, matching niri's vertical workspace model
 -- and the gesture's vertical swipe direction above.
 hl.animation({ leaf = "workspaces", enabled = true, speed = 3, bezier = "default", style = "slidevert" })
+-- Special workspaces (the side dock, the scratchpad) inherit that full-screen vertical
+-- slide, which read as too much on top of the dock cards' own slide-in. Fade instead.
+hl.animation({ leaf = "specialWorkspace", enabled = true, speed = 3, bezier = "default", style = "fade" })
 
 -- Auto-scale differs between compositors (Hyprland picked 2.0 for this
 -- 2880x1800 panel; niri's own auto heuristic apparently picked something
@@ -711,8 +715,15 @@ hl.bind(mod .. " + CTRL + I", hl.dsp.window.move({ workspace = "+1", follow = tr
 -- it on Mod+S, which is the side dock here). Mod+C shows/hides it;
 -- Mod+Ctrl+C sends the focused window there without following, or, for a
 -- window already on it, brings it back to the workspace underneath.
--- Global, so features/sidedock (whose cards also live on the scratchpad) can wrap it.
+-- Global, so features/sidedock can wrap it (Mod+Ctrl+C on a dock card undocks it).
 hl.bind(mod .. " + C", hl.dsp.workspace.toggle_special("scratch"))
+-- The scratchpad, and only it, tints what is behind it. dim_special is one global
+-- value, so it follows whichever special workspace just opened: the scratchpad gets
+-- Hyprland's default 0.2, anything else (the side dock) none. ws is nil on close.
+hl.on("workspace.special_active", function(ws)
+  local dim = (ws ~= nil and ws.name == "special:scratch") and 0.2 or 0
+  hl.config({ decoration = { dim_special = dim } })
+end)
 function HyprScratchToggle()
   local w = hl.get_active_window()
   if not w then return end
