@@ -36,7 +36,22 @@
     # module, writes the git credential helper against a store path the
     # generation keeps alive. Listing it here too would put a second, unmanaged
     # gh in users.users.<n>.packages, shadowing that one by PATH order.
-    nixd
+    /*
+      nixd with import-from-derivation OFF, for every editor. /.nixd.json points
+      nixd at a full host eval, and with IFD allowed that lets
+      nix-doom-emacs-unstraightened trigger a doom-intermediates build on file
+      open (once measured at 226 minutes). The eval workers nixd spawns inherit
+      the environment, so NIX_CONFIG reaches them. Lost: completion inside
+      features/emacs only.
+    */
+    (symlinkJoin {
+      name = "nixd-no-ifd-${nixd.version}";
+      paths = [ nixd ];
+      nativeBuildInputs = [ makeWrapper ];
+      postBuild = ''
+        wrapProgram $out/bin/nixd --set NIX_CONFIG "allow-import-from-derivation = false"
+      '';
+    })
     nixfmt
     statix
     deadnix
