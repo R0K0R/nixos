@@ -166,19 +166,24 @@ show_pile() {
 active() { $J -r '.address // ""' < <($HC activewindow -j); }
 is_dock() { $J -e --arg a "$1" 'any(.[]; .address==$a and (.tags|any(rtrimstr("*")=="dock")))' <<<"$CLIENTS" >/dev/null 2>&1; }
 is_pip()  { $J -e --arg a "$1" 'any(.[]; .address==$a and (.tags|any(rtrimstr("*")=="pip")))'  <<<"$CLIENTS" >/dev/null 2>&1; }
+dock_chrome() {  # the auto-route rule's chrome, for a window docked after it opened
+  d "hl.dsp.window.set_prop({prop=\"border_size\", value=\"0\", window=\"address:$1\"})"
+  d "hl.dsp.window.set_prop({prop=\"rounding\", value=\"0\", window=\"address:$1\"})"
+  d "hl.dsp.window.set_prop({prop=\"no_shadow\", value=\"false\", window=\"address:$1\"})"
+}
 dock_send() {  # give a window the dock shape + tag, then lay it out as the front
   local a="$1"
   ensure_float "$a"
   d "hl.dsp.window.tag({tag=\"+dock\", window=\"address:$a\"})"
   # (size + lock is applied by render(), from the live geometry -- not here.)
-  # Match the auto-route rule's chrome removal: BORDER + SHADOW render at the flat box
-  # (their own passes, not through the keystone) so they'd box the trapezoid -- strip
-  # them (decorate=false covers both). BLUR is deliberately LEFT ON: the frosted layer
-  # is drawn by renderTextureInternal, which the keystone hook warps, so the frost
-  # follows the trapezoid and a glass window reads as GLASS. The RULE strips chrome for
-  # cfg.apps; a manually-sent window (dolphin, a terminal) never hit it, so do it here.
-  d "hl.dsp.window.set_prop({prop=\"decorate\", value=\"false\", window=\"address:$a\"})"
-  d "hl.dsp.window.set_prop({prop=\"no_shadow\", value=\"true\", window=\"address:$a\"})"
+  # Match the auto-route rule's chrome: no BORDER (drawn at the flat box, not warped,
+  # so it would box the trapezoid) and rounding 0 (the keystone shader draws the
+  # corners). SHADOW and BLUR stay ON: the patch warps both to the trapezoid
+  # (keystone_shadow_*), and that drop shadow is what makes the card read as lifted.
+  # (Upstream still strips the shadow here with decorate=false + no_shadow, from
+  # before the shadow was warped -- which left manually-docked cards shadowless.)
+  # The RULE does this for cfg.apps; a sent window never hit it, so do it here.
+  dock_chrome "$a"
   snap; render "$a"
 }
 undock() {  # strip the dock shape/tag and return a window to the tiling area
@@ -202,6 +207,9 @@ undock() {  # strip the dock shape/tag and return a window to the tiling area
   # rounds like every other window (read it, don't hardcode, so it tracks decoration:rounding).
   local grnd; grnd=$($HC getoption decoration:rounding -j 2>/dev/null | $J -r '.int // 10')
   d "hl.dsp.window.set_prop({prop=\"rounding\", value=$grnd, window=\"address:$a\"})"
+  # ...and the border width dock_chrome zeroed, the same way.
+  local gbrd; gbrd=$($HC getoption general:border_size -j 2>/dev/null | $J -r '.int // 0')
+  d "hl.dsp.window.set_prop({prop=\"border_size\", value=$gbrd, window=\"address:$a\"})"
   d "hl.dsp.window.tag({tag=\"-dock\", window=\"address:$a\"})"
   # Tile it: read LIVE float state (not the pre-undock snapshot) and unfloat if
   # still floating, so it joins the layout like any normal app.
@@ -222,9 +230,7 @@ pip_make() {  # turn $1 into a keystone PiP: a standalone, pinned, tilted mini-c
   ensure_float "$a"
   d "hl.dsp.window.tag({tag=\"+dock\", window=\"address:$a\"})"  # +dock => keystone tilt/shadow/input, all free
   d "hl.dsp.window.tag({tag=\"+pip\", window=\"address:$a\"})"   # +pip  => the cascade (order/curfront/shownany) skips it
-  # strip chrome like dock_send: border/shadow are flat-box passes, the keystone owns the look
-  d "hl.dsp.window.set_prop({prop=\"decorate\", value=\"false\", window=\"address:$a\"})"
-  d "hl.dsp.window.set_prop({prop=\"no_shadow\", value=\"true\", window=\"address:$a\"})"
+  dock_chrome "$a"   # as dock_send: no border, keystone corners, warped shadow kept
   # ~1/3 of the viewport wide, KEEPING the window's current aspect, parked bottom-right (right
   # edge inset by HGAP so the keystone's flush right edge sits just off the screen edge).
   local cw ch pw ph px py mw mh
