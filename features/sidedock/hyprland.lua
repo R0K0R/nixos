@@ -1,7 +1,7 @@
 -- features/sidedock: Hyprland half of the side dock (from sihooleebd/nixos 0a7686c).
 --
--- Light apps live on a right-edge panel as a CASCADE STACK, on the `scratch` special
--- workspace (the scratchpad), so DMS's workspace strip never lists them. Every placement in
+-- Light apps live on a right-edge panel as a CASCADE STACK, on their own `dock` special
+-- workspace, so DMS's workspace strip never lists them. Every placement in
 -- dock.sh is by window address, never by focusing, so main-area windows are
 -- left alone. Upstream's wallpaper repaint and opendisplay hooks are left out;
 -- the dock is driven by the keys below and the 3-finger swipe (the patched
@@ -112,13 +112,8 @@ do
     end)
   end
 
-  -- Mod+C shows the scratchboard WITHOUT the dock: the cards share its special workspace,
-  -- so dock.sh parks them before showing (or hiding) it.
-  hl.unbind(mod .. " + C")
-  hl.bind(mod .. " + C", hl.dsp.exec_cmd(dock .. " scratchboard"))
-
-  -- Mod+Ctrl+C on a pile card: the card already lives on the scratchpad, and moving it
-  -- off by hand would strand it still tagged as a card. Undock it properly instead.
+  -- Mod+Ctrl+C on a pile card: sending it to the scratchpad by hand would strand it there
+  -- still tagged as a card. Undock it properly instead.
   hl.unbind(mod .. " + CTRL + C")
   hl.bind(mod .. " + CTRL + C", function()
     if onPileCard() then hl.dispatch(hl.dsp.exec_cmd(dock .. " dock-toggle")) else HyprScratchToggle() end

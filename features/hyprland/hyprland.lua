@@ -101,7 +101,7 @@ hl.config({
     natural_scroll = nix.naturalScroll,
 
     -- With a special workspace shown, the regular workspace under it takes no input
-    -- by default -- and the side dock (features/sidedock) is the `scratch` special
+    -- by default -- and the side dock (features/sidedock) is the `dock` special
     -- workspace, so an open dock made every ordinary window untouchable. This lets
     -- input through while the special workspace holds only floating windows, which
     -- dock cards and scratchboard windows are.
@@ -168,7 +168,7 @@ hl.config({
   decoration = {
     rounding = 16,
     -- No dimming behind a shown special workspace (default 0.2): the side dock is the
-    -- `scratch` special workspace, and opening a dock must not darken the whole screen.
+    -- `dock` special workspace, and opening a dock must not darken the whole screen.
     dim_special = 0,
     -- Glassmorphism: true backdrop blur behind translucent surfaces.
     -- Compositor-side half only. Blur applies to translucent WINDOWS

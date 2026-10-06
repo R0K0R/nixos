@@ -84,21 +84,23 @@ pin()  { d "hl.dsp.window.pin({action=\"$2\", window=\"address:$1\"})"; }
 nofocus() { d "hl.dsp.window.set_prop({prop=\"no_focus\", value=\"$2\", window=\"address:$1\"})"; }
 ensure_float() { [ "$(isfloat "$1")" = "false" ] && d "hl.dsp.window.float({window=\"address:$1\"})"; }
 
-# The pile lives on the `scratch` SPECIAL workspace -- the scratchpad features/hyprland
-# opens with Mod+C -- not on a regular one. Pinned-and-parked on a regular workspace,
-# every card still belonged to it, so DMS's workspace strip drew it as an app icon of
-# that workspace even while the dock was hidden. A special workspace is listed nowhere,
-# overlays whatever workspace is live (so no pin is needed), and showing / hiding the
-# dock shows / hides it, with the cards still sliding in and out on top.
-SPECIAL="special:scratch"
-inscratch()    { $J -e --arg a "$1" --arg s "$SPECIAL" 'any(.[]; .address==$a and .workspace.name==$s)' <<<"$CLIENTS" >/dev/null 2>&1; }
-to_scratch()   { inscratch "$1" || d "hl.dsp.window.move({workspace=\"$SPECIAL\", follow=false, window=\"address:$1\"})"; }
+# The pile lives on its own SPECIAL workspace, `dock`, not on a regular one. Pinned-and-
+# parked on a regular workspace, every card still belonged to it, so DMS's workspace strip
+# drew it as an app icon of that workspace even while the dock was hidden. A special
+# workspace is listed nowhere, overlays whatever workspace is live (so no pin is needed),
+# and showing / hiding the dock shows / hides it, with the cards still sliding in and out
+# on top. Its own, not the Mod+C scratchpad (`scratch`): sharing that one made Mod+C bring
+# the dock along. Hyprland shows one special workspace per monitor at a time, so opening
+# the dock closes the scratchpad and vice versa.
+SPECIAL="special:dock"
+in_dockws()    { $J -e --arg a "$1" --arg s "$SPECIAL" 'any(.[]; .address==$a and .workspace.name==$s)' <<<"$CLIENTS" >/dev/null 2>&1; }
+to_dockws()   { in_dockws "$1" || d "hl.dsp.window.move({workspace=\"$SPECIAL\", follow=false, window=\"address:$1\"})"; }
 # back to the regular workspace on the focused monitor (undock, PiP)
 to_regular()   { local ws; ws=$($HC monitors -j | $J -r '.[]|select(.focused)|.activeWorkspace.id')
                  [ -n "$ws" ] && d "hl.dsp.window.move({workspace=\"$ws\", follow=false, window=\"address:$1\"})"; }
-scratch_shown() { [ "$($HC monitors -j | $J -r --arg s "$SPECIAL" '.[]|select(.focused)|.specialWorkspace.name')" = "$SPECIAL" ]; }
-scratch_show()  { scratch_shown || d "hl.dsp.workspace.toggle_special(\"${SPECIAL#special:}\")"; }
-scratch_hide()  { scratch_shown && d "hl.dsp.workspace.toggle_special(\"${SPECIAL#special:}\")"; }
+dockws_shown() { [ "$($HC monitors -j | $J -r --arg s "$SPECIAL" '.[]|select(.focused)|.specialWorkspace.name')" = "$SPECIAL" ]; }
+dockws_show()  { dockws_shown || d "hl.dsp.workspace.toggle_special(\"${SPECIAL#special:}\")"; }
+dockws_hide()  { dockws_shown && d "hl.dsp.workspace.toggle_special(\"${SPECIAL#special:}\")"; }
 
 # Lay out the cascade with $1 as the front. Rotates the stable order so the front
 # is depth 0, places each window at its depth (front at base, full opacity; the rest
@@ -114,8 +116,8 @@ render() {
   for ((i=0; i<${#ord[@]}; i++)); do rot+=("${ord[$(( (fi+i) % ${#ord[@]} ))]}"); done
   # Floating is a prerequisite AND a toggle, so it can't go in the batch; dock
   # windows are already floating, so this is normally a no-op.
-  local a; for a in "${rot[@]}"; do ensure_float "$a"; to_scratch "$a"; done
-  scratch_show
+  local a; for a in "${rot[@]}"; do ensure_float "$a"; to_dockws "$a"; done
+  dockws_show
   # Front card vertical CENTRE -- back cards keep this SAME midline (no diagonal-down);
   # they only shrink and step a little LEFT, so their left edge peeks out to the left.
   local CY0=$(( DOCK_Y + DOCK_H/2 ))
@@ -161,7 +163,7 @@ render() {
 park_all() {
   # Slide the pile off to the right, BACK-to-FRONT with a small stagger so it ripples out
   # instead of leaving as one block (matches the staggered slide-IN on show). order() is
-  # front..back, so reverse. The cards stay on the scratchpad; hide_pile closes it after.
+  # front..back, so reverse. The cards stay on the dock workspace; hide_pile closes it after.
   local -a o; mapfile -t o < <(order)
   local a i
   for ((i=${#o[@]}-1; i>=0; i--)); do a="${o[$i]}"; [ -n "$a" ] || continue
@@ -169,15 +171,15 @@ park_all() {
     if [ "$i" -gt 0 ]; then sleep "$STAGGER" 2>/dev/null; fi
   done
 }
-# Hide: remember the front, slide the cards out, then close the scratchpad.
+# Hide: remember the front, slide the cards out, then close the dock workspace.
 hide_pile() {
   local cur; cur="$(curfront)"; [ -n "$cur" ] && printf '%s' "$cur" >"$STATE"
   park_all
-  scratch_hide
+  dockws_hide
 }
-# Shown = the scratchpad is up on this monitor AND a card is on-screen (Mod+C can close
-# the scratchpad with the cards still in place, which counts as hidden).
-pile_shown() { [ "$(shownany)" = "true" ] && scratch_shown; }
+# Shown = the dock workspace is up on this monitor AND a card is on-screen (opening the
+# scratchpad closes the dock workspace with the cards still in place: that is hidden).
+pile_shown() { [ "$(shownany)" = "true" ] && dockws_shown; }
 # Show the pile at the remembered front (falling back to the first window).
 show_pile() {
   local -a o; mapfile -t o < <(order); [ ${#o[@]} -eq 0 ] && return 1
@@ -218,7 +220,7 @@ undock() {  # strip the dock shape/tag and return a window to the tiling area
   d "hl.dsp.window.set_prop({prop=\"no_max_size\", value=\"true\", window=\"address:$a\"})"
   pin "$a" off
   nofocus "$a" false
-  to_regular "$a"   # off the scratchpad, onto the workspace you are looking at
+  to_regular "$a"   # off the dock workspace, onto the one you are looking at
   d "hl.dsp.window.set_prop({prop=\"opacity\", value=\"1.0 1.0\", window=\"address:$a\"})"
   # restore the chrome dock_send stripped
   d "hl.dsp.window.set_prop({prop=\"decorate\", value=\"true\", window=\"address:$a\"})"
@@ -272,7 +274,7 @@ pip_make() {  # turn $1 into a keystone PiP: a standalone, pinned, tilted mini-c
   d "hl.dsp.window.set_prop({prop=\"max_size\", value=\"$pw $ph\", window=\"address:$a\"})"
   d "hl.dsp.window.resize({x=$pw, y=$ph, window=\"address:$a\"})"
   d "hl.dsp.window.set_prop({prop=\"min_size\", value=\"$pw $ph\", window=\"address:$a\"})"
-  to_regular "$a"   # a pin needs a regular workspace; a card would be on the scratchpad
+  to_regular "$a"   # a pin needs a regular workspace; a card would be on the dock workspace
   pin "$a" on
   mv "$a" "$px" "$py"
   ztop "$a"
@@ -308,18 +310,6 @@ geom; snap
 case "${1:-toggle}" in
   toggle)   # SUPER+S: show the pile if hidden, park it if shown
     if pile_shown; then hide_pile; else show_pile; fi ;;
-  scratchboard)   # Mod+C: the scratchpad WITHOUT the dock. The cards share the `scratch`
-                  # special workspace, so park any that are on-screen first -- otherwise
-                  # opening the scratchboard would bring the dock along. Closing it while the
-                  # dock is up parks the pile too, remembering the front for the next Mod+S.
-    if scratch_shown; then
-      pile_shown && { cur="$(curfront)"; [ -n "$cur" ] && printf '%s' "$cur" >"$STATE"; }
-      [ "$(shownany)" = "true" ] && park_all
-      scratch_hide
-    else
-      [ "$(shownany)" = "true" ] && park_all
-      scratch_show
-    fi ;;
   show)     # directional gesture (3-finger swipe toward the dock): reveal the pile.
             # Idempotent -- a no-op if it is already shown, so repeated swipes don't flicker.
     pile_shown || show_pile ;;
