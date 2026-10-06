@@ -202,23 +202,25 @@ let
     # 'ov02c10.yaml' not found ... falling back to ''". ov02c10.yaml IS shipped,
     # under share/libcamera/ipa/simple/.
     LIBCAMERA_IPA_CONFIG_PATH = "${pkgs.libcamera}/share/libcamera/ipa";
-    GST_PLUGIN_PATH = lib.makeSearchPath "lib/gstreamer-1.0" [ pkgs.libcamera ];
-    LD_LIBRARY_PATH = lib.makeLibraryPath [ pkgs.libcamera ];
     /*
-      kamoso builds its own GStreamer pipeline directly (confirmed via ldd on
-      the real binary — links libgstreamer/libgstbase/libgstvideo, no
-      libQt6Multimedia.so at all) and its autoplugger picks `libcamerasrc`
-      (direct sensor access) over `pipewiresrc` (through camera-relay) when
-      choosing a Video/Source element. libcamerasrc's viewfinder stream
-      negotiates ABGR8888 with a garbage/unset alpha channel, causing the live
-      preview to render transparent or black (still-capture uses a different,
-      alpha-free format, which is why photos work fine). Deprioritizing
-      libcamerasrc's rank makes GStreamer's autoplugger prefer pipewiresrc
-      instead, which goes through our relay's alpha-free YUY2 output. Scoped
-      to GStreamer's own element selection only — doesn't touch Qt, audio, or
-      anything outside camera-source autoplugging.
+      That is ALL the session gets -- deliberately. There is one camera path:
+      libcamera -> camera-relay -> v4l2loopback ("Camera Relay"), and apps use
+      the V4L2 device. The relay is the only thing that opens the sensor.
+
+      This used to also export GST_PLUGIN_PATH/LD_LIBRARY_PATH for libcamera,
+      handing every GStreamer app `libcamerasrc` -- direct sensor access that
+      bypasses the relay and fights it for the camera (libcamera allows one
+      owner). kamoso's autoplugger preferred it and rendered a transparent
+      preview (ABGR with a garbage alpha), which is what the old
+      `GST_PLUGIN_FEATURE_RANK = "libcamerasrc:0"` hack papered over. With
+      libcamerasrc no longer visible to the session, that problem cannot
+      occur, so the hack is gone too.
+
+      The three IPA variables above stay because they are inert unless
+      something links libcamera directly -- i.e. the relay and the `cam`
+      diagnostic tool -- and without them `cam` fails the isolated-IPA lookup.
+      The relay's own wrapper sets its GStreamer paths itself.
     */
-    GST_PLUGIN_FEATURE_RANK = "libcamerasrc:0";
   };
 
   wireplumberLuaRule = ''
@@ -250,6 +252,24 @@ let
     ]
   '';
 
+  /*
+    The second camera path, removed. WirePlumber's libcamera monitor exposes
+    the sensor as its own PipeWire source ("Built-in Front Camera",
+    libcamera_input.__SB_.PC00.LNK0) beside the relay's "Camera Relay (V4L2)".
+    Apps that take the first source rather than the default picked it, and it
+    competed with the relay for the sensor. Disabled at the monitor, so the node
+    is never created -- not merely hidden.
+  */
+  wireplumberNoLibcameraConf = ''
+    wireplumber.profiles = {
+      main = {
+        monitor.libcamera = disabled
+      }
+    }
+  '';
+  wireplumberNoLibcameraLua = ''
+    libcamera_monitor.enabled = false
+  '';
   wireplumberUsesConf = lib.versionAtLeast (pkgs.wireplumber.version or "0.5") "0.5";
 in
 lib.mkIf config.my.samsung-galaxybook.enable {
@@ -355,9 +375,11 @@ lib.mkIf config.my.samsung-galaxybook.enable {
   }
   // lib.optionalAttrs wireplumberUsesConf {
     "wireplumber/wireplumber.conf.d/50-disable-ipu6-v4l2.conf".text = wireplumberConfRule;
+    "wireplumber/wireplumber.conf.d/51-no-libcamera-monitor.conf".text = wireplumberNoLibcameraConf;
   }
   // lib.optionalAttrs (!wireplumberUsesConf) {
     "wireplumber/main.lua.d/51-disable-ipu6-v4l2.lua".text = wireplumberLuaRule;
+    "wireplumber/main.lua.d/52-no-libcamera-monitor.lua".text = wireplumberNoLibcameraLua;
   };
 
   systemd.user.services.camera-relay = {
@@ -374,6 +396,4 @@ lib.mkIf config.my.samsung-galaxybook.enable {
     environment = libcameraEnv;
   };
 
-  systemd.user.services.pipewire.environment = libcameraEnv;
-  systemd.user.services.wireplumber.environment = libcameraEnv;
 }

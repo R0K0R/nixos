@@ -53,6 +53,34 @@
     '';
   };
 
+  options.my.desktop.autorotate = lib.mkOption {
+    type = lib.types.enum [ "iio" "motion-cues" "none" ];
+    default = "iio";
+    example = "motion-cues";
+    description = ''
+      Which process drives screen autorotation.
+
+      This is a switch and not two independent toggles because the two
+      sources CANNOT coexist. Orientation comes from the accelerometer, the
+      accelerometer is read through an IIO buffer, and an IIO buffer has
+      exactly one owner -- whoever asks second is simply told the device is
+      busy. Running both leaves rotation working intermittently depending on
+      which won the race at boot.
+
+        "iio"          iio-hyprland / iio-niri, listening to iio-sensor-proxy.
+                       The long-standing arrangement.
+        "motion-cues"  features/dms/plugins/vehicle-motion-cues. It must hold
+                       the buffer itself to draw motion cues, so it derives
+                       orientation from the gravity vector it already has and
+                       emits the same keyword batch iio-hyprland would, at the
+                       same shim (features/hyprland/rotation.nix). One reader,
+                       both jobs. Rotation lock then lives at
+                       `dms ipc call vehicleMotionCues toggleRotationLock`
+                       instead of in the rotationLock plugin.
+        "none"         No autorotation.
+    '';
+  };
+
   options.my.desktop.primaryOutputScale = lib.mkOption {
     type = lib.types.str;
     default = "1";

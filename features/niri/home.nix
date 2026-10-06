@@ -32,6 +32,9 @@
       prefer-no-csd = true;
 
       spawn-at-startup = [
+        # Skipped unless iio is the chosen autorotate source -- see
+        # my.desktop.autorotate for why the two sources cannot coexist.
+      ] ++ lib.optionals (osConfig.my.desktop.autorotate == "iio") [
         { command = [ "iio-niri" "listen" "--monitor" osConfig.my.desktop.primaryOutput ]; }
       ];
 

@@ -29,7 +29,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 # misconfiguration. `:?` makes an unset one fail immediately and by name.
 RHOST=${GT_RHOST:?set GT_RHOST, e.g. root@gateway}
 KEY=${GT_KEY:?set GT_KEY, path to the ssh private key}
-RPORT=${GT_RPORT:-8022}
+RPORT=${GT_RPORT:-2022}
 
 JUMP=${GT_JUMP:?set GT_JUMP, e.g. user@jumphost}
 JUMP_TIMEOUT=${GT_JUMP_TIMEOUT:-120}

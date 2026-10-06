@@ -95,8 +95,22 @@ in
         # the paged strip in features/dms/plugins/workspaces. Plain "+1"/"-1"
         # step into empty workspaces, creating them on demand, and "-1" clamps
         # at workspace 1 rather than running negative.
-        "${toString cfg.fingers},DU,*,*,hyprctl dispatch 'hl.dsp.focus({ workspace = \"+1\" })'"
-        "${toString cfg.fingers},UD,*,*,hyprctl dispatch 'hl.dsp.focus({ workspace = \"-1\" })'"
+        # Now the SAME logic the Mod+J/K keybinds and the touchpad's vertical
+        # swipe use: walk the column first, change workspace only at its end.
+        # Previously these dispatched focus{workspace=...} directly, which
+        # matched the keys but not the touchpad's built-in `workspace` gesture
+        # -- the three disagreed most visibly on a blank workspace.
+        #
+        # HyprFocusOrWorkspace is a global Lua function defined in the compositor
+        # config (features/hyprland/home.nix), so this is `eval`, not `dispatch`:
+        # dispatch is shorthand for hl.dispatch(...) and only takes a dispatcher,
+        # while eval runs arbitrary Lua in the config's own state. Calling it
+        # there rather than reimplementing keeps one copy of the behaviour, and
+        # costs only this one IPC round-trip -- unavoidable from an external
+        # daemon, but far cheaper than spawning an interpreter per swipe.
+        # DU (swiping upward) pairs with Mod+J, i.e. "down" the column.
+        "${toString cfg.fingers},DU,*,*,hyprctl eval 'HyprFocusOrWorkspace(\"down\")'"
+        "${toString cfg.fingers},UD,*,*,hyprctl eval 'HyprFocusOrWorkspace(\"up\")'"
         # Horizontal swipes walk the scrolling layout's tape, same dispatcher
         # as the Mod+H/L keybinds (features/hyprland/home.nix) -- column data
         # structure, not geometry, so it works on maximized windows too.

@@ -42,6 +42,26 @@
     deadnix
     tree
     python3
+
+    zip
+    unzip
+    # ~/KSA is a git-annex repo (unlocked, filter.annex.process): without this
+    # every `git add`/checkout there fails to start its filter.
+    #
+    # Minus bup. nixpkgs hands git-annex a list of runtime tools (bup, curl,
+    # rsync, gnupg, ...) that its configure step probes for; bup only enables
+    # the bup special remote, which nothing here uses, and on the tuned set it
+    # was a build of its own blocking the rebuild. git-annex's configure treats
+    # every one of these as optional, so without it the bup remote is simply
+    # not built in.
+    # buildTools too: on this IntraISACross set nixpkgs also hands configure
+    # build-platform copies of the same tools (pr/git-annex-cross-configure-tools),
+    # and bup would come back through that list.
+    (haskell.lib.compose.overrideCabal (drv: {
+      executableSystemDepends = builtins.filter (d: (d.pname or "") != "bup") (drv.executableSystemDepends or [ ]);
+      buildTools = builtins.filter (d: (d.pname or "") != "bup") (drv.buildTools or [ ]);
+    }) git-annex)
+
     # Python LSP for Emacs `lsp-pyright` when using BasedPyright (`basedpyright-langserver`).
     basedpyright
     clang-tools # clangd LSP + clang-format/clang-tidy
