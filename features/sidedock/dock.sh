@@ -308,6 +308,18 @@ geom; snap
 case "${1:-toggle}" in
   toggle)   # SUPER+S: show the pile if hidden, park it if shown
     if pile_shown; then hide_pile; else show_pile; fi ;;
+  scratchboard)   # Mod+C: the scratchpad WITHOUT the dock. The cards share the `scratch`
+                  # special workspace, so park any that are on-screen first -- otherwise
+                  # opening the scratchboard would bring the dock along. Closing it while the
+                  # dock is up parks the pile too, remembering the front for the next Mod+S.
+    if scratch_shown; then
+      pile_shown && { cur="$(curfront)"; [ -n "$cur" ] && printf '%s' "$cur" >"$STATE"; }
+      [ "$(shownany)" = "true" ] && park_all
+      scratch_hide
+    else
+      [ "$(shownany)" = "true" ] && park_all
+      scratch_show
+    fi ;;
   show)     # directional gesture (3-finger swipe toward the dock): reveal the pile.
             # Idempotent -- a no-op if it is already shown, so repeated swipes don't flicker.
     pile_shown || show_pile ;;

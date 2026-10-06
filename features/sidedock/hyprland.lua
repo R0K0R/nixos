@@ -112,6 +112,11 @@ do
     end)
   end
 
+  -- Mod+C shows the scratchboard WITHOUT the dock: the cards share its special workspace,
+  -- so dock.sh parks them before showing (or hiding) it.
+  hl.unbind(mod .. " + C")
+  hl.bind(mod .. " + C", hl.dsp.exec_cmd(dock .. " scratchboard"))
+
   -- Mod+Ctrl+C on a pile card: the card already lives on the scratchpad, and moving it
   -- off by hand would strand it still tagged as a card. Undock it properly instead.
   hl.unbind(mod .. " + CTRL + C")
