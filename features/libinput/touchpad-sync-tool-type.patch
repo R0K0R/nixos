@@ -1,0 +1,117 @@
+From d0e6d43a78ee81f077dbd0dda98827440a3b5fc2 Mon Sep 17 00:00:00 2001
+From: kk1987 <kk1987@gmail.com>
+Date: Sat, 1 Aug 2026 00:32:06 -0700
+Subject: [PATCH] touchpad: sync the slot's tool type when syncing touch state
+
+t->is_tool_palm is only ever updated from ABS_MT_TOOL_TYPE events. The
+kernel's per-slot tool type persists across touches and evdev only
+reports changes, so tp_sync_touch() must fetch the current value just
+like it does for position, pressure and touch major/minor.
+
+If the value changes while our fd is closed - e.g. the device is
+disabled via send-events DISABLED and the palm lifts, with the slot
+reverting to MT_TOOL_FINGER - the touchpad keeps a stale
+is_tool_palm=true for that slot after resume: evdev_device_resume()
+re-syncs libevdev but discards the sync events, no future event
+corrects the flag, and every new touch in that slot is flagged as
+PALM_TOOL_PALM on its first frame, producing no pointer output.
+
+The user-visible effect is an "N-1 finger" touchpad: one finger moves
+nothing, two fingers act as single-finger motion, three fingers act as
+a two-finger scroll. This persists until the firmware happens to
+toggle the slot's tool type again or the device is recreated.
+Reproduced on a SYNA3503 Precision touchpad (HP OmniBook X Flip 16):
+resting a palm on the pad while disabling the device, then using it
+normally after re-enabling, yields "N-2" behaviour from the two
+palm-poisoned slots; a deliberate palm touch heals it instantly.
+
+Closes: #1319
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+Signed-off-by: kk1987 <kk1987@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/libinput/libinput/-/merge_requests/1505>
+---
+ src/evdev-mt-touchpad.c |  8 ++++++++
+ test/test-touchpad.c    | 34 ++++++++++++++++++++++++++++++++++
+ 2 files changed, 42 insertions(+)
+
+diff --git a/src/evdev-mt-touchpad.c b/src/evdev-mt-touchpad.c
+index 65891d3..d8a9eff 100644
+--- a/src/evdev-mt-touchpad.c
++++ b/src/evdev-mt-touchpad.c
+@@ -2079,6 +2079,7 @@ tp_sync_touch(struct tp_dispatch *tp,
+ {
+ 	struct libevdev *evdev = device->evdev;
+ 	int tracking_id;
++	int tool_type;
+ 
+ 	if (!libevdev_fetch_slot_value(evdev, slot, ABS_MT_POSITION_X, &t->point.x))
+ 		t->point.x = libevdev_get_event_value(evdev, EV_ABS, ABS_X);
+@@ -2091,6 +2092,13 @@ tp_sync_touch(struct tp_dispatch *tp,
+ 	libevdev_fetch_slot_value(evdev, slot, ABS_MT_TOUCH_MAJOR, &t->major);
+ 	libevdev_fetch_slot_value(evdev, slot, ABS_MT_TOUCH_MINOR, &t->minor);
+ 
++	/* The kernel slot value persists across touches but evdev only
++	 * sends events on changes. If the value changed while our fd was
++	 * closed (e.g. send-events DISABLED), a stale is_tool_palm would
++	 * mark every new touch in this slot as palm, forever. */
++	if (libevdev_fetch_slot_value(evdev, slot, ABS_MT_TOOL_TYPE, &tool_type))
++		t->is_tool_palm = tool_type == MT_TOOL_PALM;
++
+ 	if (libevdev_fetch_slot_value(evdev, slot, ABS_MT_TRACKING_ID, &tracking_id) &&
+ 	    tracking_id != -1)
+ 		tp->nactive_slots++;
+diff --git a/test/test-touchpad.c b/test/test-touchpad.c
+index 0449709..6c481f4 100644
+--- a/test/test-touchpad.c
++++ b/test/test-touchpad.c
+@@ -1765,6 +1765,39 @@ START_TEST(touchpad_palm_detect_tool_palm_on_off)
+ }
+ END_TEST
+ 
++START_TEST(touchpad_palm_detect_tool_palm_stale_after_sendevents)
++{
++	struct litest_device *dev = litest_current_device();
++	struct libinput *li = dev->libinput;
++
++	if (!touchpad_has_tool_palm(dev))
++		return LITEST_NOT_APPLICABLE;
++
++	/* Touch flagged as palm by the firmware */
++	litest_touch_down(dev, 0, 50, 50);
++	litest_event(dev, EV_ABS, ABS_MT_TOOL_TYPE, MT_TOOL_PALM);
++	litest_event(dev, EV_SYN, SYN_REPORT, 0);
++	litest_touch_move_to(dev, 0, 50, 50, 70, 70, 10);
++	litest_drain_events(li);
++
++	/* While the device is disabled (fd closed), the kernel slot
++	 * reverts to finger - we never see that event */
++	litest_sendevents_off(dev);
++	litest_event(dev, EV_ABS, ABS_MT_TOOL_TYPE, MT_TOOL_FINGER);
++	litest_event(dev, EV_SYN, SYN_REPORT, 0);
++	litest_touch_up(dev, 0);
++	litest_sendevents_on(dev);
++	litest_drain_events(li);
++
++	/* A new finger in the same slot must not be treated as palm */
++	litest_touch_down(dev, 0, 50, 50);
++	litest_touch_move_to(dev, 0, 50, 50, 70, 70, 10);
++	litest_touch_up(dev, 0);
++
++	litest_assert_only_typed_events(li, LIBINPUT_EVENT_POINTER_MOTION);
++}
++END_TEST
++
+ START_TEST(touchpad_palm_detect_tool_palm_tap_after)
+ {
+ 	struct litest_device *dev = litest_current_device();
+@@ -7684,6 +7717,7 @@ TEST_COLLECTION(touchpad_palm)
+ 	litest_add(touchpad_palm_detect_both_edges, LITEST_TOUCHPAD, LITEST_SINGLE_TOUCH);
+ 	litest_add(touchpad_palm_detect_tool_palm, LITEST_TOUCHPAD, LITEST_SINGLE_TOUCH);
+ 	litest_add(touchpad_palm_detect_tool_palm_on_off, LITEST_TOUCHPAD, LITEST_SINGLE_TOUCH);
++	litest_add(touchpad_palm_detect_tool_palm_stale_after_sendevents, LITEST_TOUCHPAD, LITEST_SINGLE_TOUCH);
+ 	litest_add(touchpad_palm_detect_tool_palm_tap, LITEST_TOUCHPAD, LITEST_SINGLE_TOUCH);
+ 	litest_add(touchpad_palm_detect_tool_palm_tap_after, LITEST_TOUCHPAD, LITEST_SINGLE_TOUCH);
+ 
+-- 
+2.55.0
+
