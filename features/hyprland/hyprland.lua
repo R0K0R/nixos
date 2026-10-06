@@ -99,6 +99,13 @@ hl.config({
     -- inversion at the device, where it can tell a pinch (Ctrl + wheel)
     -- from a scroll. Inverting here as well would flip the wheel back.
     natural_scroll = nix.naturalScroll,
+
+    -- With a special workspace shown, the regular workspace under it takes no input
+    -- by default -- and the side dock (features/sidedock) is the `scratch` special
+    -- workspace, so an open dock made every ordinary window untouchable. This lets
+    -- input through while the special workspace holds only floating windows, which
+    -- dock cards and scratchboard windows are.
+    special_fallthrough = true,
   },
 
   -- Ask 1, root cause (verified against 0.56.0 source, not guessed):
