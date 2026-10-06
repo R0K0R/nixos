@@ -266,6 +266,8 @@ in
     # the pile, SUPER+ALT+T dock terminal. keystone = the 3D trapezoid look,
     # a Hyprland patch.
     sidedock.enable = true;
+    # Cast to Miracast TVs/monitors (Wi-Fi Direct) and Chromecasts.
+    wireless-display.enable = true;
     hyprland.keystone.enable = true;
 
     # X-Folding RGB Bluetooth keyboard: natural scroll on its trackpad without
