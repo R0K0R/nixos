@@ -67,6 +67,13 @@ in
               hard first; past MemoryMax only rnote is killed. Swap is limited
               too, since a scope allowed to swap freely just moves the freeze.
               Falls back to a plain exec where systemd-run cannot work.
+
+              The scope gets an explicit --unit. Left to itself, systemd-run names
+              it run-p<PID>-i<N>, and a launcher that already starts each app in
+              its own systemd-run scope (DMS does) has exec'd this script in that
+              same PID: the inner scope then collides with the outer one ("Unit
+              ... was already loaded"), systemd-run exits, and rnote never starts
+              from the desktop entry while working fine from a terminal.
             */
             postFixup = (old.postFixup or "") + ''
               mv "$out/bin/rnote" "$out/bin/.rnote-uncapped"
@@ -74,6 +81,7 @@ in
               #!${final.runtimeShell}
               if command -v systemd-run >/dev/null 2>&1 && [ -n "\''${DBUS_SESSION_BUS_ADDRESS:-}\''${XDG_RUNTIME_DIR:-}" ]; then
                 exec systemd-run --user --scope --collect --quiet \\
+                  --unit="app-rnote-\$\$-\$RANDOM" \\
                   -p MemoryHigh=5G -p MemoryMax=7G -p MemorySwapMax=1G \\
                   -- "$out/bin/.rnote-uncapped" "\$@"
               fi
