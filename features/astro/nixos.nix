@@ -23,5 +23,8 @@ in
     # Emitted only when non-empty, and keyed by this feature's `users`
     # scope rather than by a hardcoded account -- see lib/user-scope.nix.
     (lib.mkIf (pkgSet ? user) { my.packages.perUser = lib.genAttrs config.my.astro.users (_: pkgSet.user); })
+    # astropy goes into features/python-dev's environment rather than a python
+    # of its own; it only lands where python-dev is enabled.
+    { my.python-dev.packages = [ (ps: [ ps.astropy ]) ]; }
   ]);
 }

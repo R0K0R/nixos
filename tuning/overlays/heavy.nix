@@ -304,6 +304,29 @@ else
       else
         [ ];
 
+    /*
+      CUDA. Every CUDA-enabled package builds with cudaPackages.backendStdenv, not
+      stdenv -- gcc 14 for CUDA 12.9, whose nvcc rejects gcc 15 -- and nothing
+      above reaches it: it is a scope member, not a classifier name, and packages
+      that switch to it (OpenCV with enableCuda, CuPy, NCCL) do so internally.
+      So each retry of a failed CUDA build started cold: 2026-10-01, OpenCV
+      compiled twice from scratch, CuPy four times.
+
+      ccache only, no mold: nvcc links through this host compiler and that path
+      is untested with mold. backendStdenv's own passthru (cudaCapabilities
+      etc.) is an .override extraAttr, which overrideCC keeps.
+    */
+    cudaTreated = lib.optionalAttrs (ccache.enable && prev ? cudaPackages) (
+      builtins.listToAttrs (
+        tryList "cudaPackages" (
+          cp:
+          cp.overrideScope (
+            _: sp: { backendStdenv = mkStdenv { useMold = false; } sp.backendStdenv; }
+          )
+        )
+      )
+    );
+
     extraNames = map (e: e.attr) extras;
     # extras win over the classifier-driven pass, so a package listed there
     # with a non-default stdenv argument is not also swapped through `stdenv`.
@@ -316,4 +339,4 @@ else
       ++ builtins.concatMap treatScope scopes
     );
   in
-  treated // builtins.listToAttrs (builtins.concatMap (debugOff treated) noDebugInfoNames)
+  treated // cudaTreated // builtins.listToAttrs (builtins.concatMap (debugOff treated) noDebugInfoNames)
