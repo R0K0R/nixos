@@ -1,0 +1,44 @@
+diff -ru a/VehicleMotionCues.qml b/VehicleMotionCues.qml
+--- a/VehicleMotionCues.qml
++++ b/VehicleMotionCues.qml
+@@ -543,7 +543,39 @@
+ 
+     // ------------------------------------------------------------ rotation
+ 
+-    Component.onCompleted: rotationLocked = opt("rotationLocked", false) === true
++    Component.onCompleted: {
++        rotationLocked = opt("rotationLocked", false) === true;
++        if (manageRotation && compositor !== "niri")
++            seedTransform.running = true;
++    }
++
++    /*
++      screenTransform starts as a guess of 0, and rotate() only acts when the
++      sensor's answer DIFFERS from it. The compositor may well come up rotated
++      -- the host config restores the last orientation across reloads and
++      logins -- and with the guess left at 0, holding the machine in
++      landscape would read as "already there" and never turn the screen
++      back. Take the real value from the compositor instead. Goes through
++      rotateCommand, which passes anything but a transform batch straight to
++      the real hyprctl.
++    */
++    Process {
++        id: seedTransform
++        command: [root.rotateCommand || "hyprctl", "-j", "monitors"]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                try {
++                    const m = JSON.parse(text).find(o => o.name === root.monitorName);
++                    if (m && m.transform >= 0 && m.transform <= 3) {
++                        root.screenTransform = m.transform;
++                        root.proposedTransform = m.transform;
++                    }
++                } catch (e) {
++                    console.warn("vehicleMotionCues: cannot read the output transform:", e);
++                }
++            }
++        }
++    }
+ 
+     /*
+       AUTOROTATION, FOLDED INTO THE SAME SENSOR READER.

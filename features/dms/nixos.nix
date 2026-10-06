@@ -129,5 +129,6 @@ in
       quickshell.package = pkgs.quickshell;
     };
     })
+
   ];
 }

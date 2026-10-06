@@ -20,6 +20,25 @@ import qs.Modules.Plugins
 PluginComponent {
     id: root
 
+    /*
+      Two possible rotation sources, and the lock means a different thing to
+      each -- see my.desktop.autorotate.
+
+        "iio"          iio-hyprland/iio-niri. No pause switch of their own, so
+                       "lock" kills the listener and "unlock" respawns it.
+        "motion-cues"  the vehicleMotionCues plugin, which owns the
+                       accelerometer for its dots and therefore also serves
+                       orientation. It HAS a real lock, so this entry just
+                       flips it over IPC and leaves the sensor alone -- the
+                       cues keep running while rotation is held still, which
+                       is exactly what you want in a moving vehicle.
+
+      Both paths stay reachable from the same control-centre entry so the lock
+      is independent of whether the cues are on.
+    */
+    readonly property string source: pluginData.source || "iio"
+    readonly property bool viaMotionCues: source === "motion-cues"
+
     readonly property string compositor: pluginData.compositor || ""
     readonly property string monitor: pluginData.monitor || "eDP-1"
     property bool locked: false
@@ -32,12 +51,29 @@ PluginComponent {
 
     Process {
         id: statusProcess
-        command: ["pgrep", "-x", root.autorotateProcessName]
+        command: root.viaMotionCues
+            ? ["dms", "ipc", "call", "vehicleMotionCues", "rotationLockState"]
+            : ["pgrep", "-x", root.autorotateProcessName]
         running: false
+
+        // pgrep answers by exit code; the IPC call answers on stdout.
+        stdout: SplitParser {
+            onRead: line => {
+                if (root.viaMotionCues)
+                    root.locked = String(line).trim() === "locked"
+            }
+        }
+
         onExited: (exitCode) => {
-            root.locked = exitCode !== 0
+            if (!root.viaMotionCues)
+                root.locked = exitCode !== 0
             root.known = true
         }
+    }
+
+    Process {
+        id: cueLockProcess
+        running: false
     }
 
     // -9/SIGKILL, not a bare pkill (SIGTERM): iio-hyprland's own SIGTERM
@@ -81,12 +117,18 @@ PluginComponent {
     ccWidgetIsActive: locked
 
     onCcWidgetToggled: {
-        if (!compositor) {
+        if (!viaMotionCues && !compositor) {
             ToastService.showError("Rotation Lock", "No compositor configured for this plugin")
             return
         }
         locked = !locked
-        if (locked) {
+        if (viaMotionCues) {
+            // The plugin owns the lock; nothing is killed or respawned, so the
+            // motion cues carry on drawing while rotation is held.
+            cueLockProcess.command = ["dms", "ipc", "call", "vehicleMotionCues",
+                                      locked ? "lockRotation" : "unlockRotation"]
+            cueLockProcess.running = true
+        } else if (locked) {
             killProcess.running = true
         } else {
             respawnProcess.running = true
@@ -95,7 +137,7 @@ PluginComponent {
     }
 
     Component.onCompleted: {
-        if (compositor) {
+        if (viaMotionCues || compositor) {
             statusProcess.running = true
         } else {
             known = true

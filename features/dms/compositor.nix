@@ -145,6 +145,9 @@ in
         -- --alpha only sets its drawn pixels' transparency, the actual frosted
         -- backdrop still needs Hyprland's blur behind it.
         hl.layer_rule({ match = { namespace = "^(wvkbd)$" }, blur = true, ignore_alpha = 0.05 })
+        -- Claude Helper's reply window (plugins.nix) is a real toplevel so a long
+        -- answer shows in full; float it rather than let it take a tile.
+        hl.window_rule({ match = { title = "^(Claude Helper)$" }, float = true })
 
         -- Shell surfaces.
         hl.bind("${mod} + space", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))

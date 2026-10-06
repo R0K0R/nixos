@@ -132,18 +132,30 @@ PluginComponent {
             };
         }
 
-        // Bucket windows by monitor, then by column x.
+        // Bucket windows by monitor, then by column x. Floating windows are
+        // not columns and never own a seam -- but they are collected too,
+        // because they OBSTRUCT one: see the blocker trim further down.
         const byMon = {};
+        const floatsByMon = {};
         for (const t of Hyprland.toplevels.values) {
             const io = t.lastIpcObject;
-            if (!io || !io.mapped || io.hidden || io.floating)
+            if (!io || !io.mapped || io.hidden)
                 continue;
             const m = mons[io.monitor];
-            if (!m || !io.workspace || io.workspace.id !== m.ws)
+            if (!m || !io.workspace)
+                continue;
+            // A special workspace (scratchpad) renders over the active one, so
+            // its floats obstruct just as much as the active workspace's do.
+            const onActive = io.workspace.id === m.ws;
+            const onSpecial = (io.workspace.name || "").startsWith("special");
+            if (!onActive && !onSpecial)
                 continue;
             if (io.size[0] <= 0)
                 continue;
-            (byMon[io.monitor] = byMon[io.monitor] || []).push(io);
+            if (io.floating)
+                (floatsByMon[io.monitor] = floatsByMon[io.monitor] || []).push(io);
+            else if (onActive)
+                (byMon[io.monitor] = byMon[io.monitor] || []).push(io);
         }
 
         const out = [];
@@ -200,18 +212,53 @@ PluginComponent {
                 const bot = Math.min(Math.min(a.bot, b.bot), safeBot);
                 if (bot - top < 40)
                     continue;
+
+                // A layer-shell surface draws above EVERY toplevel, tiled or
+                // floating, so a handle whose strip crosses a floating window
+                // sits on top of it and eats the clicks meant for it. The seam
+                // itself is still real (it is between two tiled columns), so
+                // rather than drop it, cut the strip down to the longest run
+                // that no float covers -- a small dialog on the seam costs the
+                // part it covers, not the whole handle. Fully covered, the run
+                // falls under the same 40px minimum used above and the seam is
+                // dropped.
+                const stripLo = seamGlobalX - root.handleW / 2;
+                const stripHi = seamGlobalX + root.handleW / 2;
+                const blockers = (floatsByMon[monId] || []).filter(f => f.at[0] < stripHi && f.at[0] + f.size[0] > stripLo).map(f => [f.at[1], f.at[1] + f.size[1]]);
+                const run = root.longestFreeRun(top, bot, blockers);
+                if (!run || run[1] - run[0] < 40)
+                    continue;
+
                 out.push({
                     screen: scr,
                     monW: m.logicalW,
                     localX: seamGlobalX - m.x,
-                    localTop: top - m.y,
-                    height: bot - top,
+                    localTop: run[0] - m.y,
+                    height: run[1] - run[0],
                     leftAddr: a.addr, leftW: a.w, leftH: a.h,
                     rightAddr: b.addr, rightW: b.w, rightH: b.h
                 });
             }
         }
         seams = out;
+    }
+
+    // Longest sub-interval of [lo, hi] that none of `blocked` covers.
+    // Intervals arrive unsorted and may overlap each other, so they are
+    // clipped, sorted and swept rather than assumed disjoint.
+    function longestFreeRun(lo, hi, blocked) {
+        const iv = blocked.map(b => [Math.max(b[0], lo), Math.min(b[1], hi)]).filter(b => b[1] > b[0]).sort((a, b) => a[0] - b[0]);
+        let best = null, cur = lo;
+        const keep = (a, b) => {
+            if (b > a && (!best || b - a > best[1] - best[0]))
+                best = [a, b];
+        };
+        for (const b of iv) {
+            keep(cur, b[0]);
+            cur = Math.max(cur, b[1]);
+        }
+        keep(cur, hi);
+        return best;
     }
 
     function setW(addr, w, h) {

@@ -1,0 +1,78 @@
+gamma: forget an output that disappears while night mode is off
+
+The global-remove handler looked the removed output up in m.outputs and
+returned early when it was not there. But m.outputs only holds outputs
+that currently HAVE a gamma control, and SetEnabled(false) empties it --
+so an output removed while night mode was off was never taken out of
+availableOutputs, the list SetEnabled(true) builds new controls from.
+
+Reproduced on a laptop whose lid-close disables the panel (eDP-1) with
+night mode off: on lid-open the panel returns as a new wl_output beside
+the stale one, and enabling night mode afterwards reports "enabled,
+3600K" while the screen stays neutral. Toggling does not recover it;
+only restarting the daemon does, because that rebuilds the list. Nothing
+is logged at any point.
+
+Now the early-return path drops the output from availableOutputs (and
+outputRegNames) by registry name, matching what the normal path already
+does for outputs that had a control.
+
+--- a/internal/server/wayland/manager.go	2026-09-28 10:46:56.006810162 +0900
++++ b/internal/server/wayland/manager.go	2026-09-28 10:46:56.062035862 +0900
+@@ -218,6 +218,15 @@
+ 				return true
+ 			})
+ 			if foundOut == nil {
++				// No gamma control for this output: night mode was off when it
++				// went away, and SetEnabled(false) had already emptied
++				// m.outputs. The output is still in availableOutputs, though,
++				// and the next enable builds its controls from that list --
++				// so an output that disappeared while night mode was off (a
++				// lid-close that disables the panel, a monitor unplug) stayed
++				// there as a dead wl_output, and when it came back the new one
++				// never got a working ramp until the daemon restarted.
++				m.dropAvailableOutputByRegistryName(e.Name)
+ 				return
+ 			}
+ 			if foundOut.gammaControl != nil {
+@@ -363,6 +372,40 @@
+ 	})
+ }
+ 
++// dropAvailableOutputByRegistryName removes a wl_output from availableOutputs
++// when all that is known is its registry name, i.e. it never had (or no longer
++// has) an outputState. Mirrors what the remove handler does for outputs that do.
++func (m *Manager) dropAvailableOutputByRegistryName(name uint32) {
++	var outputID uint32
++	found := false
++	m.outputRegNames.Range(func(id uint32, reg uint32) bool {
++		if reg == name {
++			outputID, found = id, true
++			return false
++		}
++		return true
++	})
++	if !found {
++		return
++	}
++	m.outputRegNames.Delete(outputID)
++
++	var dead *wlclient.Output
++	m.availOutputsMu.Lock()
++	m.availableOutputs = slices.DeleteFunc(m.availableOutputs, func(o *wlclient.Output) bool {
++		if o != nil && o.ID() == outputID {
++			dead = o
++			return true
++		}
++		return false
++	})
++	m.availOutputsMu.Unlock()
++
++	if dead != nil && !dead.IsZombie() {
++		_ = dead.Release()
++	}
++}
++
+ func (m *Manager) outputStillValid(out *outputState) bool {
+ 	switch {
+ 	case out == nil:

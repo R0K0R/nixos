@@ -1,0 +1,12 @@
+{
+    "id": "embeddedKeyboard",
+    "name": "Embedded Keyboard",
+    "description": "Temporarily disable the built-in keyboard (restored on reboot)",
+    "version": "1.0.0",
+    "author": "r0k0r",
+    "type": "widget",
+    "capabilities": ["control-center"],
+    "component": "./EmbeddedKeyboard.qml",
+    "icon": "keyboard_off",
+    "permissions": []
+}

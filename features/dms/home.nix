@@ -1,4 +1,4 @@
-{ config, lib, osConfig, pkgs, ... }:
+{ config, lib, options, osConfig, pkgs, ... }:
 
 
 let
@@ -88,6 +88,36 @@ in
       '');
   programs.dank-material-shell = {
     enable = true;
+
+    /*
+      Patched shell: a control-centre row may hold any number of tiles, not
+      just four. See the patch's own header, and the note in ../dms/nixos.nix,
+      for why upstream's hard-coded ladder makes a five-across row
+      inexpressible.
+
+      Set HERE rather than through nixpkgs.overlays, which was the first
+      attempt and silently did nothing: this package comes from the dms flake
+      input, not from pkgs, so overriding pkgs.dms-shell produced a patched
+      derivation that nothing referenced (the two outPaths differed -- checked
+      before believing it). Taking the option's own default keeps this working
+      if the module ever changes where the package comes from.
+    */
+    package = options.programs.dank-material-shell.package.default.overrideAttrs (old: {
+      # A real source patch, unlike the QML one below: the Go backend IS the
+      # derivation's src (source/core). Night mode silently stopped working
+      # after any lid-close with it off -- see the patch header.
+      patches = (old.patches or [ ]) ++ [ ./gamma-drop-stale-output.patch ];
+      postInstall = (old.postInstall or "") + ''
+        d="$out/share/quickshell/dms"
+        # The QML is copied out of the store with its source modes -- dirs 555,
+        # files 444 -- so patch cannot even create its temp file next to the
+        # target ("Can't create temporary file ...: Permission denied").
+        # Make just this subtree writable; fixupPhase re-applies store
+        # permissions afterwards.
+        chmod -R u+w "$d/Modules/ControlCenter"
+        ${lib.getExe pkgs.patch} -p1 -d "$d" < ${./dragdropgrid-any-columns.patch}
+      '';
+    });
 
     /*
       The full DMS config lives in ./settings.nix as a plain Nix attrset --

@@ -1,0 +1,74 @@
+Let a control-centre row hold any number of tiles, not just four.
+
+DragDropGrid sized every tile from a hard-coded ladder -- <=25 became a
+quarter, <=50 a half -- and told each delegate `gridColumns: 4`. A width
+of 20 therefore rendered as a quarter and the fifth tile wrapped, so a
+five-across row could not be expressed in settings at all.
+
+Any width that divides 100 evenly now means that many equal columns
+(50 -> 2, 25 -> 4, 20 -> 5, 10 -> 10), and gridColumns follows it so the
+drag-and-drop placement maths agrees with what is drawn. Widths that do
+not divide evenly -- 75 is the only one shipped -- fall through to the
+original ladder untouched, so existing layouts render exactly as before:
+50 and 25 reach the same pixel sizes by the new path ((base - s)/2 and
+(base - 3s)/4 respectively), and 100 gives the full width.
+
+The same ladder is duplicated in utils/layout.js, which decides ROW
+PACKING rather than tile size; with only the delegate patched, five 20%
+tiles drew at a fifth each and still wrapped after four. Both get the
+same rule.
+
+Applied to the installed QML rather than as a `patches` entry: the
+derivation's src is the Go backend (source/core), while the shell lives
+in source/quickshell, so a source patch would have nothing to apply to.
+
+--- a/Modules/ControlCenter/Components/DragDropGrid.qml	2026-09-27 20:01:06.165478341 +0900
++++ b/Modules/ControlCenter/Components/DragDropGrid.qml	2026-09-27 20:01:06.220478110 +0900
+@@ -303,10 +303,19 @@
+                             return -1;
+                         }
+                         property int widgetWidth: modelData.width || 50
++                        // A width that divides 100 evenly means that many
++                        // equal columns: 50 -> 2, 25 -> 4, 20 -> 5, 10 -> 10.
++                        // The original hard-coded the first two and could not
++                        // express a row wider than four. Widths that do not
++                        // divide evenly (75) fall through to the branches
++                        // below, so every existing layout is unchanged.
++                        readonly property int widgetColumns: (widgetWidth > 0 && 100 % widgetWidth === 0) ? (100 / widgetWidth) : 0
+                         width: {
+                             const baseWidth = root.width;
+                             const spacing = Theme.spacingS;
+-                            if (widgetWidth <= 25) {
++                            if (widgetColumns > 0) {
++                                return (baseWidth - spacing * (widgetColumns - 1)) / widgetColumns;
++                            } else if (widgetWidth <= 25) {
+                                 return (baseWidth - spacing * 3) / 4;
+                             } else if (widgetWidth <= 50) {
+                                 return (baseWidth - spacing) / 2;
+@@ -322,7 +331,7 @@
+                         widgetIndex: globalWidgetIndex
+                         gridCellWidth: width
+                         gridCellHeight: height
+-                        gridColumns: 4
++                        gridColumns: widgetColumns > 0 ? widgetColumns : 4
+                         gridLayout: root
+                         isSlider: {
+                             const id = modelData.id || "";
+--- a/Modules/ControlCenter/utils/layout.js	2026-09-27 20:23:58.731928229 +0900
++++ b/Modules/ControlCenter/utils/layout.js	2026-09-27 20:23:58.780296515 +0900
+@@ -81,7 +81,14 @@
+         const widgetWidth = widget.width || 50
+ 
+         var itemWidth
+-        if (widgetWidth <= 25) {
++        // Same rule as DragDropGrid's delegate sizing: a width dividing 100
++        // evenly means that many equal columns. This copy decides ROW PACKING,
++        // so leaving it on the four-column ladder made five 20% tiles draw at
++        // a fifth each and still wrap after four.
++        const cols = (widgetWidth > 0 && 100 % widgetWidth === 0) ? (100 / widgetWidth) : 0
++        if (cols > 0) {
++            itemWidth = (baseWidth - spacing * (cols - 1)) / cols
++        } else if (widgetWidth <= 25) {
+             itemWidth = (baseWidth - spacing * 3) / 4
+         } else if (widgetWidth <= 50) {
+             itemWidth = (baseWidth - spacing) / 2

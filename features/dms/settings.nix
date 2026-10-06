@@ -144,12 +144,12 @@
     {
       id = "nightMode";
       enabled = true;
-      width = 50;
+      width = 20;
     }
     {
       id = "darkMode";
       enabled = true;
-      width = 50;
+      width = 20;
     }
     {
       # "plugin_" prefix (not the bare plugin id) is what routes this to
@@ -158,12 +158,17 @@
       # as an "Unknown" placeholder tile.
       id = "plugin_noSleep";
       enabled = true;
-      width = 50;
+      width = 20;
     }
     {
       id = "plugin_rotationLock";
       enabled = true;
-      width = 50;
+      width = 20;
+    }
+    {
+      id = "plugin_embeddedKeyboard";
+      enabled = true;
+      width = 20;
     }
   ];
   showWorkspaceIndex = true;
@@ -628,6 +633,12 @@
             enabled = true;
             id = "screenshot";
           }
+          # Claude Helper (plugins.nix): click for the conversation, right-click
+          # to screenshot and ask.
+          {
+            enabled = true;
+            id = "claudeHelper";
+          }
         ];
         clickThrough = false;
         enabled = true;
@@ -763,7 +774,9 @@
           "dankKDEConnect"
           "pagedWorkspaces"
         ] mainBar.leftWidgets;
-        centerWidgets = keepOnly [ "oskToggle" "music" "clock" "screenshot" ] mainBar.centerWidgets;
+        # claudeHelper stays: portrait is tablet mode, i.e. pen-on-paper maths,
+        # which is what it is for. One icon, ~30px of the 1200.
+        centerWidgets = keepOnly [ "oskToggle" "music" "clock" "screenshot" "claudeHelper" ] mainBar.centerWidgets;
         rightWidgets = keepOnly [
           "systemTray"
           "notificationButton"

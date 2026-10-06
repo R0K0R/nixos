@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "claude-helper": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790490200,
+        "narHash": "sha256-UBcLQGGMolL048NSv8Sr0uf0R7dZ/H1SLC84bOrV4j0=",
+        "owner": "R0K0R",
+        "repo": "dms_claude_helper",
+        "rev": "b6d7518e1ec06c50b2777d7a44593c599a7ca5a7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "repo": "dms_claude_helper",
+        "type": "github"
+      }
+    },
     "dank-greeter": {
       "inputs": {
         "dank-qml-common": "dank-qml-common",
@@ -129,10 +145,28 @@
     },
     "root": {
       "inputs": {
+        "claude-helper": "claude-helper",
         "dank-greeter": "dank-greeter",
         "dms": "dms",
         "dms-plugin-registry": "dms-plugin-registry",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "vehicle-motion-cues": "vehicle-motion-cues"
+      }
+    },
+    "vehicle-motion-cues": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790481860,
+        "narHash": "sha256-wK8hEbfRRFGvGW6O0yyAdVliY6qnlh1xeiPHxTCw5hc=",
+        "owner": "R0K0R",
+        "repo": "vehicle_motion_cues_dms",
+        "rev": "d293e095ac10c4e0e7be3d9e223e61b926ed8ffc",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "repo": "vehicle_motion_cues_dms",
+        "type": "github"
       }
     }
   },
