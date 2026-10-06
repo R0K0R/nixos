@@ -23,6 +23,19 @@
     # list. Now an explicit feature, so it has to be asked for.
     claude-code.enable = true;
 
+    astro.enable = true;
+    # Toolkit (nvcc, CUDA_PATH). 8.6 is the RTX 3050 Laptop; a different card
+    # means changing it. cudaSupport OFF for now: on, it rebuilds every
+    # CUDA-aware package in the closure (ffmpeg, gstreamer, obs, ...) with CUDA.
+    cuda = {
+      enable = true;
+      cudaSupport = true;
+      capabilities = [ "8.6" ];
+    };
+    # numpy/scipy/OpenCV/Pillow (+ astropy from astro). cuda follows my.cuda:
+    # CuPy and OpenCV with cv2.cuda, opted in per package.
+    python-dev.enable = true;
+
     /*
       Same shape as galaxybook: this machine sits on the LAN side of yulee's
       OpenVPN link, so it cannot reach note10 itself and jumps through yulee.
@@ -39,6 +52,7 @@
       # Distinct from galaxybook's 1080 and yulee's 1081: one relay per client
       # on the gateway, or `up` here kills theirs.
       remoteSocksPort = 1082;
+      remotePort = 2022;
       # Headless -- keep the admin LAN off the tunnel.
       keepDirect = [ "172.20.0.0/21" ];
 
@@ -241,7 +255,7 @@
     ];
 
     /*
-      Same intra-ISA pseudo-cross arrangement as galaxybook4-pro360, only the
+      Same IntraISACross arrangement as galaxybook4-pro360, only the
       arch differs. It used to be ~50 lines duplicated in this file, including
       its own copy of the i686 escape hatch guarded on "znver3" rather than
       "meteorlake" -- the same fix written twice because there was nowhere
@@ -271,7 +285,7 @@
       # Literal, and it must stay one -- see the note in galaxybook4-pro360.
       enable = true;
       march = "znver3";
-      pseudoCross.enable = true;
+      intraISACross.enable = true;
       o3.enable = true;
       lto.enable = true;
       upstreamTools.enable = true;

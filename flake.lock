@@ -31,13 +31,13 @@
     "claude-code-bin": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-+eWcFXvdl5FRi7vYHAs2OelwvmQ7cro/L/j2qrSTTko=",
+        "narHash": "sha256-JoD19Rhmw6S1PYQBhxuh5BfM1ija29RzBQIPVYDG52U=",
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-code-releases/2.1.259/linux-x64/claude"
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.284/linux-x64/claude"
       },
       "original": {
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-code-releases/2.1.259/linux-x64/claude"
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.284/linux-x64/claude"
       }
     },
     "claude-desktop-bin": {
@@ -50,6 +50,22 @@
       "original": {
         "type": "file",
         "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.40609.1_amd64.deb"
+      }
+    },
+    "claude-helper": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790490200,
+        "narHash": "sha256-UBcLQGGMolL048NSv8Sr0uf0R7dZ/H1SLC84bOrV4j0=",
+        "owner": "R0K0R",
+        "repo": "dms_claude_helper",
+        "rev": "b6d7518e1ec06c50b2777d7a44593c599a7ca5a7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "repo": "dms_claude_helper",
+        "type": "github"
       }
     },
     "claude-science-bin": {
@@ -329,12 +345,14 @@
     },
     "feat-dms": {
       "inputs": {
+        "claude-helper": "claude-helper",
         "dank-greeter": "dank-greeter",
         "dms": "dms",
         "dms-plugin-registry": "dms-plugin-registry",
         "nixpkgs": [
           "nixpkgs"
-        ]
+        ],
+        "vehicle-motion-cues": "vehicle-motion-cues"
       },
       "locked": {
         "path": "./features/dms",
@@ -601,11 +619,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1788944995,
-        "narHash": "sha256-lj27EYvj0O6GayjoitFz0hrqeAlc0LCl04kkJrrGXVE=",
+        "lastModified": 1791250997,
+        "narHash": "sha256-9XvwcfNE3mxLdmydbleqiFgiKpaZmL/4bSWP+0RXj5A=",
         "owner": "R0K0R",
         "repo": "nixpkgs",
-        "rev": "2bf611227041f0f3727dd06500424437ef3976c9",
+        "rev": "8bd9aa1a1dfaecd290302f5f9c2f0bbbb674557c",
         "type": "github"
       },
       "original": {
@@ -726,6 +744,22 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "vehicle-motion-cues": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790481860,
+        "narHash": "sha256-wK8hEbfRRFGvGW6O0yyAdVliY6qnlh1xeiPHxTCw5hc=",
+        "owner": "R0K0R",
+        "repo": "vehicle_motion_cues_dms",
+        "rev": "d293e095ac10c4e0e7be3d9e223e61b926ed8ffc",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "repo": "vehicle_motion_cues_dms",
         "type": "github"
       }
     },

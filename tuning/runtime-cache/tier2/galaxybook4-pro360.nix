@@ -1,5 +1,5 @@
 {
-  anchorCount = 282;
+  anchorCount = 284;
   buildOnly = [
     "ccache"
     "mold"
@@ -62,6 +62,7 @@
     "breeze-icons"
     "adwaita-icon-theme"
     "bibata-cursors"
+    "claude-science"
     "claude-desktop"
     "qemu"
     "claude-code"
@@ -198,6 +199,7 @@
     "grim"
     "iio-hyprland"
     "eza"
+    "emacs-for-kitty"
     "imagemagick"
     "gemma-claude"
     "watermarks-remover"
@@ -1269,10 +1271,10 @@
     "pycparser"
     "die-hook"
   ];
-  capturedAt = "2026-09-21T03:18:06Z";
+  capturedAt = "2026-10-06T01:48:55Z";
   host = "galaxybook4-pro360";
-  nixpkgsNarHash = "sha256-lj27EYvj0O6GayjoitFz0hrqeAlc0LCl04kkJrrGXVE=";
-  nixpkgsRev = "2bf611227041f0f3727dd06500424437ef3976c9";
+  nixpkgsNarHash = "sha256-9XvwcfNE3mxLdmydbleqiFgiKpaZmL/4bSWP+0RXj5A=";
+  nixpkgsRev = "8bd9aa1a1dfaecd290302f5f9c2f0bbbb674557c";
   runtimeNames = [
     "runtime-cache-refresh"
     "camera-relay"
@@ -1318,6 +1320,7 @@
     "breeze-icons"
     "adwaita-icon-theme"
     "bibata-cursors"
+    "claude-science"
     "claude-desktop"
     "qemu"
     "claude-code"
@@ -1454,6 +1457,7 @@
     "grim"
     "iio-hyprland"
     "eza"
+    "emacs-for-kitty"
     "imagemagick"
     "gemma-claude"
     "watermarks-remover"

@@ -10,7 +10,8 @@ let
 
   # The server refuses anyone without this; it is generated on the server and
   # copied here, never committed and never in the store.
-  mcpTokenFile = "/home/r0k0r/.config/noteworthy/mcp-token";
+  # Relative to the user's home; the features resolve it.
+  mcpTokenFile = ".config/noteworthy/mcp-token";
 
   # The book's own skill, pinned.  It lives in the noteworthy repo, which is
   # where it is edited and where a clone picks it up by itself; this copy is
@@ -25,6 +26,9 @@ in
 {
   imports = [
     ./hardware-configuration.nix
+    # Hands the accelerometer's IIO buffer to the `input` group so the
+    # vehicle-motion-cues DMS plugin can stream it without root.
+    ./accelerometer.nix
   ];
 
   services.tailscale.enable = true;
@@ -60,7 +64,7 @@ in
       # cache.nixos.org instead of building it.
       enable = true;
       march = "meteorlake";
-      pseudoCross.enable = true;
+      intraISACross.enable = true;
       o3.enable = true;
       lto.enable = true;
       upstreamTools.enable = true;
@@ -126,6 +130,7 @@ in
       # One relay per client on the gateway; see the option's description for
       # the current assignment across hosts.
       remoteSocksPort = 1080;
+      remotePort = 2022;
 
       /*
         `sudo globaltun share` hosts an AP on this machine's own card and routes
@@ -187,7 +192,7 @@ in
       enable = true;
       hosts = {
         yulee = { };
-        note10.Port = 8022;
+        note10.Port = 2022;
       };
     };
     opencode.enable = true;
@@ -205,6 +210,7 @@ in
     arduino.enable = true;
     diagnostics.enable = true;
     qt-dev.enable = true;
+    fx570ex.enable = true;
     # HWP/HWPX editor. defaultHandler is left at its default (true), so HOP
     # takes application/x-hwp from LibreOffice, which features/desktop-apps also
     # installs -- see the option's own note on why that is a separate decision.
@@ -228,7 +234,8 @@ in
       # under them and reverted at the room's next save.
       mcp = {
         servers = mcpServers;
-        projects = [ "noteworthy" ];
+        projects = [ "git_shit/noteworthy" ];
+        userScope = true;
         tokenFile = mcpTokenFile;
       };
       skills.noteworthy = "${noteworthySkill}/.claude/skills/noteworthy";
@@ -251,6 +258,20 @@ in
     # prebuilt binary and a wrapper, no Electron (see the feature's package.nix).
     claude-science.enable = true;
 
+    # Toggle for the built-in keyboard, driven from the control centre. serio0
+    # here is the i8042 KBD port; the option's description says how to confirm.
+    embedded-keyboard.enable = true;
+    # Right-edge side dock (from sihooleebd/nixos). Keys: SUPER+ALT+D show/park,
+    # SUPER+ALT+SHIFT+D dock/undock the focused window, SUPER+ALT+left/right shift
+    # the pile, SUPER+ALT+T dock terminal. keystone = the 3D trapezoid look,
+    # a Hyprland patch.
+    sidedock.enable = true;
+    hyprland.keystone.enable = true;
+
+    # X-Folding RGB Bluetooth keyboard: natural scroll on its trackpad without
+    # inverting pinch-zoom (the firmware sends pinch as Ctrl + wheel).
+    x-folding-trackpad.enable = true;
+
     remote-builder.client = {
       sshKeySecret = ../../age/remote-builder-ssh-key.age;
       enable = true;
@@ -266,7 +287,10 @@ in
       ];
       peers = {
         yulee = {
-          maxJobs = 7;
+          # 3, matching yulee's own nix.conf. Builds dispatched over ssh-ng
+          # run regardless of the remote's max-jobs, so 7 meant up to 7 builds
+          # x cores=16 on a 24-thread machine that also runs simulations.
+          maxJobs = 3;
           speedFactor = 10;
           # No gccarch-meteorlake -- see victus-15 below. Neither peer is an
           # Intel machine, and neither is asked to EXECUTE meteorlake code:
@@ -287,7 +311,7 @@ in
         # re-keying was needed. Lower maxJobs/speedFactor than yulee (6 cores
         # against yulee's Zen 5) so the scheduler prefers yulee for big jobs.
         # The gccarch reasoning above applies here verbatim.
-        victus-15 = {
+       victus-15 = {
           maxJobs = 5;
           speedFactor = 4;
           features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "ca-derivations" ];
@@ -382,6 +406,13 @@ in
       # 2880x1800 internal panel.
       primaryOutput = "eDP-1";
       primaryOutputScale = "1.5";
+      # The vehicle-motion-cues plugin drives rotation instead of
+      # iio-hyprland. Not a preference so much as arithmetic: it needs the
+      # accelerometer's IIO buffer for its dots, a buffer has exactly one
+      # owner, so whichever of the two starts second gets nothing. It derives
+      # orientation from the gravity vector it already computes and emits the
+      # same keyword batch at the same shim, so rotation behaves identically.
+      autorotate = "motion-cues";
     };
 
     dms = {
@@ -418,7 +449,7 @@ in
 
 
   /*
-    Host-specific overlays only. Everything generic -- the pseudo-cross and
+    Host-specific overlays only. Everything generic -- the IntraISACross and
     build-load fixes, o3/LTO, upstream-tools, the i686 escape hatch -- moved to
     tuning/, behind the my.tuning.* switches above. What is left is about this
     machine's hardware and nothing else, which is why it cannot be shared.
