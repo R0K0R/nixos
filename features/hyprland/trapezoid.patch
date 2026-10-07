@@ -25,9 +25,16 @@ A fitted window also keeps its box below the client's minimum size: the commit-
 time clamp, which grows a floating window about its centre, is skipped for it,
 since the oversized surface is drawn scaled instead (it pushed a corner-parked
 PiP of Firefox off the monitor).
-A PiP (tag `pip`) is told it is MONITOR-sized (realToReportSize), so the client
-lays out exactly as it would fullscreen and scale-to-fit shrinks that into the
-small PiP box, which has the monitor's aspect.
+A PiP (tag `pip`) is told it is decoration:keystone_pip_zoom (default 3) times its
+box (realToReportSize), so the client lays out for a big virtual screen of the
+box's own shape and scale-to-fit shrinks that into the box; the box can be resized.
+The scroll_move gesture drives the regular workspace when the open special
+workspace has no tiled windows (the dock's), so it keeps working with the dock open.
+And a fitted/dock window never gets Hyprland's flat blur fill for a client smaller
+than its box (it was unwarped and showed around a letterboxed Waydroid card).
+The keystone is oriented by the monitor transform (ksOrientToEdge), so its pinned
+edge is the panel's PHYSICAL right edge -- logical bottom at 90 deg -- matching
+features/sidedock, which keeps the dock on that edge through rotation.
 Fourth, two dock-card render fixes on top of upstream's warp: the drop shadow is
 no longer clipped to the window's FLAT box (that left a shadow whose inner edge
 was the straight flat-box edge, not the trapezoid's; the shader's own cutout is
@@ -116,8 +123,8 @@ diff -ruN a/src/config/lua/bindings/LuaBindingsDispatchers.cpp c/src/config/lua/
          Internal::setFn(L, "focus", hlFocus);
 diff -ruN a/src/config/values/ConfigValues.cpp c/src/config/values/ConfigValues.cpp
 --- a/src/config/values/ConfigValues.cpp	2026-10-05 19:57:04.440660029 +0900
-+++ c/src/config/values/ConfigValues.cpp	2026-10-06 15:59:50.443814319 +0900
-@@ -201,6 +201,18 @@
++++ c/src/config/values/ConfigValues.cpp	2026-10-07 17:17:06.525672852 +0900
+@@ -201,6 +201,19 @@
                  {.min = 0, .max = 20, .refresh = Supplementary::REFRESH_WINDOW_STATES | Supplementary::REFRESH_BLUR_FB}),
          MS<Float>("decoration:rounding_power", "rounding power of corners (2 is a circle)", 2,
                    {.min = 2, .max = 10, .refresh = Supplementary::REFRESH_WINDOW_STATES | Supplementary::REFRESH_BLUR_FB}),
@@ -132,11 +139,12 @@ diff -ruN a/src/config/values/ConfigValues.cpp c/src/config/values/ConfigValues.
 +        MS<Float>("decoration:keystone_shadow_dx", "dock keystone: drop-shadow horizontal offset (px, + = right) for dock windows", 0.f, {.min = -400.f, .max = 400.f}),
 +        MS<Float>("decoration:keystone_shadow_dy", "dock keystone: drop-shadow vertical offset (px, + = down) for dock windows", 0.f, {.min = -400.f, .max = 400.f}),
 +        MS<Float>("decoration:keystone_shadow_alpha", "dock keystone: drop-shadow strength multiplier for dock windows", 1.f, {.min = 0.f, .max = 1.f}),
++        MS<Float>("decoration:keystone_pip_zoom", "dock PiP: the client is told it is this many times the PiP box (3 = a box a third of the screen lays out like fullscreen)", 3.f, {.min = 1.f, .max = 8.f}),
 +        MS<Float>("decoration:keystone_parallax", "dock keystone: cursor-parallax lean strength (0 = off)", 0.f, {.min = 0.f, .max = 1.f}),
          MS<Float>("decoration:active_opacity", "opacity of active windows.", 1, {.min = 0, .max = 1, .refresh = Supplementary::REFRESH_WINDOW_STATES}),
          MS<Float>("decoration:inactive_opacity", "opacity of inactive windows.", 1, {.min = 0, .max = 1, .refresh = Supplementary::REFRESH_WINDOW_STATES}),
          MS<Float>("decoration:fullscreen_opacity", "opacity of fullscreen windows.", 1, {.min = 0, .max = 1, .refresh = Supplementary::REFRESH_WINDOW_STATES}),
-@@ -398,6 +410,7 @@
+@@ -398,6 +411,7 @@
           */
  
          MS<Int>("gestures:workspace_swipe_distance", "in px, the distance of the touchpad gesture", 300, {.min = 0, .max = 2000}),
@@ -146,8 +154,16 @@ diff -ruN a/src/config/values/ConfigValues.cpp c/src/config/values/ConfigValues.
          MS<Bool>("gestures:workspace_swipe_touch_invert", "invert the direction (touchscreen only)", false),
 diff -ruN a/src/desktop/state/ViewHitTester.cpp c/src/desktop/state/ViewHitTester.cpp
 --- a/src/desktop/state/ViewHitTester.cpp	2026-10-05 19:57:04.447126617 +0900
-+++ c/src/desktop/state/ViewHitTester.cpp	2026-10-06 16:30:11.236647546 +0900
-@@ -254,6 +254,72 @@
++++ c/src/desktop/state/ViewHitTester.cpp	2026-10-07 17:24:02.849171037 +0900
+@@ -11,6 +11,7 @@
+ #include "../../protocols/XDGShell.hpp"
+ #include "../../protocols/core/Compositor.hpp"
+ #include "../../state/MonitorState.hpp"
++#include "../../output/Monitor.hpp"
+ #include "../../state/WorkspaceState.hpp"
+ #include "../../xwayland/XWayland.hpp"
+ #include "../../managers/fullscreen/FullscreenController.hpp"
+@@ -254,6 +255,104 @@
      return windowForWorkspace(false);
  }
  
@@ -177,16 +193,48 @@ diff -ruN a/src/desktop/state/ViewHitTester.cpp c/src/desktop/state/ViewHitTeste
 +        return rel;
 +    const float g = (sx * dy2 - sy * dx2) / den;
 +    const float h = (dx1 * sy - dy1 * sx) / den;
-+    const float a = x1 - x0 + g * x1, b = x3 - x0 + h * x3, c = x0;
-+    const float d = y1 - y0 + g * y1, e = y3 - y0 + h * y3, ff = y0;
-+    const float i = 1.0f;
++    float Hm[9] = {x1 - x0 + g * x1, x3 - x0 + h * x3, x0, y1 - y0 + g * y1, y3 - y0 + h * y3, y0, g, h, 1.0f};
++    // the same physical-edge orientation as the renderer (OpenGL.cpp ksOrientToEdge)
++    {
++        const auto MON  = window->m_monitor.lock();
++        const int  EDGE = MON ? (sc<int>(MON->m_transform) % 4) : 0;
++        if (EDGE != 0) {
++            static const float T[9] = {0, 1, 0, 1, 0, 0, 0, 0, 1};
++            static const float M[9] = {-1, 0, 1, 0, 1, 0, 0, 0, 1};
++            auto               mul  = [](const float* A, const float* B, float* R) {
++                for (int r = 0; r < 3; ++r)
++                    for (int cc = 0; cc < 3; ++cc) {
++                        float s = 0.0f;
++                        for (int k = 0; k < 3; ++k)
++                            s += A[r * 3 + k] * B[k * 3 + cc];
++                        R[r * 3 + cc] = s;
++                    }
++            };
++            float R[9], Ri[9], tmp[9];
++            if (EDGE == 1) {
++                for (int k = 0; k < 9; ++k)
++                    R[k] = Ri[k] = T[k];
++            } else if (EDGE == 2) {
++                for (int k = 0; k < 9; ++k)
++                    R[k] = Ri[k] = M[k];
++            } else {
++                mul(T, M, R);
++                mul(M, T, Ri);
++            }
++            mul(Hm, Ri, tmp);
++            mul(R, tmp, Hm);
++        }
++    }
++    const float a = Hm[0], b = Hm[1], c = Hm[2];
++    const float d = Hm[3], e = Hm[4], ff = Hm[5];
++    const float g2 = Hm[6], h2 = Hm[7], i = Hm[8];
 +    // inverse of H (adjugate / determinant)
-+    const float det = a * (e * i - ff * h) - b * (d * i - ff * g) + c * (d * h - e * g);
++    const float det = a * (e * i - ff * h2) - b * (d * i - ff * g2) + c * (d * h2 - e * g2);
 +    if (det == 0.0f)
 +        return rel;
-+    const float ia = (e * i - ff * h) / det, ib = (c * h - b * i) / det, ic = (b * ff - c * e) / det;
-+    const float id = (ff * g - d * i) / det, ie = (a * i - c * g) / det, iff = (c * d - a * ff) / det;
-+    const float ig = (d * h - e * g) / det, ih = (b * g - a * h) / det, ii = (a * e - b * d) / det;
++    const float ia = (e * i - ff * h2) / det, ib = (c * h2 - b * i) / det, ic = (b * ff - c * e) / det;
++    const float id = (ff * g2 - d * i) / det, ie = (a * i - c * g2) / det, iff = (c * d - a * ff) / det;
++    const float ig = (d * h2 - e * g2) / det, ih = (b * g2 - a * h2) / det, ii = (a * e - b * d) / det;
 +    const float uu = rel.x / sz.x, vv = rel.y / sz.y;
 +    const float ww = ig * uu + ih * vv + ii;
 +    if (ww == 0.0f)
@@ -220,7 +268,7 @@ diff -ruN a/src/desktop/state/ViewHitTester.cpp c/src/desktop/state/ViewHitTeste
  SP<CWLSurfaceResource> CViewHitTester::windowSurfaceAt(const Vector2D& pos, PHLWINDOW window, Vector2D& surfaceLocal) const {
      if (!validMapped(window))
          return nullptr;
-@@ -269,7 +335,19 @@
+@@ -269,7 +368,19 @@
          return PPOPUP->wlSurface()->resource();
      }
  
@@ -241,7 +289,7 @@ diff -ruN a/src/desktop/state/ViewHitTester.cpp c/src/desktop/state/ViewHitTeste
      if (surf) {
          surfaceLocal = local;
          return surf;
-@@ -301,10 +379,15 @@
+@@ -301,10 +412,15 @@
  
      CBox geom = window->m_xdgSurface->m_current.geometry;
  
@@ -288,24 +336,27 @@ diff -ruN a/src/desktop/view/Subsurface.cpp c/src/desktop/view/Subsurface.cpp
          m_popupParent->recheckTree();
 diff -ruN a/src/desktop/view/Window.cpp c/src/desktop/view/Window.cpp
 --- a/src/desktop/view/Window.cpp	2026-10-05 19:57:04.449603878 +0900
-+++ c/src/desktop/view/Window.cpp	2026-10-07 14:37:35.542942487 +0900
-@@ -1683,6 +1683,15 @@
++++ c/src/desktop/view/Window.cpp	2026-10-07 17:17:06.527171933 +0900
+@@ -1683,6 +1683,18 @@
  }
  
  Vector2D CWindow::realToReportSize() {
-+    // side-dock PiP (tag `pip`): tell the client it is MONITOR-sized, so it lays out exactly
-+    // as it would fullscreen; the PiP box stays small and scale-to-fit (fitTransform, which
-+    // every dock/pip card gets) shrinks that fullscreen layout into it. The box has the
-+    // monitor's aspect (features/sidedock pip_place), so the shrink fills it exactly.
++    // side-dock PiP (tag `pip`): tell the client it is keystone_pip_zoom times the PiP box,
++    // so it lays out for a big virtual screen of the box's own shape (default 3: a box a
++    // third of the screen lays out like fullscreen), and scale-to-fit (fitTransform, which
++    // every dock/pip card gets) shrinks that layout into the box, filling it. Resizing the
++    // box -- or making it tall -- reshapes the layout with it; a larger zoom shrinks text.
 +    if (!m_isX11 && m_ruleApplicator && m_ruleApplicator->m_tagKeeper.isTagged("pip", false)) {
-+        if (const auto PMONITOR = m_monitor.lock(); PMONITOR && PMONITOR->m_size.x > 0 && PMONITOR->m_size.y > 0)
-+            return PMONITOR->m_size;
++        static auto PPIPZOOM = CConfigValue<Config::FLOAT>("decoration:keystone_pip_zoom");
++        const auto  BOX      = m_realSize->goal();
++        if (BOX.x > 0 && BOX.y > 0)
++            return (BOX * std::clamp(sc<double>(*PPIPZOOM), 1.0, 8.0)).round();
 +    }
 +
      if (!m_isX11)
          return m_realSize->goal().clamp(Vector2D{0, 0}, Math::VECTOR2D_MAX);
  
-@@ -1858,6 +1867,28 @@
+@@ -1858,6 +1870,28 @@
      return nullptr;
  }
  
@@ -334,7 +385,7 @@ diff -ruN a/src/desktop/view/Window.cpp c/src/desktop/view/Window.cpp
  Vector2D CWindow::getReportedSize() {
      if (m_isX11)
          return m_reportedSize;
-@@ -2739,7 +2770,13 @@
+@@ -2739,7 +2773,13 @@
      if (m_isX11)
          m_reportedSize = m_pendingReportedSize;
  
@@ -349,7 +400,7 @@ diff -ruN a/src/desktop/view/Window.cpp c/src/desktop/view/Window.cpp
          const auto MINSIZE = m_xdgSurface->m_toplevel->layoutMinSize();
          const auto MAXSIZE = m_xdgSurface->m_toplevel->layoutMaxSize();
  
-@@ -2753,6 +2790,9 @@
+@@ -2753,6 +2793,9 @@
      const auto PMONITOR = m_monitor.lock();
  
      g_pHyprRenderer->damageSurface(wlSurface()->resource(), m_realPosition->goal().x, m_realPosition->goal().y, m_isX11 ? 1.0 / m_X11SurfaceScaledBy : 1.0);
@@ -704,6 +755,42 @@ diff -ruN a/src/managers/input/trackpad/gestures/OverviewGesture.hpp c/src/manag
 +    virtual void update(const ITrackpadGesture::STrackpadGestureUpdate& e);
 +    virtual void end(const ITrackpadGesture::STrackpadGestureEnd& e);
 +};
+diff -ruN a/src/managers/input/trackpad/gestures/ScrollMoveGesture.cpp c/src/managers/input/trackpad/gestures/ScrollMoveGesture.cpp
+--- a/src/managers/input/trackpad/gestures/ScrollMoveGesture.cpp	2026-10-05 19:57:04.466815378 +0900
++++ c/src/managers/input/trackpad/gestures/ScrollMoveGesture.cpp	2026-10-07 17:03:56.992203713 +0900
+@@ -2,6 +2,8 @@
+ 
+ #include "../../../../desktop/state/FocusState.hpp"
+ #include "../../../../desktop/Workspace.hpp"
++#include "../../../../desktop/state/WindowState.hpp"
++#include "../../../../desktop/view/Window.hpp"
+ #include "../../../../output/Monitor.hpp"
+ #include "../../../../layout/LayoutManager.hpp"
+ #include "../../../../layout/algorithm/Algorithm.hpp"
+@@ -23,7 +25,22 @@
+     if (!PMONITOR)
+         return nullptr;
+ 
+-    const auto PWORKSPACE = PMONITOR->m_activeSpecialWorkspace ? PMONITOR->m_activeSpecialWorkspace : PMONITOR->m_activeWorkspace;
++    // An open special workspace with no TILED windows (the side dock's `dock` workspace,
++    // which holds only floating cards; a scratchpad of floating windows) has no tape to
++    // scroll: drive the regular workspace under it instead, so the swipe keeps working
++    // while the dock is open.
++    auto PWORKSPACE = PMONITOR->m_activeSpecialWorkspace ? PMONITOR->m_activeSpecialWorkspace : PMONITOR->m_activeWorkspace;
++    if (PMONITOR->m_activeSpecialWorkspace) {
++        bool tiled = false;
++        for (auto const& w : Desktop::windowState()->windows()) {
++            if (w && w->m_isMapped && !w->m_isFloating && w->m_workspace == PMONITOR->m_activeSpecialWorkspace) {
++                tiled = true;
++                break;
++            }
++        }
++        if (!tiled)
++            PWORKSPACE = PMONITOR->m_activeWorkspace;
++    }
+     if (!PWORKSPACE || !PWORKSPACE->m_space)
+         return nullptr;
+ 
 diff -ruN a/src/render/decorations/CHyprDropShadowDecoration.cpp c/src/render/decorations/CHyprDropShadowDecoration.cpp
 --- a/src/render/decorations/CHyprDropShadowDecoration.cpp	2026-10-05 19:57:04.487734081 +0900
 +++ c/src/render/decorations/CHyprDropShadowDecoration.cpp	2026-10-06 15:59:50.447961772 +0900
@@ -775,8 +862,8 @@ diff -ruN a/src/render/ElementRenderer.cpp c/src/render/ElementRenderer.cpp
              const Vector2D PIXELASUV   = Vector2D{1, 1} / pSurface->m_current.bufferSize;
 diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
 --- a/src/render/OpenGL.cpp	2026-10-05 19:57:04.486286784 +0900
-+++ c/src/render/OpenGL.cpp	2026-10-06 17:10:28.096623595 +0900
-@@ -1498,6 +1498,114 @@
++++ c/src/render/OpenGL.cpp	2026-10-07 17:23:44.362012953 +0900
+@@ -1498,6 +1498,140 @@
      }
  }
  
@@ -788,6 +875,31 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
 +                s += A[i * 3 + k] * B[k * 3 + j];
 +            R[i * 3 + j] = s;
 +        }
++}
++
++// The dock stays on the panel's PHYSICAL right edge (features/sidedock dock.sh geom):
++// logical right at transform 0, bottom at 90, left at 180, top at 270. The keystone is
++// defined for "pinned right edge", so conjugate it into the window frame for the edge the
++// monitor's transform puts it on: H' = R H R^-1, R mapping canonical unit coords to window
++// unit coords -- transpose (90), mirror (180), mirror-then-transpose (270).
++static inline void ksOrientToEdge(float* H, int edge) {
++    if (edge == 0)
++        return;
++    static const float T[9] = {0, 1, 0, 1, 0, 0, 0, 0, 1};
++    static const float M[9] = {-1, 0, 1, 0, 1, 0, 0, 0, 1};
++    float              R[9], Ri[9], tmp[9];
++    if (edge == 1) {
++        for (int i = 0; i < 9; ++i)
++            R[i] = Ri[i] = T[i];
++    } else if (edge == 2) {
++        for (int i = 0; i < 9; ++i)
++            R[i] = Ri[i] = M[i];
++    } else {
++        ksMul3(T, M, R);
++        ksMul3(M, T, Ri);
++    }
++    ksMul3(H, Ri, tmp);
++    ksMul3(R, tmp, H);
 +}
 +
 +// Dock keystone: windows tagged "dock" (my.sidedock) render as a perspective
@@ -871,6 +983,7 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
 +            for (int i = 0; i < 9; ++i)
 +                Hc[i] = H[i];
 +    }
++    ksOrientToEdge(Hc, MON ? (sc<int>(MON->m_transform) % 4) : 0);
 +    // T: this surface's unit square -> window unit square (same output-local space)
 +    const float tsx = sc<float>(surfBox.width) / sc<float>(winSz.x);
 +    const float tsy = sc<float>(surfBox.height) / sc<float>(winSz.y);
@@ -891,7 +1004,7 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
  void CHyprOpenGLImpl::renderTextureInternal(SP<ITexture> tex, const CBox& box, const STextureRenderData& data) {
      RASSERT(g_pHyprRenderer->m_renderData.pMonitor, "Tried to render texture without begin()!");
      RASSERT(tex, "Attempted to draw nullptr texture!");
-@@ -1538,7 +1646,35 @@
+@@ -1538,7 +1672,35 @@
  
      auto shader = renderToOutput ? renderToOutputInternal() : renderToFBInternal(tex, data, tex->m_type, newBox);
  
@@ -928,7 +1041,7 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
      shader->setUniformInt(SHADER_TEX, 0);
      GLCALL(glBindVertexArray(shader->getUniformLocation(SHADER_SHADER_VAO)));
  
-@@ -2100,6 +2236,7 @@
+@@ -2100,6 +2262,7 @@
  
                                    .primarySurfaceUVTopLeft     = monitorSpaceBox.pos() / m_renderData.pMonitor->m_transformedSize,
                                    .primarySurfaceUVBottomRight = (monitorSpaceBox.pos() + monitorSpaceBox.size()) / m_renderData.pMonitor->m_transformedSize,
@@ -936,7 +1049,7 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
                                });
  
          g_pHyprRenderer->m_renderData.renderModif.enabled = renderModif;
-@@ -2362,7 +2499,39 @@
+@@ -2362,7 +2525,39 @@
  
      if (needsCM)
          shader->setUniformInt(SHADER_SOURCE_TF, TF);
@@ -977,7 +1090,7 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
  
      CHyprColor color;
      if (!grad1.m_colors.empty())
-@@ -2379,18 +2548,18 @@
+@@ -2379,18 +2574,18 @@
          shader->setUniform4fv(SHADER_GRADIENT2, grad2.m_colorsOkLabA.size() / 4, grad2.m_colorsOkLabA);
      shader->setUniformInt(SHADER_GRADIENT2_LENGTH, grad2.m_colorsOkLabA.size() / 4);
      shader->setUniformFloat(SHADER_ANGLE2, sc<int>(grad2.m_angle / (std::numbers::pi / 180.0)) % 360 * (std::numbers::pi / 180.0));
@@ -1000,7 +1113,7 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
      shader->setUniformFloat(SHADER_ROUNDING_POWER, roundingPower);
      shader->setUniformFloat(SHADER_RANGE, range);
      shader->setUniformFloat(SHADER_SHADOW_POWER, SHADOWPOWER);
-@@ -2427,14 +2596,23 @@
+@@ -2427,14 +2622,23 @@
                  const auto cutoutTopLeft     = scaledWindowBox.pos() - newBox.pos();
                  const auto cutoutBottomRight = cutoutTopLeft + scaledWindowBox.size();
  
@@ -1095,8 +1208,24 @@ diff -ruN a/src/render/pass/SurfacePassElement.cpp c/src/render/pass/SurfacePass
      const float ALPHA = m_data.alpha * m_data.fadeAlpha * (PSURFACE ? PSURFACE->m_alphaModifier * PSURFACE->m_overallOpacity : 1.F);
 diff -ruN a/src/render/Renderer.cpp c/src/render/Renderer.cpp
 --- a/src/render/Renderer.cpp	2026-10-05 19:57:04.486286784 +0900
-+++ c/src/render/Renderer.cpp	2026-10-06 15:59:50.452982050 +0900
-@@ -2075,7 +2075,9 @@
++++ c/src/render/Renderer.cpp	2026-10-07 17:13:35.767090901 +0900
+@@ -674,7 +674,14 @@
+         if ((pWindow->m_isX11 && *PXWLUSENN) || pWindow->m_ruleApplicator->nearestNeighbor().valueOrDefault())
+             renderdata.useNearestNeighbor = true;
+ 
+-        if (!TRANSFORMEDWINDOW && pWindow->wlSurface()->small() && !pWindow->wlSurface()->m_fillIgnoreSmall && renderdata.blur) {
++        // Not for scale-to-fit / side-dock windows (fitTransform): this fills the window's FLAT
++        // box with blur behind a client smaller than it, which suits content centred at 1:1 --
++        // but theirs is drawn scaled, and inside a keystone trapezoid, which this rect is not
++        // warped to. It showed as a frosted flat rectangle around a letterboxed Waydroid card,
++        // toggling with focus as Waydroid's size ack came and went.
++        const bool FITCARD = pWindow->m_ruleApplicator &&
++            (pWindow->m_ruleApplicator->m_tagKeeper.isTagged("fit", false) || pWindow->m_ruleApplicator->m_tagKeeper.isTagged("dock", false));
++        if (!TRANSFORMEDWINDOW && !FITCARD && pWindow->wlSurface()->small() && !pWindow->wlSurface()->m_fillIgnoreSmall && renderdata.blur) {
+             CBox wb = {renderdata.pos.x - pMonitor->m_position.x, renderdata.pos.y - pMonitor->m_position.y, renderdata.w, renderdata.h};
+             wb.scale(pMonitor->m_scale).round();
+             CRectPassElement::SRectData data;
+@@ -2075,7 +2082,9 @@
  
      // tearing and DS first
      bool       shouldTear              = pMonitor->updateTearing();
@@ -1107,7 +1236,7 @@ diff -ruN a/src/render/Renderer.cpp c/src/render/Renderer.cpp
  
      if (canAttemptDirectScanout) {
          if (pMonitor->attemptDirectScanout()) {
-@@ -2161,7 +2163,9 @@
+@@ -2161,7 +2170,9 @@
  
      bool renderCursor = true;
  
@@ -1118,7 +1247,7 @@ diff -ruN a/src/render/Renderer.cpp c/src/render/Renderer.cpp
          renderWindow(pMonitor->m_solitaryClient.lock(), pMonitor, NOW, false, RENDER_PASS_MAIN /* solitary = no popups */);
      else if (!finalDamage.empty()) {
          if (pMonitor->isMirror()) {
-@@ -2173,6 +2177,11 @@
+@@ -2173,6 +2184,11 @@
          } else {
              CBox renderBox = {0, 0, sc<int>(pMonitor->m_pixelSize.x), sc<int>(pMonitor->m_pixelSize.y)};
              renderWorkspace(pMonitor, pMonitor->m_activeWorkspace, NOW, renderBox);
@@ -1130,7 +1259,7 @@ diff -ruN a/src/render/Renderer.cpp c/src/render/Renderer.cpp
              renderLockscreen(pMonitor, NOW, renderBox);
  
              // render IME even above the lockscreen - allow the user to use it to potentially input stuff on it.
-@@ -3225,6 +3234,128 @@
+@@ -3225,6 +3241,128 @@
      return PFRAMEBUFFER;
  }
  
@@ -1259,7 +1388,7 @@ diff -ruN a/src/render/Renderer.cpp c/src/render/Renderer.cpp
  void IHyprRenderer::renderFadeouts(PHLMONITOR monitor, Desktop::eFadeoutPlane plane, PHLWORKSPACE workspace) {
      if (!monitor)
          return;
-@@ -3315,7 +3446,15 @@
+@@ -3315,7 +3453,15 @@
      if (!*PBLUR)
          return false;
  

@@ -45,6 +45,10 @@ hl.bind(mod .. " + " .. nix.keys.next, hl.dsp.exec_cmd(dock .. " next"))
 -- Picture-in-picture: the focused window becomes a pinned, keystoned mini-card
 -- bottom-right (a `pip` tag keeps it out of the pile); again to put it back.
 hl.bind(mod .. " + " .. nix.keys.pip, hl.dsp.exec_cmd(dock .. " pip-toggle"))
+-- How small a PiP's content is drawn (it lays out for keystone_pip_zoom x its box):
+-- Mod+Alt+minus shrinks the content, Mod+Alt+equal enlarges it, like browser zoom.
+hl.bind(mod .. " + ALT + minus", hl.dsp.exec_cmd(dock .. " pip-zoom out"))
+hl.bind(mod .. " + ALT + equal", hl.dsp.exec_cmd(dock .. " pip-zoom in"))
 
 do
   -- A rule-applied tag reads as "dock*", a dispatcher one as "dock".
@@ -185,7 +189,7 @@ do
     pcall(function()
       local c = hl.get_cursor_pos()
       for _, w in ipairs(hl.get_windows()) do
-        if isDockWin(w) and not w.hidden
+        if isDockWin(w) and not isPip(w) and not w.hidden   -- a PiP may be dragged
            and c.x >= w.at.x and c.x < w.at.x + w.size.x
            and c.y >= w.at.y and c.y < w.at.y + w.size.y then
           overDock = true

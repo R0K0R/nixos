@@ -540,6 +540,10 @@ hl.bind(mod .. " + R", hl.dsp.layout("colresize +conf"))
 -- dispatcher is window.drag -- window.move needs a direction and rejects
 -- an empty call, so it cannot serve as the mouse-drag verb.
 hl.bind(mod .. " + mouse:272", hl.dsp.window.drag(), { drag = true })
+-- Super + right-drag resizes the window under the pointer: hl.dsp.window.resize() with no
+-- arguments is the mouse-resize verb. (Floating windows also resize by their edges:
+-- general.resize_on_border.)
+hl.bind(mod .. " + mouse:273", hl.dsp.window.resize(), { drag = true })
 
 hl.bind(mod .. " + Semicolon", hl.dsp.exec_cmd(nix.columnResizeSplit .. " -0.1"), { repeating = true })
 hl.bind(mod .. " + Apostrophe", hl.dsp.exec_cmd(nix.columnResizeSplit .. " 0.1"), { repeating = true })

@@ -28,10 +28,28 @@ geom() {
   # 90/270 rotation. Clear whatever bar is there via the monitor's reserved area
   # [left, top, right, bottom] rather than measuring one particular bar. (Local
   # adaptation; upstream picks the rightmost monitor and measures a waybar layer.)
-  read -r W H X0 Y0 RT RR RB < <($HC monitors -j | $J -r '.[]|select(.focused)
+  local t r0 r1 r2 r3
+  read -r LW LH X0 Y0 r0 r1 r2 r3 t < <($HC monitors -j | $J -r '.[]|select(.focused)
     | (if (.transform % 2) == 1 then [.height, .width] else [.width, .height] end) as $wh
-    | "\(($wh[0] / .scale) | floor) \(($wh[1] / .scale) | floor) \(.x) \(.y) \(.reserved[1]) \(.reserved[2]) \(.reserved[3])"')
-  [ -n "${W:-}" ] && [ "$W" -gt 0 ] 2>/dev/null || { W=1920; H=1080; X0=0; Y0=0; RT=0; RR=0; RB=0; }   # fallback
+    | "\(($wh[0] / .scale) | floor) \(($wh[1] / .scale) | floor) \(.x) \(.y) \(.reserved[0]) \(.reserved[1]) \(.reserved[2]) \(.reserved[3]) \(.transform)"')
+  [ -n "${LW:-}" ] && [ "$LW" -gt 0 ] 2>/dev/null || { LW=1920; LH=1080; X0=0; Y0=0; r0=0; r1=0; r2=0; r3=0; t=0; }   # fallback
+
+  # THE DOCK STAYS ON THE SAME PHYSICAL EDGE: the panel's own right edge, wherever a
+  # rotation puts it. wl_output transform 90 turns content counter-clockwise, so that edge
+  # is logical right at 0, BOTTOM at 90 (a wide trapezoid along the bottom), left at 180,
+  # top at 270. The cascade below is computed in a CANONICAL frame -- "the dock is on the
+  # right", origin 0 -- exactly as before; lrect() maps a canonical rectangle onto the real
+  # edge and CXQ reads a window's canonical inward position back out. The patch's
+  # keystone (ksDockKeystone) rotates its warp by the same transform, so the trapezoid's
+  # pinned edge is always the physical screen edge. W/H/RT/RR/RB below are canonical;
+  # LW/LH are the logical size (the PiP, which stays bottom-right, uses those).
+  EDGE=$(( t % 4 ))
+  case "$EDGE" in
+    0) W=$LW; H=$LH; RR=$r2; RT=$r1; RB=$r3; CXQ='(.at[0] - '"$X0"')' ;;
+    1) W=$LH; H=$LW; RR=$r3; RT=$r0; RB=$r2; CXQ='(.at[1] - '"$Y0"')' ;;
+    2) W=$LW; H=$LH; RR=$r0; RT=$r1; RB=$r3; CXQ='('"$LW"' - (.at[0] - '"$X0"' + .size[0]))' ;;
+    3) W=$LH; H=$LW; RR=$r1; RT=$r0; RB=$r2; CXQ='('"$LH"' - (.at[1] - '"$Y0"' + .size[1]))' ;;
+  esac
   # panel width scales with the viewport (~1/3 of the logical width -> 640 on a 1920 view,
   # 800 on a 2400 view), clamped so cards stay usable on very small / very large screens.
   DW=$((W/3)); [ "$DW" -lt 420 ] && DW=420; [ "$DW" -gt 900 ] && DW=900
@@ -47,10 +65,32 @@ geom() {
   DLEFT=$((DW/30))                   # per-depth LEFT drift of the card center (slight)
   SHRINK=9; MAXD=3                   # per-depth size shrink (%); deepest visible depth
   STAGGER=0.035                      # seconds between cards on show/park -> a bit of "feel"
-  DOCK_Y=$((Y0 + RT + VGAP))
+  # canonical (origin 0): x runs toward the dock edge, y along it
+  DOCK_Y=$((RT + VGAP))
   DOCK_H=$((H - RT - RB - 2*VGAP))
-  SHOWN_X=$((X0 + W - RR - DW - HGAP)) # front (depth 0) x
-  PARKED_X=$((X0 + W))                # fully off the right edge
+  SHOWN_X=$((W - RR - DW - HGAP))    # front (depth 0) x
+  PARKED_X=$W                        # fully off the dock edge
+}
+
+# Canonical rectangle (x y w h) -> logical "x y w h" on the real edge (see geom).
+lrect() {
+  local x=$1 y=$2 w=$3 h=$4
+  case "$EDGE" in
+    0) echo "$(( X0 + x )) $(( Y0 + y )) $w $h" ;;
+    1) echo "$(( X0 + y )) $(( Y0 + x )) $h $w" ;;
+    2) echo "$(( X0 + W - x - w )) $(( Y0 + y )) $w $h" ;;
+    3) echo "$(( X0 + y )) $(( Y0 + W - x - w )) $h $w" ;;
+  esac
+}
+# A window's current canonical size "w h" and along-edge position y.
+csize() { $J -r --arg a "$1" --argjson e "$EDGE" 'first(.[]|select(.address==$a)) | if ($e % 2) == 1 then "\(.size[1]) \(.size[0])" else "\(.size[0]) \(.size[1])" end' <<<"$CLIENTS"; }
+cy_of() { $J -r --arg a "$1" --argjson e "$EDGE" --argjson x0 "$X0" --argjson y0 "$Y0" 'first(.[]|select(.address==$a)) | if ($e % 2) == 1 then .at[0] - $x0 else .at[1] - $y0 end' <<<"$CLIENTS"; }
+# Move a window to canonical (x, y), keeping its size.
+cmv() {
+  local w h lx ly
+  read -r w h < <(csize "$1"); { [ -n "${w:-}" ] && [ -n "${h:-}" ]; } || return 0
+  read -r lx ly _ _ < <(lrect "$2" "$3" "$w" "$h")
+  mv "$1" "$lx" "$ly"
 }
 
 # One clients snapshot per run; all reads parse it (positions are read before any
@@ -65,9 +105,9 @@ EXCLUDE=""
 # is tagged dock too (so it gets the keystone look/shadow/input for free) but pip excludes it
 # from the pile, so it floats standalone wherever pip_make parked it.
 order()    { $J -r --arg ex "$EXCLUDE" '[.[]|select((.tags|any(rtrimstr("*")=="dock")) and (.tags|any(rtrimstr("*")=="pip")|not) and .address != $ex)|.address]|sort|.[]' <<<"$CLIENTS"; }
-# Current front = the on-screen dock window nearest the base (largest x).
-curfront() { $J -r --argjson px "$PARKED_X" '[.[]|select((.tags|any(rtrimstr("*")=="dock")) and (.tags|any(rtrimstr("*")=="pip")|not) and (.at[0] < $px))]|max_by(.at[0])?|.address // ""' <<<"$CLIENTS"; }
-shownany() { $J -r --argjson px "$PARKED_X" 'any(.[]; (.tags|any(rtrimstr("*")=="dock")) and (.tags|any(rtrimstr("*")=="pip")|not) and (.at[0] < $px))' <<<"$CLIENTS"; }
+# Current front = the on-screen dock window nearest the base (largest canonical x).
+curfront() { $J -r --argjson px "$PARKED_X" '[.[]|select((.tags|any(rtrimstr("*")=="dock")) and (.tags|any(rtrimstr("*")=="pip")|not) and ('"$CXQ"' < $px))]|max_by('"$CXQ"')?|.address // ""' <<<"$CLIENTS"; }
+shownany() { $J -r --argjson px "$PARKED_X" 'any(.[]; (.tags|any(rtrimstr("*")=="dock")) and (.tags|any(rtrimstr("*")=="pip")|not) and ('"$CXQ"' < $px))' <<<"$CLIENTS"; }
 isfloat()  { $J -r --arg a "$1" 'first(.[]|select(.address==$a)).floating // false' <<<"$CLIENTS"; }
 exists()   { $J -e --arg a "$1" 'any(.[]; .address==$a)' <<<"$CLIENTS" >/dev/null 2>&1; }
 
@@ -140,6 +180,8 @@ render() {
     cw=$(( DW*scp/100 )); ch=$(( DOCK_H*scp/100 ))
     x=$(( SHOWN_X - dd*DLEFT ))                                 # LEFT edge steps slightly left (peek)
     y=$(( CY0 - ch/2 ))                                         # vertically CENTERED on the front midline
+    # canonical -> the real (physical-right) edge: logical position and size
+    read -r x y cw ch < <(lrect "$x" "$y" "$cw" "$ch")
     MX[$i]=$x; MY[$i]=$y
     if [ "$d" -eq 0 ]; then op="1.0 1.0"; else ov=$(( 60 - (dd-1)*14 )); [ "$ov" -lt 30 ] && ov=30; op="0.$ov 0.$ov"; fi
     batch+="dispatch hl.dsp.window.set_prop({prop=\"max_size\", value=\"$cw $ch\", window=\"address:$a\"}) ; "
@@ -175,7 +217,7 @@ park_all() {
   local -a o; mapfile -t o < <(order)
   local a i
   for ((i=${#o[@]}-1; i>=0; i--)); do a="${o[$i]}"; [ -n "$a" ] || continue
-    ensure_float "$a"; mv "$a" "$PARKED_X" "$DOCK_Y"
+    ensure_float "$a"; cmv "$a" "$PARKED_X" "$DOCK_Y"
     if [ "$i" -gt 0 ]; then sleep "$STAGGER" 2>/dev/null; fi
   done
 }
@@ -193,7 +235,21 @@ show_pile() {
   local -a o; mapfile -t o < <(order); [ ${#o[@]} -eq 0 ] && return 1
   local want=""; [ -f "$STATE" ] && want="$(cat "$STATE" 2>/dev/null)"
   { [ -z "$want" ] || ! exists "$want"; } && want="${o[0]}"
+  # A SHORT, gentle slide-in. Parked cards sit a whole card-width (plus gap) past the edge;
+  # sliding all that way at the global window-move speed read as a fast, far swing. So
+  # place them, instantly (move animation off), a quarter card-width right of where they
+  # will land -- the dock workspace is still closed, so this is invisible -- then render
+  # slides them that short distance, slower, as the workspace fades in. The animation is
+  # global (windowsMove), so the slower speed is restored once render has started the moves.
+  local a y
+  $HC eval 'hl.animation({ leaf = "windowsMove", enabled = false, speed = 5, bezier = "dockslide" })' >/dev/null 2>&1
+  for a in "${o[@]}"; do
+    y=$(cy_of "$a")
+    cmv "$a" $(( SHOWN_X + DW/4 )) "${y:-$DOCK_Y}"
+  done
+  $HC eval 'hl.animation({ leaf = "windowsMove", enabled = true, speed = 8, bezier = "dockslide" })' >/dev/null 2>&1
   render "$want" 1
+  $HC eval 'hl.animation({ leaf = "windowsMove", enabled = true, speed = 5, bezier = "dockslide" })' >/dev/null 2>&1
 }
 active() { $J -r '.address // ""' < <($HC activewindow -j); }
 is_dock() { $J -e --arg a "$1" 'any(.[]; .address==$a and (.tags|any(rtrimstr("*")=="dock")))' <<<"$CLIENTS" >/dev/null 2>&1; }
@@ -265,23 +321,30 @@ undock() {  # strip the dock shape/tag and return a window to the tiling area
 # viewport each way, bottom-right. pip_make uses it, and relayout re-runs it on every PiP
 # so a rotation or scale change moves it to the new corner instead of leaving it at the
 # old coordinates (off-screen after a landscape -> portrait turn).
-pip_place() {
-  local a="$1"
-  # A third of the viewport each way, i.e. the SCREEN's aspect -- not the window's. The
-  # client is told it is monitor-sized (trapezoid.patch, realToReportSize for `pip`), so it
-  # lays out as it would fullscreen, and scale-to-fit shrinks that into this box, filling
-  # it exactly. (Following the window's own aspect gave every PiP a different shape, and a
-  # tall window a near-full-height "PiP".) Parked bottom-right, right edge inset by HGAP so
-  # the keystone's flush right edge sits just off the screen edge.
-  local pw ph px py
-  pw=$((W/3)); ph=$((H/3))
-  px=$(( X0 + W - pw - HGAP )); py=$(( Y0 + H - ph - VGAP ))
-  # Clear the min FIRST (a prior dock/pip lock could be larger than the new PiP size, which would
-  # clamp the resize), then set max, resize down, and re-lock min == max at the PiP size.
-  d "hl.dsp.window.set_prop({prop=\"min_size\", value=\"0 0\", window=\"address:$a\"})"
-  d "hl.dsp.window.set_prop({prop=\"max_size\", value=\"$pw $ph\", window=\"address:$a\"})"
+pip_place() {   # $1 = window, $2 = "keep" to keep its current size (relayout)
+  local a="$1" pw ph px py
+  if [ "${2:-}" = keep ]; then
+    # keep the size you gave it, clamped to the (possibly rotated) screen
+    read -r pw ph < <($J -r --arg a "$a" 'first(.[]|select(.address==$a))|"\(.size[0]) \(.size[1])"' <<<"$CLIENTS")
+    { [ -n "${pw:-}" ] && [ "$pw" -gt 0 ] 2>/dev/null; } || { pw=$((LW/3)); ph=$((LH/3)); }
+    [ "$pw" -gt $(( LW - 2*HGAP )) ] && pw=$(( LW - 2*HGAP ))
+    [ "$ph" -gt $(( LH - 2*VGAP )) ] && ph=$(( LH - 2*VGAP ))
+  else
+    # A third of the viewport each way, i.e. the SCREEN's aspect. The client is told it is
+    # keystone_pip_zoom (default 3) times this box (trapezoid.patch, realToReportSize for
+    # `pip`), so it lays out as it would fullscreen, and scale-to-fit shrinks that into the
+    # box, filling it. Resize it by its edges or Mod+right-drag (tall works too: the layout
+    # follows the box's shape); Mod+Alt+minus/equal change how small the content is drawn.
+    pw=$((LW/3)); ph=$((LH/3))
+  fi
+  # Parked bottom-right, right edge inset by HGAP so the keystone's flush right edge sits
+  # just off the screen edge.
+  px=$(( X0 + LW - pw - HGAP )); py=$(( Y0 + LH - ph - VGAP ))
+  # Loose bounds, not a lock (a dock card's min == max lock would forbid resizing): small
+  # enough to shrink to a thumbnail, no larger than the screen.
+  d "hl.dsp.window.set_prop({prop=\"min_size\", value=\"160 100\", window=\"address:$a\"})"
+  d "hl.dsp.window.set_prop({prop=\"max_size\", value=\"$LW $LH\", window=\"address:$a\"})"
   d "hl.dsp.window.resize({x=$pw, y=$ph, window=\"address:$a\"})"
-  d "hl.dsp.window.set_prop({prop=\"min_size\", value=\"$pw $ph\", window=\"address:$a\"})"
   mv "$a" "$px" "$py"
 }
 pip_make() {  # turn $1 into a keystone PiP: a standalone, pinned, tilted mini-card, bottom-right.
@@ -350,7 +413,10 @@ case "${1:-toggle}" in
                  # tape swipe and the workspace swipe; none = spring back. Either way render()
                  # animates the pile from wherever the finger left the card.
     mapfile -t ORD < <(order); [ ${#ORD[@]} -eq 0 ] && exit 0
-    cur="${3:-}"; { [ -n "$cur" ] && exists "$cur"; } || cur="$(curfront)"
+    # $3 (the patch picks the largest logical x) is only right with the dock on the right;
+    # on another edge (rotated screen) work the front out canonically instead
+    cur="${3:-}"; [ "$EDGE" -ne 0 ] && cur=""
+    { [ -n "$cur" ] && exists "$cur"; } || cur="$(curfront)"
     [ -z "$cur" ] && cur="${ORD[0]}"
     ci=0; for i in "${!ORD[@]}"; do [ "${ORD[$i]}" = "$cur" ] && ci=$i && break; done
     case "${2:-}" in
@@ -367,6 +433,17 @@ case "${1:-toggle}" in
     if   is_pip  "$a"; then dock_from_pip "$a"
     elif is_dock "$a"; then undock "$a"
     else                    dock_send "$a"; fi ;;
+  pip-zoom)      # Mod+Alt+minus / equal: draw PiP content smaller (out) or larger (in), by
+                 # scaling decoration:keystone_pip_zoom -- how many times the box the client is
+                 # told it is -- by 1.25 within 1..8. Every PiP is nudged so it is re-told.
+    z=$($HC getoption decoration:keystone_pip_zoom -j 2>/dev/null | $J -r '.float // 3')
+    z=$(awk -v z="$z" -v d="${2:-out}" 'BEGIN { z = (d == "in") ? z / 1.25 : z * 1.25; if (z < 1) z = 1; if (z > 8) z = 8; printf "%.3f", z }')
+    $HC eval "hl.config({ decoration = { keystone_pip_zoom = $z } })" >/dev/null 2>&1
+    while read -r p; do
+      [ -n "$p" ] || continue
+      d "hl.dsp.window.resize({x=1, y=0, relative=true, window=\"address:$p\"})"
+      d "hl.dsp.window.resize({x=-1, y=0, relative=true, window=\"address:$p\"})"
+    done < <($J -r '.[]|select(.tags|any(rtrimstr("*")=="pip"))|.address' <<<"$CLIENTS") ;;
   pip-toggle)    # SUPER+P: toggle the focused window as a keystone picture-in-picture / "pin" --
                  # a standalone, pinned, tilted mini-card bottom-right -- or return it to the layout
                  # if already pinned. pip_make clears pile membership (the "pin clears dock" half).
@@ -418,6 +495,6 @@ case "${1:-toggle}" in
       park_all
     fi
     # PiPs are outside the pile: move each to the new bottom-right corner, re-sized
-    while read -r p; do [ -n "$p" ] && pip_place "$p"; done \
+    while read -r p; do [ -n "$p" ] && pip_place "$p" keep; done \
       < <($J -r '.[]|select(.tags|any(rtrimstr("*")=="pip"))|.address' <<<"$CLIENTS") ;;
 esac
