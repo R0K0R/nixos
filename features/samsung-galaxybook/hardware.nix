@@ -105,4 +105,62 @@ lib.mkIf config.my.samsung-galaxybook.enable {
     is on.
   */
   services.fprintd.enable = true;
+
+  /*
+    No fingerprint in tablet mode. The sensor is on the keyboard deck, which is
+    folded behind the screen (or at least out of reach) in tablet mode, so a PAM
+    prompt that waits for a finger only delays the password. The firmware's tablet
+    switch -- SW_TABLET_MODE on "Intel HID switches" (INTC1077) -- flips on a fold
+    past laptop mode and cannot tell "rotated" from "flipped"; accepted, since the
+    sensor is hard to reach either way.
+
+    fprintd is D-Bus-activated, so stopping it is not enough: this guard keeps a
+    flag in /run while tablet mode is on, fprintd's unit refuses to start while it
+    exists, and PAM's fingerprint step fails at once and moves on to the password.
+    Leaving tablet mode removes the flag; fprintd starts again on the next prompt.
+  */
+  systemd.services.fprintd.unitConfig.ConditionPathExists = "!/run/fprintd-tablet-mode";
+  systemd.services.fprintd-tablet-guard = {
+    description = "Keep fprintd off while in tablet mode";
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      ExecStart = "${pkgs.python3.interpreter} ${pkgs.writeText "fprintd-tablet-guard.py" ''
+        import fcntl, os, struct, subprocess
+
+        DEV = "/dev/input/by-path/platform-INTC1077:00-event"   # Intel HID switches
+        FLAG = "/run/fprintd-tablet-mode"
+        EV_SW, SW_TABLET_MODE = 5, 1
+        SYSTEMCTL = "${config.systemd.package}/bin/systemctl"
+
+        def apply(tablet):
+            if tablet:
+                open(FLAG, "w").close()
+                subprocess.run([SYSTEMCTL, "stop", "fprintd.service"], check=False)
+            else:
+                try:
+                    os.unlink(FLAG)
+                except FileNotFoundError:
+                    pass
+
+        fd = os.open(DEV, os.O_RDONLY)
+        # current state first: EVIOCGSW(len) = _IOC(_IOC_READ, 'E', 0x1b, len)
+        bits = bytearray(8)
+        fcntl.ioctl(fd, (2 << 30) | (len(bits) << 16) | (ord("E") << 8) | 0x1b, bits)
+        apply(bool(bits[0] & (1 << SW_TABLET_MODE)))
+
+        # then follow it: struct input_event { timeval; u16 type; u16 code; s32 value }
+        fmt = "llHHi"
+        size = struct.calcsize(fmt)
+        while True:
+            data = os.read(fd, size)
+            if len(data) < size:
+                continue
+            _, _, typ, code, value = struct.unpack(fmt, data)
+            if typ == EV_SW and code == SW_TABLET_MODE:
+                apply(bool(value))
+      ''}";
+      Restart = "always";
+      RestartSec = 2;
+    };
+  };
 }
