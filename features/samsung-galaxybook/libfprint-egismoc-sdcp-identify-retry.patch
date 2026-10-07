@@ -1,36 +1,47 @@
-egismoc: retry, don't fail, on an SDCP identify response that does not verify
+egismoc: on an SDCP identify reply that fails its MAC, reconnect once and retry
 
-On the Galaxy Book4 Pro 360 (Egis 1c7a:05a1) the first verify after fprintd
-starts often fails with
+On the Galaxy Book4 Pro 360 (Egis 1c7a:05a1) fprintd at times fails every
+verify of a run with
 
     SDCP AuthorizedIdentity verification failed.
     Device reported an error during verify: Device SDCP Identify response
     was not valid
 
--- always within a second or two of the daemon starting, after an earlier
-daemon was stopped mid-verify. The MAC is keyed by the session's
-application secret, so the likeliest reading is a reply to the previous
-session's request. FP_DEVICE_ERROR_DATA_INVALID ends the operation and
-pam_fprintd falls back to the password although the finger matched.
+so PAM falls back to the password although the finger matched. The MAC is
+keyed by the SDCP session's application secret; a new daemon restores the
+claim (keys) cached on disk from an earlier one when it is from the same
+boot, and if the device's session has moved on since, every reply fails.
 
-Report FP_DEVICE_RETRY_GENERAL instead: fprintd asks for another scan and
-keeps listening. A retry authorizes nothing; the next scan is verified
-exactly as before.
+Add fpi_sdcp_device_invalidate_connection() -- forget the in-memory keys and
+delete the cached claim -- and on a failing MAC call it ONCE and report
+FP_DEVICE_RETRY_GENERAL, so the next scan connects afresh. A second
+consecutive failure is the original hard error. (An earlier version of this
+patch only retried, which looped forever since pam_fprintd does not count
+retries and the stale keys never change.) A retry authorizes nothing.
 
---- a/libfprint/drivers/egismoc/egismoc.c	2026-10-07 18:18:22.762539016 +0900
-+++ b/libfprint/drivers/egismoc/egismoc.c	2026-10-07 18:18:22.809538804 +0900
-@@ -1518,14 +1518,27 @@
+diff -ruN a/libfprint/drivers/egismoc/egismoc.c b/libfprint/drivers/egismoc/egismoc.c
+--- a/libfprint/drivers/egismoc/egismoc.c	2026-10-07 19:22:47.276314914 +0900
++++ b/libfprint/drivers/egismoc/egismoc.c	2026-10-07 19:22:47.367095117 +0900
+@@ -49,6 +49,7 @@
+   FpiSsm         *wait_finger_ssm;
+   gint64          wait_finger_start;
+   GCancellable   *interrupt_cancellable;
++  gboolean        sdcp_reconnected; /* a stale-keys retry already happened */
+ };
+ 
+ G_DEFINE_TYPE (FpiDeviceEgisMoc, fpi_device_egismoc, FPI_TYPE_SDCP_DEVICE);
+@@ -1518,17 +1519,44 @@
            return;
          }
  
 -      /* Ensure the returned identity is valid per SDCP. */
-+      /* Ensure the returned identity is valid per SDCP. A response that fails
-+         the check proves nothing either way -- in practice it is the device
-+         answering a request from an earlier session (the previous daemon was
-+         stopped mid-verify), MACed with that session's secret -- so ask for
-+         another scan instead of failing the whole operation: a hard error
-+         here made pam_fprintd give up and fall back to the password at once.
-+         A retry grants nothing; the next scan must verify like any other. */
++      /* Ensure the returned identity is valid per SDCP. A failing MAC means the
++         keys we hold no longer match the device's session -- typically a claim
++         cached on disk by an earlier daemon and restored by this one after the
++         device had moved on; every scan then fails. So ONCE: drop the connection
++         (keys and cached claim) and ask for another scan, which connects afresh
++         in IDENTIFY_SDCP_CONNECT. If that still fails, it is a real failure. A
++         retry authorizes nothing; the next scan is verified as before. */
        if (!fpi_sdcp_verify_authorized_identity (sdcp_dev, host_nonce,
                                                  enrollment_id, device_mac))
          {
@@ -38,8 +49,20 @@ exactly as before.
 -                               fpi_device_error_new_msg (FP_DEVICE_ERROR_DATA_INVALID,
 -                                                         "Device SDCP Identify "
 -                                                         "response was not valid"));
-+          fp_warn ("Device SDCP Identify response was not valid "
-+                   "(stale session?), asking for another scan");
++          if (self->sdcp_reconnected)
++            {
++              self->sdcp_reconnected = FALSE;
++              fpi_ssm_mark_failed (self->task_ssm,
++                                   fpi_device_error_new_msg (FP_DEVICE_ERROR_DATA_INVALID,
++                                                             "Device SDCP Identify "
++                                                             "response was not valid"));
++              return;
++            }
++
++          fp_warn ("Device SDCP Identify response was not valid; dropping the "
++                   "SDCP connection and asking for another scan");
++          fpi_sdcp_device_invalidate_connection (sdcp_dev);
++          self->sdcp_reconnected = TRUE;
 +
 +          if (fpi_device_get_current_action (device) == FPI_DEVICE_ACTION_VERIFY)
 +            fpi_device_verify_report (device, FPI_MATCH_ERROR, NULL,
@@ -52,3 +75,48 @@ exactly as before.
            return;
          }
  
++      self->sdcp_reconnected = FALSE;
++
+       if (fpi_device_get_current_action (device) == FPI_DEVICE_ACTION_IDENTIFY)
+         {
+           fpi_device_get_identify_data (device, &prints);
+diff -ruN a/libfprint/fpi-sdcp-device.c b/libfprint/fpi-sdcp-device.c
+--- a/libfprint/fpi-sdcp-device.c	2026-10-07 19:22:47.304314700 +0900
++++ b/libfprint/fpi-sdcp-device.c	2026-10-07 19:22:47.365537495 +0900
+@@ -1110,6 +1110,25 @@
+ }
+ 
+ /**
++ * fpi_sdcp_device_invalidate_connection:
++ * @device: a #FpiSdcpDevice
++ *
++ * Forget the current SDCP connection -- the in-memory keys AND the claim cached
++ * on disk -- so the next fpi_sdcp_device_is_connected() is %FALSE and the driver
++ * establishes a fresh one. For when the device's replies stop verifying against
++ * the keys we hold (e.g. a cached claim restored by a new daemon after the device
++ * itself had moved on).
++ */
++void
++fpi_sdcp_device_invalidate_connection (FpiSdcpDevice *device)
++{
++  FpiSdcpDevicePrivate *priv = fpi_sdcp_device_get_instance_private (device);
++
++  priv->is_connected = FALSE;
++  fpi_sdcp_device_delete_cached_claim (device);
++}
++
++/**
+  * fpi_sdcp_device_is_connected:
+  * @device: The #FpiSdcpDevice
+  *
+diff -ruN a/libfprint/fpi-sdcp-device.h b/libfprint/fpi-sdcp-device.h
+--- a/libfprint/fpi-sdcp-device.h	2026-10-07 19:22:47.320314578 +0900
++++ b/libfprint/fpi-sdcp-device.h	2026-10-07 19:22:47.364522031 +0900
+@@ -130,6 +130,7 @@
+                                                      const guchar  *device_signature, 
+                                                      const guchar  *mac);
+ 
++void fpi_sdcp_device_invalidate_connection (FpiSdcpDevice *device);
+ gboolean fpi_sdcp_device_is_connected (FpiSdcpDevice *device);
+ 
+ gboolean fpi_sdcp_device_can_reconnect (FpiSdcpDevice *device);
