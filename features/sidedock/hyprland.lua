@@ -203,10 +203,15 @@ end
 
 -- The pile slides as one; give window moves an ease-out without overshoot.
 hl.curve("dockslide", { type = "bezier", points = { { 0.16, 1.0 }, { 0.3, 1.0 } } })
--- Showing the dock (dock.sh show_pile): ease out with a SMALL overshoot -- the second
--- control point above 1 runs the cards a few percent past their spot before they settle.
--- Gentle on purpose; raise 1.12 for more bounce, 1.0 for none.
-hl.curve("dockshow", { type = "bezier", points = { { 0.3, 1.12 }, { 0.5, 1.0 } } })
+-- Showing the dock (dock.sh render, staggered slide-in): an ease-out whose overshoot is
+-- DAMPED along the pile -- the front card runs a little past its spot and settles, each
+-- card further back overshoots less, the deepest not at all -- so the pile's motion
+-- converges instead of compounding into a wobble (1.12 on every card did that). dockshowN
+-- is the curve for depth N; raise or lower the second control point's y to taste.
+hl.curve("dockshow0", { type = "bezier", points = { { 0.3, 1.10 }, { 0.5, 1.0 } } })
+hl.curve("dockshow1", { type = "bezier", points = { { 0.3, 1.05 }, { 0.5, 1.0 } } })
+hl.curve("dockshow2", { type = "bezier", points = { { 0.3, 1.02 }, { 0.5, 1.0 } } })
+hl.curve("dockshow3", { type = "bezier", points = { { 0.3, 1.00 }, { 0.5, 1.0 } } })
 hl.animation({ leaf = "windowsMove", enabled = true, speed = 5, bezier = "dockslide" })
 
 if nix.keystone then
