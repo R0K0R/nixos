@@ -125,6 +125,7 @@
             ./patches/keystone/09-special-recentre-exemption.patch
             ./patches/keystone/10-touch-pen-border-resize.patch
             ./patches/keystone/11-touchscreen-swipes.patch
+            ./patches/keystone/12-touch-workspace-swipe-1to1.patch
           ];
         });
       })

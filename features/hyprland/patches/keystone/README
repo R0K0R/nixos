@@ -1,7 +1,9 @@
 Hyprland patch series for the side dock (features/sidedock), applied in order by
 features/hyprland/nixos.nix under my.hyprland.keystone. Split 2026-10-08 from the
 single trapezoid.patch; applying 01..11 onto the same base gives byte-for-byte the
-tree trapezoid.patch did. Each patch's own header says what it does and why.
+tree trapezoid.patch did. Later additions: 12 (touchscreen workspace swipes follow
+the finger 1:1; uses 04's m_fromTouchscreen flag, which 11 sets). Each patch's own
+header says what it does and why.
 
 Base: Hyprland 0.56.2 + nixpkgs' monitor-soft-apply-logical-size.patch + the other
 patches listed before this series in nixos.nix (layoutmanager-guard-null-space,
