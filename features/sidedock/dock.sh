@@ -355,6 +355,13 @@ pip_make() {  # turn $1 into a keystone PiP: a standalone, pinned, tilted mini-c
   ensure_float "$a"
   d "hl.dsp.window.tag({tag=\"+dock\", window=\"address:$a\"})"  # +dock => keystone tilt/shadow/input, all free
   d "hl.dsp.window.tag({tag=\"+pip\", window=\"address:$a\"})"   # +pip  => the cascade (order/curfront/shownany) skips it
+  # A card made a PiP straight from the pile keeps its pile tags, and they are not inert:
+  # dockscale<P> makes the patch report the client box*100/P instead of the PiP size, and
+  # dockd<N> gives it a pile card's bounce curve. render() only cleans cards still in order().
+  local t
+  while read -r t; do
+    [ -n "$t" ] && d "hl.dsp.window.tag({tag=\"-$t\", window=\"address:$a\"})"
+  done < <($J -r --arg a "$a" 'first(.[]|select(.address==$a)).tags[]? | rtrimstr("*") | select(test("^dock(d|scale)[0-9]+$"))' <<<"$CLIENTS")
   dock_chrome "$a"   # as dock_send: no border, keystone corners, warped shadow kept
   to_regular "$a"   # a pin needs a regular workspace; a card would be on the dock workspace
   pin "$a" on
@@ -386,16 +393,27 @@ pip_hide() {
   d "hl.dsp.window.tag({tag=\"+piphidden\", window=\"address:$a\"})"
   d "hl.dsp.window.move({workspace=\"$PIPWS\", follow=false, window=\"address:$a\"})"
 }
-pip_show() {  # the most recently hidden PiP that still exists; 1 if none
-  local line a x y w h rest=""
+pip_show() {  # bring back EVERY hidden PiP that still exists, focusing the newest; 1 if none
+  # All of them, not just the newest: Super+P hides the FOCUSED PiP, and a shown PiP is
+  # focused, so showing one at a time made the next Super+P hide that same one again --
+  # hide A, hide B, and B toggled forever while A stayed stranded on special:pip.
+  local line a x y w h last=""
+  local -a shown=()
   [ -s "$PIPSTATE" ] || return 1
   while read -r line; do
-    a=${line%% *}
-    exists "$a" && is_piphidden "$a" && rest="$line"
+    [ -n "$line" ] || continue
+    read -r a x y w h <<<"$line"
+    exists "$a" && is_piphidden "$a" || continue
+    pip_restore "$a" "$x" "$y" "$w" "$h"
+    shown+=("$a"); last="$a"
   done <"$PIPSTATE"
-  [ -n "$rest" ] || { : >"$PIPSTATE"; return 1; }
-  read -r a x y w h <<<"$rest"
-  grep -v "^$a " "$PIPSTATE" >"$PIPSTATE.new" 2>/dev/null; command mv -f "$PIPSTATE.new" "$PIPSTATE"
+  : >"$PIPSTATE"
+  [ -n "$last" ] || return 1
+  ztop "$last"
+  d "hl.dsp.focus({window=\"address:$last\"})"
+}
+pip_restore() {  # one hidden PiP back on screen: regular workspace, pinned, at its old spot
+  local a="$1" x="$2" y="$3" w="$4" h="$5"
   to_regular "$a"
   d "hl.dsp.window.tag({tag=\"-piphidden\", window=\"address:$a\"})"
   pin "$a" on
@@ -409,7 +427,6 @@ pip_show() {  # the most recently hidden PiP that still exists; 1 if none
     snap; pip_place "$a" keep
   fi
   ztop "$a"
-  d "hl.dsp.focus({window=\"address:$a\"})"
 }
 unpip() {  # return a PiP to the tiling area -- drop the pip tag, then reuse undock's full restore
   local a="$1"
@@ -492,7 +509,7 @@ case "${1:-toggle}" in
       d "hl.dsp.window.resize({x=1, y=0, relative=true, window=\"address:$p\"})"
       d "hl.dsp.window.resize({x=-1, y=0, relative=true, window=\"address:$p\"})"
     done < <($J -r '.[]|select(.tags|any(rtrimstr("*")=="pip"))|.address' <<<"$CLIENTS") ;;
-  pip-showhide)  # SUPER+P: hide the focused PiP, or bring back the last hidden one.
+  pip-showhide)  # SUPER+P: hide the focused PiP, or bring back every hidden one.
     a="$(active)"
     if [ -n "$a" ] && is_pip "$a" && ! is_piphidden "$a"; then pip_hide "$a"; else pip_show; fi
     exit 0 ;;
