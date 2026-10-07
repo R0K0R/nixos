@@ -204,10 +204,10 @@ render() {
   if [ "$stagger" = 1 ]; then
     # DAMPED overshoot along the pile: each move uses the curve active when it starts, so
     # switch the global window-move curve to dockshow<depth> right before each card's move
-    # (front bounces most, deepest not at all -- sidedock/hyprland.lua), then put the
-    # normal dockslide back. Speed 6: a touch calmer than ordinary window moves.
+    # (overshoot = AMP * DECAY^depth, generated in sidedock/hyprland.lua for depths 0..7),
+    # then put the normal dockslide back. Speed 6: a touch calmer than ordinary moves.
     for ((i=0; i<${#rot[@]}; i++)); do
-      dd=$(( i < MAXD ? i : MAXD ))
+      dd=$(( i < 7 ? i : 7 ))
       $HC eval "hl.animation({ leaf = \"windowsMove\", enabled = true, speed = 6, bezier = \"dockshow$dd\" })" >/dev/null 2>&1
       d "hl.dsp.window.move({x=${MX[$i]}, y=${MY[$i]}, window=\"address:${rot[$i]}\"})"
       [ "$i" -lt $(( ${#rot[@]} - 1 )) ] && sleep "$STAGGER" 2>/dev/null
