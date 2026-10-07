@@ -1,0 +1,21 @@
+hardware_manager: suspend_action = none -- ignore Android's suspend request
+
+When Android's display sleeps it asks the host to suspend; the only actions
+were "stop" (tear the session down) and anything else = freeze the whole
+container, both of which stop audio. "none" keeps the container running, so
+Android can turn its display off -- no composition, an idle GPU -- while a
+music app keeps playing.
+
+--- a/tools/services/hardware_manager.py	2026-10-07 19:08:50.517764713 +0900
++++ b/tools/services/hardware_manager.py	2026-10-07 19:08:50.558488828 +0900
+@@ -23,6 +23,10 @@
+         cfg = tools.config.load(args)
+         if cfg["waydroid"]["suspend_action"] == "stop":
+             tools.actions.session_manager.stop(args)
++        elif cfg["waydroid"]["suspend_action"] == "none":
++            # Ignore Android's request: the container keeps running, so audio
++            # keeps playing with the display off.
++            return
+         else:
+             tools.actions.container_manager.freeze(args)
+ 
