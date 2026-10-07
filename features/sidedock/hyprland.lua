@@ -11,10 +11,13 @@ local nix = require("nix.sidedock")
 local mod = nix.mod
 local dock = nix.dock
 
--- One auto-route rule per docked app: FLOATING, PINNED (follows the live workspace),
--- no initial focus, at a monitor-RELATIVE first frame (percentages of the logical
--- monitor). dock.sh is the authority on geometry: `adopt` (fired on window.open below)
--- re-sizes, size-locks and places the card from the live, logical geometry.
+-- One auto-route rule per docked app. The window is born a card: FLOATING, on the dock
+-- workspace (silently -- it does not switch you there), card-sized and parked just past
+-- the right edge, so its first frame is off-screen. With the dynamic dock tag added in
+-- window.open_early below it is already a trapezoid, and `adopt` (window.open) then just
+-- slides it in from the side -- instead of the app appearing as a normal window
+-- somewhere and visibly migrating into the dock. dock.sh is the authority on geometry:
+-- adopt re-sizes, size-locks and places it from the live, logical geometry.
 --
 -- The rule does NOT tag the window 'dock': a rule tag reads as "dock*" and cannot be
 -- removed by the tag dispatcher, so an auto-routed window could never be undocked.
@@ -24,9 +27,14 @@ local dock = nix.dock
 local dockClasses = {}
 for _, c in ipairs(nix.classes) do
   dockClasses[c] = true
-  hl.window_rule({ match = { class = "^(" .. c .. ")$" }, float = true, size = "33% 88%", move = "66% 8%",
-    opacity = "1.0 1.0", pin = true, border_size = 0, rounding = 0, no_initial_focus = true })
+  hl.window_rule({ match = { class = "^(" .. c .. ")$" }, workspace = "special:dock silent", float = true,
+    size = "33% 88%", move = "100% 8%", opacity = "1.0 1.0", border_size = 0, rounding = 0, no_initial_focus = true })
 end
+-- The same birth for any other window that opens ON the dock workspace -- one opened
+-- while a card has focus, which joins the pile (window.open below). Modal dialogs are
+-- left alone; a window that turns out not to join is put back by dock.sh `stray`.
+hl.window_rule({ match = { workspace = "special:dock", modal = false }, float = true,
+  size = "33% 88%", move = "100% 8%", border_size = 0, rounding = 0 })
 
 hl.bind(mod .. " + " .. nix.keys.toggle, hl.dsp.exec_cmd(dock .. " toggle"))
 -- The dock as a workspace: send the focused window there, or back out.
@@ -75,19 +83,26 @@ do
     focusAddr = addr
   end)
 
+  -- Decide BEFORE the first frame. window.open_early fires before the window is laid
+  -- out or drawn, and focus has not moved to it yet, so focusDock is still "a card had
+  -- focus". A window joining the pile gets the dynamic dock tag here, so the keystone
+  -- warps it from its very first frame (the rules above already float it off-screen).
+  hl.on("window.open_early", function(w)
+    if not w then return end
+    local onDockWs = w.workspace ~= nil and w.workspace.name == "special:dock"
+    if (w.class and dockClasses[w.class]) or (onDockWs and focusDock) then
+      hl.dispatch(hl.dsp.window.tag({ tag = "+dock", window = "address:" .. w.address }))
+    end
+  end)
+
   hl.on("window.open", function(w)
     if not w then return end
-    if w.class and dockClasses[w.class] then
+    if isDockWin(w) and not isPip(w) then
+      -- born a card (open_early): slide it in from the side and make it the front
       hl.dispatch(hl.dsp.exec_cmd(dock .. " adopt " .. w.address))
-      return
-    end
-    local dockHadFocus = focusDock
-    if focusAddr == w.address then dockHadFocus = prevFocusDock end
-    if dockHadFocus and not w.floating then
-      hl.dispatch(hl.dsp.exec_cmd(dock .. " send " .. w.address))
     elseif w.workspace and w.workspace.name == "special:dock" then
-      -- opened on the dock workspace but not joining the pile: dock.sh moves it to the
-      -- regular workspace (the dock workspace holds only cards)
+      -- opened on the dock workspace but not joining the pile: dock.sh puts it back on
+      -- the regular workspace (the dock workspace holds only cards)
       hl.dispatch(hl.dsp.exec_cmd(dock .. " stray " .. w.address))
     end
   end)

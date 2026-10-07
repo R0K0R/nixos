@@ -362,24 +362,16 @@ case "${1:-toggle}" in
                  # if already pinned. pip_make clears pile membership (the "pin clears dock" half).
     a="$(active)"; [ -z "$a" ] && exit 0
     if is_pip "$a"; then unpip "$a"; else pip_make "$a"; fi ;;
-  adopt)   # a dock-class window ($2) just OPENED. The Lua handler recognises it by
-           # CLASS (the auto-route rule no longer tags -- see sidedock/home.nix), so
-           # give it the DYNAMIC dock tag here: a rule tag renders as "dock*" and
-           # CANNOT be removed by the tag dispatcher, so undock could never release a
-           # route-tagged window (it stayed docked + keystoned with its border back).
-           # A dispatcher tag ("dock") is removable, so undock works like a sent window.
-           # Re-snapshot after tagging so order() sees it, then cascade it to the front.
+  adopt)   # a window ($2) was just BORN a card: the Lua window.open_early handler gave it
+           # the DYNAMIC dock tag before its first frame, and the window rules floated it
+           # card-sized just past the right edge. (A rule tag would render as "dock*",
+           # which the tag dispatcher cannot remove, so undock could never release it --
+           # hence dynamic.) Re-tag for safety, re-snapshot so order() sees it, then
+           # cascade it to the front: render's move slides it in from the side.
     exists "$2" || exit 0
     d "hl.dsp.window.tag({tag=\"+dock\", window=\"address:$2\"})"
     snap
     render "$2" ;;
-  send)    # a NON-dock window ($2) just opened while a pile card had focus (the Lua
-           # window.open handler): the dock was being used like a workspace, so the new
-           # window joins the pile -- full dock shape via dock_send -- instead of tiling
-           # behind it. Already-docked or PiP windows are left alone.
-    exists "$2" || exit 0
-    { is_dock "$2" || is_pip "$2"; } && exit 0
-    dock_send "$2" ;;
   stray)   # a window ($2) opened ON the dock workspace without joining the pile (a dialog,
            # or anything opened while the workspace had focus but no card did). The dock
            # workspace holds only cards: move it to the live regular workspace, and close
@@ -388,6 +380,9 @@ case "${1:-toggle}" in
     { is_dock "$2" || is_pip "$2"; } && exit 0
     in_dockws "$2" || exit 0
     to_regular "$2"
+    # The dock workspace's window rule floated it card-sized past the right edge (modal
+    # dialogs excepted), so hand it back to the layout as a normal window.
+    [ "$(isfloat "$2")" = "true" ] && d "hl.dsp.window.float({window=\"address:$2\"})"
     snap; mapfile -t ORD < <(order); [ ${#ORD[@]} -eq 0 ] && dockws_hide
     d "hl.dsp.focus({window=\"address:$2\"})" ;;
   orphan)  # a dock window ($2) just CLOSED: re-flow the survivors (if the pile is up)
