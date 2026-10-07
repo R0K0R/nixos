@@ -21,6 +21,8 @@ set -uo pipefail
 export HYPRLAND_INSTANCE_SIGNATURE="${HYPRLAND_INSTANCE_SIGNATURE:-$(ls "${XDG_RUNTIME_DIR:-/run/user/1000}/hypr/" 2>/dev/null | head -1)}"
 HC=hyprctl; J=jq
 STATE="${XDG_RUNTIME_DIR:-/run/user/1000}/sidedock.front"   # remembers the front across hide
+# Hidden PiPs, one "address x y w h" line each, most recent last (pip-showhide).
+PIPSTATE="${XDG_RUNTIME_DIR:-/run/user/1000}/sidedock.piphidden"
 
 geom() {
   # LOGICAL geometry of the FOCUSED monitor: window moves are in logical coordinates,
@@ -370,6 +372,45 @@ pip_make() {  # turn $1 into a keystone PiP: a standalone, pinned, tilted mini-c
   fi
   d "hl.dsp.focus({window=\"address:$a\"})"
 }
+# PiP show/hide. Hidden = unpinned (a pinned window refuses a special workspace) and moved
+# to `special:pip`, a special workspace nothing ever opens, tagged `piphidden` so relayout
+# leaves it there. The window keeps its pip/dock tags, so it is still out of the pile.
+PIPWS="special:pip"
+is_piphidden() { $J -e --arg a "$1" 'any(.[]; .address==$a and (.tags|any(rtrimstr("*")=="piphidden")))' <<<"$CLIENTS" >/dev/null 2>&1; }
+pip_hide() {
+  local a="$1" g
+  g=$($J -r --arg a "$a" 'first(.[]|select(.address==$a))|"\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"' <<<"$CLIENTS")
+  { [ -f "$PIPSTATE" ] && grep -v "^$a " "$PIPSTATE"; printf '%s %s\n' "$a" "$g"; } >"$PIPSTATE.new" 2>/dev/null
+  command mv -f "$PIPSTATE.new" "$PIPSTATE"   # `command`: mv() here moves a window
+  pin "$a" off
+  d "hl.dsp.window.tag({tag=\"+piphidden\", window=\"address:$a\"})"
+  d "hl.dsp.window.move({workspace=\"$PIPWS\", follow=false, window=\"address:$a\"})"
+}
+pip_show() {  # the most recently hidden PiP that still exists; 1 if none
+  local line a x y w h rest=""
+  [ -s "$PIPSTATE" ] || return 1
+  while read -r line; do
+    a=${line%% *}
+    exists "$a" && is_piphidden "$a" && rest="$line"
+  done <"$PIPSTATE"
+  [ -n "$rest" ] || { : >"$PIPSTATE"; return 1; }
+  read -r a x y w h <<<"$rest"
+  grep -v "^$a " "$PIPSTATE" >"$PIPSTATE.new" 2>/dev/null; command mv -f "$PIPSTATE.new" "$PIPSTATE"
+  to_regular "$a"
+  d "hl.dsp.window.tag({tag=\"-piphidden\", window=\"address:$a\"})"
+  pin "$a" on
+  # Back where it was if that still fits the screen (a rotation may have happened since);
+  # otherwise the usual bottom-right corner at its size.
+  if [ -n "${h:-}" ] && [ "$x" -ge "$X0" ] && [ "$y" -ge "$Y0" ] \
+     && [ $(( x + w )) -le $(( X0 + LW )) ] && [ $(( y + h )) -le $(( Y0 + LH )) ] 2>/dev/null; then
+    d "hl.dsp.window.resize({x=$w, y=$h, window=\"address:$a\"})"
+    mv "$a" "$x" "$y"
+  else
+    snap; pip_place "$a" keep
+  fi
+  ztop "$a"
+  d "hl.dsp.focus({window=\"address:$a\"})"
+}
 unpip() {  # return a PiP to the tiling area -- drop the pip tag, then reuse undock's full restore
   local a="$1"
   d "hl.dsp.window.tag({tag=\"-pip\", window=\"address:$a\"})"
@@ -449,7 +490,11 @@ case "${1:-toggle}" in
       d "hl.dsp.window.resize({x=1, y=0, relative=true, window=\"address:$p\"})"
       d "hl.dsp.window.resize({x=-1, y=0, relative=true, window=\"address:$p\"})"
     done < <($J -r '.[]|select(.tags|any(rtrimstr("*")=="pip"))|.address' <<<"$CLIENTS") ;;
-  pip-toggle)    # SUPER+P: toggle the focused window as a keystone picture-in-picture / "pin" --
+  pip-showhide)  # SUPER+P: hide the focused PiP, or bring back the last hidden one.
+    a="$(active)"
+    if [ -n "$a" ] && is_pip "$a" && ! is_piphidden "$a"; then pip_hide "$a"; else pip_show; fi
+    exit 0 ;;
+  pip-toggle)    # SUPER+CTRL+P: toggle the focused window as a keystone picture-in-picture / "pin" --
                  # a standalone, pinned, tilted mini-card bottom-right -- or return it to the layout
                  # if already pinned. pip_make clears pile membership (the "pin clears dock" half).
     a="$(active)"; [ -z "$a" ] && exit 0
@@ -500,6 +545,7 @@ case "${1:-toggle}" in
       park_all
     fi
     # PiPs are outside the pile: move each to the new bottom-right corner, re-sized
+    # (hidden ones stay hidden; pip_show re-places them if they no longer fit)
     while read -r p; do [ -n "$p" ] && pip_place "$p" keep; done \
-      < <($J -r '.[]|select(.tags|any(rtrimstr("*")=="pip"))|.address' <<<"$CLIENTS") ;;
+      < <($J -r '.[]|select((.tags|any(rtrimstr("*")=="pip")) and (.tags|any(rtrimstr("*")=="piphidden")|not))|.address' <<<"$CLIENTS") ;;
 esac

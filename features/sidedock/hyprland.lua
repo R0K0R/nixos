@@ -44,7 +44,10 @@ hl.bind(mod .. " + " .. nix.keys.prev, hl.dsp.exec_cmd(dock .. " prev"))
 hl.bind(mod .. " + " .. nix.keys.next, hl.dsp.exec_cmd(dock .. " next"))
 -- Picture-in-picture: the focused window becomes a pinned, keystoned mini-card
 -- bottom-right (a `pip` tag keeps it out of the pile); again to put it back.
-hl.bind(mod .. " + " .. nix.keys.pip, hl.dsp.exec_cmd(dock .. " pip-toggle"))
+hl.bind(mod .. " + " .. nix.keys.pipToggle, hl.dsp.exec_cmd(dock .. " pip-toggle"))
+-- Hide the focused PiP out of the way (it keeps running), or bring back the last
+-- hidden one where it was.
+hl.bind(mod .. " + " .. nix.keys.pip, hl.dsp.exec_cmd(dock .. " pip-showhide"))
 -- How small a PiP's content is drawn (it lays out for keystone_pip_zoom x its box):
 -- Mod+Alt+minus shrinks the content, Mod+Alt+equal enlarges it, like browser zoom.
 hl.bind(mod .. " + ALT + minus", hl.dsp.exec_cmd(dock .. " pip-zoom out"))

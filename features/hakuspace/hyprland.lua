@@ -39,8 +39,9 @@ hl.bind(mod .. " + F11", hl.dsp.exec_cmd(bin("record.sh")))
 --                      moved to: SUPER + CTRL + P
 --
 -- SUPER + P keeps its upstream key, the plain screenshot. features/sidedock
--- also wants it (picture-in-picture); the two are not meant to be enabled
--- together, and if they are, Hyprland decides by registration order.
+-- also wants it (PiP show/hide), and SUPER + CTRL + P (PiP toggle); the two
+-- are not meant to be enabled together, and if they are, Hyprland decides by
+-- registration order.
 hl.bind(mod .. " + P", hl.dsp.exec_cmd(bin("screenshot.sh")))
 hl.bind(mod .. " + CTRL + P", hl.dsp.exec_cmd(bin("screenshot.sh") .. " --fullscreen"))
 hl.bind(mod .. " + SHIFT + B", hl.dsp.exec_cmd(bin("dockbar_manager.sh") .. " --toggle"))

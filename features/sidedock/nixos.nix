@@ -38,7 +38,8 @@ in
       terminal = keyOpt "ALT + T" "A terminal that opens straight into the dock.";
       prev = keyOpt "ALT + left" "Shift the pile back one window.";
       next = keyOpt "ALT + right" "Shift the pile forward one window.";
-      pip = keyOpt "P" "Toggle the focused window as a keystoned picture-in-picture card.";
+      pipToggle = keyOpt "CTRL + P" "Toggle the focused window as a keystoned picture-in-picture card.";
+      pip = keyOpt "P" "Hide the focused picture-in-picture card, or show the last hidden one.";
     };
   };
 
