@@ -465,7 +465,23 @@ hl.bind(mod .. " + E", hl.dsp.exec_cmd("emacsclient -c"))
 hl.bind("Hangul", hl.dsp.exec_cmd(nix.hangulToggle))
 
 -- Window management
-hl.bind(mod .. " + Q", hl.dsp.window.close())
+--
+-- Mod+Q on Waydroid stops the SESSION instead of closing the window. A plain close
+-- only removes Waydroid's display out from under a running Android; occasionally that
+-- left a dark window looping the boot animation (an Android-side restart), and after
+-- such a restart its networking stays wedged (see features/waydroid: eth0 addressed but
+-- no route -- a system_server soft-restart leaves EthernetServiceThread waiting
+-- forever). `waydroid session stop` lxc-stops the container cleanly and the next
+-- launch boots a fresh one (/var/lib/waydroid/waydroid.log: "Stopping container" ...
+-- "Starting up container for a new session"), so nothing is left half-alive.
+hl.bind(mod .. " + Q", function()
+  local w = hl.get_active_window()
+  if w and w.class == "Waydroid" then
+    hl.dispatch(hl.dsp.exec_cmd("waydroid session stop"))
+  else
+    hl.dispatch(hl.dsp.window.close())
+  end
+end)
 hl.bind(mod .. " + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 -- niri's maximize-column, now a real TOGGLE on Mod+D (end-4's key for
 -- it; Mod+D is free now that its earlier weirdness is understood --
