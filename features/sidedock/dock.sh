@@ -235,19 +235,11 @@ show_pile() {
   local -a o; mapfile -t o < <(order); [ ${#o[@]} -eq 0 ] && return 1
   local want=""; [ -f "$STATE" ] && want="$(cat "$STATE" 2>/dev/null)"
   { [ -z "$want" ] || ! exists "$want"; } && want="${o[0]}"
-  # A SHORT, gentle slide-in. Parked cards sit a whole card-width (plus gap) past the edge;
-  # sliding all that way at the global window-move speed read as a fast, far swing. So
-  # place them, instantly (move animation off), a quarter card-width right of where they
-  # will land -- the dock workspace is still closed, so this is invisible -- then render
-  # slides them that short distance, slower, as the workspace fades in. The animation is
-  # global (windowsMove), so the slower speed is restored once render has started the moves.
-  local a y
-  $HC eval 'hl.animation({ leaf = "windowsMove", enabled = false, speed = 5, bezier = "dockslide" })' >/dev/null 2>&1
-  for a in "${o[@]}"; do
-    y=$(cy_of "$a")
-    cmv "$a" $(( SHOWN_X + DW/4 )) "${y:-$DOCK_Y}"
-  done
-  $HC eval 'hl.animation({ leaf = "windowsMove", enabled = true, speed = 8, bezier = "dockslide" })' >/dev/null 2>&1
+  # Slide in from past the edge with a SOFT overshoot: for this slide only, window moves use
+  # the `dockshow` curve (sidedock/hyprland.lua) -- it runs a few percent past the spot and
+  # settles back -- and a slightly calmer speed. The move animation is global
+  # (windowsMove), so its normal curve is restored once render has started the moves.
+  $HC eval 'hl.animation({ leaf = "windowsMove", enabled = true, speed = 6, bezier = "dockshow" })' >/dev/null 2>&1
   render "$want" 1
   $HC eval 'hl.animation({ leaf = "windowsMove", enabled = true, speed = 5, bezier = "dockslide" })' >/dev/null 2>&1
 }
