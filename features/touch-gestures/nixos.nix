@@ -54,11 +54,15 @@ in
 
     fingers = lib.mkOption {
       type = lib.types.ints.positive;
-      default = 3;
+      default = 4;
       description = ''
-        Finger count for the default gestures. Three is deliberate: lisgd does
-        not grab the device, so one- and two-finger swipes fire *in addition* to
-        whatever the application does with them.
+        Finger count for the default gestures. lisgd does not grab the device,
+        so one- and two-finger swipes would fire *in addition* to whatever the
+        application does with them. Four, not three, since 2026-10-08: three
+        fingers on the touchscreen belong to the compositor (trapezoid.patch's
+        3-finger double-tap-and-drag live move), whose drag lisgd would also
+        read as a swipe -- and four matches the touchpad, where the vertical
+        4-finger swipe walks the column and changes workspace too.
       '';
     };
 
