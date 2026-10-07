@@ -48,15 +48,11 @@
   builders are declared as ssh:// (legacy serve protocol); if CA builds refuse
   to dispatch, the first thing to try is ssh-ng:// in features/remote-builder.
 */
-{ config, inputs, lib, hostName, ... }:
+{ config, lib, hostRuntimeClassifier, ... }:
 
 let
   cfg = config.my.tuning.ca;
-  hostRuntimeClassifier = import ./host-runtime-classifier.nix {
-    inherit inputs;
-    host = hostName;
-    system = "x86_64-linux";
-  };
+  # hostRuntimeClassifier: the shared instance from tuning/nixos.nix (_module.args).
 in
 {
   options.my.tuning.ca = {

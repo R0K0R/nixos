@@ -28,15 +28,11 @@
   source, so L2 there would be baked into every derivation hash instead of
   staying a runtime lever.
 */
-{ config, inputs, lib, hostName, ... }:
+{ config, lib, hostRuntimeClassifier, ... }:
 
 let
   cfg = config.my.tuning.heavy;
-  hostRuntimeClassifier = import ./host-runtime-classifier.nix {
-    inherit inputs;
-    host = hostName;
-    system = "x86_64-linux";
-  };
+  # hostRuntimeClassifier: the shared instance from tuning/nixos.nix (_module.args).
 in
 {
   options.my.tuning.heavy = {

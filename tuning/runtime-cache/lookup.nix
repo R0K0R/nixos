@@ -320,5 +320,12 @@ let
 in
 {
   inherit isHostRuntime hasWarmCache;
-  runtimeNames = lib.unique (tier1Names ++ tier2Names ++ tier3Names);
+  # De-duplicated through an attrset, not lib.unique: that is a foldl' testing each
+  # name against every one kept so far -- quadratic over thousands of names, and
+  # the single largest cost this file added to an eval (2026-10-08 profile).
+  # Order is not kept (attrNames sorts); every consumer filters it or builds an
+  # attrset from it.
+  runtimeNames = builtins.attrNames (
+    builtins.listToAttrs (map (name: { inherit name; value = null; }) (tier1Names ++ tier2Names ++ tier3Names))
+  );
 }

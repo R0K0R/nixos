@@ -112,6 +112,14 @@ in
 
   config = lib.mkMerge [
     /*
+      The ONE classifier instance, handed to heavy.nix and ca.nix as a module
+      argument. Each used to import its own copy, and every copy builds a fresh
+      nixpkgs (lookup.nix freshPkgs) and walks the Tier 3 closure again: three
+      of each per evaluation, measured as part of a 73 s eval on 2026-10-08.
+    */
+    { _module.args = { inherit hostRuntimeClassifier; }; }
+
+    /*
       extraOverlays applies UNCONDITIONALLY -- it is not tuning.
 
       It used to sit inside the march gate, which meant `march = null` also
