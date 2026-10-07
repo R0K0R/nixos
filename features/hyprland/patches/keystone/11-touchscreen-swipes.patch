@@ -7,6 +7,8 @@ touch_move_slop) becomes a 3-finger swipe -- the `move` gesture, dock card swipe
 included. The delta is the centroid's logical-px travel times
 gestures:touch_swipe_scale, in finger direction like libinput's; the gesture's
 touches are cancelled for the client, a lift ends it, another finger cancels it.
+While one runs, g_pTrackpadGestures->m_fromTouchscreen (declared by 04) is set, since
+these deltas are logical: the dock card swipe maps them to the physical frame.
 
 diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.cpp
 --- a/src/config/values/ConfigValues.cpp
@@ -20,13 +22,13 @@ diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.
 +        MS<Int>("gestures:touch_move_slop", "touchscreen 3-finger double-tap-drag: a tap finger may move at most this many px", 20, {.min = 0, .max = 200}),
 +        MS<Float>("gestures:touch_swipe_scale", "touchscreen swipes fed to the trackpad gestures: logical px of finger travel -> trackpad delta", 1.f, {.min = 0.1f, .max = 10.f}),
 +        MS<Int>("gestures:touch_swipe_threshold", "touchscreen 4-finger swipe: centroid travel in px before it becomes a gesture (and the touches are taken from the client)", 15, {.min = 1, .max = 200}),
-         MS<String>("gestures:dock_swipe_exec", "side dock: command run with l/r/u/d when the move gesture starts on a dock-tagged window", STRVAL_EMPTY),
+         MS<String>("gestures:dock_swipe_exec", "side dock: command run on release of a move gesture that began on a dock card, with next/prev/none and the front card's address", STRVAL_EMPTY),
+         MS<Float>("gestures:dock_swipe_follow", "side dock: on a swipe away from the dock edge, the fraction of the previous card's travel each deeper card follows (the lag)", 0.75f, {.min = 0.f, .max = 1.f}),
          MS<Bool>("gestures:workspace_swipe_touch", "enable workspace swiping from the edge of a touchscreen", false),
-         MS<Bool>("gestures:workspace_swipe_invert", "invert the direction (touchpad only)", true),
 diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
 --- a/src/managers/input/Touch.cpp
 +++ b/src/managers/input/Touch.cpp
-@@ -13,6 +13,104 @@
+@@ -13,6 +13,107 @@
  #include "../../protocols/core/DataDevice.hpp"
  #include "debug/log/Logger.hpp"
  #include "UnifiedWorkspaceSwipeGesture.hpp"
@@ -120,18 +122,21 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
 +        S.ids          = allDown();
 +        S.lastCentroid = centroid;
 +        g_pSeatManager->sendTouchCancel();
++        // these deltas are logical finger travel, not physical: the dock swipe converts them
++        g_pTrackpadGestures->m_fromTouchscreen = true;
 +        g_pTrackpadGestures->gestureBegin(IPointer::SSwipeBeginEvent{.timeMs = timeMs, .fingers = fingers});
 +    }
 +
 +    void swipeEnd(uint32_t timeMs, bool cancelled) {
 +        g_touchSwipe.active = false;
 +        g_pTrackpadGestures->gestureEnd(IPointer::SSwipeEndEvent{.timeMs = timeMs, .cancelled = cancelled});
++        g_pTrackpadGestures->m_fromTouchscreen = false;
 +    }
 +}
  
  void CInputManager::onTouchDown(ITouch::SDownEvent e) {
      m_lastInputTouch = true;
-@@ -43,6 +141,43 @@
+@@ -43,6 +144,43 @@
  
      refocus(TOUCH_COORDS);
  
@@ -175,7 +180,7 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
      if (m_clickBehavior == CLICKMODE_KILL) {
          IPointer::SButtonEvent e;
          e.state = WL_POINTER_BUTTON_STATE_PRESSED;
-@@ -137,6 +272,42 @@
+@@ -137,6 +275,42 @@
      if (info.cancelled)
          return;
  
@@ -218,7 +223,7 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
      if (m_touchBorderResizeID && *m_touchBorderResizeID == e.touchID) {
          m_touchBorderResizeID.reset();
          endBorderResize();
-@@ -170,6 +341,35 @@
+@@ -170,6 +344,35 @@
      if (info.cancelled)
          return;
  

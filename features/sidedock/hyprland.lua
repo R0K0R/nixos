@@ -283,7 +283,11 @@ if nix.keystone then
     -- a curve live and a shared one switched between cards bent those already moving).
     keystone_bounce = 0.2, keystone_bounce_decay = 0.5,
   } })
-  -- A 3-finger swipe that starts on a pile card moves that card under the finger
-  -- (features/hyprland/patches/keystone/04-dock-move-gestures.patch); on release this settles it: cycle or spring back.
+  -- A 3-finger swipe that starts on a pile card drives the pile live, in the panel's
+  -- PHYSICAL frame (features/hyprland/patches/keystone/04-dock-move-gestures.patch):
+  -- toward the dock edge the front card follows the fingers out and the one behind it
+  -- comes up; away from it every card but the last follows, each deeper one lagging by
+  -- dock_swipe_follow, and the last comes up. On release this settles it, or springs back.
+  -- (gestures.dock_swipe_follow, default 0.75, tunes the lag.)
   hl.config({ gestures = { dock_swipe_exec = dock .. " gesture-move" } })
 end

@@ -1,10 +1,22 @@
 Dock cards and the move gestures.
 
-- The `move` gesture, started on a dock pile card, moves just that card horizontally
-  under the finger (live, like moving a floating window) and on release runs
-  `gestures:dock_swipe_exec <l|r|none> <front>`, which features/sidedock points at
-  `dock.sh gesture-move` to cycle or spring back. One gesture rather than a second
-  3-finger one: Hyprland runs only the first gesture matching a finger count.
+- The `move` gesture, started on a dock pile card, drives the pile live along the axis
+  toward the dock edge, in the PHYSICAL frame: the dock sits on the panel's physical
+  right edge, so a swipe toward that edge means the same on every rotation. Touchpad
+  deltas are physical already; touchscreen ones (CTrackpadGestures::m_fromTouchscreen,
+  set by 11) are logical and get mapped through the monitor transform, the frame
+  ksOrientToEdge and dock.sh's EDGE use.
+    toward the edge  the front card follows the fingers out; released past 60px, the
+                     card right behind it comes to the front.
+    away from it     every card but the last follows, each deeper card travelling
+                     gestures:dock_swipe_follow (0.75) of the one in front -- the lag;
+                     released past 60px, the last card comes to the front.
+  Depth comes from the `dockd<N>` tags features/sidedock's render() sets. Release runs
+  `gestures:dock_swipe_exec <next|prev|none> <front>`, which features/sidedock points at
+  `dock.sh gesture-move` to cycle or spring back from where the cards were left. Before
+  2026-10-08 only the touched card moved, horizontally in LOGICAL space, and left->right
+  meant "previous" -- the last card, which read as backwards. One gesture rather than a
+  second 3-finger one: Hyprland runs only the first gesture matching a finger count.
 - The `float` gesture leaves dock windows alone (floating toggles break the pile).
 - The scroll_move gesture drives the regular workspace when the open special
   workspace has no tiled windows (the dock's), so it keeps working with the dock open.
@@ -12,11 +24,12 @@ Dock cards and the move gestures.
 diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.cpp
 --- a/src/config/values/ConfigValues.cpp
 +++ b/src/config/values/ConfigValues.cpp
-@@ -411,6 +411,7 @@
+@@ -411,6 +411,8 @@
           */
  
          MS<Int>("gestures:workspace_swipe_distance", "in px, the distance of the touchpad gesture", 300, {.min = 0, .max = 2000}),
-+        MS<String>("gestures:dock_swipe_exec", "side dock: command run with l/r/u/d when the move gesture starts on a dock-tagged window", STRVAL_EMPTY),
++        MS<String>("gestures:dock_swipe_exec", "side dock: command run on release of a move gesture that began on a dock card, with next/prev/none and the front card's address", STRVAL_EMPTY),
++        MS<Float>("gestures:dock_swipe_follow", "side dock: on a swipe away from the dock edge, the fraction of the previous card's travel each deeper card follows (the lag)", 0.75f, {.min = 0.f, .max = 1.f}),
          MS<Bool>("gestures:workspace_swipe_touch", "enable workspace swiping from the edge of a touchscreen", false),
          MS<Bool>("gestures:workspace_swipe_invert", "invert the direction (touchpad only)", true),
          MS<Bool>("gestures:workspace_swipe_touch_invert", "invert the direction (touchscreen only)", false),
@@ -41,7 +54,7 @@ diff -ruN a/src/managers/input/trackpad/gestures/FloatGesture.cpp b/src/managers
 diff -ruN a/src/managers/input/trackpad/gestures/MoveGesture.cpp b/src/managers/input/trackpad/gestures/MoveGesture.cpp
 --- a/src/managers/input/trackpad/gestures/MoveGesture.cpp
 +++ b/src/managers/input/trackpad/gestures/MoveGesture.cpp
-@@ -4,19 +4,69 @@
+@@ -4,19 +4,144 @@
  #include "../../../../desktop/view/Window.hpp"
  #include "../../../../render/Renderer.hpp"
  #include "../../../../layout/LayoutManager.hpp"
@@ -49,10 +62,56 @@ diff -ruN a/src/managers/input/trackpad/gestures/MoveGesture.cpp b/src/managers/
 +#include "../../../../config/supplementary/executor/Executor.hpp"
 +#include "../../../../desktop/state/WindowState.hpp"
 +
++#include "../TrackpadGestures.hpp"
++
++#include <algorithm>
++#include <cmath>
 +#include <format>
++#include <string>
 +
 +static bool ksTagged(const PHLWINDOW& w, const char* tag) {
 +    return w && w->m_ruleApplicator && w->m_ruleApplicator->m_tagKeeper.isTagged(tag, false);
++}
++
++// A pile card's depth from the `dockd<N>` tag features/sidedock's render() sets (0 = front),
++// or -1 for a dock window that carries none.
++static int ksDockDepth(const PHLWINDOW& w) {
++    if (!w || !w->m_ruleApplicator)
++        return -1;
++    for (auto const& t : w->m_ruleApplicator->m_tagKeeper.getTags()) {
++        std::string s = t;
++        if (!s.empty() && s.back() == '*')
++            s.pop_back();
++        if (s.size() > 5 && s.starts_with("dockd") && std::all_of(s.begin() + 5, s.end(), [](char c) { return c >= '0' && c <= '9'; }))
++            return std::stoi(s.substr(5));
++    }
++    return -1;
++}
++
++/*
++  The dock's CANONICAL frame, as features/sidedock/dock.sh's geom(): x runs toward the
++  dock edge, y along it. The dock sits on the panel's PHYSICAL right edge, which the
++  monitor transform puts on logical right (0), bottom (1 = 90 deg), left (2) or top (3).
++  Touchpad deltas are already physical -- the touchpad's right is the panel's right -- so
++  they ARE canonical. Touchscreen swipes (synthesised from logical finger travel) are
++  converted, so a swipe toward the panel's right edge means the same on every rotation.
++*/
++static Vector2D ksLogicalToCanon(const Vector2D& d, int edge) {
++    switch (edge) {
++        case 1: return {d.y, d.x};
++        case 2: return {-d.x, d.y};
++        case 3: return {-d.y, d.x};
++        default: return d;
++    }
++}
++
++static Vector2D ksCanonXToLogical(double cx, int edge) {
++    switch (edge) {
++        case 1: return {0.0, cx};
++        case 2: return {-cx, 0.0};
++        case 3: return {0.0, -cx};
++        default: return {cx, 0.0};
++    }
 +}
  
  void CMoveTrackpadGesture::begin(const ITrackpadGesture::STrackpadGestureBegin& e) {
@@ -61,34 +120,52 @@ diff -ruN a/src/managers/input/trackpad/gestures/MoveGesture.cpp b/src/managers/
      m_window    = Desktop::focusState()->window();
      m_lastDelta = {};
 +
-+    m_dockSwipe = false;
++    m_dockSwipe     = false;
++    m_dockFromTouch = false;
++    m_dockEdge      = 0;
++    m_dockMaxDepth  = 0;
++    m_dockTravel    = {};
 +    m_dockCards.clear();
 +    m_dockFront.reset();
 +
-+    // Side-dock pile cards (my.sidedock: tagged `dock`, not `pip`) must NOT be dragged
-+    // out of the cascade. The swipe moves just THAT card, live and horizontally, under
-+    // the finger; on release gestures:dock_swipe_exec decides -- cycle to the next or
-+    // previous card, or spring back -- and animates the pile from where it was left.
-+    // A PiP card is an ordinary floating window to this gesture and moves normally.
++    /*
++      Side-dock pile cards (my.sidedock: tagged `dock`, not `pip`) are never dragged out of
++      the cascade. The swipe drives the pile, live, along the axis toward the dock edge, in
++      the PHYSICAL frame (see ksLogicalToCanon):
++        toward the edge  the FRONT card follows the fingers out; released, the card right
++                         behind it comes to the front ("next").
++        away from it     every card but the LAST follows, each deeper one lagging by
++                         gestures:dock_swipe_follow per depth; released, the last card
++                         comes to the front ("prev").
++      gestures:dock_swipe_exec settles it (or springs it back) from wherever it was left.
++      A PiP card is an ordinary floating window to this gesture and moves normally.
++    */
 +    const auto WIN = m_window.lock();
 +    if (!WIN || !ksTagged(WIN, "dock") || ksTagged(WIN, "pip"))
 +        return;
 +
 +    m_window.reset();
-+    m_dockSwipe = true;
-+    m_dockCards.emplace_back(WIN);
++    m_dockSwipe     = true;
++    m_dockFromTouch = g_pTrackpadGestures->m_fromTouchscreen;
++    if (const auto MON = WIN->m_monitor.lock())
++        m_dockEdge = sc<int>(MON->m_transform) % 4;
 +
-+    // front = the on-screen pile card nearest the base (largest x), as dock.sh's curfront()
-+    const auto MON = WIN->m_monitor.lock();
++    // the pile = the dock cards on this card's (dock) workspace, by their dockd<N> depth
 +    for (auto const& w : Desktop::windowState()->windows()) {
-+        if (!w || !w->m_isMapped || !w->m_isFloating || w->m_monitor != WIN->m_monitor || !ksTagged(w, "dock") || ksTagged(w, "pip"))
++        if (!w || !w->m_isMapped || !w->m_isFloating || w->m_workspace != WIN->m_workspace || !ksTagged(w, "dock") || ksTagged(w, "pip"))
 +            continue;
-+        const auto POS = w->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
-+        if (MON && POS.x >= MON->m_position.x + MON->m_size.x)
-+            continue; // parked off-screen
-+        if (!m_dockFront || POS.x > m_dockFront->position(Desktop::View::IGeometric::GEOMETRIC_GOAL).x)
++        const int DEPTH = ksDockDepth(w);
++        if (DEPTH < 0)
++            continue;
++        m_dockCards.push_back({.window = w, .depth = DEPTH});
++        m_dockMaxDepth = std::max(m_dockMaxDepth, DEPTH);
++        if (DEPTH == 0)
 +            m_dockFront = w;
 +    }
++    if (m_dockCards.empty()) // untagged (an older sidedock): just this card, as the front
++        m_dockCards.push_back({.window = WIN, .depth = 0});
++    if (!m_dockFront)
++        m_dockFront = WIN;
  }
  
  void CMoveTrackpadGesture::update(const ITrackpadGesture::STrackpadGestureUpdate& e) {
@@ -96,13 +173,24 @@ diff -ruN a/src/managers/input/trackpad/gestures/MoveGesture.cpp b/src/managers/
 +    const auto DELTA = e.swipe ? e.swipe->delta : e.pinch->delta;
 +
 +    if (m_dockSwipe) {
-+        m_lastDelta += DELTA;
-+        for (auto const& ref : m_dockCards) {
-+            const auto W = ref.lock();
-+            if (!W)
++        static auto PFOLLOW = CConfigValue<Config::FLOAT>("gestures:dock_swipe_follow");
++        m_dockTravel += m_dockFromTouch ? ksLogicalToCanon(DELTA, m_dockEdge) : DELTA;
++
++        const double T      = m_dockTravel.x;
++        const double FOLLOW = std::clamp(sc<double>(*PFOLLOW), 0.0, 1.0);
++        for (auto& c : m_dockCards) {
++            double target = 0.0;
++            if (T > 0.0)
++                target = c.depth == 0 ? T : 0.0; // toward the edge: the front alone leaves
++            else if (c.depth < m_dockMaxDepth)
++                target = T * std::pow(FOLLOW, c.depth); // away: all but the last, deeper ones lagging
++            const double STEP = target - c.applied;
++            const auto   W    = c.window.lock();
++            if (!W || std::abs(STEP) < 0.01)
 +                continue;
-+            g_layoutManager->moveTarget(Vector2D{DELTA.x, 0.F}, W->layoutTarget());
++            g_layoutManager->moveTarget(ksCanonXToLogical(STEP, m_dockEdge), W->layoutTarget());
 +            W->finishAnimation();
++            c.applied = target;
 +        }
          return;
 +    }
@@ -113,15 +201,16 @@ diff -ruN a/src/managers/input/trackpad/gestures/MoveGesture.cpp b/src/managers/
  
      if (m_window->m_isFloating) {
          g_layoutManager->moveTarget(DELTA, m_window->layoutTarget());
-@@ -37,6 +87,24 @@
+@@ -37,6 +162,25 @@
  
  void CMoveTrackpadGesture::end(const ITrackpadGesture::STrackpadGestureEnd& e) {
  
 +    if (m_dockSwipe) {
-+        // Release: `<gestures:dock_swipe_exec> <l|r|none> <front address>`. A clearly
-+        // horizontal swipe of 60px+ cycles (l/r = finger direction); anything shorter
-+        // springs back. The front is the one captured at begin, since the drag has
-+        // since moved every card.
++        // Release: `<gestures:dock_swipe_exec> <next|prev|none> <front address>`. 60px+ of
++        // canonical travel, more toward/away from the edge than along it, cycles: toward
++        // the edge = next (the card behind comes up), away = prev (the last comes up);
++        // anything shorter springs back. The front is the one captured at begin, since the
++        // drag has since moved the cards.
 +        static auto PDOCKEXEC = CConfigValue<Config::STRING>("gestures:dock_swipe_exec");
 +        m_dockSwipe           = false;
 +        const std::string CMD = *PDOCKEXEC;
@@ -130,7 +219,7 @@ diff -ruN a/src/managers/input/trackpad/gestures/MoveGesture.cpp b/src/managers/
 +        m_dockFront.reset();
 +        if (CMD.empty() || CMD == STRVAL_EMPTY)
 +            return;
-+        const char* dir = (std::abs(m_lastDelta.x) >= 60.F && std::abs(m_lastDelta.x) > std::abs(m_lastDelta.y)) ? (m_lastDelta.x > 0 ? "r" : "l") : "none";
++        const char* dir = (std::abs(m_dockTravel.x) >= 60.0 && std::abs(m_dockTravel.x) > std::abs(m_dockTravel.y)) ? (m_dockTravel.x > 0 ? "next" : "prev") : "none";
 +        Config::Supplementary::executor()->spawnRaw(std::format("{} {} {}", CMD, dir, FRONT ? std::format("0x{:x}", rc<uintptr_t>(FRONT.get())) : std::string{""}));
 +        return;
 +    }
@@ -141,14 +230,23 @@ diff -ruN a/src/managers/input/trackpad/gestures/MoveGesture.cpp b/src/managers/
 diff -ruN a/src/managers/input/trackpad/gestures/MoveGesture.hpp b/src/managers/input/trackpad/gestures/MoveGesture.hpp
 --- a/src/managers/input/trackpad/gestures/MoveGesture.hpp
 +++ b/src/managers/input/trackpad/gestures/MoveGesture.hpp
-@@ -16,4 +16,8 @@
+@@ -16,4 +16,17 @@
    private:
      PHLWINDOWREF m_window;
      Vector2D     m_lastDelta;
 +    // began on a side-dock pile card: the swipe slides the pile, gestures:dock_swipe_exec settles it
-+    bool                      m_dockSwipe = false;
-+    std::vector<PHLWINDOWREF> m_dockCards;
-+    PHLWINDOWREF              m_dockFront;
++    struct SDockCard {
++        PHLWINDOWREF window;
++        int          depth   = 0;   // dockd<N>: 0 = front
++        double       applied = 0.0; // canonical offset already applied by this swipe
++    };
++    bool                   m_dockSwipe     = false;
++    bool                   m_dockFromTouch = false; // deltas are logical (touchscreen), not physical (touchpad)
++    int                    m_dockEdge      = 0;     // monitor transform % 4: which logical edge is the panel's right
++    int                    m_dockMaxDepth  = 0;
++    Vector2D               m_dockTravel;            // canonical: x toward the dock edge, y along it
++    std::vector<SDockCard> m_dockCards;
++    PHLWINDOWREF           m_dockFront;
  };
 diff -ruN a/src/managers/input/trackpad/gestures/ScrollMoveGesture.cpp b/src/managers/input/trackpad/gestures/ScrollMoveGesture.cpp
 --- a/src/managers/input/trackpad/gestures/ScrollMoveGesture.cpp
@@ -186,3 +284,18 @@ diff -ruN a/src/managers/input/trackpad/gestures/ScrollMoveGesture.cpp b/src/man
      if (!PWORKSPACE || !PWORKSPACE->m_space)
          return nullptr;
  
+diff -ruN a/src/managers/input/trackpad/TrackpadGestures.hpp b/src/managers/input/trackpad/TrackpadGestures.hpp
+--- a/src/managers/input/trackpad/TrackpadGestures.hpp
++++ b/src/managers/input/trackpad/TrackpadGestures.hpp
+@@ -26,6 +26,11 @@
+     eTrackpadGestureDirection        dirForString(const std::string_view& s);
+     const char*                      stringForDir(eTrackpadGestureDirection dir);
+ 
++    // True while a swipe fed in from somewhere other than libinput's touchpad -- the
++    // touchscreen -- is running: its deltas are LOGICAL, not physical. The side-dock swipe
++    // (MoveGesture) reads it to keep its direction physical on a rotated screen.
++    bool                             m_fromTouchscreen = false;
++
+   private:
+     struct SGestureData {
+         UP<ITrackpadGesture>      gesture;

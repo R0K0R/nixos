@@ -453,22 +453,24 @@ case "${1:-toggle}" in
     if [ "$1" = "next" ]; then ni=$(( (ci+1) % ${#ORD[@]} )); else ni=$(( (ci-1+${#ORD[@]}) % ${#ORD[@]} )); fi
     render "${ORD[$ni]}" ;;
   gesture-move)  # Release of a 3-finger swipe that began on a pile card. Hyprland's move
-                 # gesture (features/hyprland/patches/keystone/04-dock-move-gestures.patch) has already moved the swiped card under the finger
-                 # and hands over $2 = l / r / none (the FINGER direction, or too short) and
-                 # $3 = the front card at swipe start. Finger LEFT = next, like the 4-finger
-                 # tape swipe and the workspace swipe; none = spring back. Either way render()
-                 # animates the pile from wherever the finger left the card.
+                 # gesture (features/hyprland/patches/keystone/04-dock-move-gestures.patch)
+                 # has already moved the cards under the fingers -- in the PHYSICAL frame,
+                 # so the same on every rotation -- and hands over $2 = next / prev / none
+                 # and $3 = the front card at swipe start (its dockd0 tag, so right on any
+                 # edge). Toward the dock edge = next: the front leaves and the card right
+                 # behind it comes up. Away = prev: the pile slides off and the last card
+                 # comes up. none = too short, spring back. Either way render() animates
+                 # the pile from wherever the fingers left it. (l / r: what a Hyprland built
+                 # before 2026-10-08 sends -- finger left = next -- kept until it rebuilds.)
     mapfile -t ORD < <(order); [ ${#ORD[@]} -eq 0 ] && exit 0
-    # $3 (the patch picks the largest logical x) is only right with the dock on the right;
-    # on another edge (rotated screen) work the front out canonically instead
-    cur="${3:-}"; [ "$EDGE" -ne 0 ] && cur=""
+    cur="${3:-}"
     { [ -n "$cur" ] && exists "$cur"; } || cur="$(curfront)"
     [ -z "$cur" ] && cur="${ORD[0]}"
     ci=0; for i in "${!ORD[@]}"; do [ "${ORD[$i]}" = "$cur" ] && ci=$i && break; done
     case "${2:-}" in
-      l) render "${ORD[$(( (ci+1) % ${#ORD[@]} ))]}" ;;
-      r) render "${ORD[$(( (ci-1+${#ORD[@]}) % ${#ORD[@]} ))]}" ;;
-      *) render "$cur" ;;
+      next|l) render "${ORD[$(( (ci+1) % ${#ORD[@]} ))]}" ;;
+      prev|r) render "${ORD[$(( (ci-1+${#ORD[@]}) % ${#ORD[@]} ))]}" ;;
+      *)      render "$cur" ;;
     esac ;;
   dock-toggle)   # SUPER+CTRL+S: toggle the focused window's DOCK membership. pin and dock are
                  # mutually exclusive: a PiP (pin) folds into the pile (clearing the pin); a pile
