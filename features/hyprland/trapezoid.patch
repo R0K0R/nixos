@@ -38,6 +38,10 @@ features/sidedock, which keeps the dock on that edge through rotation.
 Edge resizing (general:resize_on_border) tests a dock/PiP card's pointer position
 in its UNWARPED frame (keystoneUnwarpGlobal), so the grab zone follows the drawn
 trapezoid's edges instead of the flat box around it.
+The keystone is applied in the box's UNROTATED frame and the draw's quad transform
+after it (ksDockKeystone: N * conj * N^-1 * B), so the frosted-blur pass -- drawn
+with the monitor's rotation -- warps to the same trapezoid as the window on a
+rotated screen instead of one turned against it.
 Fourth, two dock-card render fixes on top of upstream's warp: the drop shadow is
 no longer clipped to the window's FLAT box (that left a shadow whose inner edge
 was the straight flat-box edge, not the trapezoid's; the shader's own cutout is
@@ -901,8 +905,8 @@ diff -ruN a/src/render/ElementRenderer.cpp c/src/render/ElementRenderer.cpp
              const Vector2D PIXELASUV   = Vector2D{1, 1} / pSurface->m_current.bufferSize;
 diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
 --- a/src/render/OpenGL.cpp	2026-10-05 19:57:04.486286784 +0900
-+++ c/src/render/OpenGL.cpp	2026-10-07 17:23:44.362012953 +0900
-@@ -1498,6 +1498,140 @@
++++ c/src/render/OpenGL.cpp	2026-10-07 19:20:32.061931951 +0900
+@@ -1498,6 +1498,179 @@
      }
  }
  
@@ -948,7 +952,46 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
 +// the surface's own projection -- this keeps multi-surface apps (Qt/KDE, e.g.
 +// dolphin) composing into ONE trapezoid instead of warping each piece alone. For
 +// the main surface T == identity, reducing to base*H. Input mirror: ViewHitTester.
++static inline bool ksInv3(const float* m, float* o) {
++    const float det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
++    if (std::abs(det) < 1e-12f)
++        return false;
++    o[0] = (m[4] * m[8] - m[5] * m[7]) / det;
++    o[1] = (m[2] * m[7] - m[1] * m[8]) / det;
++    o[2] = (m[1] * m[5] - m[2] * m[4]) / det;
++    o[3] = (m[5] * m[6] - m[3] * m[8]) / det;
++    o[4] = (m[0] * m[8] - m[2] * m[6]) / det;
++    o[5] = (m[2] * m[3] - m[0] * m[5]) / det;
++    o[6] = (m[3] * m[7] - m[4] * m[6]) / det;
++    o[7] = (m[1] * m[6] - m[0] * m[7]) / det;
++    o[8] = (m[0] * m[4] - m[1] * m[3]) / det;
++    return true;
++}
++
++static std::array<GLfloat, 9> ksDockKeystoneImpl(const std::array<GLfloat, 9>& base, const CBox& surfBox, bool allowParallax);
++
++// `base` is the draw's projection, which may carry a quad TRANSFORM (the frosted-blur pass
++// draws with the monitor's rotation, the window's own pass usually without). The keystone
++// is defined on the box's UNROTATED unit square, so apply it there and the transform after:
++// M = N * conj * (N^-1 * B), N being the same box projected with no transform. Otherwise the
++// frost's trapezoid came out turned against the window's on a rotated screen. With no
++// transform N == B and this is base * conj as before.
 +static std::array<GLfloat, 9> ksDockKeystone(const std::array<GLfloat, 9>& base, const CBox& surfBox, bool allowParallax = true) {
++    // not a dock card / keystone off: the projection comes back untouched, nothing to do
++    if (ksDockKeystoneImpl(base, surfBox, allowParallax) == base)
++        return base;
++    const auto N  = g_pHyprRenderer->projectBoxToTarget(surfBox, HYPRUTILS_TRANSFORM_NORMAL).getMatrix();
++    const auto NK = ksDockKeystoneImpl(N, surfBox, allowParallax); // N * conj
++    float      Ni[9], Rt[9];
++    if (!ksInv3(N.data(), Ni))
++        return ksDockKeystoneImpl(base, surfBox, allowParallax);
++    ksMul3(Ni, base.data(), Rt);
++    std::array<GLfloat, 9> M{};
++    ksMul3(NK.data(), Rt, M.data());
++    return M;
++}
++
++static std::array<GLfloat, 9> ksDockKeystoneImpl(const std::array<GLfloat, 9>& base, const CBox& surfBox, bool allowParallax) {
 +    const auto w = g_pHyprRenderer->m_renderData.currentWindow;
 +    if (!w || !w->m_ruleApplicator || !w->m_ruleApplicator->m_tagKeeper.isTagged("dock", false))
 +        return base;
@@ -1043,7 +1086,7 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
  void CHyprOpenGLImpl::renderTextureInternal(SP<ITexture> tex, const CBox& box, const STextureRenderData& data) {
      RASSERT(g_pHyprRenderer->m_renderData.pMonitor, "Tried to render texture without begin()!");
      RASSERT(tex, "Attempted to draw nullptr texture!");
-@@ -1538,7 +1672,35 @@
+@@ -1538,7 +1711,35 @@
  
      auto shader = renderToOutput ? renderToOutputInternal() : renderToFBInternal(tex, data, tex->m_type, newBox);
  
@@ -1080,7 +1123,7 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
      shader->setUniformInt(SHADER_TEX, 0);
      GLCALL(glBindVertexArray(shader->getUniformLocation(SHADER_SHADER_VAO)));
  
-@@ -2100,6 +2262,7 @@
+@@ -2100,6 +2301,7 @@
  
                                    .primarySurfaceUVTopLeft     = monitorSpaceBox.pos() / m_renderData.pMonitor->m_transformedSize,
                                    .primarySurfaceUVBottomRight = (monitorSpaceBox.pos() + monitorSpaceBox.size()) / m_renderData.pMonitor->m_transformedSize,
@@ -1088,7 +1131,7 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
                                });
  
          g_pHyprRenderer->m_renderData.renderModif.enabled = renderModif;
-@@ -2362,7 +2525,39 @@
+@@ -2362,7 +2564,39 @@
  
      if (needsCM)
          shader->setUniformInt(SHADER_SOURCE_TF, TF);
@@ -1129,7 +1172,7 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
  
      CHyprColor color;
      if (!grad1.m_colors.empty())
-@@ -2379,18 +2574,18 @@
+@@ -2379,18 +2613,18 @@
          shader->setUniform4fv(SHADER_GRADIENT2, grad2.m_colorsOkLabA.size() / 4, grad2.m_colorsOkLabA);
      shader->setUniformInt(SHADER_GRADIENT2_LENGTH, grad2.m_colorsOkLabA.size() / 4);
      shader->setUniformFloat(SHADER_ANGLE2, sc<int>(grad2.m_angle / (std::numbers::pi / 180.0)) % 360 * (std::numbers::pi / 180.0));
@@ -1152,7 +1195,7 @@ diff -ruN a/src/render/OpenGL.cpp c/src/render/OpenGL.cpp
      shader->setUniformFloat(SHADER_ROUNDING_POWER, roundingPower);
      shader->setUniformFloat(SHADER_RANGE, range);
      shader->setUniformFloat(SHADER_SHADOW_POWER, SHADOWPOWER);
-@@ -2427,14 +2622,23 @@
+@@ -2427,14 +2661,23 @@
                  const auto cutoutTopLeft     = scaledWindowBox.pos() - newBox.pos();
                  const auto cutoutBottomRight = cutoutTopLeft + scaledWindowBox.size();
  
