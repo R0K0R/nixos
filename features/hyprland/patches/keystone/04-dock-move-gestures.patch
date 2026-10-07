@@ -1,0 +1,188 @@
+Dock cards and the move gestures.
+
+- The `move` gesture, started on a dock pile card, moves just that card horizontally
+  under the finger (live, like moving a floating window) and on release runs
+  `gestures:dock_swipe_exec <l|r|none> <front>`, which features/sidedock points at
+  `dock.sh gesture-move` to cycle or spring back. One gesture rather than a second
+  3-finger one: Hyprland runs only the first gesture matching a finger count.
+- The `float` gesture leaves dock windows alone (floating toggles break the pile).
+- The scroll_move gesture drives the regular workspace when the open special
+  workspace has no tiled windows (the dock's), so it keeps working with the dock open.
+
+diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.cpp
+--- a/src/config/values/ConfigValues.cpp
++++ b/src/config/values/ConfigValues.cpp
+@@ -411,6 +411,7 @@
+          */
+ 
+         MS<Int>("gestures:workspace_swipe_distance", "in px, the distance of the touchpad gesture", 300, {.min = 0, .max = 2000}),
++        MS<String>("gestures:dock_swipe_exec", "side dock: command run with l/r/u/d when the move gesture starts on a dock-tagged window", STRVAL_EMPTY),
+         MS<Bool>("gestures:workspace_swipe_touch", "enable workspace swiping from the edge of a touchscreen", false),
+         MS<Bool>("gestures:workspace_swipe_invert", "invert the direction (touchpad only)", true),
+         MS<Bool>("gestures:workspace_swipe_touch_invert", "invert the direction (touchscreen only)", false),
+diff -ruN a/src/managers/input/trackpad/gestures/FloatGesture.cpp b/src/managers/input/trackpad/gestures/FloatGesture.cpp
+--- a/src/managers/input/trackpad/gestures/FloatGesture.cpp
++++ b/src/managers/input/trackpad/gestures/FloatGesture.cpp
+@@ -36,6 +36,14 @@
+     if (!m_window)
+         return;
+ 
++    // Side-dock windows (my.sidedock) must NOT be moved by the touchpad gesture:
++    // dragging a keystoned card out of the cascade breaks it (mirrors the
++    // SUPER+drag gate in features/hyprland). Bail before any move begins.
++    if (m_window->m_ruleApplicator && m_window->m_ruleApplicator->m_tagKeeper.isTagged("dock", false)) {
++        m_window.reset();
++        return;
++    }
++
+     if ((m_window->m_isFloating && m_mode == FLOAT_MODE_FLOAT) || (!m_window->m_isFloating && m_mode == FLOAT_MODE_TILE)) {
+         m_window.reset();
+         return;
+diff -ruN a/src/managers/input/trackpad/gestures/MoveGesture.cpp b/src/managers/input/trackpad/gestures/MoveGesture.cpp
+--- a/src/managers/input/trackpad/gestures/MoveGesture.cpp
++++ b/src/managers/input/trackpad/gestures/MoveGesture.cpp
+@@ -4,19 +4,69 @@
+ #include "../../../../desktop/view/Window.hpp"
+ #include "../../../../render/Renderer.hpp"
+ #include "../../../../layout/LayoutManager.hpp"
++#include "../../../../config/ConfigValue.hpp"
++#include "../../../../config/supplementary/executor/Executor.hpp"
++#include "../../../../desktop/state/WindowState.hpp"
++
++#include <format>
++
++static bool ksTagged(const PHLWINDOW& w, const char* tag) {
++    return w && w->m_ruleApplicator && w->m_ruleApplicator->m_tagKeeper.isTagged(tag, false);
++}
+ 
+ void CMoveTrackpadGesture::begin(const ITrackpadGesture::STrackpadGestureBegin& e) {
+     ITrackpadGesture::begin(e);
+ 
+     m_window    = Desktop::focusState()->window();
+     m_lastDelta = {};
++
++    m_dockSwipe = false;
++    m_dockCards.clear();
++    m_dockFront.reset();
++
++    // Side-dock pile cards (my.sidedock: tagged `dock`, not `pip`) must NOT be dragged
++    // out of the cascade. The swipe moves just THAT card, live and horizontally, under
++    // the finger; on release gestures:dock_swipe_exec decides -- cycle to the next or
++    // previous card, or spring back -- and animates the pile from where it was left.
++    // A PiP card is an ordinary floating window to this gesture and moves normally.
++    const auto WIN = m_window.lock();
++    if (!WIN || !ksTagged(WIN, "dock") || ksTagged(WIN, "pip"))
++        return;
++
++    m_window.reset();
++    m_dockSwipe = true;
++    m_dockCards.emplace_back(WIN);
++
++    // front = the on-screen pile card nearest the base (largest x), as dock.sh's curfront()
++    const auto MON = WIN->m_monitor.lock();
++    for (auto const& w : Desktop::windowState()->windows()) {
++        if (!w || !w->m_isMapped || !w->m_isFloating || w->m_monitor != WIN->m_monitor || !ksTagged(w, "dock") || ksTagged(w, "pip"))
++            continue;
++        const auto POS = w->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
++        if (MON && POS.x >= MON->m_position.x + MON->m_size.x)
++            continue; // parked off-screen
++        if (!m_dockFront || POS.x > m_dockFront->position(Desktop::View::IGeometric::GEOMETRIC_GOAL).x)
++            m_dockFront = w;
++    }
+ }
+ 
+ void CMoveTrackpadGesture::update(const ITrackpadGesture::STrackpadGestureUpdate& e) {
+-    if (!m_window)
++    const auto DELTA = e.swipe ? e.swipe->delta : e.pinch->delta;
++
++    if (m_dockSwipe) {
++        m_lastDelta += DELTA;
++        for (auto const& ref : m_dockCards) {
++            const auto W = ref.lock();
++            if (!W)
++                continue;
++            g_layoutManager->moveTarget(Vector2D{DELTA.x, 0.F}, W->layoutTarget());
++            W->finishAnimation();
++        }
+         return;
++    }
+ 
+-    const auto DELTA = e.swipe ? e.swipe->delta : e.pinch->delta;
++    if (!m_window)
++        return;
+ 
+     if (m_window->m_isFloating) {
+         g_layoutManager->moveTarget(DELTA, m_window->layoutTarget());
+@@ -37,6 +87,24 @@
+ 
+ void CMoveTrackpadGesture::end(const ITrackpadGesture::STrackpadGestureEnd& e) {
+ 
++    if (m_dockSwipe) {
++        // Release: `<gestures:dock_swipe_exec> <l|r|none> <front address>`. A clearly
++        // horizontal swipe of 60px+ cycles (l/r = finger direction); anything shorter
++        // springs back. The front is the one captured at begin, since the drag has
++        // since moved every card.
++        static auto PDOCKEXEC = CConfigValue<Config::STRING>("gestures:dock_swipe_exec");
++        m_dockSwipe           = false;
++        const std::string CMD = *PDOCKEXEC;
++        const auto        FRONT = m_dockFront.lock();
++        m_dockCards.clear();
++        m_dockFront.reset();
++        if (CMD.empty() || CMD == STRVAL_EMPTY)
++            return;
++        const char* dir = (std::abs(m_lastDelta.x) >= 60.F && std::abs(m_lastDelta.x) > std::abs(m_lastDelta.y)) ? (m_lastDelta.x > 0 ? "r" : "l") : "none";
++        Config::Supplementary::executor()->spawnRaw(std::format("{} {} {}", CMD, dir, FRONT ? std::format("0x{:x}", rc<uintptr_t>(FRONT.get())) : std::string{""}));
++        return;
++    }
++
+     if (!m_window)
+         return;
+ 
+diff -ruN a/src/managers/input/trackpad/gestures/MoveGesture.hpp b/src/managers/input/trackpad/gestures/MoveGesture.hpp
+--- a/src/managers/input/trackpad/gestures/MoveGesture.hpp
++++ b/src/managers/input/trackpad/gestures/MoveGesture.hpp
+@@ -16,4 +16,8 @@
+   private:
+     PHLWINDOWREF m_window;
+     Vector2D     m_lastDelta;
++    // began on a side-dock pile card: the swipe slides the pile, gestures:dock_swipe_exec settles it
++    bool                      m_dockSwipe = false;
++    std::vector<PHLWINDOWREF> m_dockCards;
++    PHLWINDOWREF              m_dockFront;
+ };
+diff -ruN a/src/managers/input/trackpad/gestures/ScrollMoveGesture.cpp b/src/managers/input/trackpad/gestures/ScrollMoveGesture.cpp
+--- a/src/managers/input/trackpad/gestures/ScrollMoveGesture.cpp
++++ b/src/managers/input/trackpad/gestures/ScrollMoveGesture.cpp
+@@ -2,6 +2,8 @@
+ 
+ #include "../../../../desktop/state/FocusState.hpp"
+ #include "../../../../desktop/Workspace.hpp"
++#include "../../../../desktop/state/WindowState.hpp"
++#include "../../../../desktop/view/Window.hpp"
+ #include "../../../../output/Monitor.hpp"
+ #include "../../../../layout/LayoutManager.hpp"
+ #include "../../../../layout/algorithm/Algorithm.hpp"
+@@ -23,7 +25,22 @@
+     if (!PMONITOR)
+         return nullptr;
+ 
+-    const auto PWORKSPACE = PMONITOR->m_activeSpecialWorkspace ? PMONITOR->m_activeSpecialWorkspace : PMONITOR->m_activeWorkspace;
++    // An open special workspace with no TILED windows (the side dock's `dock` workspace,
++    // which holds only floating cards; a scratchpad of floating windows) has no tape to
++    // scroll: drive the regular workspace under it instead, so the swipe keeps working
++    // while the dock is open.
++    auto PWORKSPACE = PMONITOR->m_activeSpecialWorkspace ? PMONITOR->m_activeSpecialWorkspace : PMONITOR->m_activeWorkspace;
++    if (PMONITOR->m_activeSpecialWorkspace) {
++        bool tiled = false;
++        for (auto const& w : Desktop::windowState()->windows()) {
++            if (w && w->m_isMapped && !w->m_isFloating && w->m_workspace == PMONITOR->m_activeSpecialWorkspace) {
++                tiled = true;
++                break;
++            }
++        }
++        if (!tiled)
++            PWORKSPACE = PMONITOR->m_activeWorkspace;
++    }
+     if (!PWORKSPACE || !PWORKSPACE->m_space)
+         return nullptr;
+ 

@@ -228,7 +228,7 @@ do
 
   hl.bind("mouse:272", function() frontAt(hl.get_cursor_pos()) end, { non_consuming = true })
   -- A finger or the pen press through the touch/tablet path, not the button one, so the
-  -- bind above never sees them; trapezoid.patch reports both as Lua events with the point.
+  -- bind above never sees them; features/hyprland/patches/keystone/08-lua-touch-pen-events.patch reports both as Lua events with the point.
   -- pcall: a Hyprland without the patch rejects the unknown event names.
   pcall(hl.on, "input.touch.down", function(p) frontAt(p) end)
   pcall(hl.on, "input.tablet.tip", function(p) frontAt(p) end)
@@ -269,7 +269,7 @@ hl.curve("dockslide", { type = "bezier", points = { { 0.16, 1.0 }, { 0.3, 1.0 } 
 hl.animation({ leaf = "windowsMove", enabled = true, speed = 3.5, bezier = "dockslide" })
 
 if nix.keystone then
-  -- Keystone (my.hyprland.keystone, trapezoid.patch): dock windows render as a
+  -- Keystone (my.hyprland.keystone, features/hyprland/patches/keystone/01-keystone-render.patch): dock windows render as a
   -- perspective trapezoid. Only valid with the patch; stock Hyprland rejects these.
   -- Values from sihooleebd/nixos 0a7686c. rounding = corner radius (px) of the
   -- trapezoid plus edge anti-aliasing; the shadow is warped with the card.
@@ -284,6 +284,6 @@ if nix.keystone then
     keystone_bounce = 0.2, keystone_bounce_decay = 0.5,
   } })
   -- A 3-finger swipe that starts on a pile card moves that card under the finger
-  -- (trapezoid.patch's move gesture); on release this settles it: cycle or spring back.
+  -- (features/hyprland/patches/keystone/04-dock-move-gestures.patch); on release this settles it: cycle or spring back.
   hl.config({ gestures = { dock_swipe_exec = dock .. " gesture-move" } })
 end

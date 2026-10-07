@@ -1,0 +1,332 @@
+resize_on_border for pen and touch. A pen tip or a finger landing on a window's border
+grab zone starts the same MBIND_RESIZE drag a mouse press there would (one
+keystone-aware test, CInputManager::isOnResizeBorder, shared by all three); the press
+never reaches the client, the pen drives the drag through its cursor and the finger
+by warping the cursor along. The zone is per window (CViewHitTester::borderGrabExtend):
+extend_border_grab_area, widened to general:touch_border_grab_area (30) after touch
+input and to decoration:keystone_pip_grab (40) on a dock PiP, consistently for the hit
+test, the cursor icon and the press.
+
+diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.cpp
+--- a/src/config/values/ConfigValues.cpp
++++ b/src/config/values/ConfigValues.cpp
+@@ -181,6 +181,8 @@
+         MS<Bool>("general:resize_on_border", "enables resizing windows by clicking and dragging on borders and gaps", false),
+         MS<Int>("general:extend_border_grab_area", "extends the area around the border where you can click and drag on, only used when general:resize_on_border is on.", 15,
+                 {.min = 0, .max = 100}),
++        MS<Int>("general:touch_border_grab_area", "extend_border_grab_area while the last input was a touchscreen (a finger is less precise than a cursor)", 30,
++                {.min = 0, .max = 200}),
+         MS<Bool>("general:hover_icon_on_border", "show a cursor icon when hovering over borders, only used when general:resize_on_border is on.", true),
+         MS<Bool>("general:allow_tearing", "master switch for allowing tearing to occur.", false),
+         MS<Int>("general:resize_corner", "force floating windows to use a specific corner when being resized (1-4 going clockwise from top left, 0 to disable)", 0,
+@@ -215,6 +217,7 @@
+         MS<Float>("decoration:keystone_bounce", "dock: the front card's move overshoot (0 = none); cards behind get bounce * decay^depth", 0.f, {.min = 0.f, .max = 1.f}),
+         MS<Float>("decoration:keystone_bounce_decay", "dock: share of the overshoot each card further back keeps (0..1)", 0.5f, {.min = 0.f, .max = 1.f}),
+         MS<Float>("decoration:keystone_pip_zoom", "dock PiP: the client is told it is this many times the PiP box (3 = a box a third of the screen lays out like fullscreen)", 3.f, {.min = 1.f, .max = 8.f}),
++        MS<Int>("decoration:keystone_pip_grab", "dock PiP (tag pip): extend_border_grab_area for its edges, px -- a small card needs a wider grab", 40, {.min = 0, .max = 200}),
+         MS<Float>("decoration:keystone_parallax", "dock keystone: cursor-parallax lean strength (0 = off)", 0.f, {.min = 0.f, .max = 1.f}),
+         MS<Float>("decoration:active_opacity", "opacity of active windows.", 1, {.min = 0, .max = 1, .refresh = Supplementary::REFRESH_WINDOW_STATES}),
+         MS<Float>("decoration:inactive_opacity", "opacity of inactive windows.", 1, {.min = 0, .max = 1, .refresh = Supplementary::REFRESH_WINDOW_STATES}),
+diff -ruN a/src/desktop/state/ViewHitTester.cpp b/src/desktop/state/ViewHitTester.cpp
+--- a/src/desktop/state/ViewHitTester.cpp
++++ b/src/desktop/state/ViewHitTester.cpp
+@@ -15,7 +15,9 @@
+ #include "../../state/WorkspaceState.hpp"
+ #include "../../xwayland/XWayland.hpp"
+ #include "../../managers/fullscreen/FullscreenController.hpp"
++#include "../../managers/input/InputManager.hpp"
+ 
++#include <algorithm>
+ #include <cmath>
+ #include <ranges>
+ #include <tuple>
+@@ -34,11 +36,11 @@
+ 
+     static auto PRESIZEONBORDER       = CConfigValue<Config::INTEGER>("general:resize_on_border");
+     static auto PBORDERSIZE           = CConfigValue<Config::INTEGER>("general:border_size");
+-    static auto PBORDERGRABEXTEND     = CConfigValue<Config::INTEGER>("general:extend_border_grab_area");
+     static auto PSPECIALFALLTHRU      = CConfigValue<Config::INTEGER>("input:special_fallthrough");
+     static auto PMODALPARENTBLOCKING  = CConfigValue<Config::INTEGER>("general:modal_parent_blocking");
+     static auto PFOLLOWMOUSESHRINK    = CConfigValue<Config::INTEGER>("input:follow_mouse_shrink");
+-    const auto  BORDER_GRAB_AREA      = *PRESIZEONBORDER ? *PBORDERSIZE + *PBORDERGRABEXTEND : 0;
++    // per window: borderGrabExtend widens it for PiPs and touch
++    const auto  BORDER_GRAB_AREA      = [&](const PHLWINDOW& w) -> int { return *PRESIZEONBORDER ? sc<int>(*PBORDERSIZE) + borderGrabExtend(w) : 0; };
+     const bool  ONLY_PRIORITY         = properties & FOCUS_PRIORITY;
+     const bool  DO_FOLLOW_MOUSE_CHECK = properties & FOLLOW_MOUSE_CHECK;
+     const auto  HITBOX_SHRINK         = DO_FOLLOW_MOUSE_CHECK ? *PFOLLOWMOUSESHRINK : 0;
+@@ -58,7 +60,7 @@
+             if (w->m_isFloating && w->m_isMapped && w->acceptsInput() && !w->m_X11ShouldntFocus && w->m_pinned && !w->m_ruleApplicator->noFocus().valueOrDefault() &&
+                 w != ignoreWindow && !isShadowedByModal(w)) {
+                 const auto BB  = w->getWindowBoxUnified(properties);
+-                CBox       box = BB.copy().expand(!w->isX11OverrideRedirect() ? BORDER_GRAB_AREA : 0);
++                CBox       box = BB.copy().expand(!w->isX11OverrideRedirect() ? BORDER_GRAB_AREA(w) : 0);
+                 if (HITBOX_SHRINK > 0 && w != LASTFOCUSED)
+                     box = box.copy().expand(-HITBOX_SHRINK);
+                 if (box.containsPoint(pos))
+@@ -101,7 +103,7 @@
+                         continue;
+ 
+                     const auto BB  = w->getWindowBoxUnified(properties);
+-                    CBox       box = BB.copy().expand(!w->isX11OverrideRedirect() ? BORDER_GRAB_AREA : 0);
++                    CBox       box = BB.copy().expand(!w->isX11OverrideRedirect() ? BORDER_GRAB_AREA(w) : 0);
+                     if (HITBOX_SHRINK > 0 && w != LASTFOCUSED)
+                         box = box.copy().expand(-HITBOX_SHRINK);
+                     if (box.containsPoint(pos)) {
+@@ -185,7 +187,8 @@
+             if (!w->m_isFloating && w->m_isMapped && w->workspaceID() == WSPID && w->acceptsInput() && !w->m_X11ShouldntFocus && !w->m_ruleApplicator->noFocus().valueOrDefault() &&
+                 w != ignoreWindow && !isShadowedByModal(w)) {
+                 CBox box = (properties & USE_PROP_TILED) ? w->getWindowBoxUnified(properties) : w->layoutBox();
+-                if ((properties & INPUT_EXTENTS) && BORDER_GRAB_AREA > 0 && !w->isX11OverrideRedirect()) {
++                const int WGRAB = BORDER_GRAB_AREA(w);
++                if ((properties & INPUT_EXTENTS) && WGRAB > 0 && !w->isX11OverrideRedirect()) {
+                     const auto WORKAREA                    = PWORKSPACE->m_space->workArea();
+                     auto       isWindowCloseToWorkAreaEdge = [&](const Math::eDirection dir) -> bool {
+                         constexpr double STICK_THRESHOLD = 2.0; // This constant is taken from isAdjacent in CWindowQuery::inDirection
+@@ -216,20 +219,20 @@
+                     };
+ 
+                     if (isWindowCloseToWorkAreaEdge(Math::eDirection::DIRECTION_LEFT)) {
+-                        box.x -= BORDER_GRAB_AREA;
+-                        box.width += BORDER_GRAB_AREA;
++                        box.x -= WGRAB;
++                        box.width += WGRAB;
+                     }
+ 
+                     if (isWindowCloseToWorkAreaEdge(Math::eDirection::DIRECTION_RIGHT))
+-                        box.width += BORDER_GRAB_AREA;
++                        box.width += WGRAB;
+ 
+                     if (isWindowCloseToWorkAreaEdge(Math::eDirection::DIRECTION_UP)) {
+-                        box.y -= BORDER_GRAB_AREA;
+-                        box.height += BORDER_GRAB_AREA;
++                        box.y -= WGRAB;
++                        box.height += WGRAB;
+                     }
+ 
+                     if (isWindowCloseToWorkAreaEdge(Math::eDirection::DIRECTION_DOWN))
+-                        box.height += BORDER_GRAB_AREA;
++                        box.height += WGRAB;
+                 }
+                 if (HITBOX_SHRINK > 0 && w != LASTFOCUSED)
+                     box = box.copy().expand(-HITBOX_SHRINK);
+@@ -348,6 +351,18 @@
+ // window box, which is exactly what Hyprland's border-resize test (InputManager) wants.
+ // Without it the grab zone stayed around the flat box, which is not where the card's
+ // visible (inset) edges are, so a PiP could not be resized by its edges.
++int CViewHitTester::borderGrabExtend(PHLWINDOW window) const {
++    static auto      PEXTEND  = CConfigValue<Config::INTEGER>("general:extend_border_grab_area");
++    static auto      PTOUCH   = CConfigValue<Config::INTEGER>("general:touch_border_grab_area");
++    static auto      PPIPGRAB = CConfigValue<Config::INTEGER>("decoration:keystone_pip_grab");
++    Config::INTEGER  area     = *PEXTEND;
++    if (g_pInputManager && g_pInputManager->m_lastInputTouch)
++        area = std::max(area, sc<Config::INTEGER>(*PTOUCH));
++    if (window && window->m_ruleApplicator && window->m_ruleApplicator->m_tagKeeper.isTagged("pip", false))
++        area = std::max(area, sc<Config::INTEGER>(*PPIPGRAB));
++    return sc<int>(area);
++}
++
+ Vector2D CViewHitTester::keystoneUnwarpGlobal(const Vector2D& pos, PHLWINDOW window) const {
+     if (!window || !window->m_ruleApplicator || !window->m_ruleApplicator->m_tagKeeper.isTagged("dock", false))
+         return pos;
+diff -ruN a/src/desktop/state/ViewHitTester.hpp b/src/desktop/state/ViewHitTester.hpp
+--- a/src/desktop/state/ViewHitTester.hpp
++++ b/src/desktop/state/ViewHitTester.hpp
+@@ -27,6 +27,11 @@
+         // the trapezoid. Non-dock windows get the plain flat coord (no behaviour change).
+         Vector2D               keystoneSurfaceLocal(const Vector2D& pos, PHLWINDOW window) const;
+         Vector2D               keystoneUnwarpGlobal(const Vector2D& pos, PHLWINDOW window) const;
++        // resize_on_border's extend_border_grab_area for this window: widened for a dock PiP
++        // (decoration:keystone_pip_grab) and while the last input was touch
++        // (general:touch_border_grab_area). Every border test uses it, so the hit test, the
++        // cursor icon and the press (mouse, pen, touch) agree on one zone.
++        int                    borderGrabExtend(PHLWINDOW window) const;
+         SP<CWLSurfaceResource> layerPopupSurfaceAt(const Vector2D& pos, PHLMONITOR monitor, Vector2D* surfaceCoords, PHLLS* layerFound) const;
+         SP<CWLSurfaceResource> layerPopupSurfaceAt(const Vector2D& pos, const std::vector<PHLLSREF>* layerSurfaces, Vector2D* surfaceCoords, PHLLS* layerFound) const;
+         SP<CWLSurfaceResource> layerSurfaceAt(const Vector2D& pos, std::vector<PHLLSREF>* layerSurfaces, Vector2D* surfaceCoords, PHLLS* layerFound,
+diff -ruN a/src/managers/input/InputManager.cpp b/src/managers/input/InputManager.cpp
+--- a/src/managers/input/InputManager.cpp
++++ b/src/managers/input/InputManager.cpp
+@@ -922,9 +922,6 @@
+     const auto  PASS              = g_pKeybindManager->onMouseEvent(e, mouse);
+     static auto PFOLLOWMOUSE      = CConfigValue<Config::INTEGER>("input:follow_mouse");
+     static auto PRESIZEONBORDER   = CConfigValue<Config::INTEGER>("general:resize_on_border");
+-    static auto PBORDERSIZE       = CConfigValue<Config::INTEGER>("general:border_size");
+-    static auto PBORDERGRABEXTEND = CConfigValue<Config::INTEGER>("general:extend_border_grab_area");
+-    const auto  BORDER_GRAB_AREA  = *PRESIZEONBORDER ? *PBORDERSIZE + *PBORDERGRABEXTEND : 0;
+ 
+     if (!PASS && !*PPASSMOUSE)
+         return;
+@@ -938,14 +935,9 @@
+     // clicking on border triggers resize
+     // TODO detect click on LS properly
+     if (*PRESIZEONBORDER && !g_pSessionLockManager->isSessionLocked() && !m_lastFocusOnLS && e.state == WL_POINTER_BUTTON_STATE_PRESSED && (!w || !w->isX11OverrideRedirect())) {
+-        if (w && !Fullscreen::controller()->isFullscreen(w)) {
+-            const CBox real = w->geometricBox(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
+-            const CBox grab = {real.x - BORDER_GRAB_AREA, real.y - BORDER_GRAB_AREA, real.width + 2 * BORDER_GRAB_AREA, real.height + 2 * BORDER_GRAB_AREA};
+-
+-            if ((grab.containsPoint(mouseCoords) && (!real.containsPoint(mouseCoords) || w->isInCurvedCorner(mouseCoords.x, mouseCoords.y))) && !w->hasPopupAt(mouseCoords)) {
+-                g_pKeybindManager->resizeWithBorder(e);
+-                return;
+-            }
++        if (isOnResizeBorder(w, mouseCoords)) {
++            g_pKeybindManager->resizeWithBorder(e);
++            return;
+         }
+     }
+ 
+@@ -996,6 +988,48 @@
+     }
+ }
+ 
++bool CInputManager::isOnResizeBorder(PHLWINDOW w, const Vector2D& coords) {
++    static auto PRESIZEONBORDER = CConfigValue<Config::INTEGER>("general:resize_on_border");
++    static auto PBORDERSIZE     = CConfigValue<Config::INTEGER>("general:border_size");
++    if (!*PRESIZEONBORDER || !w || w->isX11OverrideRedirect() || Fullscreen::controller()->isFullscreen(w))
++        return false;
++
++    const int  AREA = sc<int>(*PBORDERSIZE) + Desktop::viewState()->hitTest().borderGrabExtend(w);
++    const CBox real = w->geometricBox(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
++    const CBox grab = {real.x - AREA, real.y - AREA, real.width + 2 * AREA, real.height + 2 * AREA};
++    // dock keystone: test in the card's unwarped frame, so the grab zone follows the
++    // drawn trapezoid's edges rather than the flat box (identity for other windows)
++    const auto MC = Desktop::viewState()->hitTest().keystoneUnwarpGlobal(coords, w);
++
++    return grab.containsPoint(MC) && (!real.containsPoint(MC) || w->isInCurvedCorner(MC.x, MC.y)) && !w->hasPopupAt(coords);
++}
++
++bool CInputManager::beginBorderResizeAt(const Vector2D& coords) {
++    // callers have just refocus()ed at coords, so a layer surface there (a bar, a panel)
++    // shows up here and takes the press instead
++    if (g_pSessionLockManager->isSessionLocked() || !m_foundLSToFocus.expired() || g_layoutManager->dragController()->target())
++        return false;
++
++    const auto w = Desktop::viewState()->hitTest().windowAt(coords, Desktop::View::ALLOW_FLOATING | Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS);
++    if (!isOnResizeBorder(w, coords))
++        return false;
++
++    // the drag starts from the cursor, and changeMouseBindMode finds the window there
++    Pointer::mgr()->warpTo(coords);
++    CKeybindManager::changeMouseBindMode(MBIND_RESIZE);
++    return g_layoutManager->dragController()->target() != nullptr;
++}
++
++void CInputManager::borderResizeMoveTo(const Vector2D& coords) {
++    Pointer::mgr()->warpTo(coords);
++    g_layoutManager->moveMouse(coords);
++}
++
++void CInputManager::endBorderResize() {
++    if (g_layoutManager->dragController()->target())
++        CKeybindManager::changeMouseBindMode(MBIND_INVALID);
++}
++
+ void CInputManager::processMouseDownKill(const IPointer::SButtonEvent& e) {
+     switch (e.state) {
+         case WL_POINTER_BUTTON_STATE_PRESSED: {
+@@ -2206,7 +2240,7 @@
+         return;
+     }
+ 
+-    static auto PEXTENDBORDERGRAB = CConfigValue<Config::INTEGER>("general:extend_border_grab_area");
++    const int   EXTENDBORDERGRAB  = Desktop::viewState()->hitTest().borderGrabExtend(w); // PiP / touch aware
+     const int   BORDERSIZE        = w->getRealBorderSize();
+     const int   ROUNDING          = w->rounding();
+ 
+@@ -2216,8 +2250,8 @@
+     const auto           mouseCoords      = Desktop::viewState()->hitTest().keystoneUnwarpGlobal(getMouseCoordsInternal(), w);
+     CBox                 box              = w->getWindowMainSurfaceBox();
+     eBorderIconDirection direction        = BORDERICON_NONE;
+-    CBox                 boxFullGrabInput = {box.x - *PEXTENDBORDERGRAB - BORDERSIZE, box.y - *PEXTENDBORDERGRAB - BORDERSIZE, box.width + 2 * (*PEXTENDBORDERGRAB + BORDERSIZE),
+-                                             box.height + 2 * (*PEXTENDBORDERGRAB + BORDERSIZE)};
++    CBox                 boxFullGrabInput = {box.x - EXTENDBORDERGRAB - BORDERSIZE, box.y - EXTENDBORDERGRAB - BORDERSIZE, box.width + 2 * (EXTENDBORDERGRAB + BORDERSIZE),
++                                             box.height + 2 * (EXTENDBORDERGRAB + BORDERSIZE)};
+ 
+     if (w->hasPopupAt(mouseCoords))
+         direction = BORDERICON_NONE;
+diff -ruN a/src/managers/input/InputManager.hpp b/src/managers/input/InputManager.hpp
+--- a/src/managers/input/InputManager.hpp
++++ b/src/managers/input/InputManager.hpp
+@@ -144,6 +144,16 @@
+     void               onTouchUp(ITouch::SUpEvent);
+     void               onTouchMove(ITouch::SMotionEvent);
+ 
++    // resize_on_border for pen and touch, which never reach processMouseDownNormal's
++    // border press: the same keystone-aware zone test, then the same MBIND_RESIZE drag,
++    // driven by the cursor (pen) or the touch point warped onto it (touch).
++    bool               isOnResizeBorder(PHLWINDOW w, const Vector2D& coords);
++    bool               beginBorderResizeAt(const Vector2D& coords);
++    void               borderResizeMoveTo(const Vector2D& coords);
++    void               endBorderResize();
++    std::optional<int32_t> m_touchBorderResizeID; // the touch driving a border resize
++    bool               m_tabletBorderResize = false;
++
+     void               onSwipeBegin(IPointer::SSwipeBeginEvent);
+     void               onSwipeEnd(IPointer::SSwipeEndEvent);
+     void               onSwipeUpdate(IPointer::SSwipeUpdateEvent);
+diff -ruN a/src/managers/input/Tablets.cpp b/src/managers/input/Tablets.cpp
+--- a/src/managers/input/Tablets.cpp
++++ b/src/managers/input/Tablets.cpp
+@@ -202,6 +202,20 @@
+     if (e.in)
+         refocus();
+ 
++    // resize_on_border for the pen: a tip on a window's border grab zone starts the same
++    // resize a mouse press there would, and the tip never reaches the client. The tool is
++    // not marked down, so onTabletAxis keeps calling simulateMouseMovement(), which is what
++    // feeds the drag; tip up ends it.
++    if (e.in && beginBorderResizeAt(getMouseCoordsInternal())) {
++        m_tabletBorderResize = true;
++        return;
++    }
++    if (!e.in && m_tabletBorderResize) {
++        m_tabletBorderResize = false;
++        endBorderResize();
++        return;
++    }
++
+     refocusTablet(PTAB, PTOOL, true);
+ 
+     if (e.in)
+diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
+--- a/src/managers/input/Touch.cpp
++++ b/src/managers/input/Touch.cpp
+@@ -73,6 +73,14 @@
+         }
+     }
+ 
++    // resize_on_border for touch: a finger landing on a window's border grab zone (wider
++    // than the mouse's, general:touch_border_grab_area) resizes it like a mouse drag there.
++    // One finger at a time; it never reaches the client, and other fingers are unaffected.
++    if (!m_touchBorderResizeID && beginBorderResizeAt(TOUCH_COORDS)) {
++        m_touchBorderResizeID = e.touchID;
++        return;
++    }
++
+     // could have abovelock surface, thus only use lock if no ls found
+     if (g_pSessionLockManager->isSessionLocked() && m_foundLSToFocus.expired()) {
+         m_touchData.touchFocusLockSurface = g_pSessionLockManager->getSessionLockSurfaceForMonitor(PMONITOR->m_id);
+@@ -129,6 +137,12 @@
+     if (info.cancelled)
+         return;
+ 
++    if (m_touchBorderResizeID && *m_touchBorderResizeID == e.touchID) {
++        m_touchBorderResizeID.reset();
++        endBorderResize();
++        return;
++    }
++
+     if (g_pUnifiedWorkspaceSwipe->isGestureInProgress()) {
+         // If there was a swipe from this finger, end it.
+         if (e.touchID == g_pUnifiedWorkspaceSwipe->m_touchID)
+@@ -156,6 +170,11 @@
+     if (info.cancelled)
+         return;
+ 
++    if (m_touchBorderResizeID && *m_touchBorderResizeID == e.touchID) {
++        borderResizeMoveTo(m_touchData.lastTouchPos);
++        return;
++    }
++
+     if (g_pUnifiedWorkspaceSwipe->isGestureInProgress()) {
+         // Do nothing if this is using a different finger.
+         if (e.touchID != g_pUnifiedWorkspaceSwipe->m_touchID)

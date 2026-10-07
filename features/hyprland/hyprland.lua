@@ -421,7 +421,7 @@ hl.window_rule({ match = { class = "^(Waydroid)$" }, scrolling_width = 1.0 })
 -- ...and scale-to-fit. Waydroid's Android display has a fixed size and never
 -- follows the window's, so any other size -- a narrower column, a side-dock
 -- card, PiP -- would crop it. The `fit` tag makes the patched renderer
--- (trapezoid.patch, CWindow::fitTransform) draw it scaled down to the window
+-- (patches/keystone/02-scale-to-fit.patch, CWindow::fitTransform) draw it scaled down to the window
 -- box instead, aspect kept, with input mapped back. Dock and PiP cards are
 -- fitted anyway; on stock Hyprland the tag is inert.
 hl.window_rule({ match = { class = "^(Waydroid)$" }, tag = "+fit" })
@@ -698,7 +698,7 @@ hl.bind(mod .. " + J", function() HyprFocusOrWorkspace("down") end, { repeating 
 -- The touchpad's 4-finger vertical swipe, same behaviour as Mod+J/K -- walk the column,
 -- change workspace at its end -- and INTERACTIVE where it changes workspace. Decided as
 -- the swipe begins: mid-column it steps focus on release (discrete, like the key); at the
--- column's end hl.gesture_handoff("workspace") (trapezoid.patch) gives the rest of the
+-- column's end hl.gesture_handoff("workspace") (patches/keystone/06-gesture-handoff.patch) gives the rest of the
 -- swipe to Hyprland's built-in workspace swipe, which follows the fingers.
 -- gestures.workspace_swipe_use_r / _create_new in the config table above make that
 -- swipe step into empty workspaces, like the key's "+1"/"-1".

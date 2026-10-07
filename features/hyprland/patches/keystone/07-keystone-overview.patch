@@ -1,0 +1,345 @@
+Dock keystone: mission-control overview (expo), from the upstream patch. A 5-finger
+gesture (`overview` action, in both config front-ends) or hl.dsp.overview() toggles
+it: ksOverviewToggle() collects every mapped, non-pinned window across all
+workspaces; while active, renderMonitor() draws the live workspace, then
+renderOverview() as an overlay -- the wallpaper dimmed, each window's live surface
+texture in a grid tile (texture-direct, since off-workspace windows render blank
+through renderWindow, but their last committed buffer is kept). A click jumps to the
+tile's workspace, focuses it and closes. Direct scanout and the solitary-client fast
+path are off while it is up.
+
+diff -ruN a/src/config/legacy/ConfigManager.cpp b/src/config/legacy/ConfigManager.cpp
+--- a/src/config/legacy/ConfigManager.cpp
++++ b/src/config/legacy/ConfigManager.cpp
+@@ -53,6 +53,7 @@
+ #include "../../managers/input/trackpad/gestures/WorkspaceSwipeGesture.hpp"
+ #include "../../managers/input/trackpad/gestures/ResizeGesture.hpp"
+ #include "../../managers/input/trackpad/gestures/MoveGesture.hpp"
++#include "../../managers/input/trackpad/gestures/OverviewGesture.hpp"
+ #include "../../managers/input/trackpad/gestures/SpecialWorkspaceGesture.hpp"
+ #include "../../managers/input/trackpad/gestures/CloseGesture.hpp"
+ #include "../../managers/input/trackpad/gestures/FloatGesture.hpp"
+@@ -1986,6 +1987,8 @@
+         result = g_pTrackpadGestures->addGesture(makeUnique<CResizeTrackpadGesture>(), fingerCount, direction, modMask, deltaScale, disableInhibit);
+     else if (data[startDataIdx] == "move")
+         result = g_pTrackpadGestures->addGesture(makeUnique<CMoveTrackpadGesture>(), fingerCount, direction, modMask, deltaScale, disableInhibit);
++    else if (data[startDataIdx] == "overview") // dock keystone mission-control toggle (my.sidedock)
++        result = g_pTrackpadGestures->addGesture(makeUnique<COverviewTrackpadGesture>(), fingerCount, direction, modMask, deltaScale, disableInhibit);
+     else if (data[startDataIdx] == "special")
+         result =
+             g_pTrackpadGestures->addGesture(makeUnique<CSpecialWorkspaceGesture>(std::string{data[startDataIdx + 1]}), fingerCount, direction, modMask, deltaScale, disableInhibit);
+diff -ruN a/src/config/lua/bindings/LuaBindingsConfigRules.cpp b/src/config/lua/bindings/LuaBindingsConfigRules.cpp
+--- a/src/config/lua/bindings/LuaBindingsConfigRules.cpp
++++ b/src/config/lua/bindings/LuaBindingsConfigRules.cpp
+@@ -37,6 +37,7 @@
+ #include "../../../managers/input/trackpad/gestures/FullscreenGesture.hpp"
+ #include "../../../managers/input/trackpad/gestures/LuaFunctionGesture.hpp"
+ #include "../../../managers/input/trackpad/gestures/MoveGesture.hpp"
++#include "../../../managers/input/trackpad/gestures/OverviewGesture.hpp"
+ #include "../../../managers/input/trackpad/gestures/ResizeGesture.hpp"
+ #include "../../../managers/input/trackpad/gestures/SpecialWorkspaceGesture.hpp"
+ #include "../../../managers/input/trackpad/gestures/WorkspaceSwipeGesture.hpp"
+@@ -947,6 +948,8 @@
+             result = g_pTrackpadGestures->addGesture(makeUnique<CResizeTrackpadGesture>(), fingerCount, direction, modMask, deltaScale, disableInhibit);
+         else if (action == "move")
+             result = g_pTrackpadGestures->addGesture(makeUnique<CMoveTrackpadGesture>(), fingerCount, direction, modMask, deltaScale, disableInhibit);
++        else if (action == "overview") // dock keystone mission-control toggle (my.sidedock)
++            result = g_pTrackpadGestures->addGesture(makeUnique<COverviewTrackpadGesture>(), fingerCount, direction, modMask, deltaScale, disableInhibit);
+         else if (action == "special")
+             result = g_pTrackpadGestures->addGesture(makeUnique<CSpecialWorkspaceGesture>(workspaceName), fingerCount, direction, modMask, deltaScale, disableInhibit);
+         else if (action == "close")
+diff -ruN a/src/config/lua/bindings/LuaBindingsDispatchers.cpp b/src/config/lua/bindings/LuaBindingsDispatchers.cpp
+--- a/src/config/lua/bindings/LuaBindingsDispatchers.cpp
++++ b/src/config/lua/bindings/LuaBindingsDispatchers.cpp
+@@ -14,6 +14,7 @@
+ #include "../../../devices/IKeyboard.hpp"
+ #include "../../../desktop/rule/windowRule/WindowRule.hpp"
+ #include "config/shared/actions/ConfigActions.hpp"
++#include "../../../render/Renderer.hpp" // dock keystone overview: g_pHyprRenderer->ksOverviewToggle()
+ 
+ using namespace Config;
+ using namespace Config::Lua;
+@@ -335,6 +336,19 @@
+     return 1;
+ }
+ 
++// Dock keystone (my.sidedock): toggle the mission-control overview from a keybind, since
++// 5-finger trackpad gestures don't fire on many touchpads. Bound via hl.dsp.overview().
++static int dsp_overview(lua_State* L) {
++    if (g_pHyprRenderer)
++        g_pHyprRenderer->ksOverviewToggle();
++    return Internal::checkResult(L, CA::SActionResult{});
++}
++
++static int hlOverview(lua_State* L) {
++    lua_pushcclosure(L, dsp_overview, 0);
++    return 1;
++}
++
+ static int hlForceIdle(lua_State* L) {
+     auto timeout = Check::number(L, 1);
+     if (!timeout)
+@@ -1408,6 +1422,7 @@
+         Internal::setFn(L, "event", hlEvent);
+         Internal::setFn(L, "global", hlGlobal);
+         Internal::setFn(L, "force_renderer_reload", hlForceRendererReload);
++        Internal::setFn(L, "overview", hlOverview); // dock keystone mission-control toggle (my.sidedock)
+         Internal::setFn(L, "force_idle", hlForceIdle);
+         Internal::setFn(L, "release_input_capture", hlReleaseInputCapture);
+         Internal::setFn(L, "focus", hlFocus);
+diff -ruN a/src/managers/input/InputManager.cpp b/src/managers/input/InputManager.cpp
+--- a/src/managers/input/InputManager.cpp
++++ b/src/managers/input/InputManager.cpp
+@@ -809,6 +809,15 @@
+ 
+     m_lastCursorMovement.reset();
+ 
++    // Dock keystone overview (mission control): while the overlay is up, a press selects the
++    // thumbnail under the cursor (focuses that window) and closes -- it must not fall through to
++    // normal window/button handling. (Release after the close processes normally; harmless.)
++    if (g_pHyprRenderer && g_pHyprRenderer->m_ksOverviewActive) {
++        if (e.state == WL_POINTER_BUTTON_STATE_PRESSED)
++            g_pHyprRenderer->ksOverviewSelectAt(getMouseCoordsInternal());
++        return;
++    }
++
+     if (e.state == WL_POINTER_BUTTON_STATE_PRESSED) {
+         m_currentlyHeldButtons.push_back(e.button);
+     } else {
+diff -ruN a/src/managers/input/trackpad/gestures/OverviewGesture.cpp b/src/managers/input/trackpad/gestures/OverviewGesture.cpp
+--- a/src/managers/input/trackpad/gestures/OverviewGesture.cpp
++++ b/src/managers/input/trackpad/gestures/OverviewGesture.cpp
+@@ -0,0 +1,20 @@
++#include "OverviewGesture.hpp"
++
++#include "../../../../render/Renderer.hpp"
++
++// Toggle on gesture begin, so a single 5-finger swipe (either direction) opens or closes the
++// overview immediately -- the "5-finger transitions" feel. update/end are intentionally no-ops
++// (v1 has no live-drag reveal). The snapshot + render + close all live in the renderer.
++void COverviewTrackpadGesture::begin(const ITrackpadGesture::STrackpadGestureBegin& e) {
++    ITrackpadGesture::begin(e);
++    if (g_pHyprRenderer)
++        g_pHyprRenderer->ksOverviewToggle();
++}
++
++void COverviewTrackpadGesture::update(const ITrackpadGesture::STrackpadGestureUpdate&) {
++    ;
++}
++
++void COverviewTrackpadGesture::end(const ITrackpadGesture::STrackpadGestureEnd&) {
++    ;
++}
+diff -ruN a/src/managers/input/trackpad/gestures/OverviewGesture.hpp b/src/managers/input/trackpad/gestures/OverviewGesture.hpp
+--- a/src/managers/input/trackpad/gestures/OverviewGesture.hpp
++++ b/src/managers/input/trackpad/gestures/OverviewGesture.hpp
+@@ -0,0 +1,19 @@
++#pragma once
++
++#include "ITrackpadGesture.hpp"
++
++#include "../../../../desktop/DesktopTypes.hpp"
++
++// Dock keystone (my.sidedock, trapezoid.patch): a 5-finger gesture that toggles the mission-
++// control overview (expo). Registered as the "overview" gesture action in both config
++// front-ends (legacy ConfigManager + Lua LuaBindingsConfigRules). Mirrors the local
++// Move/Float gesture patch; the actual work lives in CHyprRenderer::ksOverviewToggle().
++class COverviewTrackpadGesture : public ITrackpadGesture {
++  public:
++    COverviewTrackpadGesture()          = default;
++    virtual ~COverviewTrackpadGesture() = default;
++
++    virtual void begin(const ITrackpadGesture::STrackpadGestureBegin& e);
++    virtual void update(const ITrackpadGesture::STrackpadGestureUpdate& e);
++    virtual void end(const ITrackpadGesture::STrackpadGestureEnd& e);
++};
+diff -ruN a/src/render/Renderer.cpp b/src/render/Renderer.cpp
+--- a/src/render/Renderer.cpp
++++ b/src/render/Renderer.cpp
+@@ -2082,7 +2082,9 @@
+ 
+     // tearing and DS first
+     bool       shouldTear              = pMonitor->updateTearing();
+-    const bool canAttemptDirectScanout = pMonitor->canAttemptDirectScanoutFast();
++    // Dock keystone overview (mission control): never direct-scanout a client buffer while
++    // the overview overlay is up, or it would bypass the compositor and hide the thumbnails.
++    const bool canAttemptDirectScanout = !(m_ksOverviewActive || m_ksOverviewProgress > 0.001f) && pMonitor->canAttemptDirectScanoutFast();
+ 
+     if (canAttemptDirectScanout) {
+         if (pMonitor->attemptDirectScanout()) {
+@@ -2168,7 +2170,9 @@
+ 
+     bool renderCursor = true;
+ 
+-    if (pMonitor->m_solitaryClient && (!finalDamage.empty() || *PSOLDAMAGE))
++    // Dock keystone overview: the solitary-client fast path renders only the one fullscreen
++    // window and skips the workspace -- bypass it while the overview overlay is up.
++    if (!(m_ksOverviewActive || m_ksOverviewProgress > 0.001f) && pMonitor->m_solitaryClient && (!finalDamage.empty() || *PSOLDAMAGE))
+         renderWindow(pMonitor->m_solitaryClient.lock(), pMonitor, NOW, false, RENDER_PASS_MAIN /* solitary = no popups */);
+     else if (!finalDamage.empty()) {
+         if (pMonitor->isMirror()) {
+@@ -2180,6 +2184,11 @@
+         } else {
+             CBox renderBox = {0, 0, sc<int>(pMonitor->m_pixelSize.x), sc<int>(pMonitor->m_pixelSize.y)};
+             renderWorkspace(pMonitor, pMonitor->m_activeWorkspace, NOW, renderBox);
++            // Mission-control overview: an OVERLAY on the live workspace -- dim the real wallpaper
++            // and draw every window as a scaled snapshot tile (incl. ones on OTHER workspaces).
++            // Kept rendering through the close fade (progress > 0) so it isn't a hard cut.
++            if ((m_ksOverviewActive || m_ksOverviewProgress > 0.001F) && pMonitor == Desktop::focusState()->monitor())
++                renderOverview(pMonitor);
+             renderLockscreen(pMonitor, NOW, renderBox);
+ 
+             // render IME even above the lockscreen - allow the user to use it to potentially input stuff on it.
+@@ -3232,6 +3241,128 @@
+     return PFRAMEBUFFER;
+ }
+ 
++// ======================= Dock keystone: mission-control overview (expo) =======================
++// trapezoid.patch (my.sidedock). SUPER+E -> ksOverviewToggle() collects EVERY mapped, non-pinned
++// window across ALL workspaces. While active, renderMonitor() draws the live workspace then calls
++// renderOverview() as an OVERLAY: dim the real wallpaper + draw each window's live surface TEXTURE
++// into a grid tile. Texture-direct, NOT a renderWindow snapshot: off-workspace windows render
++// blank through renderWindow (their workspace is slid off-screen AND its alpha is 0), but the last
++// committed buffer texture is retained, so drawing it directly works for any workspace -- and it's
++// live. A click (ksOverviewSelectAt) jumps to the tile's workspace + focuses it, then closes.
++void IHyprRenderer::ksOverviewToggle() {
++    m_ksOverviewActive = !m_ksOverviewActive;
++    if (m_ksOverviewActive) {
++        m_ksOverviewTiles.clear();
++        for (auto const& w : Desktop::windowState()->windows()) {
++            if (!w || !w->m_isMapped || w->isHidden())
++                continue;
++            if (w->m_pinned) // the side-dock & pinned overlays are always on screen -- skip them
++                continue;
++            SKsOverviewTile tile;
++            tile.window = w;
++            m_ksOverviewTiles.emplace_back(std::move(tile));
++        }
++        if (m_ksOverviewTiles.empty())
++            m_ksOverviewActive = false;
++    }
++    // on close, tiles are kept until the fade-out finishes (renderOverview clears them)
++    for (auto const& m : State::monitorState()->monitors())
++        damageMonitor(m);
++}
++
++void IHyprRenderer::renderOverview(PHLMONITOR pMonitor) {
++    // Step the open/close fade (per frame; a frame is requested below while animating). The
++    // live workspace was already drawn by renderMonitor, so this is an OVERLAY: dim it + tiles.
++    const float STEP = 0.08F;
++    if (m_ksOverviewActive)
++        m_ksOverviewProgress = std::min(1.0F, m_ksOverviewProgress + STEP);
++    else
++        m_ksOverviewProgress = std::max(0.0F, m_ksOverviewProgress - STEP);
++    if (!m_ksOverviewActive && m_ksOverviewProgress <= 0.001F) {
++        m_ksOverviewTiles.clear(); // fully closed -> free the snapshots
++        return;
++    }
++    const float    p  = m_ksOverviewProgress;
++    const float    e  = p * p * (3.0F - 2.0F * p); // smoothstep ease
++    const Vector2D MS = pMonitor->m_transformedSize;
++    // Dim the real desktop (which is rendered underneath) -- so the backdrop is the CURRENT
++    // wallpaper, darkened, not a flat black fill.
++    {
++        CRectPassElement::SRectData d;
++        d.box   = {0, 0, MS.x, MS.y};
++        d.color = CHyprColor(0.0F, 0.0F, 0.0F, 0.72F * e);
++        m_renderPass.add(makeUnique<CRectPassElement>(d));
++    }
++    const int N = sc<int>(m_ksOverviewTiles.size());
++    if (N > 0) {
++        const int   cols  = std::max(1, sc<int>(std::ceil(std::sqrt(sc<float>(N)))));
++        const int   rows  = std::max(1, sc<int>(std::ceil(sc<float>(N) / sc<float>(cols))));
++        const float cellW = sc<float>(MS.x) / sc<float>(cols);
++        const float cellH = sc<float>(MS.y) / sc<float>(rows);
++        CRegion     fakeDamage{0, 0, sc<int>(MS.x), sc<int>(MS.y)};
++        for (int i = 0; i < N; ++i) {
++            auto&      tile = m_ksOverviewTiles[i];
++            const auto win  = tile.window.lock();
++            if (!win)
++                continue;
++            const auto wls  = win->wlSurface();
++            const auto surf = wls ? wls->resource() : nullptr;
++            if (!surf || !surf->m_current.texture) // no live buffer -> nothing to show
++                continue;
++            const int      cx   = i % cols;
++            const int      cy   = i / cols;
++            const float    padX = cellW * 0.04F, padY = cellH * 0.04F;
++            const CBox     cell{cx * cellW + padX, cy * cellH + padY, cellW - 2.F * padX, cellH - 2.F * padY};
++            // Aspect-fit the window into its cell using the window's logical dimensions.
++            const Vector2D wd = win->size(Desktop::View::IGeometric::GEOMETRIC_GOAL);
++            if (wd.x <= 0 || wd.y <= 0)
++                continue;
++            const float ar = sc<float>(wd.x) / sc<float>(wd.y);
++            float       tw = sc<float>(cell.w), th = tw / ar;
++            if (th > sc<float>(cell.h)) {
++                th = sc<float>(cell.h);
++                tw = th * ar;
++            }
++            const CBox box{cell.x + (sc<double>(cell.w) - tw) / 2.0, cell.y + (sc<double>(cell.h) - th) / 2.0, sc<double>(tw), sc<double>(th)};
++            tile.box = box; // for click hit-test
++            // Draw the window's LIVE surface texture straight into the tile -- works for any
++            // workspace (the last committed buffer is retained even when the window is hidden),
++            // and updates live. Alpha = the open/close fade.
++            CTexPassElement::SRenderData d;
++            d.tex    = surf->m_current.texture;
++            d.box    = box;
++            d.a      = e;
++            d.damage = fakeDamage;
++            m_renderPass.add(makeUnique<CTexPassElement>(std::move(d)));
++        }
++    }
++    // keep requesting frames until the fade settles
++    if ((m_ksOverviewActive && m_ksOverviewProgress < 1.0F) || (!m_ksOverviewActive && m_ksOverviewProgress > 0.0F))
++        damageMonitor(pMonitor);
++}
++
++bool IHyprRenderer::ksOverviewSelectAt(const Vector2D& coords) {
++    if (!m_ksOverviewActive)
++        return false;
++    const auto PMON = Desktop::focusState()->monitor();
++    if (PMON) {
++        const Vector2D p = (coords - PMON->m_position) * PMON->m_scale; // logical global -> physical monitor-local
++        for (auto& tile : m_ksOverviewTiles) {
++            if (!tile.box.containsPoint(p))
++                continue;
++            if (const auto win = tile.window.lock(); win) {
++                // the picked window may be on another workspace -> jump there, then focus it
++                if (const auto WS = win->m_workspace; WS && WS->m_monitor)
++                    WS->m_monitor->changeWorkspace(WS);
++                Desktop::focusState()->fullWindowFocus(win, Desktop::FOCUS_REASON_CLICK);
++            }
++            break;
++        }
++    }
++    ksOverviewToggle(); // begin the close (active -> false; tiles persist for the fade-out)
++    return true;
++}
++
+ void IHyprRenderer::renderFadeouts(PHLMONITOR monitor, Desktop::eFadeoutPlane plane, PHLWORKSPACE workspace) {
+     if (!monitor)
+         return;
+diff -ruN a/src/render/Renderer.hpp b/src/render/Renderer.hpp
+--- a/src/render/Renderer.hpp
++++ b/src/render/Renderer.hpp
+@@ -101,6 +101,20 @@
+         SP<IFramebuffer>                    makeSnapshotFB(WP<Desktop::View::CPopup>);
+         void                                renderFadeouts(PHLMONITOR monitor, Desktop::eFadeoutPlane plane, PHLWORKSPACE workspace = nullptr);
+         bool                                beginFullFakeRender(PHLMONITOR pMonitor, CRegion& damage, SP<IFramebuffer> fb);
++
++        // Dock keystone: mission-control overview / expo (my.sidedock, trapezoid.patch). A
++        // 5-finger gesture toggles it; renderMonitor() draws renderOverview() in its place; a
++        // click picks a tile. Snapshots captured on open, held here. See Renderer.cpp.
++        struct SKsOverviewTile {
++            PHLWINDOWREF window;
++            CBox         box; // on-screen tile rect (physical, monitor-local); set by renderOverview
++        };
++        bool                                m_ksOverviewActive   = false;
++        float                               m_ksOverviewProgress = 0.f; // open/close fade 0..1 (stepped per frame)
++        std::vector<SKsOverviewTile>        m_ksOverviewTiles;
++        void                                ksOverviewToggle();
++        void                                renderOverview(PHLMONITOR pMonitor);
++        bool                                ksOverviewSelectAt(const Vector2D& coords);
+         bool                                beginRenderToBuffer(PHLMONITOR pMonitor, CRegion& damage, SP<IHLBuffer> buffer, bool simple = false);
+         virtual void                        startRenderPass() {};
+         virtual void                        endRender(const std::function<void()>& renderingDoneCallback = {}) = 0;

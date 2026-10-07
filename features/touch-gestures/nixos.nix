@@ -59,7 +59,7 @@ in
         Finger count for the default gestures. lisgd does not grab the device,
         so one- and two-finger swipes would fire *in addition* to whatever the
         application does with them. Four, not three, since 2026-10-08: three
-        fingers on the touchscreen belong to the compositor (trapezoid.patch's
+        fingers on the touchscreen belong to the compositor (features/hyprland/patches/keystone/11-touchscreen-swipes.patch's
         3-finger double-tap-and-drag live move), whose drag lisgd would also
         read as a swipe -- and four matches the touchpad, where the vertical
         4-finger swipe walks the column and changes workspace too.

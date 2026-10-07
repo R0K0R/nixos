@@ -1,0 +1,89 @@
+Two Lua events, `input.touch.down` (point, touch id) and `input.tablet.tip` (point,
+after the cursor warp), so a config can react to finger and pen presses, which never
+pass through mouse binds (features/sidedock's click-to-front on a back card).
+
+diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.cpp
+--- a/src/config/lua/LuaEventHandler.cpp
++++ b/src/config/lua/LuaEventHandler.cpp
+@@ -8,6 +8,12 @@
+ 
+ #include "../../event/EventBus.hpp"
+ #include "../../desktop/state/FocusState.hpp"
++#include "../../state/MonitorState.hpp"
++#include "../../output/Monitor.hpp"
++#include "../../devices/ITouch.hpp"
++#include "../../devices/Tablet.hpp"
++#include "../../managers/input/InputManager.hpp"
++#include "../../managers/eventLoop/EventLoopManager.hpp"
+ #include <expected>
+ #include <vector>
+ 
+@@ -183,6 +189,39 @@
+             lua_pushinteger(L, keyEvent.state);
+         });
+     }));
++
++    // Touch and pen presses, as a global layout point {x, y} -- what hl.get_cursor_pos()
++    // gives for the mouse. Neither moves through the button path, so `mouse:272` binds
++    // never see them (features/sidedock's click-to-front on a back card needs both).
++    const auto pushPoint = [](lua_State* L, const Vector2D& p) {
++        lua_createtable(L, 0, 2);
++        lua_pushnumber(L, p.x);
++        lua_setfield(L, -2, "x");
++        lua_pushnumber(L, p.y);
++        lua_setfield(L, -2, "y");
++    };
++    m_listeners.push_back(bus()->m_events.input.touch.down.listen([this, pushPoint](const ITouch::SDownEvent& e, const SCallbackInfo& _) {
++        // same monitor choice as CInputManager::onTouchDown
++        auto PMONITOR = State::monitorState()->query().name(e.device && !e.device->m_boundOutput.empty() ? e.device->m_boundOutput : "").run();
++        PMONITOR      = PMONITOR ? PMONITOR : Desktop::focusState()->monitor();
++        if (!PMONITOR)
++            return;
++        const Vector2D POS = PMONITOR->m_position + e.pos * PMONITOR->m_size;
++        dispatch("input.touch.down", 2, [&](lua_State* L) {
++            pushPoint(L, POS);
++            lua_pushinteger(L, e.touchID);
++        });
++    }));
++    m_listeners.push_back(bus()->m_events.input.tablet.tip.listen([this, pushPoint](const CTablet::STipEvent& e, const SCallbackInfo& _) {
++        if (!e.in)
++            return;
++        // The tip event fires before the cursor is warped to the pen; report after it is.
++        // The lock dies with this handler (config reload), cancelling a pending call.
++        m_tabletTipLater = g_pEventLoopManager->doLaterLock([this, pushPoint] {
++            const Vector2D POS = g_pInputManager->getMouseCoordsInternal();
++            dispatch("input.tablet.tip", 1, [&](lua_State* L) { pushPoint(L, POS); });
++        });
++    }));
+ }
+ 
+ CLuaEventHandler::~CLuaEventHandler() {
+@@ -296,6 +335,8 @@
+         "hyprland.start",
+         "hyprland.shutdown",
+         "input.keyboard.key",
++        "input.touch.down",
++        "input.tablet.tip",
+     };
+     for (auto& kv : Event::bus()->m_events.plugin)
+         EVENTS.emplace(kv.first);
+diff -ruN a/src/config/lua/LuaEventHandler.hpp b/src/config/lua/LuaEventHandler.hpp
+--- a/src/config/lua/LuaEventHandler.hpp
++++ b/src/config/lua/LuaEventHandler.hpp
+@@ -18,6 +18,8 @@
+ #include <lua.h>
+ }
+ 
++struct SEventLoopDoLaterLock;
++
+ namespace Config::Lua {
+ 
+     // Manages hl.on() event subscriptions for a single Lua state lifetime.
+@@ -58,6 +60,7 @@
+         size_t                                                 m_dispatchDepth = 0;
+         std::vector<CHyprSignalListener>                       m_listeners;
+         std::unordered_map<std::string, CHyprSignalListener>   m_pluginListeners;
++        UP<SEventLoopDoLaterLock>                              m_tabletTipLater; // input.tablet.tip, after the cursor warp
+ 
+         static constexpr size_t                                MAX_DISPATCH_DEPTH = 32;
+ 

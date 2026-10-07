@@ -1,0 +1,320 @@
+Scale-to-fit (CWindow::fitTransform): a window tagged `fit`, and every dock card,
+whose client does not follow its configured size (Waydroid's fixed Android display)
+is drawn scaled into its box, aspect kept and centred, instead of cropped. Covers the
+surface tree's texture boxes and UVs, pointer / touch / tablet input (mapped back
+through the same scale; the letterbox margin is a miss) and commit damage (repaints
+the whole window). Inactive while the client's size matches, so well-behaved
+windows render 1:1 exactly as before.
+
+- A fitted window keeps its box below the client's minimum size: the commit-time
+  clamp, which grows a floating window about its centre, is skipped for it, since the
+  oversized surface is drawn scaled instead (it pushed a corner-parked PiP of Firefox
+  off the monitor).
+- A fitted/dock window never gets Hyprland's flat blur fill for a client smaller than
+  its box (it was unwarped and showed around a letterboxed Waydroid card).
+- A PiP (tag `pip`) is told it is decoration:keystone_pip_zoom (default 3) times its
+  box (realToReportSize), so the client lays out for a big virtual screen of the
+  box's own shape and scale-to-fit shrinks that into the box; the box can be resized.
+- A back dock card (tag `dockscale<P>`) is told the FRONT card's size, box / P%, and
+  drawn shrunk by scale-to-fit, so moving back in the pile never re-lays it out.
+
+diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.cpp
+--- a/src/config/values/ConfigValues.cpp
++++ b/src/config/values/ConfigValues.cpp
+@@ -212,6 +212,7 @@
+         MS<Float>("decoration:keystone_shadow_dx", "dock keystone: drop-shadow horizontal offset (px, + = right) for dock windows", 0.f, {.min = -400.f, .max = 400.f}),
+         MS<Float>("decoration:keystone_shadow_dy", "dock keystone: drop-shadow vertical offset (px, + = down) for dock windows", 0.f, {.min = -400.f, .max = 400.f}),
+         MS<Float>("decoration:keystone_shadow_alpha", "dock keystone: drop-shadow strength multiplier for dock windows", 1.f, {.min = 0.f, .max = 1.f}),
++        MS<Float>("decoration:keystone_pip_zoom", "dock PiP: the client is told it is this many times the PiP box (3 = a box a third of the screen lays out like fullscreen)", 3.f, {.min = 1.f, .max = 8.f}),
+         MS<Float>("decoration:keystone_parallax", "dock keystone: cursor-parallax lean strength (0 = off)", 0.f, {.min = 0.f, .max = 1.f}),
+         MS<Float>("decoration:active_opacity", "opacity of active windows.", 1, {.min = 0, .max = 1, .refresh = Supplementary::REFRESH_WINDOW_STATES}),
+         MS<Float>("decoration:inactive_opacity", "opacity of inactive windows.", 1, {.min = 0, .max = 1, .refresh = Supplementary::REFRESH_WINDOW_STATES}),
+diff -ruN a/src/desktop/state/ViewHitTester.cpp b/src/desktop/state/ViewHitTester.cpp
+--- a/src/desktop/state/ViewHitTester.cpp
++++ b/src/desktop/state/ViewHitTester.cpp
+@@ -269,7 +269,16 @@
+         return PPOPUP->wlSurface()->resource();
+     }
+ 
+-    auto [surf, local] = window->wlSurface()->resource()->at(pos - window->position(Desktop::View::IGeometric::GEOMETRIC_GOAL), true);
++    Vector2D ksRel = pos - window->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
++    // scale-to-fit: window-box coords -> the client's unscaled surface-tree coords; the
++    // letterbox margin around the scaled content is a miss
++    if (const auto FIT = window->fitTransform(); FIT.active) {
++        ksRel = (ksRel - FIT.offset) / FIT.scale;
++        const Vector2D CONTENT = window->wlSurface()->resource()->m_current.size;
++        if (ksRel.x < 0 || ksRel.y < 0 || ksRel.x > CONTENT.x || ksRel.y > CONTENT.y)
++            return nullptr;
++    }
++    auto [surf, local] = window->wlSurface()->resource()->at(ksRel, true);
+     if (surf) {
+         surfaceLocal = local;
+         return surf;
+@@ -301,10 +310,15 @@
+ 
+     CBox geom = window->m_xdgSurface->m_current.geometry;
+ 
++    // scale-to-fit: undo the window's scale before taking the surface offset
++    Vector2D rel = pos - window->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
++    if (const auto FIT = window->fitTransform(); FIT.active)
++        rel = (rel - FIT.offset) / FIT.scale;
++
+     if (std::get<1>(iterData) == Vector2D{-1337, -1337})
+-        return pos - window->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
++        return rel;
+ 
+-    return pos - window->position(Desktop::View::IGeometric::GEOMETRIC_GOAL) - std::get<1>(iterData) + Vector2D{geom.x, geom.y};
++    return rel - std::get<1>(iterData) + Vector2D{geom.x, geom.y};
+ }
+ 
+ SP<CWLSurfaceResource> CViewHitTester::layerPopupSurfaceAt(const Vector2D& pos, PHLMONITOR monitor, Vector2D* surfaceCoords, PHLLS* layerFound) const {
+diff -ruN a/src/desktop/view/Subsurface.cpp b/src/desktop/view/Subsurface.cpp
+--- a/src/desktop/view/Subsurface.cpp
++++ b/src/desktop/view/Subsurface.cpp
+@@ -193,6 +193,9 @@
+     const auto COORDS = coordsGlobal();
+ 
+     g_pHyprRenderer->damageSurface(m_wlSurface->resource(), COORDS.x, COORDS.y);
++    // scale-to-fit (CWindow::fitTransform): that damage is unscaled; repaint the window
++    if (const auto W = m_windowParent.lock(); W && W->fitTransform().active)
++        g_pHyprRenderer->damageWindow(W);
+ 
+     if (m_popupParent && !m_popupParent->inert() && m_popupParent->wlSurface())
+         m_popupParent->recheckTree();
+diff -ruN a/src/desktop/view/Window.cpp b/src/desktop/view/Window.cpp
+--- a/src/desktop/view/Window.cpp
++++ b/src/desktop/view/Window.cpp
+@@ -1683,6 +1683,36 @@
+ }
+ 
+ Vector2D CWindow::realToReportSize() {
++    // side-dock PiP (tag `pip`): tell the client it is keystone_pip_zoom times the PiP box,
++    // so it lays out for a big virtual screen of the box's own shape (default 3: a box a
++    // third of the screen lays out like fullscreen), and scale-to-fit (fitTransform, which
++    // every dock/pip card gets) shrinks that layout into the box, filling it. Resizing the
++    // box -- or making it tall -- reshapes the layout with it; a larger zoom shrinks text.
++    // side-dock BACK cards (tag `dockscale<P>`, P = the card's size in % of the front card,
++    // set by features/sidedock): tell the client the FRONT card's size -- box / P% -- so it
++    // never re-lays out when it moves back in the pile, and scale-to-fit (fitTransform)
++    // draws it shrunk. The shrink is only apparent, as for Waydroid.
++    if (!m_isX11 && m_ruleApplicator && m_ruleApplicator->m_tagKeeper.isTagged("dock", false) && !m_ruleApplicator->m_tagKeeper.isTagged("pip", false)) {
++        for (auto const& t : m_ruleApplicator->m_tagKeeper.getTags()) {
++            std::string s = t;
++            if (!s.empty() && s.back() == '*')
++                s.pop_back();
++            if (s.size() > 9 && s.starts_with("dockscale") && std::all_of(s.begin() + 9, s.end(), [](char c) { return c >= '0' && c <= '9'; })) {
++                const int P = std::stoi(s.substr(9));
++                if (P > 0 && P < 100)
++                    return (m_realSize->goal() * (100.0 / P)).round();
++                break;
++            }
++        }
++    }
++
++    if (!m_isX11 && m_ruleApplicator && m_ruleApplicator->m_tagKeeper.isTagged("pip", false)) {
++        static auto PPIPZOOM = CConfigValue<Config::FLOAT>("decoration:keystone_pip_zoom");
++        const auto  BOX      = m_realSize->goal();
++        if (BOX.x > 0 && BOX.y > 0)
++            return (BOX * std::clamp(sc<double>(*PPIPZOOM), 1.0, 8.0)).round();
++    }
++
+     if (!m_isX11)
+         return m_realSize->goal().clamp(Vector2D{0, 0}, Math::VECTOR2D_MAX);
+ 
+@@ -1858,6 +1888,28 @@
+     return nullptr;
+ }
+ 
++CWindow::SFitTransform CWindow::fitTransform() const {
++    SFitTransform fit;
++    if (m_isX11 || !m_isMapped || !m_ruleApplicator || !m_wlSurface || !m_wlSurface->resource())
++        return fit;
++    const auto& TAGS = m_ruleApplicator->m_tagKeeper;
++    if (!TAGS.isTagged("fit", false) && !TAGS.isTagged("dock", false))
++        return fit;
++
++    const Vector2D CONTENT = m_wlSurface->resource()->m_current.size;
++    const Vector2D BOX     = size(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
++    if (CONTENT.x < 1 || CONTENT.y < 1 || BOX.x < 1 || BOX.y < 1)
++        return fit;
++    // within a pixel or so: the client follows its size, draw it 1:1 as usual
++    if (std::abs(CONTENT.x - BOX.x) < 1.5 && std::abs(CONTENT.y - BOX.y) < 1.5)
++        return fit;
++
++    fit.active = true;
++    fit.scale  = std::min(BOX.x / CONTENT.x, BOX.y / CONTENT.y);
++    fit.offset = (BOX - CONTENT * fit.scale) / 2.0;
++    return fit;
++}
++
+ Vector2D CWindow::getReportedSize() {
+     if (m_isX11)
+         return m_reportedSize;
+@@ -2739,7 +2791,13 @@
+     if (m_isX11)
+         m_reportedSize = m_pendingReportedSize;
+ 
+-    if (!m_isX11 && !Fullscreen::controller()->isFullscreen(m_self.lock()) && m_isFloating) {
++    // scale-to-fit windows (`fit` / side-dock and PiP cards, fitTransform) keep the size the
++    // compositor gave them even below the client's minimum: the oversized surface is drawn
++    // scaled into the box instead. Growing the box (about its centre) pushed a corner-parked
++    // PiP of e.g. Firefox off the monitor.
++    const bool FITTED = m_ruleApplicator && (m_ruleApplicator->m_tagKeeper.isTagged("fit", false) || m_ruleApplicator->m_tagKeeper.isTagged("dock", false));
++
++    if (!m_isX11 && !Fullscreen::controller()->isFullscreen(m_self.lock()) && m_isFloating && !FITTED) {
+         const auto MINSIZE = m_xdgSurface->m_toplevel->layoutMinSize();
+         const auto MAXSIZE = m_xdgSurface->m_toplevel->layoutMaxSize();
+ 
+@@ -2753,6 +2811,9 @@
+     const auto PMONITOR = m_monitor.lock();
+ 
+     g_pHyprRenderer->damageSurface(wlSurface()->resource(), m_realPosition->goal().x, m_realPosition->goal().y, m_isX11 ? 1.0 / m_X11SurfaceScaledBy : 1.0);
++    // scale-to-fit: the surface damage above is in unscaled coordinates; repaint the window
++    if (fitTransform().active)
++        g_pHyprRenderer->damageWindow(m_self.lock());
+ 
+     if (!m_isX11) {
+         m_subsurfaceHead->recheckDamageForSubsurfaces();
+diff -ruN a/src/desktop/view/Window.hpp b/src/desktop/view/Window.hpp
+--- a/src/desktop/view/Window.hpp
++++ b/src/desktop/view/Window.hpp
+@@ -420,6 +420,18 @@
+         bool                              priorityFocus();
+         SP<CWLSurfaceResource>            getSolitaryResource();
+         Vector2D                          getReportedSize();
++
++        // Scale-to-fit (window tag `fit`, and every side-dock card -- tag `dock`): a
++        // client that does not follow its configured size (Waydroid's fixed Android
++        // display) is drawn scaled into the window box, aspect kept and centred,
++        // instead of cropped or centred at 1:1. Input is mapped back through the same
++        // transform. Inactive (scale 1) while the client's size already matches.
++        struct SFitTransform {
++            bool     active = false;
++            double   scale  = 1.0;
++            Vector2D offset; // of the scaled content inside the window box, logical px
++        };
++        SFitTransform fitTransform() const;
+         std::optional<Vector2D>           calculateExpression(const std::string& s);
+         std::optional<Vector2D>           calculateExpression(const Math::SExpressionVec2& expr);
+         std::optional<Vector2D>           minSize();
+diff -ruN a/src/managers/input/InputManager.hpp b/src/managers/input/InputManager.hpp
+--- a/src/managers/input/InputManager.hpp
++++ b/src/managers/input/InputManager.hpp
+@@ -60,6 +60,7 @@
+     PHLLSREF                touchFocusLS;
+     WP<CWLSurfaceResource>  touchFocusSurface;
+     Vector2D                touchSurfaceOrigin;
++    double                  touchSurfaceScale = 1.0; // scale-to-fit window: global delta -> surface delta
+     Vector2D                lastTouchPos;
+ };
+ 
+diff -ruN a/src/managers/input/Tablets.cpp b/src/managers/input/Tablets.cpp
+--- a/src/managers/input/Tablets.cpp
++++ b/src/managers/input/Tablets.cpp
+@@ -86,6 +86,15 @@
+ 
+     auto local = CURSORPOS - BOX->pos();
+ 
++    // scale-to-fit (CWindow::fitTransform): BOX is the unscaled surface box, so map the
++    // cursor through the window's scale first, as the pointer path does
++    if (WINDOW) {
++        if (const auto FIT = WINDOW->fitTransform(); FIT.active) {
++            const auto WPOS = WINDOW->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
++            local           = (CURSORPOS - WPOS - FIT.offset) / FIT.scale - (BOX->pos() - WPOS);
++        }
++    }
++
+     if (WINDOW && WINDOW->m_isX11)
+         local = local * WINDOW->m_X11SurfaceScaledBy;
+ 
+diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
+--- a/src/managers/input/Touch.cpp
++++ b/src/managers/input/Touch.cpp
+@@ -88,6 +88,7 @@
+     }
+ 
+     Vector2D local;
++    m_touchData.touchSurfaceScale = 1.0;
+ 
+     if (m_touchData.touchFocusLockSurface) {
+         local                          = TOUCH_COORDS - PMONITOR->m_position;
+@@ -98,7 +99,10 @@
+             m_touchData.touchSurfaceOrigin = m_touchData.touchFocusWindow->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
+         } else {
+             Desktop::viewState()->hitTest().windowSurfaceAt(TOUCH_COORDS, m_touchData.touchFocusWindow.lock(), local);
+-            m_touchData.touchSurfaceOrigin = TOUCH_COORDS - local;
++            // scale-to-fit: local is in the client's unscaled coords, the origin in global ones
++            const auto FIT                 = m_touchData.touchFocusWindow->fitTransform();
++            m_touchData.touchSurfaceScale  = FIT.active ? FIT.scale : 1.0;
++            m_touchData.touchSurfaceOrigin = TOUCH_COORDS - local * m_touchData.touchSurfaceScale;
+         }
+     } else if (!m_touchData.touchFocusLS.expired()) {
+         PHLLS    foundSurf;
+@@ -194,7 +198,7 @@
+     } else if (validMapped(m_touchData.touchFocusWindow)) {
+         const auto PMONITOR     = m_touchData.touchFocusWindow->m_monitor.lock();
+         const auto TOUCH_COORDS = PMONITOR->m_position + (e.pos * PMONITOR->m_size);
+-        auto       local        = TOUCH_COORDS - m_touchData.touchSurfaceOrigin;
++        auto       local        = (TOUCH_COORDS - m_touchData.touchSurfaceOrigin) / m_touchData.touchSurfaceScale;
+         if (m_touchData.touchFocusWindow->m_isX11)
+             local = local * m_touchData.touchFocusWindow->m_X11SurfaceScaledBy;
+ 
+diff -ruN a/src/render/ElementRenderer.cpp b/src/render/ElementRenderer.cpp
+--- a/src/render/ElementRenderer.cpp
++++ b/src/render/ElementRenderer.cpp
+@@ -75,7 +75,9 @@
+             }
+         }
+ 
+-        if (projSize != Vector2D{} && fixMisalignedFSV1) {
++        if (pWindow && pWindow->fitTransform().active) {
++            // scale-to-fit: the whole buffer maps onto the (scaled) texture box
++        } else if (projSize != Vector2D{} && fixMisalignedFSV1) {
+             // instead of nearest_neighbor (we will repeat / skip)
+             // just cut off / expand surface
+             const Vector2D PIXELASUV   = Vector2D{1, 1} / pSurface->m_current.bufferSize;
+diff -ruN a/src/render/Renderer.cpp b/src/render/Renderer.cpp
+--- a/src/render/Renderer.cpp
++++ b/src/render/Renderer.cpp
+@@ -674,7 +674,14 @@
+         if ((pWindow->m_isX11 && *PXWLUSENN) || pWindow->m_ruleApplicator->nearestNeighbor().valueOrDefault())
+             renderdata.useNearestNeighbor = true;
+ 
+-        if (!TRANSFORMEDWINDOW && pWindow->wlSurface()->small() && !pWindow->wlSurface()->m_fillIgnoreSmall && renderdata.blur) {
++        // Not for scale-to-fit / side-dock windows (fitTransform): this fills the window's FLAT
++        // box with blur behind a client smaller than it, which suits content centred at 1:1 --
++        // but theirs is drawn scaled, and inside a keystone trapezoid, which this rect is not
++        // warped to. It showed as a frosted flat rectangle around a letterboxed Waydroid card,
++        // toggling with focus as Waydroid's size ack came and went.
++        const bool FITCARD = pWindow->m_ruleApplicator &&
++            (pWindow->m_ruleApplicator->m_tagKeeper.isTagged("fit", false) || pWindow->m_ruleApplicator->m_tagKeeper.isTagged("dock", false));
++        if (!TRANSFORMEDWINDOW && !FITCARD && pWindow->wlSurface()->small() && !pWindow->wlSurface()->m_fillIgnoreSmall && renderdata.blur) {
+             CBox wb = {renderdata.pos.x - pMonitor->m_position.x, renderdata.pos.y - pMonitor->m_position.y, renderdata.w, renderdata.h};
+             wb.scale(pMonitor->m_scale).round();
+             CRectPassElement::SRectData data;
+diff -ruN a/src/render/pass/SurfacePassElement.cpp b/src/render/pass/SurfacePassElement.cpp
+--- a/src/render/pass/SurfacePassElement.cpp
++++ b/src/render/pass/SurfacePassElement.cpp
+@@ -28,6 +28,22 @@
+     auto         PSURFACE                    = Desktop::View::CWLSurface::fromResource(m_data.surface);
+ 
+     CBox         windowBox;
++
++    // Scale-to-fit (CWindow::fitTransform): the window's surface tree -- main surface
++    // and subsurfaces, not popups (squishOversized is false only for those) -- is drawn
++    // scaled about the window origin into the window box, so nothing is cropped.
++    if (m_data.pWindow && m_data.surface && m_data.squishOversized && !m_data.popup) {
++        if (const auto FIT = m_data.pWindow->fitTransform(); FIT.active) {
++            const Vector2D SURFSIZE = m_data.surface->m_current.size;
++            windowBox      = {sc<int>(outputX) + m_data.pos.x + FIT.offset.x + m_data.localPos.x * FIT.scale,
++                              sc<int>(outputY) + m_data.pos.y + FIT.offset.y + m_data.localPos.y * FIT.scale, std::max(SURFSIZE.x * FIT.scale, 2.0),
++                              std::max(SURFSIZE.y * FIT.scale, 2.0)};
++            m_cachedTexBox = windowBox;
++            m_texBoxCached = true;
++            return windowBox;
++        }
++    }
++
+     if (m_data.surface && m_data.mainSurface) {
+         windowBox = {sc<int>(outputX) + m_data.pos.x + m_data.localPos.x, sc<int>(outputY) + m_data.pos.y + m_data.localPos.y, m_data.w, m_data.h};
+ 

@@ -1,0 +1,256 @@
+Touchscreen swipes as trackpad gestures (Touch.cpp): the touch path synthesizes swipe
+begin/update/end into g_pTrackpadGestures, so the configured hl.gesture entries run
+live for touch as on the touchpad. Four fingers whose centroid travels
+gestures:touch_swipe_threshold px become a 4-finger swipe; a 3-finger tap followed by
+three fingers down again (gestures:touch_move_tap_ms, touch_move_gap_ms,
+touch_move_slop) becomes a 3-finger swipe -- the `move` gesture, dock card swipe
+included. The delta is the centroid's logical-px travel times
+gestures:touch_swipe_scale, in finger direction like libinput's; the gesture's
+touches are cancelled for the client, a lift ends it, another finger cancels it.
+
+diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.cpp
+--- a/src/config/values/ConfigValues.cpp
++++ b/src/config/values/ConfigValues.cpp
+@@ -416,6 +416,11 @@
+          */
+ 
+         MS<Int>("gestures:workspace_swipe_distance", "in px, the distance of the touchpad gesture", 300, {.min = 0, .max = 2000}),
++        MS<Int>("gestures:touch_move_tap_ms", "touchscreen 3-finger double-tap-drag: the first tap's fingers must all lift within this many ms", 250, {.min = 50, .max = 2000}),
++        MS<Int>("gestures:touch_move_gap_ms", "touchscreen 3-finger double-tap-drag: the second touch must start within this many ms of the tap", 400, {.min = 50, .max = 2000}),
++        MS<Int>("gestures:touch_move_slop", "touchscreen 3-finger double-tap-drag: a tap finger may move at most this many px", 20, {.min = 0, .max = 200}),
++        MS<Float>("gestures:touch_swipe_scale", "touchscreen swipes fed to the trackpad gestures: logical px of finger travel -> trackpad delta", 1.f, {.min = 0.1f, .max = 10.f}),
++        MS<Int>("gestures:touch_swipe_threshold", "touchscreen 4-finger swipe: centroid travel in px before it becomes a gesture (and the touches are taken from the client)", 15, {.min = 1, .max = 200}),
+         MS<String>("gestures:dock_swipe_exec", "side dock: command run with l/r/u/d when the move gesture starts on a dock-tagged window", STRVAL_EMPTY),
+         MS<Bool>("gestures:workspace_swipe_touch", "enable workspace swiping from the edge of a touchscreen", false),
+         MS<Bool>("gestures:workspace_swipe_invert", "invert the direction (touchpad only)", true),
+diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
+--- a/src/managers/input/Touch.cpp
++++ b/src/managers/input/Touch.cpp
+@@ -13,6 +13,104 @@
+ #include "../../protocols/core/DataDevice.hpp"
+ #include "debug/log/Logger.hpp"
+ #include "UnifiedWorkspaceSwipeGesture.hpp"
++#include "trackpad/TrackpadGestures.hpp"
++
++#include <algorithm>
++#include <optional>
++#include <unordered_map>
++#include <vector>
++
++/*
++  Touchscreen swipes as TRACKPAD gestures: the touch path synthesizes swipe begin /
++  update / end into g_pTrackpadGestures, the same dispatcher libinput's touchpad swipes
++  feed, so the configured hl.gesture entries run live for touch exactly as they do on the
++  touchpad. The delta is the touch centroid's travel in logical px (times
++  gestures:touch_swipe_scale), in finger direction like libinput's -- with the default
++  gestures:workspace_swipe_invert the content follows the fingers. Two entries:
++
++  - 4 fingers: once exactly four are down and their centroid has travelled
++    gestures:touch_swipe_threshold px -> a 4-finger swipe (the column walk with its
++    workspace handoff, scroll_move).
++  - 3 fingers, double-tap-then-drag: a 3-finger tap (all up within
++    gestures:touch_move_tap_ms, none moved past gestures:touch_move_slop), then three
++    fingers down again within gestures:touch_move_gap_ms -> a 3-finger swipe from the
++    third finger on, i.e. the `move` gesture: a window follows the fingers, a side-dock
++    card swipes and gestures:dock_swipe_exec settles it. A plain 3-finger swipe stays
++    the client's.
++
++  From the start the gesture's touches are cancelled for the client. Lifting a finger
++  ends it; another finger landing cancels it.
++*/
++namespace {
++    struct STouchSwipeState {
++        struct SPoint {
++            Vector2D start, last;
++        };
++        std::unordered_map<int32_t, SPoint> points; // every finger currently down
++        size_t                              maxFingers = 0;
++        uint32_t                            seqStartMs = 0;
++        bool                                seqMoved   = false;
++        bool                                seqGesture = false; // this sequence became a gesture
++        std::optional<uint32_t>             lastTapEndMs;       // a qualifying 3-finger tap ended
++
++        bool                                pending4 = false; // four down, waiting for the threshold
++        Vector2D                            pendingStart;
++
++        bool                                active  = false;
++        uint32_t                            fingers = 0;
++        std::vector<int32_t>                ids;         // the gesture's fingers, swallowed until lifted
++        std::optional<int32_t>              undelivered; // the finger that started it never reached the client
++        Vector2D                            lastCentroid;
++    };
++    STouchSwipeState g_touchSwipe;
++
++    bool isGestureFinger(int32_t id) {
++        return std::ranges::find(g_touchSwipe.ids, id) != g_touchSwipe.ids.end();
++    }
++
++    Vector2D centroidOf(const std::vector<int32_t>& ids) {
++        Vector2D sum;
++        size_t   n = 0;
++        for (const auto id : ids) {
++            if (const auto it = g_touchSwipe.points.find(id); it != g_touchSwipe.points.end()) {
++                sum = sum + it->second.last;
++                n++;
++            }
++        }
++        return n ? sum / sc<double>(n) : g_touchSwipe.lastCentroid;
++    }
++
++    std::vector<int32_t> allDown() {
++        std::vector<int32_t> ids;
++        for (auto const& [id, _] : g_touchSwipe.points)
++            ids.push_back(id);
++        return ids;
++    }
++
++    void swipeUpdate(uint32_t timeMs, const Vector2D& delta) {
++        static auto                       PSCALE = CConfigValue<Config::FLOAT>("gestures:touch_swipe_scale");
++        const IPointer::SSwipeUpdateEvent UPDATE = {.timeMs = timeMs, .fingers = g_touchSwipe.fingers, .delta = delta * sc<double>(*PSCALE)};
++        g_pTrackpadGestures->gestureUpdate(UPDATE);
++    }
++
++    // take the current fingers from the client and start a synthetic swipe
++    void swipeBegin(uint32_t timeMs, uint32_t fingers, const Vector2D& centroid) {
++        auto& S        = g_touchSwipe;
++        S.active       = true;
++        S.seqGesture   = true;
++        S.pending4     = false;
++        S.fingers      = fingers;
++        S.ids          = allDown();
++        S.lastCentroid = centroid;
++        g_pSeatManager->sendTouchCancel();
++        g_pTrackpadGestures->gestureBegin(IPointer::SSwipeBeginEvent{.timeMs = timeMs, .fingers = fingers});
++    }
++
++    void swipeEnd(uint32_t timeMs, bool cancelled) {
++        g_touchSwipe.active = false;
++        g_pTrackpadGestures->gestureEnd(IPointer::SSwipeEndEvent{.timeMs = timeMs, .cancelled = cancelled});
++    }
++}
+ 
+ void CInputManager::onTouchDown(ITouch::SDownEvent e) {
+     m_lastInputTouch = true;
+@@ -43,6 +141,43 @@
+ 
+     refocus(TOUCH_COORDS);
+ 
++    // touchscreen swipes as trackpad gestures (see the top of this file)
++    {
++        static auto PGAP = CConfigValue<Config::INTEGER>("gestures:touch_move_gap_ms");
++        auto&       S    = g_touchSwipe;
++        // a finger whose up never came (device cancel) must not wedge the tracking
++        if (!S.points.empty() && !S.active && e.timeMs - S.seqStartMs > 10000) {
++            S.points.clear();
++            S.ids.clear();
++            S.pending4 = false;
++        }
++        if (S.points.empty()) {
++            S.maxFingers = 0;
++            S.seqStartMs = e.timeMs;
++            S.seqMoved   = false;
++            S.seqGesture = false;
++        }
++        S.points[e.touchID] = {.start = TOUCH_COORDS, .last = TOUCH_COORDS};
++        S.maxFingers        = std::max(S.maxFingers, S.points.size());
++
++        if (S.active) { // another finger landing cancels a running gesture
++            swipeEnd(e.timeMs, true);
++        } else if (S.ids.empty() && !m_touchBorderResizeID && !g_pUnifiedWorkspaceSwipe->isGestureInProgress()) {
++            S.pending4 = S.points.size() == 4;
++            if (S.pending4)
++                S.pendingStart = centroidOf(allDown());
++
++            if (S.points.size() == 3 && S.lastTapEndMs && S.seqStartMs >= *S.lastTapEndMs && S.seqStartMs - *S.lastTapEndMs <= sc<uint32_t>(*PGAP)) {
++                S.lastTapEndMs.reset();
++                const auto C = centroidOf(allDown());
++                refocus(C); // the move acts on the focused window: the one under the fingers
++                swipeBegin(e.timeMs, 3, C);
++                S.undelivered = e.touchID;
++                return;
++            }
++        }
++    }
++
+     if (m_clickBehavior == CLICKMODE_KILL) {
+         IPointer::SButtonEvent e;
+         e.state = WL_POINTER_BUTTON_STATE_PRESSED;
+@@ -137,6 +272,42 @@
+     if (info.cancelled)
+         return;
+ 
++    // touchscreen swipes as trackpad gestures (see the top of this file)
++    {
++        static auto PTAP    = CConfigValue<Config::INTEGER>("gestures:touch_move_tap_ms");
++        auto&       S       = g_touchSwipe;
++        bool        swallow    = false;
++        const bool  wasGesture = isGestureFinger(e.touchID);
++        S.pending4             = false;
++        if (wasGesture) {
++            if (S.active) // lifting any of its fingers ends it
++                swipeEnd(e.timeMs, false);
++            std::erase(S.ids, e.touchID);
++        }
++        if (S.undelivered && *S.undelivered == e.touchID) {
++            S.undelivered.reset();
++            swallow = true; // the client never saw it go down
++        }
++        if (S.points.erase(e.touchID) && S.points.empty()) {
++            const bool TAP = S.maxFingers == 3 && !S.seqMoved && !S.seqGesture && e.timeMs - S.seqStartMs <= sc<uint32_t>(*PTAP);
++            if (TAP)
++                S.lastTapEndMs = e.timeMs;
++            else
++                S.lastTapEndMs.reset();
++        }
++        if (swallow)
++            return;
++        // a gesture's delivered fingers still go up: the client was cancelled, but the seat
++        // counts every delivered down (m_touchLocks) and must see its up. Nothing else --
++        // the touch workspace-swipe branch below keys on m_touchID, which a gesture's
++        // workspace handoff never set.
++        if (wasGesture) {
++            if (m_touchData.touchFocusSurface)
++                g_pSeatManager->sendTouchUp(e.timeMs, e.touchID);
++            return;
++        }
++    }
++
+     if (m_touchBorderResizeID && *m_touchBorderResizeID == e.touchID) {
+         m_touchBorderResizeID.reset();
+         endBorderResize();
+@@ -170,6 +341,35 @@
+     if (info.cancelled)
+         return;
+ 
++    // touchscreen swipes as trackpad gestures (see the top of this file)
++    {
++        static auto PSLOP      = CConfigValue<Config::INTEGER>("gestures:touch_move_slop");
++        static auto PTHRESHOLD = CConfigValue<Config::INTEGER>("gestures:touch_swipe_threshold");
++        auto&       S          = g_touchSwipe;
++        if (const auto it = S.points.find(e.touchID); it != S.points.end()) {
++            it->second.last = m_touchData.lastTouchPos;
++            if ((it->second.last - it->second.start).size() > sc<double>(*PSLOP))
++                S.seqMoved = true;
++        }
++        if (S.pending4 && S.points.size() == 4 && !g_pUnifiedWorkspaceSwipe->isGestureInProgress()) {
++            const auto C = centroidOf(allDown());
++            if ((C - S.pendingStart).size() > sc<double>(*PTHRESHOLD)) {
++                swipeBegin(e.timeMs, 4, S.pendingStart);
++                swipeUpdate(e.timeMs, C - S.lastCentroid); // the travel so far, so the dispatcher sees the direction
++                S.lastCentroid = C;
++                return;
++            }
++        }
++        if (isGestureFinger(e.touchID)) {
++            if (S.active) {
++                const auto C = centroidOf(S.ids);
++                swipeUpdate(e.timeMs, C - S.lastCentroid);
++                S.lastCentroid = C;
++            }
++            return; // cancelled for the client
++        }
++    }
++
+     if (m_touchBorderResizeID && *m_touchBorderResizeID == e.touchID) {
+         borderResizeMoveTo(m_touchData.lastTouchPos);
+         return;

@@ -20,7 +20,7 @@
   options.my.hyprland = {
     keystone.enable = lib.mkEnableOption ''
       EXPERIMENTAL per-window perspective-trapezoid rendering for windows tagged
-      "dock" (my.sidedock). Patches the compositor (./trapezoid.patch, from
+      "dock" (my.sidedock). Patches the compositor (./patches/keystone/, from
       sihooleebd/nixos): the texture vertex shaders honour a projective w, and
       renderTextureInternal post-multiplies a yaw homography into the projection
       for dock windows; every other window renders as before. Touches the same
@@ -110,9 +110,22 @@
             # which edits the same function.
             ./soft-apply-mark-blur-dirty.patch
           ]
-          # Perspective-trapezoid rendering for side-dock windows; see the
-          # keystone option. From sihooleebd/nixos (1d5e9bf).
-          ++ lib.optional config.my.hyprland.keystone.enable ./trapezoid.patch;
+          # Perspective-trapezoid rendering for side-dock windows and the dock's
+          # input/gesture support, as an ordered series (patches/keystone/README);
+          # see the keystone option. Rendering from sihooleebd/nixos (1d5e9bf).
+          ++ lib.optionals config.my.hyprland.keystone.enable [
+            ./patches/keystone/01-keystone-render.patch
+            ./patches/keystone/02-scale-to-fit.patch
+            ./patches/keystone/03-keystone-input.patch
+            ./patches/keystone/04-dock-move-gestures.patch
+            ./patches/keystone/05-dock-bounce-curves.patch
+            ./patches/keystone/06-gesture-handoff.patch
+            ./patches/keystone/07-keystone-overview.patch
+            ./patches/keystone/08-lua-touch-pen-events.patch
+            ./patches/keystone/09-special-recentre-exemption.patch
+            ./patches/keystone/10-touch-pen-border-resize.patch
+            ./patches/keystone/11-touchscreen-swipes.patch
+          ];
         });
       })
     ];

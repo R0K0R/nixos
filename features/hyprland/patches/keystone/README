@@ -1,0 +1,20 @@
+Hyprland patch series for the side dock (features/sidedock), applied in order by
+features/hyprland/nixos.nix under my.hyprland.keystone. Split 2026-10-08 from the
+single trapezoid.patch; applying 01..11 onto the same base gives byte-for-byte the
+tree trapezoid.patch did. Each patch's own header says what it does and why.
+
+Base: Hyprland 0.56.2 + nixpkgs' monitor-soft-apply-logical-size.patch + the other
+patches listed before this series in nixos.nix (layoutmanager-guard-null-space,
+gamma-refused-control-zombie, swipe-abandon-on-monitor-loss,
+soft-apply-mark-blur-dirty).
+
+Bisectability: every prefix was checked for references to identifiers a later patch
+introduces (none), but only the full series has been compiled. Known behavioural
+gap in a prefix: before 10, a mouse press on a dock card's border tests the flat
+box (03 makes only the hover cursor keystone-aware). Code comments inside the
+patched sources still say "trapezoid.patch" where they predate the split; the
+patches themselves must reproduce that source exactly.
+
+Maintaining: keep the patches applying in order. To change one, apply the series
+up to it on the base, edit, and regenerate it as the diff between consecutive
+trees, so later patches still apply without fuzz.
