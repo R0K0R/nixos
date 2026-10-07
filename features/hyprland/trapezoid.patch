@@ -25,6 +25,9 @@ A fitted window also keeps its box below the client's minimum size: the commit-
 time clamp, which grows a floating window about its centre, is skipped for it,
 since the oversized surface is drawn scaled instead (it pushed a corner-parked
 PiP of Firefox off the monitor).
+A PiP (tag `pip`) is told it is MONITOR-sized (realToReportSize), so the client
+lays out exactly as it would fullscreen and scale-to-fit shrinks that into the
+small PiP box, which has the monitor's aspect.
 Fourth, two dock-card render fixes on top of upstream's warp: the drop shadow is
 no longer clipped to the window's FLAT box (that left a shadow whose inner edge
 was the straight flat-box edge, not the trapezoid's; the shader's own cutout is
@@ -285,8 +288,24 @@ diff -ruN a/src/desktop/view/Subsurface.cpp c/src/desktop/view/Subsurface.cpp
          m_popupParent->recheckTree();
 diff -ruN a/src/desktop/view/Window.cpp c/src/desktop/view/Window.cpp
 --- a/src/desktop/view/Window.cpp	2026-10-05 19:57:04.449603878 +0900
-+++ c/src/desktop/view/Window.cpp	2026-10-07 10:11:01.789580320 +0900
-@@ -1858,6 +1858,28 @@
++++ c/src/desktop/view/Window.cpp	2026-10-07 14:37:35.542942487 +0900
+@@ -1683,6 +1683,15 @@
+ }
+ 
+ Vector2D CWindow::realToReportSize() {
++    // side-dock PiP (tag `pip`): tell the client it is MONITOR-sized, so it lays out exactly
++    // as it would fullscreen; the PiP box stays small and scale-to-fit (fitTransform, which
++    // every dock/pip card gets) shrinks that fullscreen layout into it. The box has the
++    // monitor's aspect (features/sidedock pip_place), so the shrink fills it exactly.
++    if (!m_isX11 && m_ruleApplicator && m_ruleApplicator->m_tagKeeper.isTagged("pip", false)) {
++        if (const auto PMONITOR = m_monitor.lock(); PMONITOR && PMONITOR->m_size.x > 0 && PMONITOR->m_size.y > 0)
++            return PMONITOR->m_size;
++    }
++
+     if (!m_isX11)
+         return m_realSize->goal().clamp(Vector2D{0, 0}, Math::VECTOR2D_MAX);
+ 
+@@ -1858,6 +1867,28 @@
      return nullptr;
  }
  
@@ -315,7 +334,7 @@ diff -ruN a/src/desktop/view/Window.cpp c/src/desktop/view/Window.cpp
  Vector2D CWindow::getReportedSize() {
      if (m_isX11)
          return m_reportedSize;
-@@ -2739,7 +2761,13 @@
+@@ -2739,7 +2770,13 @@
      if (m_isX11)
          m_reportedSize = m_pendingReportedSize;
  
@@ -330,7 +349,7 @@ diff -ruN a/src/desktop/view/Window.cpp c/src/desktop/view/Window.cpp
          const auto MINSIZE = m_xdgSurface->m_toplevel->layoutMinSize();
          const auto MAXSIZE = m_xdgSurface->m_toplevel->layoutMaxSize();
  
-@@ -2753,6 +2781,9 @@
+@@ -2753,6 +2790,9 @@
      const auto PMONITOR = m_monitor.lock();
  
      g_pHyprRenderer->damageSurface(wlSurface()->resource(), m_realPosition->goal().x, m_realPosition->goal().y, m_isX11 ? 1.0 / m_X11SurfaceScaledBy : 1.0);

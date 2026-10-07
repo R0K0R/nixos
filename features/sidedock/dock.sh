@@ -267,17 +267,14 @@ undock() {  # strip the dock shape/tag and return a window to the tiling area
 # old coordinates (off-screen after a landscape -> portrait turn).
 pip_place() {
   local a="$1"
-  # ~1/3 of the viewport wide, KEEPING the window's current aspect, parked bottom-right (right
-  # edge inset by HGAP so the keystone's flush right edge sits just off the screen edge).
-  local cw ch pw ph px py mw mh
-  read -r cw ch < <($J -r --arg a "$a" 'first(.[]|select(.address==$a))|"\(.size[0]) \(.size[1])"' <<<"$CLIENTS")
-  { [ -n "${cw:-}" ] && [ "$cw" -gt 0 ] 2>/dev/null; } || { cw=16; ch=9; }
-  # Fit the window's aspect INSIDE a small max box (~1/3 of the viewport each way) so a PiP is
-  # always a MINI card. Capping width alone left a tall window near full-height (= a dock card).
-  # min(mw/cw, mh/ch) via cross-multiply: whichever dimension is the tighter fit wins.
-  mw=$((W/3)); mh=$((H/3))
-  if [ $(( mw * ch )) -le $(( mh * cw )) ]; then pw=$mw; ph=$(( mw * ch / cw ));
-  else                                          ph=$mh; pw=$(( mh * cw / ch )); fi
+  # A third of the viewport each way, i.e. the SCREEN's aspect -- not the window's. The
+  # client is told it is monitor-sized (trapezoid.patch, realToReportSize for `pip`), so it
+  # lays out as it would fullscreen, and scale-to-fit shrinks that into this box, filling
+  # it exactly. (Following the window's own aspect gave every PiP a different shape, and a
+  # tall window a near-full-height "PiP".) Parked bottom-right, right edge inset by HGAP so
+  # the keystone's flush right edge sits just off the screen edge.
+  local pw ph px py
+  pw=$((W/3)); ph=$((H/3))
   px=$(( X0 + W - pw - HGAP )); py=$(( Y0 + H - ph - VGAP ))
   # Clear the min FIRST (a prior dock/pip lock could be larger than the new PiP size, which would
   # clamp the resize), then set max, resize down, and re-lock min == max at the PiP size.
@@ -331,6 +328,17 @@ geom; snap
 case "${1:-toggle}" in
   toggle)   # SUPER+S: show the pile if hidden, park it if shown
     if pile_shown; then hide_pile; else show_pile; fi ;;
+  settle)  # end of the interactive 4-finger touchpad swipe (sidedock/hyprland.lua), which has
+           # already dragged the cards part of the way: $2 = open | closed. Unlike show /
+           # hide this never skips, since mid-drag the pile is neither shown nor parked --
+           # it animates from wherever the fingers left the cards.
+    if [ "${2:-}" = open ]; then
+      show_pile
+    else
+      pile_shown && { cur="$(curfront)"; [ -n "$cur" ] && printf '%s' "$cur" >"$STATE"; }
+      park_all
+      dockws_hide
+    fi ;;
   show)     # directional gesture (3-finger swipe toward the dock): reveal the pile.
             # Idempotent -- a no-op if it is already shown, so repeated swipes don't flicker.
     pile_shown || show_pile ;;
