@@ -172,8 +172,11 @@ in
           chmod 0620 /run/waydroid-display
           while read -r cmd; do
             case "$cmd" in
-              off) waydroid shell -- input keyevent KEYCODE_SLEEP ;;
-              on)  waydroid shell -- input keyevent KEYCODE_WAKEUP ;;
+              # </dev/null: `waydroid shell` (lxc-attach) treats an inherited stdin as
+              # its terminal -- here the FIFO itself, which it left 0600 (and it could
+              # swallow the next queued command).
+              off) waydroid shell -- input keyevent KEYCODE_SLEEP </dev/null ;;
+              on)  waydroid shell -- input keyevent KEYCODE_WAKEUP </dev/null ;;
             esac
             chmod 0620 /run/waydroid-display
           done
