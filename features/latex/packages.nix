@@ -6,33 +6,28 @@
     # dvisvgm and asymptote are both kept (both pull in qt5.qtbase as a
     # runtime dep via wrap-qt5-apps-hook) since both are actually used here.
     #
-    # TODO: texlive.combine is deprecated and removed in nixpkgs 27.05 --
-    # port to texliveSmall.withPackages. The package set is explicit either
-    # way, so it is a mechanical translation; it changes the texlive
-    # derivation hash, so do it deliberately rather than mixed into another
-    # change.
-    (texlive.combine {
-      inherit (texlive)
-        scheme-small
-        graphics
-        amsmath
-        amsfonts
-        latexmk
-        geometry
-        hyperref
-        xcolor
-        booktabs
-        caption
-        enumitem
-        microtype
-        csquotes
-        pgf
-        biblatex
-        listings
-        dvisvgm
-        asymptote
-        ;
-    })
+    # texliveSmall.withPackages, not the deprecated texlive.combine (removed in
+    # nixpkgs 27.05). texliveSmall is scheme-small, so the set is unchanged;
+    # the derivation is new (2026-10-08) and rebuilds once.
+    (texliveSmall.withPackages (ps: with ps; [
+      graphics
+      amsmath
+      amsfonts
+      latexmk
+      geometry
+      hyperref
+      xcolor
+      booktabs
+      caption
+      enumitem
+      microtype
+      csquotes
+      pgf
+      biblatex
+      listings
+      dvisvgm
+      asymptote
+    ]))
     biber
   ];
 }

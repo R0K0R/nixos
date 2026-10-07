@@ -269,7 +269,18 @@ let
         pkg = p;
       }) (
         builtins.filter (p: p ? pname || p ? name) (
-          (pkg.buildInputs or [ ]) ++ (pkg.propagatedBuildInputs or [ ])
+          let
+            /*
+              nixpkgs' `nodejs` is a symlinkJoin wrapper whose every non-own
+              attribute -- buildInputs, propagatedBuildInputs, even drvAttrs --
+              is a lib.warn redirect to nodejs-slim's ("Use nodejs-slim.buildInputs
+              instead of nodejs.buildInputs" on every eval). Its first `paths`
+              entry IS nodejs-slim, so step to it: the same inputs the redirect
+              returned, without the warning.
+            */
+            src = if (pkg.pname or "") == "nodejs" && pkg ? paths && pkg.paths != [ ] then builtins.head pkg.paths else pkg;
+          in
+          (src.buildInputs or [ ]) ++ (src.propagatedBuildInputs or [ ])
         )
       );
   };

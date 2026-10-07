@@ -3,6 +3,17 @@
 
 let
   /*
+    make-emacs.nix marks native compilation `broken` when
+    `!(stdenv.buildPlatform.canExecute stdenv.hostPlatform)`, which is how it
+    rules out a real cross build. IntraISACross is cross only on paper: the
+    build machine (generic x86_64) runs meteorlake code fine and these Emacs
+    builds work, but canExecute compares the two platforms' gcc.arch and says
+    no -- so every build printed "emacs-pgtk ... is broken". Clear the flag
+    here. meta never reaches the derivation, so this changes no hash.
+  */
+  notBroken = e: e.overrideAttrs (old: { meta = (old.meta or { }) // { broken = false; }; });
+
+  /*
     Unstable `emacs-pgtk` + xwidgets, against whatever WebKit nixpkgs ships.
 
     This used to pin webkitgtk from nixos-22.11 (2.38), because Emacs's
@@ -13,7 +24,7 @@ let
     drew the last page over the first, neither of which reproduces on a
     current WebKit.
   */
-  emacsPgtkBase = (
+  emacsPgtkBase = notBroken (
     pkgs.emacs-pgtk.override {
       withNativeCompilation = true;
       withTreeSitter = true;
@@ -35,7 +46,7 @@ let
     terminal, and TREESIT_GRAMMAR_DIR (doom-config.nix) feeds the same
     Nix-provided grammars either way.
   */
-  emacsNox = (
+  emacsNox = notBroken (
     pkgs.emacs-nox.override {
       withNativeCompilation = true;
       withTreeSitter = true;
