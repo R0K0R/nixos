@@ -206,9 +206,9 @@ do
     return cv >= margin and cv <= 1 - margin
   end
 
-  hl.bind("mouse:272", function()
+  -- Bring the back card under point c to the front.
+  local function frontAt(c)
     pcall(function()
-      local c = hl.get_cursor_pos()
       local best, bestDepth
       for _, w in ipairs(hl.get_windows()) do
         if isDockWin(w) and not isPip(w) and not w.hidden
@@ -221,7 +221,14 @@ do
         hl.dispatch(hl.dsp.exec_cmd(dock .. " front " .. best.address))
       end
     end)
-  end, { non_consuming = true })
+  end
+
+  hl.bind("mouse:272", function() frontAt(hl.get_cursor_pos()) end, { non_consuming = true })
+  -- A finger or the pen press through the touch/tablet path, not the button one, so the
+  -- bind above never sees them; trapezoid.patch reports both as Lua events with the point.
+  -- pcall: a Hyprland without the patch rejects the unknown event names.
+  pcall(hl.on, "input.touch.down", function(p) frontAt(p) end)
+  pcall(hl.on, "input.tablet.tip", function(p) frontAt(p) end)
 
   -- Fullscreening a docked card or dragging one out breaks the cascade, so
   -- the existing SUPER+F and SUPER+drag binds (features/hyprland) are
