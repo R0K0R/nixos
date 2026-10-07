@@ -66,12 +66,10 @@ in
       type = lib.types.enum [ "normal" "left" "right" "inverted" ];
       default = "normal";
       description = ''
-        Screen orientation lisgd should assume, passed as `-o`.
-
-        Static, which is a real limitation on a convertible: this machine
-        autorotates via iio-hyprland, and lisgd will not follow. Gestures are
-        rotated with the panel until it returns to this orientation. Nothing
-        here fixes that; it is recorded so the behaviour is not a surprise.
+        Screen orientation lisgd assumes until a rotation has been recorded.
+        After that it follows the panel: a rotation hook (features/hyprland's
+        rotationHooks) records each new transform and restarts lisgd with the
+        matching `-o`, since lisgd only maps edges and directions at start-up.
       '';
     };
 
@@ -144,7 +142,38 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = lib.mkIf cfg.enable (let
+    /*
+      lisgd FOLLOWS THE ROTATION. It maps edges and swipe directions through its
+      orientation once, at start-up, so after an autorotate the right-edge gesture fired
+      from a different physical edge. So: a rotation hook records the new transform and
+      restarts the daemon, and this wrapper starts it with -o for the CURRENT transform.
+      Mapping as lisgd's own wl_output handler does (lisgd.c display_handle_geometry):
+      Hyprland/wl_output transform 1 (90 deg) is lisgd 3, transform 3 is lisgd 1. The
+      static `orientation` option is the fallback before any rotation was recorded.
+    */
+    staticOrientation = { normal = 0; right = 1; inverted = 2; left = 3; }.${cfg.orientation};
+    lisgdStart = pkgs.writeShellScript "lisgd-start" ''
+      t=""
+      [ -r "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/lisgd.transform" ] && t=$(cat "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/lisgd.transform")
+      [ -z "$t" ] && [ -r "''${XDG_STATE_HOME:-$HOME/.local/state}/hypr/transform-${config.my.desktop.primaryOutput}" ] \
+        && t=$(cat "''${XDG_STATE_HOME:-$HOME/.local/state}/hypr/transform-${config.my.desktop.primaryOutput}")
+      case "$t" in
+        1) o=3 ;; 3) o=1 ;; 2) o=2 ;; 0) o=0 ;;
+        *) o=${toString staticOrientation} ;;
+      esac
+      exec ${lib.escapeShellArgs [ (lib.getExe pkgs.lisgd) "-d" cfg.device ]} -o "$o" ${
+        lib.escapeShellArgs (lib.concatMap (g: [ "-g" g ]) (cfg.gestures ++ cfg.extraGestures))
+      }
+    '';
+    reorient = pkgs.writeShellScript "lisgd-reorient" ''
+      printf '%s\n' "$1" > "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/lisgd.transform"
+      systemctl --user try-restart lisgd.service
+    '';
+  in {
+    # Run on every screen rotation (features/hyprland), with the new transform.
+    my.hyprland.rotationHooks = [ reorient ];
+
     # /dev/input/event* is root:input 0660.
     users.users.${cfg.user}.extraGroups = [ "input" ];
 
@@ -159,16 +188,7 @@ in
 
       serviceConfig = {
         Type = "simple";
-        ExecStart = lib.escapeShellArgs (
-          [
-            (lib.getExe pkgs.lisgd)
-            "-d"
-            cfg.device
-            "-o"
-            cfg.orientation
-          ]
-          ++ lib.concatMap (g: [ "-g" g ]) (cfg.gestures ++ cfg.extraGestures)
-        );
+        ExecStart = lisgdStart;
         Restart = "on-failure";
         RestartSec = 5;
       };
@@ -176,5 +196,5 @@ in
       # hyprctl, and whatever else a gesture command reaches for.
       path = [ pkgs.hyprland ];
     };
-  };
+  });
 }
