@@ -56,6 +56,11 @@
   # Safe to apply twice: bindkey and WORDCHARS are assignments, so an account
   # that gets this from both /etc/zshrc and its own rc is not harmed.
   interactiveInit = ''
+    # Case-insensitive completion, as fish does: either case matches either case
+    # (`doc<Tab>` finds Documents, `DOC<Tab>` finds docs). zstyle is read when
+    # completion runs, so its place relative to compinit does not matter.
+    zstyle ':completion:*' matcher-list 'm:{[:lower:][:upper:]}={[:upper:][:lower:]}'
+
     # Ctrl+left / Ctrl+right word movement. Spelled out rather than taken from
     # terminfo, which does not carry them: xterm-kitty's kLFT/kRIT are
     # \E[1;2D/C -- SHIFT+arrow, CSI modifier 2 -- and there is no ctrl entry.
