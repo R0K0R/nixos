@@ -156,6 +156,12 @@ hl.config({
   gestures = {
     workspace_swipe_touch = true,
     workspace_swipe_touch_invert = false,
+    -- The 4-finger swipe's interactive workspace part (hl.gesture further down):
+    -- `r` steps through workspace ids including empty ones (the default `m` walks only
+    -- workspaces that exist), and past the last one it creates the next -- the same
+    -- "+1 / -1" stepping as Mod+J/K and Page_Up/Down.
+    workspace_swipe_use_r = true,
+    workspace_swipe_create_new = true,
   },
 
   -- NEITHER general.col.* NOR group.col.* is set here, deliberately.
@@ -626,24 +632,18 @@ hl.bind(mod .. " + L", function() hl.dispatch(hl.dsp.layout("focus " .. HyprLayo
   out (ScrollingAlgorithm.cpp falls back to targetDatas.front()/back()
   unless general:no_focus_fallback), so a no-move signal is not readable.
 ]]
-function HyprFocusOrWorkspace(dir)
+-- Can focus move one window along the column in `dir` ("up"/"down"), rather than the
+-- column having ended? The decision half of HyprFocusOrWorkspace, shared with the
+-- touchpad gesture below, which needs it BEFORE acting.
+function HyprCanStepInColumn(dir)
   local down = dir == "down"
-  local function switchWorkspace()
-    hl.dispatch(hl.dsp.focus({ workspace = down and "+1" or "-1" }))
-  end
 
   local active = hl.get_active_window()
   -- Nothing focused (blank workspace) or floating: no column to walk.
-  if not active or active.floating or not active.workspace then
-    switchWorkspace()
-    return
-  end
+  if not active or active.floating or not active.workspace then return false end
 
   local wins = hl.get_workspace_windows(active.workspace.id)
-  if not wins then
-    switchWorkspace()
-    return
-  end
+  if not wins then return false end
 
   -- Tape running vertically (portrait): up/down is between columns,
   -- which are stacked rows now, so the edge is simply "no tiled window
@@ -651,19 +651,13 @@ function HyprFocusOrWorkspace(dir)
   -- differently from this one.
   local tape = hl.get_config("scrolling.direction")
   if tape == "down" or tape == "up" then
-    local beyond = false
     for _, w in ipairs(wins) do
       if w.mapped and not w.hidden and not w.floating and w.address ~= active.address
           and ((down and w.at.y > active.at.y + 4) or (not down and w.at.y < active.at.y - 4)) then
-        beyond = true
+        return true
       end
     end
-    if beyond then
-      hl.dispatch(hl.dsp.layout("focus " .. HyprLayoutFocusArg(down and "d" or "u")))
-    else
-      switchWorkspace()
-    end
-    return
+    return false
   end
 
   -- The focused window's column: tiled windows sharing its x, top down.
@@ -680,15 +674,20 @@ function HyprFocusOrWorkspace(dir)
   for i, w in ipairs(col) do
     if w.address == active.address then idx = i end
   end
-  if not idx then
-    switchWorkspace()
-    return
-  end
+  if not idx then return false end
+  return not ((down and idx == #col) or (not down and idx == 1))
+end
 
-  if (down and idx == #col) or (not down and idx == 1) then
-    switchWorkspace()
+-- One step of focus along the column (HyprCanStepInColumn has said there is one).
+function HyprStepInColumn(dir)
+  hl.dispatch(hl.dsp.layout("focus " .. HyprLayoutFocusArg(dir == "down" and "d" or "u")))
+end
+
+function HyprFocusOrWorkspace(dir)
+  if HyprCanStepInColumn(dir) then
+    HyprStepInColumn(dir)
   else
-    hl.dispatch(hl.dsp.layout("focus " .. HyprLayoutFocusArg(down and "d" or "u")))
+    hl.dispatch(hl.dsp.focus({ workspace = dir == "down" and "+1" or "-1" }))
   end
 end
 
@@ -696,22 +695,36 @@ end
 hl.bind(mod .. " + K", function() HyprFocusOrWorkspace("up") end, { repeating = true })
 hl.bind(mod .. " + J", function() HyprFocusOrWorkspace("down") end, { repeating = true })
 
--- The touchpad's 4-finger vertical swipe, same function as J/K: walk the column, then
--- change workspace at its end. Declared as a function rather than a string action
--- because only the Lua form takes a FUNCTION as the action; a plain function is
--- registered as the gesture's END callback (LuaFunctionGesture's legacy-end-only ctor),
--- so it fires once per completed swipe rather than continuously -- discrete, like the
--- keybind. Hyprland's built-in `workspace` gesture would follow the fingers, but it only
--- changes workspace, and a Lua gesture cannot hand over to it mid-swipe; the J/K
--- behaviour won (tried 2026-10-07 and reverted).
---
--- Swipe UP maps to "down" (focus down the column, then workspace +1),
--- matching both Mod+J and the touchscreen's DU spec in
--- features/touch-gestures.
-hl.gesture({ fingers = 4, direction = "up",
-  action = function() HyprFocusOrWorkspace("down") end })
-hl.gesture({ fingers = 4, direction = "down",
-  action = function() HyprFocusOrWorkspace("up") end })
+-- The touchpad's 4-finger vertical swipe, same behaviour as Mod+J/K -- walk the column,
+-- change workspace at its end -- and INTERACTIVE where it changes workspace. Decided as
+-- the swipe begins: mid-column it steps focus on release (discrete, like the key); at the
+-- column's end hl.gesture_handoff("workspace") (trapezoid.patch) gives the rest of the
+-- swipe to Hyprland's built-in workspace swipe, which follows the fingers.
+-- gestures.workspace_swipe_use_r / _create_new in the config table above make that
+-- swipe step into empty workspaces, like the key's "+1"/"-1".
+-- Swipe UP maps to "down" (focus down the column, then workspace +1), matching both
+-- Mod+J and the touchscreen's DU spec in features/touch-gestures.
+do
+  local step
+  hl.gesture({ fingers = 4, direction = "vertical", action = {
+    start = function(e)
+      local dir = (e and e.direction == "UP") and "down" or "up"
+      if HyprCanStepInColumn(dir) then
+        step = { column = dir }
+      elseif hl.gesture_handoff then
+        step = nil
+        hl.gesture_handoff("workspace")
+      else
+        step = { workspace = dir } -- stock Hyprland (no patch): the discrete switch
+      end
+    end,
+    finish = function()
+      if step and step.column then HyprStepInColumn(step.column)
+      elseif step and step.workspace then HyprFocusOrWorkspace(step.workspace) end
+      step = nil
+    end,
+  } })
+end
 hl.bind(mod .. " + Page_Down", hl.dsp.focus({ workspace = "-1" }))
 hl.bind(mod .. " + Page_Up", hl.dsp.focus({ workspace = "+1" }))
 hl.bind(mod .. " + CTRL + U", hl.dsp.window.move({ workspace = "-1", follow = true }))

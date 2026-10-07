@@ -171,6 +171,37 @@ do
   -- one-finger swipe in from the right edge).
   function SideDockToggle() hl.dispatch(hl.dsp.exec_cmd(dock .. " toggle")) end
 
+  -- Click a BACK card to bring it to the front. Back cards refuse focus (dock.sh sets
+  -- no_focus, so hovering one with focus-follows-mouse cannot shuffle the pile), so
+  -- the click is caught here instead: of the pile cards under the pointer, the one
+  -- nearest the front (lowest dockd<N> depth tag) wins; if that is a back card, dock.sh
+  -- re-lays the pile with it in front. non_consuming: the click still reaches whatever
+  -- window is under it, so every other click behaves exactly as before.
+  local function depthOf(w)
+    for _, t in ipairs(w.tags or {}) do
+      local n = t:match("^dockd(%d+)%*?$")
+      if n then return tonumber(n) end
+    end
+  end
+  hl.bind("mouse:272", function()
+    pcall(function()
+      local c = hl.get_cursor_pos()
+      local best, bestDepth
+      for _, w in ipairs(hl.get_windows()) do
+        if isDockWin(w) and not isPip(w) and not w.hidden
+           and w.workspace and w.workspace.name == "special:dock"
+           and c.x >= w.at.x and c.x < w.at.x + w.size.x
+           and c.y >= w.at.y and c.y < w.at.y + w.size.y then
+          local d = depthOf(w)
+          if d and (not bestDepth or d < bestDepth) then best, bestDepth = w, d end
+        end
+      end
+      if best and bestDepth > 0 then
+        hl.dispatch(hl.dsp.exec_cmd(dock .. " front " .. best.address))
+      end
+    end)
+  end, { non_consuming = true })
+
   -- Fullscreening a docked card or dragging one out breaks the cascade, so
   -- the existing SUPER+F and SUPER+drag binds (features/hyprland) are
   -- replaced by guarded versions. Hyprland APPENDS duplicate binds, hence
@@ -203,13 +234,7 @@ end
 
 -- The pile slides as one; give window moves an ease-out without overshoot.
 hl.curve("dockslide", { type = "bezier", points = { { 0.16, 1.0 }, { 0.3, 1.0 } } })
--- Showing the dock (dock.sh show_pile): ease-out with a gentle overshoot -- the cards run
--- slightly past their spot and settle. ONE curve for the whole slide-in: Hyprland reads an
--- animation's curve LIVE, so switching curves between staggered cards (an attempt at
--- damping the overshoot card by card) bent the cards already in flight and the slide
--- zig-zagged. Per-card damping would need a Hyprland patch. Raise 1.06 for more bounce,
--- 1.0 for none.
-hl.curve("dockshow", { type = "bezier", points = { { 0.3, 1.06 }, { 0.5, 1.0 } } })
+
 hl.animation({ leaf = "windowsMove", enabled = true, speed = 5, bezier = "dockslide" })
 
 if nix.keystone then
@@ -221,6 +246,11 @@ if nix.keystone then
     keystone_inset = 0.07, keystone_shrink = 0.035, keystone_rounding = 24,
     keystone_shadow_range = 48, keystone_shadow_dx = 8, keystone_shadow_dy = 14,
     keystone_shadow_alpha = 0.5, keystone_parallax = 0,
+    -- Card moves overshoot and settle, DAMPED along the pile: a card at depth d (front 0)
+    -- overshoots by keystone_bounce * keystone_bounce_decay^d -- a continuous formula,
+    -- evaluated per card by the patch (each card gets its own curve, since Hyprland reads
+    -- a curve live and a shared one switched between cards bent those already moving).
+    keystone_bounce = 0.10, keystone_bounce_decay = 0.8,
   } })
   -- A 3-finger swipe that starts on a pile card moves that card under the finger
   -- (trapezoid.patch's move gesture); on release this settles it: cycle or spring back.

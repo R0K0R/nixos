@@ -171,8 +171,8 @@ render() {
   local CY0=$(( DOCK_Y + DOCK_H/2 ))
   # ONE atomic batch (size, opacity, pin, focusability, z-order, focus) so nothing flashes
   # to the top mid-shuffle. The MOVE is in the batch ONLY when not staggering; on show it
-  # is done per-card with a small delay below (the "feel"). NB back cards are ACTUAL smaller
-  # windows (min==max lock) -- the app reflows to that size; that's the cost of real shrink.
+  # is done per-card with a small delay below (the "feel"). Back cards are smaller BOXES,
+  # but their apps keep the front card's size and are drawn shrunk (dockscale tag below).
   local batch=""
   for ((i=0; i<${#rot[@]}; i++)); do
     d=$i; dd=$(( d < MAXD ? d : MAXD )); a="${rot[$i]}"
@@ -184,6 +184,19 @@ render() {
     read -r x y cw ch < <(lrect "$x" "$y" "$cw" "$ch")
     MX[$i]=$x; MY[$i]=$y
     if [ "$d" -eq 0 ]; then op="1.0 1.0"; else ov=$(( 60 - (dd-1)*14 )); [ "$ov" -lt 30 ] && ov=30; op="0.$ov 0.$ov"; fi
+    # Tags first: the patch reads them when the resize below re-sends the client its size.
+    #  dockd<i>       this card's moves get their own curve, overshooting by
+    #                 keystone_bounce * keystone_bounce_decay^i (hyprland.lua) -- the
+    #                 slide-in bounce damped card by card
+    #  dockscale<P>   a BACK card is P% of the front card; the client is told the FRONT
+    #                 card's size and drawn shrunk (scale-to-fit), so it never re-lays out
+    #                 -- the shrink is only apparent. The front card carries none.
+    # A card's previous dockd/dockscale tags are dropped first.
+    local t want="dockd$i"; [ "$scp" -lt 100 ] && want="$want dockscale$scp"
+    while read -r t; do
+      [ -n "$t" ] && [[ " $want " != *" $t "* ]] && batch+="dispatch hl.dsp.window.tag({tag=\"-$t\", window=\"address:$a\"}) ; "
+    done < <($J -r --arg a "$a" 'first(.[]|select(.address==$a)).tags[]? | rtrimstr("*") | select(test("^dock(d|scale)[0-9]+$"))' <<<"$CLIENTS")
+    for t in $want; do batch+="dispatch hl.dsp.window.tag({tag=\"+$t\", window=\"address:$a\"}) ; "; done
     batch+="dispatch hl.dsp.window.set_prop({prop=\"max_size\", value=\"$cw $ch\", window=\"address:$a\"}) ; "
     batch+="dispatch hl.dsp.window.set_prop({prop=\"min_size\", value=\"$cw $ch\", window=\"address:$a\"}) ; "
     batch+="dispatch hl.dsp.window.resize({x=$cw, y=$ch, window=\"address:$a\"}) ; "
@@ -235,13 +248,9 @@ show_pile() {
   local -a o; mapfile -t o < <(order); [ ${#o[@]} -eq 0 ] && return 1
   local want=""; [ -f "$STATE" ] && want="$(cat "$STATE" 2>/dev/null)"
   { [ -z "$want" ] || ! exists "$want"; } && want="${o[0]}"
-  # Slide in from past the edge on the `dockshow` curve (gentle overshoot, sidedock/
-  # hyprland.lua) at a slightly calmer speed, set ONCE for the whole slide-in: the move
-  # animation's curve is read live, so it must not change while cards are moving. Back to
-  # the plain dockslide only after the last card has had time to land (speed 6 = 600 ms).
-  $HC eval 'hl.animation({ leaf = "windowsMove", enabled = true, speed = 6, bezier = "dockshow" })' >/dev/null 2>&1
+  # Slide in from past the edge. Each card's move overshoots by its own, damped amount
+  # (its dockd<depth> tag, set in render; trapezoid.patch updateDockMoveAnimation).
   render "$want" 1
-  ( sleep 0.8; $HC eval 'hl.animation({ leaf = "windowsMove", enabled = true, speed = 5, bezier = "dockslide" })' >/dev/null 2>&1 ) &
 }
 active() { $J -r '.address // ""' < <($HC activewindow -j); }
 is_dock() { $J -e --arg a "$1" 'any(.[]; .address==$a and (.tags|any(rtrimstr("*")=="dock")))' <<<"$CLIENTS" >/dev/null 2>&1; }
@@ -383,6 +392,10 @@ geom; snap
 case "${1:-toggle}" in
   toggle)   # SUPER+S: show the pile if hidden, park it if shown
     if pile_shown; then hide_pile; else show_pile; fi ;;
+  front)   # a click on a BACK card ($2, sidedock/hyprland.lua): re-lay the pile with it in front
+    exists "$2" || exit 0
+    { is_dock "$2" && ! is_pip "$2"; } || exit 0
+    render "$2" ;;
   show)     # directional gesture (3-finger swipe toward the dock): reveal the pile.
             # Idempotent -- a no-op if it is already shown, so repeated swipes don't flicker.
     pile_shown || show_pile ;;

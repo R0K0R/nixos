@@ -42,6 +42,16 @@ The keystone is applied in the box's UNROTATED frame and the draw's quad transfo
 after it (ksDockKeystone: N * conj * N^-1 * B), so the frosted-blur pass -- drawn
 with the monitor's rotation -- warps to the same trapezoid as the window on a
 rotated screen instead of one turned against it.
+Dock cards' moves get a per-window animation config (updateDockMoveAnimation) whose
+curve overshoots by decoration:keystone_bounce * keystone_bounce_decay^depth, the
+depth from a `dockd<N>` tag features/sidedock sets: a slide-in bounce damped card by
+card, without switching the shared windowsMove curve under cards already moving.
+hl.gesture_handoff("workspace"), called from a Lua gesture's start callback, hands
+the rest of that swipe to the built-in interactive workspace swipe: the 4-finger
+vertical swipe walks the column like Mod+J/K and only at its end follows the fingers
+into the next workspace (features/hyprland/hyprland.lua).
+A back dock card (tag `dockscale<P>`) is told the FRONT card's size, box / P%, and
+drawn shrunk by scale-to-fit, so moving back in the pile never re-lays it out.
 Fourth, two dock-card render fixes on top of upstream's warp: the drop shadow is
 no longer clipped to the window's FLAT box (that left a shadow whose inner edge
 was the straight flat-box edge, not the trapezoid's; the shader's own cutout is
@@ -71,7 +81,7 @@ diff -ruN a/src/config/legacy/ConfigManager.cpp c/src/config/legacy/ConfigManage
              g_pTrackpadGestures->addGesture(makeUnique<CSpecialWorkspaceGesture>(std::string{data[startDataIdx + 1]}), fingerCount, direction, modMask, deltaScale, disableInhibit);
 diff -ruN a/src/config/lua/bindings/LuaBindingsConfigRules.cpp c/src/config/lua/bindings/LuaBindingsConfigRules.cpp
 --- a/src/config/lua/bindings/LuaBindingsConfigRules.cpp	2026-10-05 19:57:04.434229254 +0900
-+++ c/src/config/lua/bindings/LuaBindingsConfigRules.cpp	2026-10-06 15:59:50.442188010 +0900
++++ c/src/config/lua/bindings/LuaBindingsConfigRules.cpp	2026-10-07 19:29:55.389251823 +0900
 @@ -37,6 +37,7 @@
  #include "../../../managers/input/trackpad/gestures/FullscreenGesture.hpp"
  #include "../../../managers/input/trackpad/gestures/LuaFunctionGesture.hpp"
@@ -80,7 +90,21 @@ diff -ruN a/src/config/lua/bindings/LuaBindingsConfigRules.cpp c/src/config/lua/
  #include "../../../managers/input/trackpad/gestures/ResizeGesture.hpp"
  #include "../../../managers/input/trackpad/gestures/SpecialWorkspaceGesture.hpp"
  #include "../../../managers/input/trackpad/gestures/WorkspaceSwipeGesture.hpp"
-@@ -940,6 +941,8 @@
+@@ -734,6 +735,13 @@
+     return 1;
+ }
+ 
++// hl.gesture_handoff("workspace"): from inside a gesture's `start` callback, give the rest
++// of this swipe to the built-in interactive workspace swipe (CLuaFunctionGesture).
++static int hlGestureHandoff(lua_State* L) {
++    CLuaFunctionGesture::s_requestedHandoff = luaL_checkstring(L, 1);
++    return 0;
++}
++
+ static int hlGesture(lua_State* L) {
+     if (!lua_istable(L, 1))
+         return Internal::configError(L, R"(hl.gesture: expected a table, e.g. { fingers = 3, direction = "horizontal", action = "workspace" })");
+@@ -940,6 +948,8 @@
              result = g_pTrackpadGestures->addGesture(makeUnique<CResizeTrackpadGesture>(), fingerCount, direction, modMask, deltaScale, disableInhibit);
          else if (action == "move")
              result = g_pTrackpadGestures->addGesture(makeUnique<CMoveTrackpadGesture>(), fingerCount, direction, modMask, deltaScale, disableInhibit);
@@ -89,6 +113,14 @@ diff -ruN a/src/config/lua/bindings/LuaBindingsConfigRules.cpp c/src/config/lua/
          else if (action == "special")
              result = g_pTrackpadGestures->addGesture(makeUnique<CSpecialWorkspaceGesture>(workspaceName), fingerCount, direction, modMask, deltaScale, disableInhibit);
          else if (action == "close")
+@@ -1405,6 +1415,7 @@
+     lua_setfield(L, -2, "plugin");
+ 
+     Internal::setFn(L, "gesture", hlGesture);
++    Internal::setFn(L, "gesture_handoff", hlGestureHandoff);
+     Internal::setFn(L, "curve", hlCurve);
+     Internal::setFn(L, "animation", hlAnimation);
+ }
 diff -ruN a/src/config/lua/bindings/LuaBindingsDispatchers.cpp c/src/config/lua/bindings/LuaBindingsDispatchers.cpp
 --- a/src/config/lua/bindings/LuaBindingsDispatchers.cpp	2026-10-05 19:57:04.434229254 +0900
 +++ c/src/config/lua/bindings/LuaBindingsDispatchers.cpp	2026-10-06 15:59:50.443045200 +0900
@@ -128,10 +160,21 @@ diff -ruN a/src/config/lua/bindings/LuaBindingsDispatchers.cpp c/src/config/lua/
          Internal::setFn(L, "force_idle", hlForceIdle);
          Internal::setFn(L, "release_input_capture", hlReleaseInputCapture);
          Internal::setFn(L, "focus", hlFocus);
+diff -ruN a/src/config/shared/actions/ConfigActions.cpp c/src/config/shared/actions/ConfigActions.cpp
+--- a/src/config/shared/actions/ConfigActions.cpp	2026-10-05 19:57:04.438472454 +0900
++++ c/src/config/shared/actions/ConfigActions.cpp	2026-10-07 19:27:57.876918488 +0900
+@@ -638,6 +638,7 @@
+     if (window->m_ruleApplicator->m_tagKeeper.applyTag(tagStr)) {
+         window->m_ruleApplicator->propertiesChanged(Desktop::Rule::RULE_PROP_TAG);
+         window->updateDecorationValues();
++        window->updateDockMoveAnimation(); // side dock: depth tag -> its own move curve
+     }
+ 
+     return {};
 diff -ruN a/src/config/values/ConfigValues.cpp c/src/config/values/ConfigValues.cpp
 --- a/src/config/values/ConfigValues.cpp	2026-10-05 19:57:04.440660029 +0900
-+++ c/src/config/values/ConfigValues.cpp	2026-10-07 17:17:06.525672852 +0900
-@@ -201,6 +201,19 @@
++++ c/src/config/values/ConfigValues.cpp	2026-10-07 19:27:57.866952345 +0900
+@@ -201,6 +201,21 @@
                  {.min = 0, .max = 20, .refresh = Supplementary::REFRESH_WINDOW_STATES | Supplementary::REFRESH_BLUR_FB}),
          MS<Float>("decoration:rounding_power", "rounding power of corners (2 is a circle)", 2,
                    {.min = 2, .max = 10, .refresh = Supplementary::REFRESH_WINDOW_STATES | Supplementary::REFRESH_BLUR_FB}),
@@ -146,12 +189,14 @@ diff -ruN a/src/config/values/ConfigValues.cpp c/src/config/values/ConfigValues.
 +        MS<Float>("decoration:keystone_shadow_dx", "dock keystone: drop-shadow horizontal offset (px, + = right) for dock windows", 0.f, {.min = -400.f, .max = 400.f}),
 +        MS<Float>("decoration:keystone_shadow_dy", "dock keystone: drop-shadow vertical offset (px, + = down) for dock windows", 0.f, {.min = -400.f, .max = 400.f}),
 +        MS<Float>("decoration:keystone_shadow_alpha", "dock keystone: drop-shadow strength multiplier for dock windows", 1.f, {.min = 0.f, .max = 1.f}),
++        MS<Float>("decoration:keystone_bounce", "dock: the front card's move overshoot (0 = none); cards behind get bounce * decay^depth", 0.f, {.min = 0.f, .max = 1.f}),
++        MS<Float>("decoration:keystone_bounce_decay", "dock: share of the overshoot each card further back keeps (0..1)", 0.5f, {.min = 0.f, .max = 1.f}),
 +        MS<Float>("decoration:keystone_pip_zoom", "dock PiP: the client is told it is this many times the PiP box (3 = a box a third of the screen lays out like fullscreen)", 3.f, {.min = 1.f, .max = 8.f}),
 +        MS<Float>("decoration:keystone_parallax", "dock keystone: cursor-parallax lean strength (0 = off)", 0.f, {.min = 0.f, .max = 1.f}),
          MS<Float>("decoration:active_opacity", "opacity of active windows.", 1, {.min = 0, .max = 1, .refresh = Supplementary::REFRESH_WINDOW_STATES}),
          MS<Float>("decoration:inactive_opacity", "opacity of inactive windows.", 1, {.min = 0, .max = 1, .refresh = Supplementary::REFRESH_WINDOW_STATES}),
          MS<Float>("decoration:fullscreen_opacity", "opacity of fullscreen windows.", 1, {.min = 0, .max = 1, .refresh = Supplementary::REFRESH_WINDOW_STATES}),
-@@ -398,6 +411,7 @@
+@@ -398,6 +413,7 @@
           */
  
          MS<Int>("gestures:workspace_swipe_distance", "in px, the distance of the touchpad gesture", 300, {.min = 0, .max = 2000}),
@@ -356,8 +401,58 @@ diff -ruN a/src/desktop/view/Subsurface.cpp c/src/desktop/view/Subsurface.cpp
          m_popupParent->recheckTree();
 diff -ruN a/src/desktop/view/Window.cpp c/src/desktop/view/Window.cpp
 --- a/src/desktop/view/Window.cpp	2026-10-05 19:57:04.449603878 +0900
-+++ c/src/desktop/view/Window.cpp	2026-10-07 17:17:06.527171933 +0900
-@@ -1683,6 +1683,18 @@
++++ c/src/desktop/view/Window.cpp	2026-10-07 19:34:29.085946304 +0900
+@@ -1198,6 +1198,49 @@
+ void CWindow::setAnimationsToMove() {
+     m_realPosition->setConfig(Config::animationTree()->getAnimationPropertyConfig("windowsMove"));
+     m_animatingIn = false;
++    updateDockMoveAnimation();
++}
++
++void CWindow::updateDockMoveAnimation() {
++    const auto MOVE = Config::animationTree()->getAnimationPropertyConfig("windowsMove");
++
++    int        depth = -1;
++    if (m_ruleApplicator && m_ruleApplicator->m_tagKeeper.isTagged("dock", false)) {
++        for (auto const& t : m_ruleApplicator->m_tagKeeper.getTags()) {
++            std::string s = t;
++            if (!s.empty() && s.back() == '*')
++                s.pop_back();
++            if (s.size() > 5 && s.starts_with("dockd") && std::all_of(s.begin() + 5, s.end(), [](char c) { return c >= '0' && c <= '9'; })) {
++                depth = std::stoi(s.substr(5));
++                break;
++            }
++        }
++    }
++
++    static auto PBOUNCE = CConfigValue<Config::FLOAT>("decoration:keystone_bounce");
++    static auto PDECAY  = CConfigValue<Config::FLOAT>("decoration:keystone_bounce_decay");
++    if (depth < 0 || m_animatingIn || *PBOUNCE <= 0.0001f) {
++        m_realPosition->setConfig(MOVE);
++        return;
++    }
++
++    // the curve for this depth, straight from the formula; registered on demand
++    const float Y    = 1.f + *PBOUNCE * std::pow(std::clamp(sc<float>(*PDECAY), 0.f, 1.f), depth);
++    const auto  NAME = std::format("__dockbounce_{:.4f}", Y);
++    if (!Animation::mgr()->bezierExists(NAME))
++        Animation::mgr()->addBezierWithName(NAME, Vector2D{0.3, Y}, Vector2D{0.5, 1.0});
++
++    const auto MV = MOVE ? MOVE->pValues.lock() : nullptr;
++    if (!m_dockMoveConfig)
++        m_dockMoveConfig = makeShared<Hyprutils::Animation::SAnimationPropertyConfig>();
++    m_dockMoveConfig->overridden       = true;
++    m_dockMoveConfig->internalBezier   = NAME;
++    m_dockMoveConfig->internalSpeed    = MV ? MV->internalSpeed : 5.f;
++    m_dockMoveConfig->internalEnabled  = MV ? MV->internalEnabled : 1;
++    m_dockMoveConfig->internalStyle    = MV ? MV->internalStyle : "";
++    m_dockMoveConfig->pValues          = m_dockMoveConfig;
++    m_dockMoveConfig->pParentAnimation = MOVE;
++    m_realPosition->setConfig(m_dockMoveConfig);
+ }
+ 
+ void CWindow::onWorkspaceAnimUpdate() {
+@@ -1683,6 +1726,36 @@
  }
  
  Vector2D CWindow::realToReportSize() {
@@ -366,6 +461,24 @@ diff -ruN a/src/desktop/view/Window.cpp c/src/desktop/view/Window.cpp
 +    // third of the screen lays out like fullscreen), and scale-to-fit (fitTransform, which
 +    // every dock/pip card gets) shrinks that layout into the box, filling it. Resizing the
 +    // box -- or making it tall -- reshapes the layout with it; a larger zoom shrinks text.
++    // side-dock BACK cards (tag `dockscale<P>`, P = the card's size in % of the front card,
++    // set by features/sidedock): tell the client the FRONT card's size -- box / P% -- so it
++    // never re-lays out when it moves back in the pile, and scale-to-fit (fitTransform)
++    // draws it shrunk. The shrink is only apparent, as for Waydroid.
++    if (!m_isX11 && m_ruleApplicator && m_ruleApplicator->m_tagKeeper.isTagged("dock", false) && !m_ruleApplicator->m_tagKeeper.isTagged("pip", false)) {
++        for (auto const& t : m_ruleApplicator->m_tagKeeper.getTags()) {
++            std::string s = t;
++            if (!s.empty() && s.back() == '*')
++                s.pop_back();
++            if (s.size() > 9 && s.starts_with("dockscale") && std::all_of(s.begin() + 9, s.end(), [](char c) { return c >= '0' && c <= '9'; })) {
++                const int P = std::stoi(s.substr(9));
++                if (P > 0 && P < 100)
++                    return (m_realSize->goal() * (100.0 / P)).round();
++                break;
++            }
++        }
++    }
++
 +    if (!m_isX11 && m_ruleApplicator && m_ruleApplicator->m_tagKeeper.isTagged("pip", false)) {
 +        static auto PPIPZOOM = CConfigValue<Config::FLOAT>("decoration:keystone_pip_zoom");
 +        const auto  BOX      = m_realSize->goal();
@@ -376,7 +489,7 @@ diff -ruN a/src/desktop/view/Window.cpp c/src/desktop/view/Window.cpp
      if (!m_isX11)
          return m_realSize->goal().clamp(Vector2D{0, 0}, Math::VECTOR2D_MAX);
  
-@@ -1858,6 +1870,28 @@
+@@ -1858,6 +1931,28 @@
      return nullptr;
  }
  
@@ -405,7 +518,15 @@ diff -ruN a/src/desktop/view/Window.cpp c/src/desktop/view/Window.cpp
  Vector2D CWindow::getReportedSize() {
      if (m_isX11)
          return m_reportedSize;
-@@ -2739,7 +2773,13 @@
+@@ -2043,6 +2138,7 @@
+ 
+     if (animvar->m_Context.pWindow) {
+         animvar->m_Context.pWindow->m_animatingIn = false;
++        animvar->m_Context.pWindow->updateDockMoveAnimation(); // dock cards: their own curve
+ 
+         if (!animvar->m_Context.pWindow->positionAnimation()->isBeingAnimated() && !animvar->m_Context.pWindow->sizeAnimation()->isBeingAnimated())
+             animvar->m_Context.pWindow->resetMotionBlur();
+@@ -2739,7 +2835,13 @@
      if (m_isX11)
          m_reportedSize = m_pendingReportedSize;
  
@@ -420,7 +541,7 @@ diff -ruN a/src/desktop/view/Window.cpp c/src/desktop/view/Window.cpp
          const auto MINSIZE = m_xdgSurface->m_toplevel->layoutMinSize();
          const auto MAXSIZE = m_xdgSurface->m_toplevel->layoutMaxSize();
  
-@@ -2753,6 +2793,9 @@
+@@ -2753,6 +2855,9 @@
      const auto PMONITOR = m_monitor.lock();
  
      g_pHyprRenderer->damageSurface(wlSurface()->resource(), m_realPosition->goal().x, m_realPosition->goal().y, m_isX11 ? 1.0 / m_X11SurfaceScaledBy : 1.0);
@@ -432,8 +553,8 @@ diff -ruN a/src/desktop/view/Window.cpp c/src/desktop/view/Window.cpp
          m_subsurfaceHead->recheckDamageForSubsurfaces();
 diff -ruN a/src/desktop/view/Window.hpp c/src/desktop/view/Window.hpp
 --- a/src/desktop/view/Window.hpp	2026-10-05 19:57:04.451981755 +0900
-+++ c/src/desktop/view/Window.hpp	2026-10-06 16:30:11.224911240 +0900
-@@ -420,6 +420,18 @@
++++ c/src/desktop/view/Window.hpp	2026-10-07 19:27:57.867682004 +0900
+@@ -420,6 +420,27 @@
          bool                              priorityFocus();
          SP<CWLSurfaceResource>            getSolitaryResource();
          Vector2D                          getReportedSize();
@@ -449,6 +570,15 @@ diff -ruN a/src/desktop/view/Window.hpp c/src/desktop/view/Window.hpp
 +            Vector2D offset; // of the scaled content inside the window box, logical px
 +        };
 +        SFitTransform fitTransform() const;
++
++        // Side dock: a card's position moves get their OWN animation config whose curve
++        // overshoots by keystone_bounce * keystone_bounce_decay^depth -- depth from a
++        // `dockd<N>` tag that features/sidedock sets -- so the pile's slide-in bounce is
++        // damped card by card. Per window, because Hyprland reads a curve live: switching
++        // the shared windowsMove curve between cards bent the ones already moving.
++        // Everything else (and a card without a depth tag) keeps windowsMove.
++        SP<Hyprutils::Animation::SAnimationPropertyConfig> m_dockMoveConfig;
++        void                                               updateDockMoveAnimation();
          std::optional<Vector2D>           calculateExpression(const std::string& s);
          std::optional<Vector2D>           calculateExpression(const Math::SExpressionVec2& expr);
          std::optional<Vector2D>           minSize();
@@ -639,6 +769,112 @@ diff -ruN a/src/managers/input/trackpad/gestures/FloatGesture.cpp c/src/managers
      if ((m_window->m_isFloating && m_mode == FLOAT_MODE_FLOAT) || (!m_window->m_isFloating && m_mode == FLOAT_MODE_TILE)) {
          m_window.reset();
          return;
+diff -ruN a/src/managers/input/trackpad/gestures/LuaFunctionGesture.cpp c/src/managers/input/trackpad/gestures/LuaFunctionGesture.cpp
+--- a/src/managers/input/trackpad/gestures/LuaFunctionGesture.cpp	2026-10-05 19:57:04.466815378 +0900
++++ c/src/managers/input/trackpad/gestures/LuaFunctionGesture.cpp	2026-10-07 19:29:55.388120113 +0900
+@@ -1,4 +1,5 @@
+ #include "LuaFunctionGesture.hpp"
++#include "WorkspaceSwipeGesture.hpp"
+ 
+ #include "../../../../config/lua/ConfigManager.hpp"
+ 
+@@ -125,6 +126,18 @@
+     ;
+ }
+ 
++std::string CLuaFunctionGesture::s_requestedHandoff;
++
++// a direction-sensitive built-in (the workspace swipe) expects the registered AXIS, while
++// this gesture is handed the actual direction
++static eTrackpadGestureDirection axisOf(eTrackpadGestureDirection d) {
++    if (d == TRACKPAD_GESTURE_DIR_UP || d == TRACKPAD_GESTURE_DIR_DOWN)
++        return TRACKPAD_GESTURE_DIR_VERTICAL;
++    if (d == TRACKPAD_GESTURE_DIR_LEFT || d == TRACKPAD_GESTURE_DIR_RIGHT)
++        return TRACKPAD_GESTURE_DIR_HORIZONTAL;
++    return d;
++}
++
+ CLuaFunctionGesture::CLuaFunctionGesture(int startRef, int updateRef, int endRef) : m_luaStartFnId(startRef), m_luaUpdateFnId(updateRef), m_luaEndFnId(endRef) {
+     ;
+ }
+@@ -136,10 +149,30 @@
+     if (!MGR)
+         return;
+ 
++    m_delegating = false;
++    m_handoff.reset();
++    s_requestedHandoff.clear();
++
+     MGR->callLuaFn(m_luaStartFnId, [&](lua_State* L) { return pushGestureEvent(L, e); }, Config::Lua::CConfigManager::LUA_TIMEOUT_EVENT_CALLBACK_MS, "gesture start callback");
++
++    if (s_requestedHandoff == "workspace") {
++        m_handoff  = std::make_unique<CWorkspaceSwipeGesture>();
++        auto ev    = e;
++        ev.direction = axisOf(e.direction);
++        m_handoff->begin(ev);
++        m_delegating = true;
++    }
++    s_requestedHandoff.clear();
+ }
+ 
+ void CLuaFunctionGesture::update(const ITrackpadGesture::STrackpadGestureUpdate& e) {
++    if (m_delegating && m_handoff) {
++        auto ev      = e;
++        ev.direction = axisOf(e.direction);
++        m_handoff->update(ev);
++        return;
++    }
++
+     const auto MGR = Config::Lua::mgr();
+     if (!MGR)
+         return;
+@@ -148,6 +181,15 @@
+ }
+ 
+ void CLuaFunctionGesture::end(const ITrackpadGesture::STrackpadGestureEnd& e) {
++    if (m_delegating && m_handoff) {
++        auto ev      = e;
++        ev.direction = axisOf(e.direction);
++        m_handoff->end(ev);
++        m_handoff.reset();
++        m_delegating = false;
++        return;
++    }
++
+     const auto MGR = Config::Lua::mgr();
+     if (!MGR)
+         return;
+diff -ruN a/src/managers/input/trackpad/gestures/LuaFunctionGesture.hpp c/src/managers/input/trackpad/gestures/LuaFunctionGesture.hpp
+--- a/src/managers/input/trackpad/gestures/LuaFunctionGesture.hpp	2026-10-05 19:57:04.466935561 +0900
++++ c/src/managers/input/trackpad/gestures/LuaFunctionGesture.hpp	2026-10-07 19:29:55.386442519 +0900
+@@ -2,6 +2,9 @@
+ 
+ #include "ITrackpadGesture.hpp"
+ 
++#include <memory>
++#include <string>
++
+ class CLuaFunctionGesture : public ITrackpadGesture {
+   public:
+     CLuaFunctionGesture(int ref);
+@@ -12,7 +15,17 @@
+     virtual void update(const ITrackpadGesture::STrackpadGestureUpdate& e);
+     virtual void end(const ITrackpadGesture::STrackpadGestureEnd& e);
+ 
++    // Handoff (hl.gesture_handoff from inside a `start` callback): the Lua decides, as the
++    // swipe begins, to give the REST of it to a built-in gesture -- "workspace", the
++    // interactive workspace swipe -- instead of handling it itself. features/hyprland
++    // uses it for a 4-finger swipe that walks the column like Mod+J/K and only at the
++    // column's end becomes the follow-the-fingers workspace swipe.
++    static std::string s_requestedHandoff;
++
+   private:
++    std::unique_ptr<ITrackpadGesture> m_handoff;
++    bool                              m_delegating = false;
++
+     int  m_luaStartFnId  = -2;
+     int  m_luaUpdateFnId = -2;
+     int  m_luaEndFnId    = -2;
 diff -ruN a/src/managers/input/trackpad/gestures/MoveGesture.cpp c/src/managers/input/trackpad/gestures/MoveGesture.cpp
 --- a/src/managers/input/trackpad/gestures/MoveGesture.cpp	2026-10-05 19:57:04.466815378 +0900
 +++ c/src/managers/input/trackpad/gestures/MoveGesture.cpp	2026-10-06 16:31:20.478180442 +0900
