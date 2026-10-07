@@ -30,11 +30,11 @@ for _, c in ipairs(nix.classes) do
   hl.window_rule({ match = { class = "^(" .. c .. ")$" }, workspace = "special:dock silent", float = true,
     size = "33% 88%", move = "100% 8%", opacity = "1.0 1.0", border_size = 0, rounding = 0, no_initial_focus = true })
 end
--- The same birth for any other window that opens ON the dock workspace -- one opened
--- while a card has focus, which joins the pile (window.open below). Modal dialogs are
--- left alone; a window that turns out not to join is put back by dock.sh `stray`.
-hl.window_rule({ match = { workspace = "special:dock", modal = false }, float = true,
-  size = "33% 88%", move = "100% 8%", border_size = 0, rounding = 0 })
+-- The same birth for any other window that opens ON the dock workspace while a card has
+-- focus: it joins the pile (window.open below). Modal dialogs are left alone. Enabled
+-- only while a card has focus -- see syncOpenRules() further down.
+local dockBirth = hl.window_rule({ match = { workspace = "special:dock", modal = false }, float = true,
+  size = "33% 88%", move = "100% 8%", border_size = 0, rounding = 0, enabled = false })
 
 hl.bind(mod .. " + " .. nix.keys.toggle, hl.dsp.exec_cmd(dock .. " toggle"))
 -- The dock as a workspace: send the focused window there, or back out.
@@ -75,12 +75,37 @@ do
     return hit
   end
   local focusAddr, focusDock, prevFocusDock = nil, false, false
+
+  -- Where a new window opens is decided by window rules, BEFORE it is mapped. Hyprland
+  -- puts every new window on the monitor's open special workspace regardless of focus,
+  -- so with the dock open but focus on an ordinary window (input falls through to it),
+  -- a new app would land on the dock workspace and have to be moved back -- a visible
+  -- flicker. So, on every focus change:
+  --   card focused       -> dockBirth on: the new window is born a card (joins the pile)
+  --   ordinary window    -> a redirect rule for THAT window's workspace on: the new
+  --                         window opens there directly, never touching the dock workspace
+  -- A rule cannot see focus, hence the toggling. One redirect rule per workspace id,
+  -- created on first use and only ever enabled one at a time.
+  local redirects = {}
+  local function syncOpenRules(w)
+    dockBirth:set_enabled(focusDock)
+    for _, r in pairs(redirects) do r:set_enabled(false) end
+    if not focusDock and w and w.workspace and not w.workspace.special then
+      local id = w.workspace.id
+      if not redirects[id] then
+        redirects[id] = hl.window_rule({ match = { workspace = "special:dock" }, workspace = tostring(id), enabled = false })
+      end
+      redirects[id]:set_enabled(true)
+    end
+  end
+
   hl.on("window.active", function(w)
     local addr = w and w.address or nil
     if addr == focusAddr then return end
     prevFocusDock = focusDock
     focusDock = w ~= nil and isDockWin(w) and not isPip(w)
     focusAddr = addr
+    syncOpenRules(w)
   end)
 
   -- Decide BEFORE the first frame. window.open_early fires before the window is laid
@@ -101,8 +126,8 @@ do
       -- born a card (open_early): slide it in from the side and make it the front
       hl.dispatch(hl.dsp.exec_cmd(dock .. " adopt " .. w.address))
     elseif w.workspace and w.workspace.name == "special:dock" then
-      -- opened on the dock workspace but not joining the pile: dock.sh puts it back on
-      -- the regular workspace (the dock workspace holds only cards)
+      -- fallback (e.g. nothing had focus, so no redirect rule was on): opened on the dock
+      -- workspace without joining the pile -- dock.sh puts it back on the regular one
       hl.dispatch(hl.dsp.exec_cmd(dock .. " stray " .. w.address))
     end
   end)
