@@ -202,17 +202,10 @@ render() {
   # pile fans in with a bit of feel instead of snapping as one block. (Sizes/z were set
   # atomically above; only the visible position is staggered, so there is no flicker.)
   if [ "$stagger" = 1 ]; then
-    # DAMPED overshoot along the pile: each move uses the curve active when it starts, so
-    # switch the global window-move curve to dockshow<depth> right before each card's move
-    # (overshoot = AMP * DECAY^depth, generated in sidedock/hyprland.lua for depths 0..7),
-    # then put the normal dockslide back. Speed 6: a touch calmer than ordinary moves.
     for ((i=0; i<${#rot[@]}; i++)); do
-      dd=$(( i < 7 ? i : 7 ))
-      $HC eval "hl.animation({ leaf = \"windowsMove\", enabled = true, speed = 6, bezier = \"dockshow$dd\" })" >/dev/null 2>&1
       d "hl.dsp.window.move({x=${MX[$i]}, y=${MY[$i]}, window=\"address:${rot[$i]}\"})"
       [ "$i" -lt $(( ${#rot[@]} - 1 )) ] && sleep "$STAGGER" 2>/dev/null
     done
-    $HC eval 'hl.animation({ leaf = "windowsMove", enabled = true, speed = 5, bezier = "dockslide" })' >/dev/null 2>&1
   fi
   printf '%s' "${rot[0]}" >"$STATE"
 }
@@ -242,9 +235,13 @@ show_pile() {
   local -a o; mapfile -t o < <(order); [ ${#o[@]} -eq 0 ] && return 1
   local want=""; [ -f "$STATE" ] && want="$(cat "$STATE" 2>/dev/null)"
   { [ -z "$want" ] || ! exists "$want"; } && want="${o[0]}"
-  # Slide in from past the edge; render's staggered moves give each card its own damped
-  # overshoot (dockshowN by depth).
+  # Slide in from past the edge on the `dockshow` curve (gentle overshoot, sidedock/
+  # hyprland.lua) at a slightly calmer speed, set ONCE for the whole slide-in: the move
+  # animation's curve is read live, so it must not change while cards are moving. Back to
+  # the plain dockslide only after the last card has had time to land (speed 6 = 600 ms).
+  $HC eval 'hl.animation({ leaf = "windowsMove", enabled = true, speed = 6, bezier = "dockshow" })' >/dev/null 2>&1
   render "$want" 1
+  ( sleep 0.8; $HC eval 'hl.animation({ leaf = "windowsMove", enabled = true, speed = 5, bezier = "dockslide" })' >/dev/null 2>&1 ) &
 }
 active() { $J -r '.address // ""' < <($HC activewindow -j); }
 is_dock() { $J -e --arg a "$1" 'any(.[]; .address==$a and (.tags|any(rtrimstr("*")=="dock")))' <<<"$CLIENTS" >/dev/null 2>&1; }

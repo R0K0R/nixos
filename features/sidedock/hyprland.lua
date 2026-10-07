@@ -203,22 +203,13 @@ end
 
 -- The pile slides as one; give window moves an ease-out without overshoot.
 hl.curve("dockslide", { type = "bezier", points = { { 0.16, 1.0 }, { 0.3, 1.0 } } })
--- Showing the dock (dock.sh render, staggered slide-in): an ease-out whose overshoot is
--- DAMPED along the pile, as a continuous envelope rather than hand-picked steps:
---
---     overshoot(depth) = AMP * DECAY ^ depth
---
--- the front card (depth 0) runs AMP past its spot and settles, each card behind keeps
--- DECAY of the one before, so the pile's motion converges instead of compounding into a
--- wobble. Tune those two numbers. One curve per depth (dockshow0, dockshow1, ...): Hyprland
--- evaluates a named curve every frame, so redefining a single shared one for each card
--- would bend the cards already in flight.
-do
-  local AMP, DECAY = 0.10, 0.5
-  for depth = 0, 7 do
-    hl.curve("dockshow" .. depth, { type = "bezier", points = { { 0.3, 1.0 + AMP * DECAY ^ depth }, { 0.5, 1.0 } } })
-  end
-end
+-- Showing the dock (dock.sh show_pile): ease-out with a gentle overshoot -- the cards run
+-- slightly past their spot and settle. ONE curve for the whole slide-in: Hyprland reads an
+-- animation's curve LIVE, so switching curves between staggered cards (an attempt at
+-- damping the overshoot card by card) bent the cards already in flight and the slide
+-- zig-zagged. Per-card damping would need a Hyprland patch. Raise 1.06 for more bounce,
+-- 1.0 for none.
+hl.curve("dockshow", { type = "bezier", points = { { 0.3, 1.06 }, { 0.5, 1.0 } } })
 hl.animation({ leaf = "windowsMove", enabled = true, speed = 5, bezier = "dockslide" })
 
 if nix.keystone then
