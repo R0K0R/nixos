@@ -5,6 +5,40 @@
 
 let
   cfg = config.my.waydroid;
+  user = config.my.internal.primaryUser;
+  # Waydroid with the suspend_action = none patch (see suspendAction).
+  waydroidPkg = pkgs.waydroid-nftables.overrideAttrs (old: {
+    patches = (old.patches or [ ]) ++ [ ./waydroid-suspend-none.patch ];
+  });
+  hyprland = config.programs.hyprland.enable or false;
+
+  /*
+    The `waydroid` users run (launcher entries: `waydroid`, `waydroid app launch
+    <pkg>`): before handing over, bring back a window that Super+Q put away with
+    the display off (features/waydroid/hyprland.lua) -- wake Android's display and
+    move the window from the hidden `waydroid` special workspace to the one you are
+    on. Without this, launching an app would light up an invisible window.
+  */
+  waydroidCli = pkgs.writeShellScriptBin "waydroid" ''
+    case "''${1:-}" in
+      ""|app|show-full-ui|first-launch)
+        ${lib.optionalString hyprland ''
+          if [ -n "''${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+            H=${config.programs.hyprland.package}/bin/hyprctl
+            J=${lib.getExe pkgs.jq}
+            a=$("$H" clients -j 2>/dev/null | "$J" -r '.[]|select(.class=="Waydroid" and .workspace.name=="special:waydroid")|.address' | head -1)
+            if [ -n "$a" ]; then
+              [ -w /run/waydroid-display ] && echo on > /run/waydroid-display
+              ws=$("$H" monitors -j | "$J" -r '.[]|select(.focused)|.activeWorkspace.id')
+              "$H" dispatch "hl.dsp.window.move({workspace=\"$ws\", follow=true, window=\"address:$a\"})" >/dev/null
+              "$H" dispatch "hl.dsp.focus({window=\"address:$a\"})" >/dev/null
+            fi
+          fi
+        ''}
+        ;;
+    esac
+    exec ${waydroidPkg}/bin/waydroid "$@"
+  '';
 in
 {
   options.my.waydroid = {
@@ -23,8 +57,8 @@ in
     };
 
     suspendAction = lib.mkOption {
-      type = lib.types.enum [ "freeze" "stop" ];
-      default = "freeze";
+      type = lib.types.enum [ "none" "freeze" "stop" ];
+      default = "none";
       description = ''
         What the host does when Android asks to suspend, written to
         `suspend_action` in waydroid.cfg.
@@ -42,6 +76,14 @@ in
         strictly worse. The knob to actually keep music playing is
         androidSettings below, because the suspend is Android's REQUEST --
         the host only obeys it.
+
+        "none" is OURS (./waydroid-suspend-none.patch): ignore the request and
+        keep the container running. It is the default because Super+Q on the
+        Waydroid window now turns Android's DISPLAY off (stopping composition,
+        so the GPU idles) instead of closing the window -- closing it makes
+        Android's hwcomposer segfault and Android loops its boot animation
+        forever (journal, 2026-10-07). A display that is off makes Android ask
+        to suspend, and freezing would stop the music that was the point.
       '';
     };
 
@@ -78,9 +120,80 @@ in
       # Always use the nftables build. Plain `waydroid` wraps `waydroid-net.sh` with `iptables`;
       # NixOS firewalls/stack are effectively nft-based (`USE_NFTABLES=1` in nixpkgs), otherwise
       # `RuntimeError … waydroid-net.sh start` is common (`networking.nftables.enable` is often unset).
-      virtualisation.waydroid.package = pkgs.waydroid-nftables;
+      virtualisation.waydroid.package = waydroidPkg;
 
-      environment.systemPackages = [ pkgs.wl-clipboard ];
+      # hiPrio: the launcher wrapper above shadows the package's own `waydroid`
+      environment.systemPackages = [ pkgs.wl-clipboard (lib.hiPrio waydroidCli) ];
+
+      /*
+        Android's display on/off, as root (`waydroid shell` needs it), behind a
+        FIFO the `waydroid` group may write: `echo off > /run/waydroid-display`
+        sends KEYCODE_SLEEP, `echo on` KEYCODE_WAKEUP. systemd holds the FIFO and
+        starts the service when something is written (a group, not polkit, decides
+        who may). Super+Q on the Waydroid window writes `off` and hides the window;
+        the `waydroid` wrapper writes `on` when you launch it again. Group
+        membership takes effect from the next login.
+      */
+      users.groups.waydroid = { };
+      users.users.${user}.extraGroups = [ "waydroid" ];
+      systemd.sockets.waydroid-display = {
+        description = "Waydroid: Android display control FIFO";
+        wantedBy = [ "sockets.target" ];
+        socketConfig = {
+          ListenFIFO = "/run/waydroid-display";
+          SocketGroup = "waydroid";
+          SocketMode = "0620";
+          RemoveOnStop = true;
+        };
+      };
+      systemd.services.waydroid-display = {
+        description = "Waydroid: Android display on/off";
+        path = [ waydroidPkg ];
+        serviceConfig.StandardInput = "socket";
+        script = ''
+          while read -r cmd; do
+            case "$cmd" in
+              off) waydroid shell -- input keyevent KEYCODE_SLEEP ;;
+              on)  waydroid shell -- input keyevent KEYCODE_WAKEUP ;;
+            esac
+          done
+        '';
+      };
+
+      /*
+        Safety net for when the window IS lost anyway -- a Hyprland restart, or a
+        close from anywhere but Super+Q. Android's hwcomposer then segfaults (or
+        can no longer connect and exits), surfaceflinger dies with it, and Android
+        loops its boot animation forever while its framework stays wedged -- the
+        state that also leaves it without network. Android's `init` logs into the
+        host journal, so watch for hwcomposer dying and restart cleanly: stop the
+        user's session, restart the container. Android is then down until you
+        launch it again (about 20 s), instead of broken. Rate-limited, since the
+        dying service is restarted every 5 s.
+      */
+      systemd.services.waydroid-hwc-watchdog = {
+        description = "Restart Waydroid cleanly when its hwcomposer dies";
+        wantedBy = [ "multi-user.target" ];
+        path = [ config.systemd.package pkgs.coreutils pkgs.util-linux waydroidPkg ];
+        serviceConfig.Restart = "always";
+        script = ''
+          last=0
+          journalctl -f -n0 -o cat SYSLOG_IDENTIFIER=init | while read -r line; do
+            case "$line" in
+              *"Service 'vendor.hwcomposer-2-1'"*"received signal"*|*"Service 'vendor.hwcomposer-2-1'"*"exited with status"*)
+                now=$(date +%s)
+                [ $(( now - last )) -lt 120 ] && continue
+                last=$now
+                echo "hwcomposer died ($line): restarting Waydroid cleanly"
+                sleep 3
+                uid=$(id -u ${user})
+                runuser -u ${user} -- env XDG_RUNTIME_DIR=/run/user/$uid waydroid session stop || true
+                systemctl restart waydroid-container.service
+                ;;
+            esac
+          done
+        '';
+      };
     })
 
     /*
