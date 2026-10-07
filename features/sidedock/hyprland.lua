@@ -278,7 +278,7 @@ if nix.keystone then
     -- overshoots by keystone_bounce * keystone_bounce_decay^d -- a continuous formula,
     -- evaluated per card by the patch (each card gets its own curve, since Hyprland reads
     -- a curve live and a shared one switched between cards bent those already moving).
-    keystone_bounce = 0.05, keystone_bounce_decay = 0.2,
+    keystone_bounce = 0.2, keystone_bounce_decay = 0.5,
   } })
   -- A 3-finger swipe that starts on a pile card moves that card under the finger
   -- (trapezoid.patch's move gesture); on release this settles it: cycle or spring back.
