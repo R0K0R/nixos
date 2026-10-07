@@ -113,7 +113,7 @@ Options only for what actually varies. Most features have nothing but `enable`.
 1. Copy an existing `hosts/<name>/default.nix`, change `networking.hostName`
 2. `nixos-generate-config` for `hardware-configuration.nix`
 3. Register it in `flake.nix`
-4. **Run `runtime-cache-refresh` before the first real build** — see below
+4. **Run `cache-refresh-local` before the first real build** — see below
 
 ## The tuning backend
 
@@ -139,7 +139,7 @@ my.tuning = {
 O3 and LTO apply only to packages the **host-runtime classifier** believes run on
 this machine. It has three tiers: Tier 1 is the live system closure, Tier 2 a
 cached eval heuristic, Tier 3 a live recompute. Tiers 1 and 2 are generated files
-under `tuning/runtime-cache/`, refreshed by `runtime-cache-refresh` on each host.
+under `tuning/runtime-cache/`, refreshed by the `cache-refresh` commands.
 
 ## Gotchas
 
@@ -199,7 +199,9 @@ on.
 nixos-rebuild-local          # build here
 nixos-rebuild-victus-15      # build on victus-15
 nixos-rebuild-yulee          # build on yulee
-runtime-cache-refresh        # after every switch, on the host that switched
+cache-refresh                # runtime cache for every host (tier1 over ssh)
+cache-refresh-local          # just this host, after a switch
+cache-refresh-<host>         # just that host
 ```
 
 The rebuild wrappers are **generated** from `my.remote-builder.client.peers` and
@@ -207,9 +209,12 @@ this host's own name — the hand-written versions hardcoded
 `--flake ...#galaxybook4-pro360`, so a cloned host would have rebuilt the machine
 it was copied from.
 
-`runtime-cache-refresh` runs `git add` at the end, and that is load-bearing: a
+The `cache-refresh` commands run `git add` at the end, and that is load-bearing: a
 dirty tree's flake evaluation only sees files git knows about, so an untracked
-cache file is written, reported as written, and then silently ignored.
+cache file is written, reported as written, and then silently ignored. Every cache
+file lands in the checkout the command runs in; another host's Tier 1 is read over
+ssh (`my.tuning.refreshTool.sshTargets` -- victus-15 is reachable, the laptop runs
+no sshd, so from victus its Tier 1 is skipped).
 
 Per-feature `update.sh` scripts bump pinned upstreams
 (`features/claude-code/update.sh`, `features/claude-desktop/update.sh`).

@@ -257,7 +257,7 @@ lib.mkIf (cfg.enable && inScope) {
       # build-helpers/build-doom-emacs.sh in Unstraightened), so pandoc's store
       # path ends up inside the wrapper script: a real runtime reference, and
       # the daemon finds it too. Once this is switched to and
-      # runtime-cache-refresh runs, Tier 1 picks it up, isHostRuntime flips
+      # cache-refresh runs, Tier 1 picks it up, isHostRuntime flips
       # true, and the O3/LTO overlays claim it -- at which point it is rebuilt
       # from source and pulls a GHC toolchain.
       #

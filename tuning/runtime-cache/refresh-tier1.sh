@@ -5,6 +5,12 @@
 #   ./refresh-tier1.sh [hostname]
 # No argument = this machine's own hostname. Ground truth, not a heuristic --
 # see runtime-cache/lookup.nix for how this is combined with Tier 2/3.
+#
+# Or from ANOTHER machine, over ssh: TIER1_SSH=<ssh target> ./refresh-tier1.sh <hostname>
+# reads the closure of the target's /run/current-system there (the only part that
+# must run on it), and writes the cache file into THIS checkout, stamped with THIS
+# checkout's nixpkgs -- the stamp lookup.nix validates against, so the file is
+# valid exactly where it is committed. (cache-refresh-<host> wraps this.)
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 FLAKE_ROOT="$(git rev-parse --show-toplevel)"
@@ -38,14 +44,48 @@ fi
 #    other (valid) path batched alongside it. Filtered via a plain
 #    existence check before batching, not caught after the fact.
 echo "resolving pnames via each store path's own deriver (accurate, not a string-pattern guess)..."
-PNAMES="$(
-  nix-store -q --requisites /run/current-system \
-    | xargs nix-store -q --deriver 2>/dev/null \
-    | grep '\.drv$' \
-    | while read -r drv; do [ -e "$drv" ] && echo "$drv"; done \
-    | xargs -n 200 nix derivation show 2>/dev/null \
-    | jq -s -r '[.[] | .derivations | to_entries[] | (.value.env.pname // .value.structuredAttrs.pname // empty)] | unique | .[]'
-)"
+# The same pipeline locally or on the TIER1_SSH target; quoted once, so the remote
+# shell sees it exactly as the local one would.
+PNAME_PIPELINE='nix-store -q --requisites /run/current-system \
+  | xargs nix-store -q --deriver 2>/dev/null \
+  | grep "\.drv$" \
+  | while read -r drv; do [ -e "$drv" ] && echo "$drv"; done \
+  | xargs -n 200 nix derivation show 2>/dev/null \
+  | jq -s -r "[.[] | .derivations | to_entries[] | (.value.env.pname // .value.structuredAttrs.pname // empty)] | unique | .[]"'
+if [ -n "${TIER1_SSH:-}" ]; then
+  REMOTE_HOST="$(ssh -o BatchMode=yes "$TIER1_SSH" hostname)"
+  if [ "$REMOTE_HOST" != "$HOST" ]; then
+    echo "TIER1_SSH=$TIER1_SSH is $REMOTE_HOST, not $HOST -- refusing to file one host's closure under another's name" >&2
+    exit 1
+  fi
+  REMOTE_VERSION="$(ssh -o BatchMode=yes "$TIER1_SSH" cat /run/current-system/nixos-version)"
+  # The deriver list comes from the target; the .drv files need not. A host GCs its
+  # .drvs (victus-15 had 896 of 2032 gone, 2026-10-07), and the plain pipeline then
+  # drops those packages silently -- 806 names instead of ~1900. Evaluating the
+  # host's toplevel HERE instantiates the same .drvs into this store (same config,
+  # same paths), so: show what exists locally, after instantiating if anything is
+  # missing; ask the target for whatever still is; report the rest.
+  DRVS="$(ssh -o BatchMode=yes "$TIER1_SSH" 'nix-store -q --requisites /run/current-system | xargs nix-store -q --deriver 2>/dev/null | grep "\.drv$" | sort -u')"
+  missing_here() { while read -r d; do [ -e "$d" ] || echo "$d"; done <<<"$DRVS"; }
+  if [ -n "$(missing_here)" ]; then
+    echo "instantiating $HOST's system here to recreate .drvs it has garbage-collected (~1 min)..."
+    nix eval --raw "$FLAKE_ROOT#nixosConfigurations.$HOST.config.system.build.toplevel.drvPath" >/dev/null 2>&1 \
+      || echo "warning: evaluating $HOST here failed; falling back to the target for every .drv" >&2
+  fi
+  SHOW='xargs -n 200 nix derivation show 2>/dev/null | jq -s -r "[.[] | .derivations | to_entries[] | (.value.env.pname // .value.structuredAttrs.pname // empty)] | .[]"'
+  LOCAL_NAMES="$(while read -r d; do [ -e "$d" ] && echo "$d"; done <<<"$DRVS" | bash -c "$SHOW")"
+  STILL="$(missing_here)"
+  REMOTE_NAMES=""
+  if [ -n "$STILL" ]; then
+    REMOTE_NAMES="$(ssh -o BatchMode=yes "$TIER1_SSH" "while read -r d; do [ -e \"\$d\" ] && echo \"\$d\"; done | $SHOW" <<<"$STILL")"
+  fi
+  PNAMES="$(printf '%s\n%s\n' "$LOCAL_NAMES" "$REMOTE_NAMES" | grep -v '^$' | sort -u)"
+  TOTAL=$(grep -c . <<<"$DRVS"); HERE=$(( TOTAL - $(grep -c . <<<"$STILL" || true) ))
+  echo "(closure read on $TIER1_SSH: $TOTAL derivers, $HERE resolved here, rest asked of $TIER1_SSH)"
+else
+  PNAMES="$(bash -c "$PNAME_PIPELINE")"
+  REMOTE_VERSION=""
+fi
 
 NAMES_FILE="$(mktemp)"
 trap 'rm -f "$NAMES_FILE"' EXIT
@@ -66,6 +106,11 @@ NIXPKGS_INFO="$(
 )"
 NIXPKGS_REV="$(jq -r '.rev' <<<"$NIXPKGS_INFO")"
 NIXPKGS_NARHASH="$(jq -r '.narHash' <<<"$NIXPKGS_INFO")"
+# A running system built from another nixpkgs still gets stamped with this
+# checkout's -- same as a local refresh after a pull without a rebuild -- so say so.
+if [ -n "$REMOTE_VERSION" ] && [[ "$REMOTE_VERSION" != *".${NIXPKGS_REV:0:7}" ]]; then
+  echo "warning: $HOST runs $REMOTE_VERSION, this checkout's nixpkgs is ${NIXPKGS_REV:0:7}; rebuild $HOST first for an exact capture" >&2
+fi
 CAPTURED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 export TIER1_FLAKE_ROOT="$FLAKE_ROOT"
