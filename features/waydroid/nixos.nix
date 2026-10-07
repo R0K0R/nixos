@@ -220,6 +220,36 @@ in
     })
 
     (lib.mkIf cfg.enable {
+      /*
+        Android's Vulkan driver, as Waydroid would pick it TODAY. waydroid_base.prop
+        is written only by `waydroid init` / `upgrade`, so a stale one survives: on
+        galaxybook it said ro.hardware.vulkan=radeon (file dated 2026-05-18) although
+        its only render node is i915 -- Vulkan apps were pointed at an AMD driver.
+        Same mapping as Waydroid's tools/helpers/gpu.py getVulkanDriver, on the same
+        node it uses (the first renderD* not driven by nvidia); the per-session
+        waydroid.prop is rebuilt from this file, so it applies from the next session.
+      */
+      system.activationScripts.waydroid-vulkan-hal = lib.mkAfter ''
+        base=/var/lib/waydroid/waydroid_base.prop
+        if [ -w "$base" ] && grep -q '^ro.hardware.vulkan=' "$base"; then
+          drv=
+          for n in /sys/class/drm/renderD*; do
+            [ -e "$n/device/driver" ] || continue
+            d=$(basename "$(readlink -f "$n/device/driver")")
+            [ "$d" = nvidia ] && continue
+            drv=$d; break
+          done
+          case "$drv" in
+            i915|xe) v=intel ;;
+            amdgpu)  v=radeon ;;
+            *)       v= ;;
+          esac
+          if [ -n "$v" ] && ! grep -qx "ro.hardware.vulkan=$v" "$base"; then
+            ${lib.getExe pkgs.gnused} -i "s/^ro.hardware.vulkan=.*/ro.hardware.vulkan=$v/" "$base"
+          fi
+        fi
+      '';
+
       # waydroid.cfg is state, not a store file, so this is the same
       # rewrite-in-place shape as auto_adb above. Only rewrites an existing
       # line: waydroid init always writes one, and appending into the right
