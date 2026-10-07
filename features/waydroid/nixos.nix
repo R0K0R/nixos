@@ -162,12 +162,20 @@ in
         description = "Waydroid: Android display on/off";
         path = [ waydroidPkg ];
         serviceConfig.StandardInput = "socket";
+        /*
+          The socket's ExecStartPost chmod holds only until this service starts:
+          the FIFO's mode went back to 0600 within a second of the first write
+          (stat ctime, 2026-10-07), so the launcher's `on` got through and Super+Q's
+          `off` was refused. Re-assert it here, after each command as well.
+        */
         script = ''
+          chmod 0620 /run/waydroid-display
           while read -r cmd; do
             case "$cmd" in
               off) waydroid shell -- input keyevent KEYCODE_SLEEP ;;
               on)  waydroid shell -- input keyevent KEYCODE_WAKEUP ;;
             esac
+            chmod 0620 /run/waydroid-display
           done
         '';
       };
