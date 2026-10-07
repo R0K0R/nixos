@@ -250,8 +250,8 @@ lib.mkIf osConfig.my.dms.enable {
 
     /*
       Screenshot -> background Claude Code session -> reply over
-      `dms ipc call claudeHelper replyFile`, shown in its own window (floated
-      by compositor.nix). For maths and science it tutors: the first mistake
+      `dms ipc call claudeHelper replyFile`, shown in the bar popout, with
+      switchable sessions. For maths and science it tutors: the first mistake
       and escalating hints, never the final answer. Placed in the bar by
       settings.nix.
 
@@ -271,6 +271,22 @@ lib.mkIf osConfig.my.dms.enable {
       # sized and stay sharp at scale 1.5. By store path, same as
       # vehicleMotionCues' rotateCommand: no PATH entry for one plugin's tool.
       settings.cmarkCommand = "${pkgs.cmark-gfm}/bin/cmark-gfm";
+    };
+
+    /*
+      Bar stopwatch. Click the timer icon to start; click the running time to
+      pause; click while paused for a Resume / Reset popup. State lives in its
+      daemon, so both bars (and every screen) show the same time and a
+      rotation mid-run keeps it. Placed in the bar by settings.nix.
+
+      Pinned from its own repo; update with `nix flake update stopwatch` in
+      features/dms.
+    */
+    # Named barStopwatch, not stopwatch: dms-plugin-registry already defines
+    # plugins.stopwatch (a different plugin) and the two `src`s collide.
+    barStopwatch = {
+      enable = true;
+      src = inputs.feat-dms.pluginSources.stopwatch;
     };
 
     # Stays on for BOTH autorotate sources -- the lock is independent of
@@ -327,6 +343,15 @@ lib.mkIf osConfig.my.dms.enable {
   # (pointed at the working tree while the plugin was being built and tested).
   home.activation.vehicleMotionCuesStagedLink = lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
     l="$HOME/.config/DankMaterialShell/plugins/vehicleMotionCues"
+    if [ -L "$l" ] && ! readlink "$l" | grep -q -- '-home-manager-files/'; then
+      run rm -f "$l"
+    fi
+  '';
+
+  # Same one-time guard again, for the barStopwatch symlink staged on
+  # 2026-10-06 (pointing at the git checkout) to try it before a rebuild.
+  home.activation.barStopwatchStagedLink = lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
+    l="$HOME/.config/DankMaterialShell/plugins/barStopwatch"
     if [ -L "$l" ] && ! readlink "$l" | grep -q -- '-home-manager-files/'; then
       run rm -f "$l"
     fi

@@ -626,7 +626,11 @@
             enabled = true;
             id = "oskToggle";
           }
-          "music"
+          # Stopwatch (plugins.nix): click to start, pause, then resume/reset.
+          {
+            enabled = true;
+            id = "barStopwatch";
+          }
           "clock"
           "weather"
           {
@@ -677,6 +681,7 @@
         position = 0;
         removeWidgetPadding = false;
         rightWidgets = [
+          "music"
           "systemTray"
           "cpuUsage"
           "memUsage"
@@ -776,10 +781,11 @@
         ] mainBar.leftWidgets;
         # claudeHelper stays: portrait is tablet mode, i.e. pen-on-paper maths,
         # which is what it is for. One icon, ~30px of the 1200.
-        centerWidgets = keepOnly [ "oskToggle" "music" "clock" "screenshot" "claudeHelper" ] mainBar.centerWidgets;
+        # stopwatch stays so a run started in landscape is still visible (and
+        # stoppable) after rotating -- the daemon keeps one time for both bars.
+        centerWidgets = keepOnly [ "oskToggle" "clock" "barStopwatch" "screenshot" "claudeHelper" ] mainBar.centerWidgets;
         rightWidgets = keepOnly [
-          "systemTray"
-          "notificationButton"
+          "music"
           "controlCenterButton"
           "battery"
         ] mainBar.rightWidgets;

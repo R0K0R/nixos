@@ -51,10 +51,16 @@
       url = "github:R0K0R/dms_claude_helper";
       flake = false;
     };
+
+    # Bar stopwatch: icon -> running time -> paused -> resume/reset popup.
+    stopwatch = {
+      url = "github:R0K0R/dms_stopwatch_bar";
+      flake = false;
+    };
   };
 
   outputs =
-    { dms, dank-greeter, dms-plugin-registry, vehicle-motion-cues, claude-helper, ... }:
+    { dms, dank-greeter, dms-plugin-registry, vehicle-motion-cues, claude-helper, stopwatch, ... }:
     {
       greeterModule = dank-greeter.nixosModules.default;
 
@@ -64,6 +70,7 @@
       pluginSources = {
         vehicleMotionCues = vehicle-motion-cues;
         claudeHelper = claude-helper;
+        inherit stopwatch;
       };
       homeModules = [
         dms.homeModules.dank-material-shell

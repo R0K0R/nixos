@@ -3,11 +3,11 @@
     "claude-helper": {
       "flake": false,
       "locked": {
-        "lastModified": 1790490200,
-        "narHash": "sha256-UBcLQGGMolL048NSv8Sr0uf0R7dZ/H1SLC84bOrV4j0=",
+        "lastModified": 1791276610,
+        "narHash": "sha256-CnoOE82vv6oYpX9p6cBQNAIAzaYcBVFqO4w0IQ4WFJk=",
         "owner": "R0K0R",
         "repo": "dms_claude_helper",
-        "rev": "b6d7518e1ec06c50b2777d7a44593c599a7ca5a7",
+        "rev": "96d5d145c8ccbad13b9e1e273800646d55561c0c",
         "type": "github"
       },
       "original": {
@@ -150,7 +150,24 @@
         "dms": "dms",
         "dms-plugin-registry": "dms-plugin-registry",
         "nixpkgs": "nixpkgs",
+        "stopwatch": "stopwatch",
         "vehicle-motion-cues": "vehicle-motion-cues"
+      }
+    },
+    "stopwatch": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791275188,
+        "narHash": "sha256-72Kdi7kIjndtrkWvHXZbvFQBWejC7h5YmrB4et6+6ho=",
+        "owner": "R0K0R",
+        "repo": "dms_stopwatch_bar",
+        "rev": "8ce5aaa4d394d0ddbc61b5f97dd31a50a5692dd1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "repo": "dms_stopwatch_bar",
+        "type": "github"
       }
     },
     "vehicle-motion-cues": {
