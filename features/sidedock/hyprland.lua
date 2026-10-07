@@ -170,9 +170,13 @@ do
     if onPileCard() then hl.dispatch(hl.dsp.exec_cmd(dock .. " dock-toggle")) else HyprScratchToggle() end
   end)
 
-  -- Touchscreen (features/touch-gestures runs `hyprctl eval 'SideDockToggle()'` for a
-  -- one-finger swipe in from the right edge).
+  -- Touchscreen (features/touch-gestures runs these through `hyprctl eval`): a 5-finger
+  -- swipe toward the panel's physical left shows the dock, toward its right hides it
+  -- (sidedock/nixos.nix). Show/hide rather than toggle, so a direction always means one
+  -- thing; both are no-ops when already in that state (dock.sh's show/hide verbs).
   function SideDockToggle() hl.dispatch(hl.dsp.exec_cmd(dock .. " toggle")) end
+  function SideDockShow() hl.dispatch(hl.dsp.exec_cmd(dock .. " show")) end
+  function SideDockHide() hl.dispatch(hl.dsp.exec_cmd(dock .. " hide")) end
 
   -- Click a BACK card to bring it to the front. Back cards refuse focus (dock.sh sets
   -- no_focus, so hovering one with focus-follows-mouse cannot shuffle the pile), so

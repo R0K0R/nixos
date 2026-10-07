@@ -77,6 +77,19 @@ in
       '';
     };
 
+    followRotation = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Whether gesture directions and edges follow the screen rotation (the
+        `orientation` fallback, then each recorded transform). false pins them to
+        the panel's PHYSICAL frame -- lisgd at -o 0, which is the touchscreen's
+        raw frame -- for gestures tied to a physical edge rather than to the
+        picture, e.g. features/sidedock's dock, which lives on the panel's
+        physical right edge at every rotation.
+      '';
+    };
+
     # For other features to ADD gestures. Defining `gestures` itself from a feature would
     # replace the defaults wholesale (a list option's default applies only when nothing
     # defines it); this one merges, and is appended after them.
@@ -146,6 +159,7 @@ in
         1) o=3 ;; 3) o=1 ;; 2) o=2 ;; 0) o=0 ;;
         *) o=${toString staticOrientation} ;;
       esac
+      ${lib.optionalString (!cfg.followRotation) "o=0  # followRotation = false: the panel's physical frame"}
       size=$(${config.programs.hyprland.package}/bin/hyprctl monitors -j 2>/dev/null \
         | ${lib.getExe pkgs.jq} -r '(.[] | select(.name == "${config.my.desktop.primaryOutput}")) // .[0] | "-w \(.width) -h \(.height)"' 2>/dev/null)
       # shellcheck disable=SC2086 # $size is two flag pairs, or empty (falls back to Wayland)
