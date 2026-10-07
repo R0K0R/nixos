@@ -125,12 +125,13 @@ lib.mkIf config.my.samsung-galaxybook.enable {
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       ExecStart = "${pkgs.python3.interpreter} ${pkgs.writeText "fprintd-tablet-guard.py" ''
-        import fcntl, os, struct, subprocess
+        import errno, fcntl, os, select, subprocess, time
 
         DEV = "/dev/input/by-path/platform-INTC1077:00-event"   # Intel HID switches
         FLAG = "/run/fprintd-tablet-mode"
-        EV_SW, SW_TABLET_MODE = 5, 1
+        SW_TABLET_MODE = 1
         SYSTEMCTL = "${config.systemd.package}/bin/systemctl"
+        EVIOCGSW = (2 << 30) | (8 << 16) | (ord("E") << 8) | 0x1b   # _IOC(READ, 'E', 0x1b, 8)
 
         def apply(tablet):
             if tablet:
@@ -142,22 +143,42 @@ lib.mkIf config.my.samsung-galaxybook.enable {
                 except FileNotFoundError:
                     pass
 
-        fd = os.open(DEV, os.O_RDONLY)
-        # current state first: EVIOCGSW(len) = _IOC(_IOC_READ, 'E', 0x1b, len)
-        bits = bytearray(8)
-        fcntl.ioctl(fd, (2 << 30) | (len(bits) << 16) | (ord("E") << 8) | 0x1b, bits)
-        apply(bool(bits[0] & (1 << SW_TABLET_MODE)))
+        def tablet_now(fd):
+            bits = bytearray(8)
+            fcntl.ioctl(fd, EVIOCGSW, bits)
+            return bool(bits[0] & (1 << SW_TABLET_MODE))
 
-        # then follow it: struct input_event { timeval; u16 type; u16 code; s32 value }
-        fmt = "llHHi"
-        size = struct.calcsize(fmt)
+        # The STATE is what matters, so it is re-read rather than reconstructed from
+        # events: on every event, and every few seconds regardless. The device is
+        # recreated on resume (its node was newer than this process, 2026-10-07), and
+        # the old version -- one EVIOCGSW at start, then blocking reads -- sat on the
+        # dead fd for hours: tablet mode never reached fprintd. A vanished device
+        # raises (ENODEV) on the ioctl, which reopens it.
+        last = None
         while True:
-            data = os.read(fd, size)
-            if len(data) < size:
+            try:
+                fd = os.open(DEV, os.O_RDONLY | os.O_NONBLOCK)
+            except OSError:
+                time.sleep(2)
                 continue
-            _, _, typ, code, value = struct.unpack(fmt, data)
-            if typ == EV_SW and code == SW_TABLET_MODE:
-                apply(bool(value))
+            try:
+                while True:
+                    cur = tablet_now(fd)
+                    if cur != last:
+                        apply(cur)
+                        last = cur
+                    if select.select([fd], [], [], 3)[0]:
+                        try:
+                            while os.read(fd, 4096):   # drain; the state is re-read above
+                                pass
+                        except BlockingIOError:
+                            pass
+            except OSError as e:
+                if e.errno not in (errno.ENODEV, errno.ENOENT, errno.EIO):
+                    raise
+            finally:
+                os.close(fd)
+            time.sleep(1)
       ''}";
       Restart = "always";
       RestartSec = 2;
