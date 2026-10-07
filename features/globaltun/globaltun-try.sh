@@ -18,7 +18,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 [ -f "$HERE/globaltun.env" ] && . "$HERE/globaltun.env"
 
 [ "$(id -u)" = 0 ] || { echo "must run as root" >&2; exit 1; }
-GT="$HERE/globaltun.sh"; [ -x "$GT" ] || GT="$HERE/globaltun-direct.sh"
+GT="$HERE/globaltun.sh"
 [ -x "$GT" ] || { echo "no globaltun script beside $0" >&2; exit 1; }
 
 MINUTES=${1:-10}
@@ -26,24 +26,32 @@ UNIT=globaltun-deadman
 PROBES=${GT_PREFLIGHT_PROBES:-3}
 GW_HOST=${GT_RHOST##*@}
 GW_PORT=${GT_RPORT:-8022}
-JUMP=${GT_JUMP:-}
+JUMPS=${GT_JUMPS:-${GT_JUMP:-}}
 
 disarm(){ systemctl stop "$UNIT.timer" 2>/dev/null
           systemctl reset-failed "$UNIT.timer" "$UNIT.service" 2>/dev/null; }
 
+JUMP_LIST=()
+for _j in ${JUMPS//,/ }; do JUMP_LIST+=("$_j"); done
+NJUMPS=${#JUMP_LIST[@]}
+# The hop that must reach the gateway is the LAST one, and it is reached
+# through the ones before it. Rather than rebuild that chain here, borrow the
+# one globaltun.sh generates -- its Host blocks already carry the key and the
+# ProxyJump links, so a bare `-F cfg gt-hop-N` walks the whole path.
+SSHCFG=$("$GT" ssh-config 2>/dev/null || true)
+
 # Probe the gateway from wherever the carrier actually originates: locally when
-# dialling direct, otherwise from the jump host, which is what has to reach it.
+# dialling direct, otherwise from the last jump, which is what has to reach it.
 probe_once(){
-  if [ -n "$JUMP" ]; then
-    timeout 40 ssh -i "$GT_KEY" -o BatchMode=yes -o ConnectTimeout=20 \
-      -o StrictHostKeyChecking=accept-new "$JUMP" \
+  if [ "$NJUMPS" -gt 0 ] && [ -n "$SSHCFG" ]; then
+    timeout 40 ssh -F "$SSHCFG" -o BatchMode=yes "gt-hop-$NJUMPS" \
       "timeout 20 bash -c 'exec 3<>/dev/tcp/$GW_HOST/$GW_PORT'" >/dev/null 2>&1
   else
     timeout 20 bash -c "exec 3<>/dev/tcp/$GW_HOST/$GW_PORT" >/dev/null 2>&1
   fi
 }
 
-echo "== preflight: $PROBES probes to $GW_HOST:$GW_PORT${JUMP:+ (from $JUMP)}"
+echo "== preflight: $PROBES probes to $GW_HOST:$GW_PORT${JUMPS:+ (via $JUMPS)}"
 ok=0
 for i in $(seq 1 "$PROBES"); do
   if probe_once; then ok=$((ok+1)); echo "   probe $i OK"; else echo "   probe $i FAIL"; fi

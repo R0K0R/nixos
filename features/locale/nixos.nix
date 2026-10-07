@@ -27,6 +27,14 @@ in
 
         A headless machine that never moves should set this false -- it has no
         geoclue2 and nothing to gain from relocating its clock.
+
+        Geolocation believes the network, so a full tunnel moves the clock: with
+        my.globaltun up, geoclue's BSSID lookup falls back to IP geolocation and
+        resolves the gateway's egress, which has been seen as Africa/Libreville
+        from a Cloudflare address two other databases place in Korea. globaltun
+        stops automatic-timezoned for the duration and starts it again on `down`
+        -- so the two features already cooperate, and this option stays true on
+        a laptop that actually travels. See globaltun-findings.md.
       '';
     };
 

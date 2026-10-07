@@ -1,26 +1,40 @@
 # globaltun
 
-Full tunnel — **TCP, UDP, QUIC/HTTP-3 and ICMP** — out through a phone acting as
-the gateway, over an existing SSH path. On demand, never auto-started:
+Full tunnel — **TCP, UDP, QUIC/HTTP-3 and ICMP** — out through any box you can
+ssh into, over an existing SSH path. On demand, never auto-started:
 `sudo globaltun up` / `sudo globaltun down`.
 
-For a network with no outbound path of its own, where some other machine can
-still reach a phone that does have one.
+For a network with no outbound path of its own.
 
 ```
-this host --LAN--> jump host --(its uplink)--> phone gateway --> internet
+this host --> [jumps...] --> gateway --> internet
 ```
+
+`jumps` is a list and may be empty, so one module covers both shapes:
+
+```
+this host --LAN--> jump --OpenVPN--> phone gateway --> internet
+this host --LAN--> server with its own uplink --> internet
+```
+
+**The gateway needs nothing installed** beyond an sshd and a writable `/tmp`.
+The relay is pushed in as a static binary built for its architecture (`relay/`,
+Go with CGO off: no libc, no dynamic loader, no interpreter). `rsocks.py` is
+kept as a fallback for an architecture we do not ship or a `/tmp` mounted
+noexec, and needs a `python3` there.
 
 ## Why it is built this way
 
-The gateway is Termux + proot-distro. PRoot fakes uid 0 via ptrace, but the
-kernel still sees an unprivileged uid: no `CAP_NET_ADMIN`, no `CAP_NET_RAW`, no
-tun device, so `ssh -w` is impossible. The gateway can only terminate and
-re-originate **sockets**, never forward packets. Everything else follows.
+The design is shaped by its hardest gateway: Termux + proot-distro on an
+unrooted phone. PRoot fakes uid 0 via ptrace, but the kernel still sees an
+unprivileged uid: no `CAP_NET_ADMIN`, no `CAP_NET_RAW`, no tun device, so
+`ssh -w` is impossible. Such a gateway can only terminate and re-originate
+**sockets**, never forward packets. Everything else follows — and because it
+follows, an ordinary server works as a gateway with no changes at all.
 
 `ssh -L` carries TCP only, and sshd will never `sendto()` for you, so UDP and
-ICMP are multiplexed over TCP streams and re-emitted as real datagrams by a
-small Python relay (`rsocks.py`) — the only thing that runs on the gateway:
+ICMP are multiplexed over TCP streams and re-emitted as real datagrams by the
+relay — the only thing that runs on the gateway:
 
 | stream | opened by | gateway does |
 |---|---|---|
@@ -44,14 +58,21 @@ for apps.
 ```nix
 my.globaltun = {
   enable = true;
-  jump   = "user@jump.example";     # must be able to reach `remote`
-  remote = "root@192.0.2.50";       # the phone, as seen FROM the jump host
+  jumps  = [ ];                     # empty: dial the gateway directly
+  remote = "user@192.0.2.50";       # the gateway, as seen from the LAST jump
   sshKey = "/path/to/key";          # a STRING -- see below
   remoteSocksPort = 1080;           # unique per client, no default
 };
 ```
 
-`sudo globaltun {up|down|status|verify|reload|reicmp|is-up}`.
+`jumps` is nearest-first and each entry is `[user@]host[:port]`, so a longer
+chain is just a longer list:
+
+```nix
+  jumps = [ "user@jump.example" "admin@10.0.0.9:2222" ];
+```
+
+`sudo globaltun {up|down|status|verify|reload|reicmp|is-up|ssh-config}`.
 `verify` exercises TCP, DNS, UDP, ICMP and reports the egress address.
 
 The same scripts run standalone on a host that is not managed by this flake:
@@ -66,9 +87,9 @@ and `up` fails on a missing binary:
 nix-store --realise --add-root ~/globaltun/.deps/sing-box --indirect /nix/store/...-sing-box
 ```
 
-Point `globaltun.env` at those symlinks rather than raw store paths. A host that reaches
-the gateway *without* a jump — one holding the VPN link itself — uses
-`globaltun-direct.sh`.
+Point `globaltun.env` at those symlinks rather than raw store paths. A host that
+reaches the gateway without a jump sets `GT_JUMPS=-` (or just leaves it unset);
+there is no separate script for that case.
 
 ## Options that are easy to get wrong
 
@@ -79,15 +100,32 @@ into the world-readable Nix store; the type makes that inexpressible.
 not share a relay: whichever ran `up` last would kill the others' relay and
 every connection on it, silently. A required option forces the choice.
 
-The gateway is the registry, not this file — `pgrep -f rsocks` there shows what
-is actually bound (`ss` is blind under proot). Four clients have been run
-concurrently on one phone at negligible cost.
+The gateway is the registry, not this file — `pgrep -f 'gtrelay|rsocks'` there
+shows what is actually bound (`ss` is blind under proot, where Android blocks
+netlink). Four clients have been run concurrently on one phone at negligible
+cost. The allocation is **per gateway**: changing gateways does not free the
+numbers, it starts a new namespace.
 
 **`keepDirect`** freezes prefixes onto the path they already use. Two things
 belong there: on a headless machine, the network the admin session arrives over
 — otherwise `up` cuts the connection mid-command and nothing is left to undo it
 — and the underlay of any VPN the carrier depends on, since routing that into
 the tunnel it carries survives only until the next rekey.
+
+**The tunnel freezes the timezone.** `up` stops `automatic-timezoned` and `down`
+starts it again. Not a convenience: a full tunnel makes this machine *appear* to
+sit wherever the gateway's egress does, geoclue's BSSID lookup falls back to IP
+geolocation when it has no data for the local APs, and the clock walks to
+whatever that database thinks of the exit address — measured once as
+`Africa/Libreville`, from a Cloudflare egress that two other databases place in
+Korea. Freezing rather than correcting, because the timezone at `up` time was
+decided on the real network and is already right, including after a real flight.
+
+It restarts only what it stopped (a marker in `/run`), so a deliberately
+disabled service stays disabled. With `my.locale.automatic = false` the unit is
+not installed at all and this is a no-op — which is the correct behaviour, not a
+coincidence worth guarding against. `GT_FREEZE_TZ=0` opts out in a standalone
+bundle.
 
 **`icmp.enable`** is separable because it is the only part touching policy
 routing and netfilter: a second tun, an `ipproto icmp` rule, a routing table and
@@ -107,11 +145,19 @@ sing-box app (VpnService tun)
 gtlocal.py in Termux .......... UDP-ASSOCIATE over loopback, no privileges
      |  one TCP stream
      v
-ssh -L  ->  rsocks.py on the gateway
+ssh -L  ->  the relay on the gateway
 ```
 
-Nothing in the relays changes — `rsocks.py` and `gtlocal.py` are the same files,
-referenced from the feature root rather than copied.
+Nothing in the relays changes — the gateway relay and `gtlocal.py` are the same
+files, referenced from the feature root rather than copied. Drop a
+`gtrelay-linux-*` binary into the bundle and the phone pushes the static relay
+too; without one it falls back to needing `python3` on the gateway.
+
+**Match the binary to the GATEWAY's architecture, not the phone's.** The phone
+is the client here: it only ever pushes the relay onward. With yulee as the
+gateway the bundle needs `gtrelay-linux-amd64`, on an arm64 phone. Getting this
+backwards is silent — `pick_relay` reads the gateway's `uname -m`, finds no
+binary for it, and quietly falls back to `python3`.
 
 **The tun inbound must exclude Termux** (`"exclude_package": ["com.termux"]`, as
 shipped in `sing-box-android.json`). Otherwise ssh's own carrier is captured by
@@ -137,7 +183,8 @@ On the phone, in Termux (`pkg install openssh python`):
 ```sh
 mkdir -p ~/globaltun && cd ~/globaltun
 # from this repo: android/globaltun-termux.sh, android/globaltun.env.example,
-#                 android/sing-box-android.json, rsocks.py, gtlocal.py
+#                 android/sing-box-android.json, rsocks.py, gtlocal.py,
+#                 and optionally gtrelay-linux-{amd64,arm64}
 cp globaltun.env.example globaltun.env && $EDITOR globaltun.env
 ssh-keygen -t ed25519 -f ~/.ssh/globaltun -N ""      # add the .pub to both hops
 ./globaltun-termux.sh up
@@ -232,7 +279,7 @@ sing-box (Wintun tun, auto_route)
 gtlocal.py ......... UDP-ASSOCIATE over loopback
      |  one TCP stream
      v
-ssh -L  ->  rsocks.py on the gateway
+ssh -L  ->  the relay on the gateway
 ```
 
 Two differences from the Linux scripts, both load-bearing:
@@ -254,8 +301,8 @@ here.
 
 ## Two traps worth knowing
 
-**`ssh -J` does not pass `-i` to the jump host.** ssh(1) applies command-line
-options to the destination only, so under `-J` the jump silently falls back to
+**`ssh -J` does not pass `-i` to the jump hosts.** ssh(1) applies command-line
+options to the destination only, so under `-J` every hop silently falls back to
 password auth on every connection. Each prompt holds an unauthenticated slot on
 that sshd for the whole `LoginGraceTime`; enough at once crosses `MaxStartups`
 and it starts dropping *new* connections — which looks like a network outage and

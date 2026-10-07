@@ -37,8 +37,7 @@
     python-dev.enable = true;
 
     /*
-      Same shape as galaxybook: this machine sits on the LAN side of yulee's
-      OpenVPN link, so it cannot reach note10 itself and jumps through yulee.
+      Same shape as galaxybook: yulee is the gateway and there are no jumps.
       `sudo globaltun up` -- nothing starts on its own.
 
       The key is r0k0r's own ~/ssh_key, spelled absolutely because the script
@@ -46,13 +45,13 @@
     */
     globaltun = {
       enable = true;
-      jump = "r0k0r@172.30.0.215";
-      remote = "root@192.168.0.100";
+      jumps = [ ];
+      remote = "r0k0r@172.30.0.215";
       sshKey = "/home/r0k0r/ssh_key";
-      # Distinct from galaxybook's 1080 and yulee's 1081: one relay per client
-      # on the gateway, or `up` here kills theirs.
+      # Distinct from galaxybook's 1080: one relay per client on the gateway,
+      # or `up` here kills theirs.
       remoteSocksPort = 1082;
-      remotePort = 2022;
+      remotePort = 22;
       # Headless -- keep the admin LAN off the tunnel.
       keepDirect = [ "172.20.0.0/21" ];
 

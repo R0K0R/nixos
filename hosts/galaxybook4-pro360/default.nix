@@ -113,10 +113,15 @@ in
     };
 
     /*
-      On-demand full tunnel out through note10 for networks with no uplink of
-      their own -- `sudo globaltun up`. yulee is the jump host because it is the
-      only machine that can reach note10 from such a network; see
-      globaltun-findings.md.
+      On-demand full tunnel for networks with no uplink of their own --
+      `sudo globaltun up`. See globaltun-findings.md.
+
+      yulee IS the gateway, with no jumps: it has its own uplink, so the chain
+      is one hop. It used to be the jump host in front of note10, and that path
+      still works, but it was three failure points for one service -- yulee,
+      yulee's OpenVPN link, and a ptraced proot on the phone, whose per-syscall
+      cost capped the whole tunnel near 90KB/s. Dropping the last two removes
+      the slow part and the two flaky parts at once.
 
       Same identity my.ssh.builderKeyFile uses, spelled out rather than shared,
       so the feature stays giftable. NOTE this file is a leftover: with
@@ -124,13 +129,13 @@ in
     */
     globaltun = {
       enable = true;
-      jump = "r0k0r@172.30.0.215";
-      remote = "root@192.168.0.100";
+      jumps = [ ];
+      remote = "r0k0r@172.30.0.215";
       sshKey = "/etc/nix/remote-builder/ssh_key";
       # One relay per client on the gateway; see the option's description for
       # the current assignment across hosts.
       remoteSocksPort = 1080;
-      remotePort = 2022;
+      remotePort = 22;
 
       /*
         `sudo globaltun share` hosts an AP on this machine's own card and routes

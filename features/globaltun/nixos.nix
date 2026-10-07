@@ -3,7 +3,12 @@
   gateway, over an existing SSH path. On-demand, never auto-started:
   `sudo globaltun up` / `sudo globaltun down`.
 
-    laptop --LAN--> jump host --OpenVPN--> phone (home wifi) --home ISP--> internet
+    laptop --LAN--> [jumps...] --> gateway --> internet
+
+  `jumps` is a list and may be empty, so both of these are the same module:
+
+    laptop --LAN--> jump --OpenVPN--> phone (home wifi) --home ISP--> internet
+    laptop --LAN--> server with its own uplink --ISP--> internet
 
   Why this shape rather than a VPN. The far end is Termux + proot-distro, where
   PRoot fakes uid 0 via ptrace but the kernel still sees an unprivileged uid: no
@@ -13,7 +18,7 @@
 
   `ssh -L` carries TCP only and sshd will never sendto() on your behalf, so UDP
   and ICMP are multiplexed over TCP streams and re-emitted as real datagrams by
-  a small Python relay on the phone (`rsocks.py`), which is the only thing that
+  a small static relay pushed onto the gateway (`relay/`), which is the only thing that
   runs there:
 
     SOCKS5 CONNECT                -> connect()                     [TCP]
@@ -90,6 +95,46 @@ let
     up -- with routes already installed and no proxy behind them, which is the
     one failure mode that takes the machine offline.
   */
+  /*
+    The gateway half of the tunnel, built static for every architecture a
+    gateway might be.
+
+    This exists so the gateway needs NOTHING pre-installed. The Python relay it
+    replaces is fine on a box that happens to ship python3, but "happens to" is
+    the problem: the whole point of this design is that the gateway is some
+    arbitrary machine we can only ssh into. With CGO off there is no libc, no
+    dynamic loader and no interpreter behind the binary, so an sshd and a
+    writable /tmp are the entire contract.
+
+    Both architectures are built here, in one derivation, because Go
+    cross-compiles with no cross toolchain at all once CGO is off -- so this
+    costs a second `go build`, not a second stdenv. The script picks by the
+    gateway's `uname -m` at runtime.
+  */
+  gtrelay = pkgs.stdenv.mkDerivation {
+    pname = "gtrelay";
+    version = "1";
+    src = ./relay;
+    nativeBuildInputs = [ pkgs.go ];
+    # No module dependencies at all -- stdlib only -- so the build needs no
+    # network and no vendor hash, and GOPROXY is pinned off to keep it honest.
+    buildPhase = ''
+      export HOME=$TMPDIR GOCACHE=$TMPDIR/go-cache GOPROXY=off CGO_ENABLED=0
+      for arch in amd64 arm64; do
+        GOOS=linux GOARCH=$arch \
+          go build -trimpath -ldflags="-s -w" -o gtrelay-linux-$arch .
+      done
+    '';
+    installPhase = ''
+      mkdir -p $out/bin
+      cp gtrelay-linux-amd64 gtrelay-linux-arm64 $out/bin/
+    '';
+    # The foreign-architecture binary would be mangled by the host's strip,
+    # and -ldflags=-s -w has already done the stripping.
+    dontFixup = true;
+    meta.description = "static SOCKS5/UDP/ICMP relay pushed to a globaltun gateway";
+  };
+
   runtimeDeps = with pkgs; [
     openssh iproute2 iptables nftables python3 sing-box
     coreutils gnugrep gnused gawk procps iputils curl
@@ -98,7 +143,7 @@ let
 
   globaltun = pkgs.writeShellScriptBin "globaltun" (''
     export PATH=${lib.makeBinPath runtimeDeps}:$PATH
-    export GT_JUMP=${lib.escapeShellArg cfg.jump}
+    export GT_JUMPS=${lib.escapeShellArg (lib.concatStringsSep " " cfg.jumps)}
     export GT_RHOST=${lib.escapeShellArg cfg.remote}
     export GT_RPORT=${toString cfg.remotePort}
     export GT_JUMP_TIMEOUT=${toString cfg.jumpConnectTimeout}
@@ -106,6 +151,7 @@ let
     export GT_KEEP_DIRECT=${lib.escapeShellArg (lib.concatStringsSep " " cfg.keepDirect)}
     export GT_KEY=${lib.escapeShellArg cfg.sshKey}
     export GT_ICMP=${if cfg.icmp.enable then "1" else "0"}
+    export GT_RELAY_DIR=${gtrelay}/bin
     export GT_RSOCKS=${./rsocks.py}
     export GT_GTLOCAL=${./gtlocal.py}
     export GT_GTICMP=${./gticmp.py}
@@ -205,18 +251,24 @@ in
       `sudo globaltun up` and check it with `sudo globaltun verify`
     '';
 
-    jump = lib.mkOption {
-      type = lib.types.str;
-      example = "user@192.0.2.1";
+    jumps = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "user@192.0.2.1" "admin@10.0.0.9:2222" ];
       description = ''
-        SSH jump host, `user@host`, reachable from this machine and itself able
-        to reach `remote`.
+        SSH hops between this machine and `remote`, nearest first: this machine
+        reaches `jumps` head-first and the last one reaches the gateway. Each
+        entry is `[user@]host[:port]`.
 
-        Required, with no default: every host in this flake sits on the LAN side
-        of the VPN link into the gateway's network and cannot reach the gateway
-        itself. A machine that DOES hold that link needs no jump and uses
-        globaltun-direct.sh instead -- it is not a NixOS host, so that case is
-        deliberately absent from this module rather than modelled as an option.
+        Empty -- the default -- means this machine dials the gateway itself.
+        That is a normal configuration, not a degenerate one: it is what you
+        want whenever the gateway is directly reachable, including the case
+        where the gateway is simply a machine that has internet.
+
+        Every hop is given `sshKey` through a generated ssh config rather than
+        `-J`, because ssh(1) applies command-line options to the DESTINATION
+        only: under a bare `-J` list each hop falls back to password auth. See
+        `sshKey` for why that is worse than it sounds.
       '';
     };
 
@@ -224,7 +276,7 @@ in
       type = lib.types.ints.positive;
       default = 120;
       description = ''
-        ConnectTimeout for the jump hop, in seconds. Ignored when `jump` is
+        ConnectTimeout for each jump hop, in seconds. Ignored when `jumps` is
         empty.
 
         Separate from the gateway's own budget (GT_TIMEOUTS, 300/600/900)
@@ -238,7 +290,13 @@ in
     remote = lib.mkOption {
       type = lib.types.str;
       example = "root@192.0.2.50";
-      description = "The phone gateway, `user@host`, as reached FROM the jump host.";
+      description = ''
+        The gateway, `user@host`, as reached from the LAST entry in `jumps` --
+        or from this machine when `jumps` is empty.
+
+        It needs nothing installed beyond an sshd and a writable /tmp: the
+        relay is pushed in as a static binary.
+      '';
     };
 
     remotePort = lib.mkOption {
@@ -251,13 +309,13 @@ in
       type = lib.types.str;
       example = "/run/agenix/globaltun-key";
       description = ''
-        Private key authenticating to BOTH hops, read at runtime from outside
-        the store.
+        Private key authenticating to EVERY hop and to the gateway, read at
+        runtime from outside the store.
 
-        It is passed to the jump hop with an explicit ProxyCommand rather than
-        `-J`, because ssh(1) applies command-line options to the DESTINATION
-        only: under `-J` the jump silently falls back to password auth on every
-        connection. Each prompt then holds an unauthenticated slot on the jump
+        Each hop gets it through a generated ssh config -- one `Host` block per
+        jump, chained with ProxyJump -- rather than through `-J`, because
+        ssh(1) applies command-line options to the DESTINATION only: under `-J`
+        the hops silently fall back to password auth on every connection. Each prompt then holds an unauthenticated slot on the jump
         host's sshd for the whole LoginGraceTime, and enough of them at once
         crosses the default MaxStartups, at which point that host starts
         dropping NEW connections from this machine entirely -- which looks like
@@ -286,11 +344,19 @@ in
         because it sees only its own host's config, so the check has to be a
         human one, and a required option is what forces it.
 
-        Assigned so far: 1080 galaxybook4-pro360, 1081 yulee (standalone
-        bundle), 1082 victus-15, 1083 (peer outside this flake), 1084 (Android
-        client, see android/), 1085 (Windows client, see windows/). Next free:
-        1086. Check the gateway before claiming one -- `pgrep -f rsocks` there
-        lists what is actually running, since `ss` is blind under proot.
+        The allocation is per gateway, and the gateway is now yulee -- 1080
+        galaxybook4-pro360, 1082 victus-15, 1084 (Android client, see android/),
+        1085 (Windows client, see windows/). Next free: 1086.
+
+        1081 and 1083 are left unclaimed on purpose: they were yulee's own
+        standalone bundle and a peer outside this flake, both back when note10
+        was the gateway. Reusing them would make an old note10 relay and a new
+        yulee one answer to the same number.
+
+        Check the gateway before claiming one -- `pgrep -f 'gtrelay|rsocks'`
+        there lists what is actually running. On a proot gateway `ss` is blind
+        (Android blocks netlink for apps), so `pgrep` is the only honest check
+        and the pidfiles in /tmp are the next best.
       '';
     };
 

@@ -54,7 +54,11 @@ $RHost     = Need 'GT_RHOST'
 $Key       = Need 'GT_KEY'
 $RelayPort = Need 'GT_REMOTE_SOCKS_PORT'
 $RPort     = if ($cfg['GT_RPORT'])      { $cfg['GT_RPORT'] }      else { '8022' }
-$Jump      = $cfg['GT_JUMP']
+# Hops between this PC and the gateway, nearest first; space- or
+# comma-separated, each [user@]host[:port]. Empty means dial the gateway
+# directly. GT_JUMP (singular) is still read for older globaltun.env files.
+$JumpsRaw  = if ($cfg['GT_JUMPS']) { $cfg['GT_JUMPS'] } else { $cfg['GT_JUMP'] }
+$Jumps     = @($JumpsRaw -split '[,\s]+' | Where-Object { $_ -and $_ -ne '-' })
 $LPort     = if ($cfg['GT_LPORT'])      { $cfg['GT_LPORT'] }      else { '11080' }
 $LocalPort = if ($cfg['GT_LOCAL_PORT']) { $cfg['GT_LOCAL_PORT'] } else { '1081' }
 $SingBox   = if ($cfg['GT_SINGBOX'])    { $cfg['GT_SINGBOX'] }    else { Join-Path $Here 'sing-box.exe' }
@@ -62,8 +66,16 @@ $Python    = if ($cfg['GT_PYTHON'])     { $cfg['GT_PYTHON'] }     else { 'python
 $SbConf    = Join-Path $Here 'sing-box-windows.json'
 $GtLocal   = if (Test-Path (Join-Path $Here 'gtlocal.py')) { Join-Path $Here 'gtlocal.py' } else { Join-Path $Here '..\gtlocal.py' }
 $RSocks    = if (Test-Path (Join-Path $Here 'rsocks.py'))  { Join-Path $Here 'rsocks.py' }  else { Join-Path $Here '..\rsocks.py' }
+# Static relay binaries for the gateway, if this bundle carries them. Optional:
+# without them the gateway needs its own python3, which is the prerequisite
+# they exist to remove.
+$RelayDir  = @($Here, (Join-Path $Here '..')) |
+             Where-Object { (Test-Path (Join-Path $_ 'gtrelay-linux-amd64')) -or
+                            (Test-Path (Join-Path $_ 'gtrelay-linux-arm64')) } |
+             Select-Object -First 1
 
 $State   = Join-Path $env:ProgramData 'globaltun'
+$SshCfg  = Join-Path $State 'ssh_config'
 $SshPid  = Join-Path $State 'ssh.pid'
 $GlPid   = Join-Path $State 'gtlocal.pid'
 $SbPid   = Join-Path $State 'sing-box.pid'
@@ -71,9 +83,11 @@ $GlLog   = Join-Path $State 'gtlocal.log'
 $SbLog   = Join-Path $State 'sing-box.log'
 New-Item -ItemType Directory -Force -Path $State | Out-Null
 
-# The host whose route must not be swallowed by the tun: the jump when there is
-# one, otherwise the gateway itself.
-$CarrierHost = if ($Jump) { ($Jump -split '@')[-1] } else { ($RHost -split '@')[-1] }
+# The host whose route must not be swallowed by the tun: the host this PC
+# actually opens a socket to, which is the FIRST jump when there is one and the
+# gateway itself when there is not. Strips both user@ and :port.
+$CarrierSpec = if ($Jumps.Count) { $Jumps[0] } else { $RHost }
+$CarrierHost = (($CarrierSpec -split '@')[-1] -split ':')[0]
 
 function Resolve-Carrier {
   try { ([System.Net.Dns]::GetHostAddresses($CarrierHost) |
@@ -103,13 +117,98 @@ function Get-SshArgs {
          '-o', 'StrictHostKeyChecking=accept-new',
          '-o', 'ServerAliveInterval=30', '-o', 'ServerAliveCountMax=10',
          '-o', 'ExitOnForwardFailure=yes')
-  if ($Jump) {
-    # The key must be handed to the jump hop explicitly: ssh(1) applies
-    # command-line options to the destination only, so plain -J falls back to
-    # password auth on every connection.
-    $a += @('-o', "ProxyCommand=ssh -i `"$Key`" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=120 -W %h:%p $Jump")
-  }
+  if ($Jumps.Count) { $a += @('-F', $SshCfg, '-o', "ProxyJump=gt-hop-$($Jumps.Count)") }
   $a
+}
+
+# One Host block per hop, chained with ProxyJump, written once per run.
+#
+# The key has to be handed to every hop explicitly: ssh(1) applies
+# command-line options to the DESTINATION only, so under a plain -J list each
+# hop falls back to password auth on every connection. A generated config says
+# it once per hop instead of nesting a ProxyCommand inside a ProxyCommand,
+# where the quoting and the %h:%p expansion both go wrong silently.
+function Write-SshConfig {
+  if (-not $Jumps.Count) { return }
+  $lines = foreach ($i in 0..($Jumps.Count - 1)) {
+    $e = $Jumps[$i]
+    $u = if ($e -match '@') { ($e -split '@')[0] } else { $null }
+    $hp = ($e -split '@')[-1]
+    $h  = ($hp -split ':')[0]
+    $pt = if ($hp -match ':') { ($hp -split ':')[1] } else { '22' }
+    "Host gt-hop-$($i + 1)"
+    "  HostName $h"
+    if ($u) { "  User $u" }
+    "  Port $pt"
+    "  IdentityFile `"$Key`""
+    '  IdentitiesOnly yes'
+    '  StrictHostKeyChecking accept-new'
+    '  ConnectTimeout 120'
+    '  ServerAliveInterval 30'
+    '  ServerAliveCountMax 10'
+    if ($i -gt 0) { "  ProxyJump gt-hop-$i" }
+  }
+  Set-Content -Path $SshCfg -Value $lines -Encoding ASCII
+}
+
+# Run a multi-line script on the gateway in /bin/sh.
+#
+# Via a temp file and -RedirectStandardInput, not a pipeline: piping to a native
+# command re-encodes the text in the console code page and ends every line with
+# CRLF, and a stray CR makes /bin/sh fail on lines that look perfectly fine in
+# the error message.
+function Invoke-RemoteScript($script) {
+  $f = Join-Path $State 'remote.sh'
+  [IO.File]::WriteAllText($f, ($script -replace "`r`n", "`n") + "`n", [Text.UTF8Encoding]::new($false))
+  $a = (Get-SshArgs) + @($RHost, '/bin/sh')
+  $p = Start-Process ssh -ArgumentList $a -RedirectStandardInput $f -NoNewWindow -Wait -PassThru
+  Remove-Item $f -ErrorAction SilentlyContinue
+  # Set, not returned: an uncaptured return value would be written to the host,
+  # printing a bare exit code under the relay's own output.
+  $global:LASTEXITCODE = $p.ExitCode
+}
+
+# Pick the relay the gateway can actually execute, pushing it if it is not
+# already there. Returns the command that starts it.
+function Get-RelayCommand {
+  $fallback = "python3 -u /tmp/rsocks-$RelayPort.py"
+  if (-not $RelayDir) { return $fallback }
+  $arch = (& ssh @(Get-SshArgs) $RHost "/bin/sh -c 'uname -m'") -join '' -replace '\s',''
+  $bin = switch -Regex ($arch) {
+    '^(x86_64|amd64)$'          { Join-Path $RelayDir 'gtrelay-linux-amd64' }
+    '^(aarch64|arm64|armv[89])' { Join-Path $RelayDir 'gtrelay-linux-arm64' }
+    default                     { $null }
+  }
+  if (-not $bin -or -not (Test-Path $bin)) {
+    Write-Host "  no binary for gateway arch '$arch', using python3"
+    return $fallback
+  }
+  # Content-addressed, so the 2MB push happens once per gateway.
+  $sum = (Get-FileHash $bin -Algorithm SHA256).Hash.ToLower().Substring(0, 16)
+  $rp  = "/tmp/gtrelay-$sum"
+  # Every remote command goes through /bin/sh: `ssh host "script"` hands the
+  # string to the gateway user's LOGIN shell, which may be fish or csh, where
+  # none of this parses. `test` rather than `[` for the same reason -- it is
+  # also a real binary.
+  & ssh @(Get-SshArgs) $RHost "/bin/sh -c 'test -x $rp'" 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "  pushing $arch relay -> $rp"
+    # Start-Process with -RedirectStandardInput, not a pipeline: PowerShell
+    # pipelines carry text and would re-encode the binary into garbage.
+    $pushArgs = (Get-SshArgs) + @($RHost, "/bin/sh -c 'cat > $rp.part && chmod +x $rp.part && mv $rp.part $rp'")
+    $p = Start-Process ssh -ArgumentList $pushArgs -RedirectStandardInput $bin `
+                       -NoNewWindow -Wait -PassThru
+    if ($p.ExitCode -ne 0) { Write-Host '  push failed, using python3'; return $fallback }
+  }
+  # -check exits at once without binding, so this proves the gateway can
+  # EXECUTE the file -- a noexec /tmp fails exactly here.
+  & ssh @(Get-SshArgs) $RHost "/bin/sh -c '$rp -check'" 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "  gateway will not execute $rp, using python3"
+    return $fallback
+  }
+  Write-Host "  static $arch relay at $rp"
+  $rp
 }
 
 function Pin-Carrier {
@@ -126,6 +225,7 @@ function Pin-Carrier {
 }
 
 function Up {
+  Write-SshConfig
   Write-Host '== pinning the carrier (before anything creates the tun)'
   $carrierIp = Pin-Carrier
 
@@ -147,18 +247,26 @@ function Up {
   }
 
   Write-Host '== remote relay'
+  $relay = Get-RelayCommand
+  if ($relay -like 'python3*') {
+    Get-Content $RSocks -Raw | & ssh @(Get-SshArgs) $RHost "/bin/sh -c 'cat > /tmp/rsocks-$RelayPort.py'"
+  }
   # No ControlMaster on Windows, so this is its own connection.
+  #
+  # The readiness check is the relay's own listening line, printed only after
+  # bind() succeeded, into a log truncated a moment earlier. `exec 3<>/dev/tcp`
+  # would be shorter but it is a bash feature, and /bin/sh here is dash.
   $remote = @"
 P=/tmp/globaltun-server-$RelayPort.pid
 [ -f `$P ] && kill `$(cat `$P) 2>/dev/null; rm -f `$P
 : > /tmp/globaltun-server-$RelayPort.log
-RSOCKS_PORT=$RelayPort setsid python3 -u /tmp/rsocks-$RelayPort.py >/tmp/globaltun-server-$RelayPort.log 2>&1 </dev/null &
+D=`$(command -v setsid || command -v nohup || true)
+RSOCKS_PORT=$RelayPort `$D $relay >/tmp/globaltun-server-$RelayPort.log 2>&1 </dev/null &
 echo `$! > `$P
 sleep 2
-(exec 3<>/dev/tcp/127.0.0.1/$RelayPort) 2>/dev/null && echo "  relay up: `$(head -1 /tmp/globaltun-server-$RelayPort.log)" || { echo '  relay FAILED'; cat /tmp/globaltun-server-$RelayPort.log; exit 1; }
+grep -q 'listening on' /tmp/globaltun-server-$RelayPort.log 2>/dev/null && echo "  relay up: `$(head -1 /tmp/globaltun-server-$RelayPort.log)" || { echo '  relay FAILED'; cat /tmp/globaltun-server-$RelayPort.log; exit 1; }
 "@
-  Get-Content $RSocks -Raw | & ssh @(Get-SshArgs) $RHost "cat > /tmp/rsocks-$RelayPort.py"
-  & ssh @(Get-SshArgs) $RHost $remote
+  Invoke-RemoteScript $remote
   if ($LASTEXITCODE -ne 0) { Write-Error 'remote relay failed to start' }
 
   Write-Host '== gtlocal'
@@ -195,7 +303,7 @@ function Down {
   Stop-Tracked $SbPid 'sing-box'
   Stop-Tracked $GlPid 'gtlocal'
   try {
-    & ssh @(Get-SshArgs) $RHost "P=/tmp/globaltun-server-$RelayPort.pid; [ -f `$P ] && kill `$(cat `$P) 2>/dev/null; rm -f `$P; true"
+    Invoke-RemoteScript "P=/tmp/globaltun-server-$RelayPort.pid`n[ -f `$P ] && kill `$(cat `$P) 2>/dev/null; rm -f `$P; true"
   } catch { Write-Host '  (could not stop the remote relay; it will idle)' }
   Stop-Tracked $SshPid 'ssh'
   $ip = try { Resolve-Carrier } catch { $null }

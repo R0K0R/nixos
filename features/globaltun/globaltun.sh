@@ -11,6 +11,7 @@
 #   is-up   : exit 0 if the tunnel is carrying traffic (for automation)
 #   share   : host a Wi-Fi AP on this card and route its clients through the tunnel
 #   unshare : stop it
+#   ssh-config : path to the generated jump chain (empty when there are none)
 #
 set -euo pipefail
 
@@ -31,15 +32,36 @@ RHOST=${GT_RHOST:?set GT_RHOST, e.g. root@gateway}
 KEY=${GT_KEY:?set GT_KEY, path to the ssh private key}
 RPORT=${GT_RPORT:-2022}
 
-JUMP=${GT_JUMP:?set GT_JUMP, e.g. user@jumphost}
+# Jump hosts, in order, nearest first: this machine -> jumps[0] -> jumps[1]
+# -> ... -> gateway. Space- or comma-separated, each `[user@]host[:port]`.
+#
+# An EMPTY list is a first-class case, not a degenerate one: a machine that
+# already holds the link to the gateway reaches it directly, and the gateway
+# may itself be the box with the internet. GT_JUMP (singular) is still read so
+# an older standalone globaltun.env keeps working.
+JUMPS=${GT_JUMPS:-${GT_JUMP:-}}
 JUMP_TIMEOUT=${GT_JUMP_TIMEOUT:-120}
+# "-" lets a config file say "no jumps" explicitly rather than by omission.
+[ "$JUMPS" = "-" ] && JUMPS=""
+JUMP_LIST=()
+# Unquoted on purpose: word splitting IS the parse.
+for _j in ${JUMPS//,/ }; do JUMP_LIST+=("$_j"); done
 
-# The host whose route must NOT be swallowed by the tun it carries.
-CARRIER=${JUMP##*@}
+# The host whose route must NOT be swallowed by the tun it carries -- i.e. the
+# one THIS machine opens a socket to, which is the first jump if there is one
+# and the gateway itself if there is not. Strips both `user@` and `:port`.
+if [ ${#JUMP_LIST[@]} -gt 0 ]; then CARRIER=${JUMP_LIST[0]}
+else                               CARRIER=$RHOST
+fi
+CARRIER=${CARRIER##*@}
+CARRIER=${CARRIER%%:*}
 
 # Component paths. Set by the NixOS wrapper to store paths; fall back to files
 # beside this script so a checkout still runs standalone.
 : "${GT_RSOCKS:=$HERE/rsocks.py}"
+# Static, dependency-free relay binaries, one per architecture. See
+# start_remote_relay: these are what make the gateway prerequisite-free.
+: "${GT_RELAY_DIR:=$HERE}"
 : "${GT_GTLOCAL:=$HERE/gtlocal.py}"
 : "${GT_GTICMP:=$HERE/gticmp.py}"
 : "${GT_SBCONF:=$HERE/gt-client.json}"
@@ -78,11 +100,64 @@ SSHOPTS=(-i "$KEY" -p "$RPORT"
          -o ExitOnForwardFailure=yes
          -o ControlPersist=10m)
 
-# The key must be handed to the jump hop EXPLICITLY. ssh(1) applies command-line
-# options to the destination only, so under plain `-J` the jump silently falls
-# back to password auth on every connection -- which parks unauthenticated slots
-# on its sshd until MaxStartups starts dropping new connections outright.
-SSHOPTS+=(-o ProxyCommand="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=$JUMP_TIMEOUT -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -W %h:%p $JUMP")
+# The key must be handed to every jump hop EXPLICITLY. ssh(1) applies
+# command-line options to the DESTINATION only, so under a plain `-J` list each
+# jump silently falls back to password auth on every connection -- which parks
+# unauthenticated slots on its sshd until MaxStartups starts dropping new
+# connections outright, a failure that looks exactly like a network outage.
+#
+# One nested ProxyCommand per hop would also work, but each level has to be
+# quoted inside the one outside it, so the escaping grows exponentially in the
+# number of hops and %h:%p silently rebinds to the wrong ssh at every level. A
+# generated config says the same thing once per hop, flatly, and chains the
+# hops with ProxyJump between names we control.
+: "${GT_SSHCFG:=}"
+if [ -z "$GT_SSHCFG" ]; then
+  # /run is the right place -- cleared on boot, so a stale chain cannot
+  # outlive a reconfiguration -- but Termux has no /run and runs unrooted.
+  if [ -w /run ]; then GT_SSHCFG=/run/globaltun.ssh_config
+  else                 GT_SSHCFG=${TMPDIR:-/tmp}/globaltun-$(id -u).ssh_config
+  fi
+fi
+
+write_ssh_config(){
+  local i=0 prev="" name entry h u p
+  umask 077
+  : > "$GT_SSHCFG"
+  for entry in "${JUMP_LIST[@]}"; do
+    i=$((i + 1)); name=gt-hop-$i
+    u=""; h=$entry; p=22
+    case $h in *@*) u=${h%%@*}; h=${h#*@} ;; esac
+    case $h in *:*) p=${h##*:};  h=${h%%:*} ;; esac
+    {
+      echo "Host $name"
+      echo "  HostName $h"
+      [ -n "$u" ] && echo "  User $u"
+      echo "  Port $p"
+      echo "  IdentityFile $KEY"
+      # Without IdentitiesOnly, a loaded agent is offered first and a hop that
+      # rejects those keys can exhaust MaxAuthTries before ours is ever tried.
+      echo "  IdentitiesOnly yes"
+      echo "  StrictHostKeyChecking accept-new"
+      echo "  ConnectTimeout $JUMP_TIMEOUT"
+      echo "  ServerAliveInterval 30"
+      echo "  ServerAliveCountMax 10"
+      # Chain: hop N is reached through hop N-1. Absent on the first hop,
+      # which this machine dials directly.
+      [ -n "$prev" ] && echo "  ProxyJump $prev"
+    } >> "$GT_SSHCFG"
+    prev=$name
+  done
+  LAST_HOP=$prev
+}
+
+LAST_HOP=""
+if [ ${#JUMP_LIST[@]} -gt 0 ]; then
+  write_ssh_config || { echo "cannot write $GT_SSHCFG" >&2; exit 1; }
+  # -F makes ssh read ONLY this file (plus the system one). Everything the
+  # destination needs is already on the command line above, so nothing is lost.
+  SSHOPTS+=(-F "$GT_SSHCFG" -o ProxyJump="$LAST_HOP")
+fi
 
 gw(){  ip route show default | awk '{print $3; exit}'; }
 
@@ -147,6 +222,22 @@ dev(){ ip route show default | awk '{print $5; exit}'; }
 need_root(){ [ "$(id -u)" = 0 ] || { echo "must run as root" >&2; exit 1; }; }
 have_ctl(){ [ -S "$CTL" ] && ssh -S "$CTL" -O check "$RHOST" >/dev/null 2>&1; }
 
+# Run a script on the gateway in a POSIX shell, read from stdin.
+#
+# `ssh host "some script"` hands the string to the gateway user's LOGIN shell,
+# which is whatever that person chose -- yulee's is fish, where `P=/tmp/x` is a
+# syntax error and the whole block dies on its first line. None of these
+# snippets are written in fish, csh or anything else, and making them portable
+# to every interactive shell is not a thing that can be finished.
+#
+# So the login shell gets exactly one word to exec, and the script arrives on
+# stdin for /bin/sh to read. Nothing about the gateway's shell can reach it.
+rsh(){ ssh -S "$CTL" "$RHOST" /bin/sh; }
+
+# Same idea for a one-liner, where stdin is needed for something else: quote it
+# so the login shell passes it through to /bin/sh -c intact.
+rsh1(){ ssh -S "$CTL" "$RHOST" "/bin/sh -c '$1'"; }
+
 master(){   # key auth on both hops; no password prompts
   have_ctl && return 0
   rm -f "$CTL"
@@ -174,7 +265,7 @@ master(){   # key auth on both hops; no password prompts
     [ $n -lt 3 ] && { echo "  retrying in ${delay}s" >&2; sleep "$delay"; }
   done
   rm -f "$err"
-  echo "could not establish ssh master to $RHOST${JUMP:+ via $JUMP}. Reading the error above:" >&2
+  echo "could not establish ssh master to $RHOST${JUMPS:+ via $JUMPS}. Reading the error above:" >&2
   echo "  'No route to host'   -> the hop BEFORE the gateway lost its path to it" >&2
   echo "  'Connection refused' -> the gateway is up but sshd is not listening" >&2
   echo "  'Connection closed'  -> the far end hung up; check it is not rate-limiting" >&2
@@ -256,36 +347,171 @@ start_gticmp(){
   echo "gticmp up: $(head -1 "$ICLOG"); icmp -> $ICTUN (table $IC_TABLE, lan=$lan direct)"
 }
 
+# Pick the relay this gateway can actually execute and make sure it is there.
+#
+# The gateway must need NOTHING pre-installed: a static binary with CGO off has
+# no libc, no dynamic loader and no interpreter behind it, so an sshd and a
+# writable /tmp are the whole contract. rsocks.py stays as a fallback for an
+# architecture we do not ship a binary for, and for a /tmp mounted noexec.
+#
+# Echoes the command that starts the relay, or nothing if neither route works.
+pick_relay(){
+  local arch bin sum rpath
+  arch=$(rsh1 'uname -m' 2>/dev/null | tr -d '\r')
+  case $arch in
+    x86_64|amd64)                 bin=$GT_RELAY_DIR/gtrelay-linux-amd64 ;;
+    aarch64|arm64|armv8*|armv9*)  bin=$GT_RELAY_DIR/gtrelay-linux-arm64 ;;
+    *)                            bin= ;;
+  esac
+  [ -n "$bin" ] && [ -f "$bin" ] || bin=
+
+  if [ -n "$bin" ]; then
+    # Content-addressed by its own hash, so the push happens once per binary
+    # per gateway and never again -- it is 2MB, and the reference path to the
+    # gateway runs at ~90KB/s, where re-pushing on every `up` is 25 seconds of
+    # pure waste. A changed binary lands at a different name, so there is no
+    # stale-cache case to reason about.
+    sum=$(sha256sum "$bin" | cut -c1-16)
+    rpath=/tmp/gtrelay-$sum
+    # `test`, not `[`: it is also a real binary, so it survives a login shell
+    # with no such builtin.
+    if rsh1 "test -x $rpath" 2>/dev/null; then
+      echo "  relay: $arch binary already on the gateway ($rpath)" >&2
+    else
+      echo "  relay: pushing $(du -h "$bin" | cut -f1) $arch binary -> $rpath" >&2
+      # Via a temp name: a push interrupted halfway would otherwise leave a
+      # truncated file at the cached path, which every later run would trust.
+      # stdin is the binary, so the command cannot come in on it; `-c` keeps
+      # the redirection out of the login shell's hands.
+      if ssh -S "$CTL" "$RHOST" "/bin/sh -c 'cat > $rpath.part && chmod +x $rpath.part && mv $rpath.part $rpath'" < "$bin"; then
+        :
+      else
+        echo "  relay: push failed, falling back to python3" >&2
+        bin=
+      fi
+    fi
+  else
+    echo "  relay: no binary for gateway arch '${arch:-unknown}', falling back to python3" >&2
+  fi
+
+  # `-check` exits immediately without binding anything, so this proves the
+  # gateway can EXECUTE the file -- the one thing we cannot assume -- without
+  # starting a relay we would then have to clean up.
+  if [ -n "$bin" ]; then
+    # Redirections are done HERE, locally: a remote `2>&1` is bash/POSIX syntax
+    # that csh spells differently, and only the exit status matters.
+    if rsh1 "$rpath -check" >/dev/null 2>&1; then
+      echo "$rpath"
+      return 0
+    fi
+    echo "  relay: gateway will not execute $rpath (noexec /tmp? wrong arch?), falling back to python3" >&2
+  fi
+
+  # Fallback: the gateway's own python3.
+  if ! rsh1 'command -v python3' >/dev/null 2>&1; then
+    echo "  relay: gateway has neither an executable binary nor python3" >&2
+    return 1
+  fi
+  ssh -S "$CTL" "$RHOST" "/bin/sh -c 'cat > /tmp/rsocks-$RPORT_SS.py'" < "$GT_RSOCKS" || return 1
+  echo "python3 -u /tmp/rsocks-$RPORT_SS.py"
+}
+
+# A full tunnel makes this machine *appear* to sit wherever the gateway's egress
+# does, and anything doing IP geolocation believes it. automatic-timezoned does:
+# geoclue asks beacondb, beacondb has no data for the local BSSIDs and falls
+# back to IP, its IP database places the gateway's Cloudflare egress in Gabon,
+# and the clock moves to Africa/Libreville. Measured; see globaltun-findings.md.
+#
+# FREEZE, not correct. Whatever the timezone is when `up` runs was decided by
+# geolocation on the REAL network, so it is already right -- including when the
+# laptop has genuinely flown somewhere, which is the only case automatic
+# timezone exists for. Setting a timezone here would override that.
+TZUNIT=automatic-timezoned.service
+TZFREEZE=/run/globaltun.tzfreeze
+FREEZE_TZ=${GT_FREEZE_TZ:-1}
+
+current_tz(){
+  timedatectl show -p Timezone --value 2>/dev/null \
+    || readlink -f /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||' \
+    || echo unknown
+}
+
+freeze_tz(){
+  [ "$FREEZE_TZ" = 1 ] || return 0
+  command -v systemctl >/dev/null 2>&1 || return 0
+  # `systemctl cat` is the cheap existence test -- it exits 1 on a unit that is
+  # not installed, which is the standalone-bundle-on-a-foreign-box case.
+  systemctl cat "$TZUNIT" >/dev/null 2>&1 || return 0
+  # Already stopped: do NOT leave a marker, or `down` would start a service the
+  # person had deliberately turned off.
+  systemctl is-active --quiet "$TZUNIT" || return 0
+  if systemctl stop "$TZUNIT" 2>/dev/null; then
+    : > "$TZFREEZE"
+    echo "timezone frozen at $(current_tz) -- $TZUNIT stopped (egress geolocation is not where you are)"
+  else
+    echo "could not stop $TZUNIT; the clock may follow the gateway's apparent location" >&2
+  fi
+}
+
+thaw_tz(){
+  # Only restart what WE stopped. The marker is the whole record of that.
+  [ -f "$TZFREEZE" ] || return 0
+  rm -f "$TZFREEZE"
+  command -v systemctl >/dev/null 2>&1 || return 0
+  if systemctl start "$TZUNIT" 2>/dev/null; then
+    echo "timezone tracking resumed -- $TZUNIT started"
+  else
+    echo "could not start $TZUNIT" >&2
+  fi
+}
+
+start_remote_relay(){
+  local cmd
+  cmd=$(pick_relay) || { echo "no usable relay on the gateway" >&2; exit 1; }
+  # Unquoted heredoc so $RPORT_SS and $cmd expand HERE; \$ escapes what must
+  # expand on the gateway. A quoted one would send the port through literally,
+  # and the relay would silently start on its default while the -L forward
+  # pointed elsewhere.
+  rsh <<EOF
+P=/tmp/globaltun-server-$RPORT_SS.pid
+[ -f \$P ] && kill \$(cat \$P) 2>/dev/null; rm -f \$P
+# Migration: relays predating per-client ports used unsuffixed names and are
+# invisible to the pidfile above, so they survive and hold the port, making the
+# new relay fail to bind. Only the legacy names -- never another client's
+# suffixed relay.
+L=/tmp/globaltun-server.pid
+[ -f \$L ] && kill \$(cat \$L) 2>/dev/null; rm -f \$L /tmp/rsocks.py /tmp/globaltun-server.log
+: > /tmp/globaltun-server-$RPORT_SS.log
+# setsid is util-linux and nohup is coreutils; a gateway we were handed may
+# have either. Without one of them ssh can hold the channel open waiting on
+# the child and \`up\` hangs here instead of returning.
+D=\$(command -v setsid || command -v nohup || true)
+RSOCKS_PORT=$RPORT_SS \$D $cmd >/tmp/globaltun-server-$RPORT_SS.log 2>&1 </dev/null &
+echo \$! > \$P
+sleep 2
+# The relay prints its listening line only after bind() succeeded, and the log
+# was truncated a moment ago -- so this is the same proof a port probe would
+# give. It replaces \`exec 3<>/dev/tcp/...\`, which is a bash feature: /bin/sh
+# here is dash on most gateways, where that line is a syntax error.
+if grep -q 'listening on' /tmp/globaltun-server-$RPORT_SS.log 2>/dev/null; then
+  echo "remote relay up: \$(head -1 /tmp/globaltun-server-$RPORT_SS.log)"
+else
+  echo 'remote relay FAILED:'; cat /tmp/globaltun-server-$RPORT_SS.log; exit 1
+fi
+EOF
+}
+
 up(){
   need_root
   SB="$GT_SINGBOX"
   [ -x "$SB" ] || { echo "missing $SB" >&2; exit 1; }
 
+  # Before the routes move, so the last fix geoclue acted on was the real one.
+  freeze_tz
+
   master
-  echo "--- starting remote relay (python socks5)"
-  ssh -S "$CTL" "$RHOST" "cat > /tmp/rsocks-$RPORT_SS.py" < "$GT_RSOCKS"
-  # Double-quoted so $RPORT_SS expands HERE; \$ escapes what must expand on the
-  # gateway. Single quotes would send the port through literally, and the relay
-  # would silently start on its default while the -L forward pointed elsewhere.
-  ssh -S "$CTL" "$RHOST" "
-    P=/tmp/globaltun-server-$RPORT_SS.pid
-    [ -f \$P ] && kill \$(cat \$P) 2>/dev/null; rm -f \$P
-    # Migration: relays predating per-client ports used unsuffixed names and are
-    # invisible to the pidfile above, so they survive and hold the port, making
-    # the new relay fail to bind. Only the legacy names -- never another
-    # client's suffixed relay.
-    L=/tmp/globaltun-server.pid
-    [ -f \$L ] && kill \$(cat \$L) 2>/dev/null; rm -f \$L /tmp/rsocks.py /tmp/globaltun-server.log
-    : > /tmp/globaltun-server-$RPORT_SS.log
-    RSOCKS_PORT=$RPORT_SS setsid python3 -u /tmp/rsocks-$RPORT_SS.py >/tmp/globaltun-server-$RPORT_SS.log 2>&1 </dev/null &
-    echo \$! > \$P
-    sleep 2
-    if (exec 3<>/dev/tcp/127.0.0.1/$RPORT_SS) 2>/dev/null; then
-      echo \"remote relay up: \$(head -1 /tmp/globaltun-server-$RPORT_SS.log)\"
-    else
-      echo 'remote relay FAILED:'; cat /tmp/globaltun-server-$RPORT_SS.log; exit 1
-    fi
-  "
+  echo "--- starting remote relay"
+  start_remote_relay
 
   echo "--- starting local udp/tcp adapter"
   start_gtlocal
@@ -336,7 +562,10 @@ down(){
   nft delete table inet globaltun 2>/dev/null || true
   ip link del "$ICTUN" 2>/dev/null || true
   sleep 1
-  have_ctl && ssh -S "$CTL" "$RHOST" "P=/tmp/globaltun-server-$RPORT_SS.pid; [ -f \$P ] && kill \$(cat \$P) 2>/dev/null; rm -f \$P; true" || true
+  have_ctl && rsh <<EOF || true
+P=/tmp/globaltun-server-$RPORT_SS.pid
+[ -f \$P ] && kill \$(cat \$P) 2>/dev/null; rm -f \$P; true
+EOF
   [ -S "$CTL" ] && { ssh -S "$CTL" -O exit "$RHOST" 2>/dev/null || true; }
   rm -f "$CTL"
   ip route del 0.0.0.0/1   2>/dev/null || true
@@ -345,6 +574,9 @@ down(){
   for p in ${GT_KEEP_DIRECT:-}; do ip route del "$p" 2>/dev/null || true; done
   ip link del "$TUN" 2>/dev/null || true
   rm -f "$STATE"
+  # Last, so its first fix after this sees the real network rather than a
+  # half-torn-down tunnel.
+  thaw_tz
   echo "down"
 }
 
@@ -377,7 +609,7 @@ verify(){
   python3 "$GT_VERIFY"
   echo "=== local log (last errors, icmp noise filtered)"
   grep -v 'icmp is not supported' "$LOG" 2>/dev/null | grep -E 'ERROR|FATAL|outbound|proxy' | tail -10
-  echo "=== remote log tail"; have_ctl && ssh -S "$CTL" "$RHOST" "tail -n 8 /tmp/globaltun-server-$RPORT_SS.log" || echo "(no master)"
+  echo "=== remote log tail"; have_ctl && rsh1 "tail -n 8 /tmp/globaltun-server-$RPORT_SS.log" || echo "(no master)"
 }
 
 # --- sharing the tunnel over a Wi-Fi AP on the same card -------------------
@@ -400,6 +632,41 @@ SHARE_CONF=/run/globaltun-ap.conf
 SHARE_PID=/run/globaltun-hostapd.pid
 SHARE_DNS_PID=/run/globaltun-dnsmasq.pid
 
+# Regulatory flags for one frequency, from the card's own table. Prints the
+# blocking reason and exits 0 when the channel cannot host an AP; exits 1 when
+# it is clear.
+#
+# "Radar detection" is DFS: hostapd will not initiate radiation on radar
+# spectrum, and a station parked there cannot be joined by an AP vif because
+# this card's interface combinations cap AP+station at `#channels <= 1` -- one
+# radio, one frequency. "No IR" blocks initiating radiation outright.
+chan_restricted(){
+  local freq=$1 phy
+  phy=phy$(iw dev "$GT_SHARE_STA" info 2>/dev/null | awk '/wiphy/{print $2}')
+  iw phy "$phy" channels 2>/dev/null | awk -v f="$freq" '
+    $0 ~ "\\* " f " MHz"                       { inblk=1; next }
+    inblk && /^[[:space:]]*\* [0-9]+ MHz/       { inblk=0 }
+    inblk && (/Radar detection/ || /No IR/)     { gsub(/^[ \t]+/,""); print; found=1 }
+    END { exit !found }
+  '
+}
+
+# Channels the upstream SSID is actually on AND that can host an AP -- i.e. the
+# ones worth roaming to. Advice without this is "pick a different channel",
+# which is not advice.
+suggest_channels(){
+  command -v nmcli >/dev/null 2>&1 || return 0
+  local ssid
+  ssid=$(iw dev "$GT_SHARE_STA" info 2>/dev/null | sed -n 's/^[[:space:]]*ssid //p')
+  [ -n "$ssid" ] || return 0
+  nmcli -t -f SSID,CHAN,FREQ,SIGNAL dev wifi list 2>/dev/null \
+    | awk -F: -v s="$ssid" '$1==s { split($3, a, " "); print $2, a[1], $4 }' \
+    | while read -r c f sig; do
+        chan_restricted "$f" >/dev/null 2>&1 \
+          || printf '    channel %-4s %-5s MHz   signal %s\n' "$c" "$f" "$sig"
+      done | sort -u -k2 -n | head -8
+}
+
 share_up(){
   need_root
   [ "${GT_SHARE:-0}" = 1 ] || { echo "sharing is not enabled (my.globaltun.share.enable)" >&2; exit 1; }
@@ -421,18 +688,51 @@ share_up(){
   fi
   ip link set "$GT_SHARE_AP" up
 
+  local freq hwmode vht reason
   ch=$(iw dev "$GT_SHARE_STA" info | awk '/channel/{print $2}')
+  freq=$(iw dev "$GT_SHARE_STA" info | sed -n 's/.*channel [0-9]* (\([0-9]*\) MHz.*/\1/p')
   [ -n "$ch" ] || { echo "$GT_SHARE_STA is not associated; the AP needs its channel" >&2; exit 1; }
+
+  # The AP has to use the station's channel, so a station on radar spectrum
+  # makes an AP impossible -- and hostapd reports that as eight lines of
+  # nl80211 detail that never say "DFS". Fail here with the one fact that
+  # matters, and with somewhere to go.
+  if reason=$(chan_restricted "$freq"); then
+    {
+      echo "cannot host an AP on channel $ch ($freq MHz): $reason"
+      echo
+      echo "This card allows an AP alongside a station only on ONE channel"
+      echo "(#channels <= 1 in its interface combinations), so the AP must use"
+      echo "$GT_SHARE_STA's channel -- and that channel is restricted spectrum."
+      echo "The card is capable; this channel is not."
+      echo
+      echo "Move $GT_SHARE_STA to a channel that can host an AP. On the network it is"
+      echo "associated to, these are reachable and unrestricted:"
+      suggest_channels
+      echo
+      echo "To stay off radar spectrum for good, pin the profile to 2.4GHz, where"
+      echo "no channel is DFS -- roaming still works within the band:"
+      echo "  nmcli con modify <profile> 802-11-wireless.band bg && nmcli con up <profile>"
+    } >&2
+    exit 1
+  fi
+
+  # hw_mode follows the channel. It was hardcoded to `a`, which fails on any
+  # 2.4GHz channel with "Configured channel (11) ... not found from the channel
+  # list of the current mode (2) IEEE 802.11a" -- the same shape of error as a
+  # DFS rejection, from a completely different cause. VHT is 5GHz-only, so it
+  # has to follow too.
+  if [ "$ch" -le 14 ]; then hwmode=g; vht=0; else hwmode=a; vht=1; fi
 
   ( umask 077; cat > "$SHARE_CONF" <<CONF
 interface=$GT_SHARE_AP
 driver=nl80211
 ssid=$GT_SHARE_SSID
 country_code=$GT_SHARE_COUNTRY
-hw_mode=a
+hw_mode=$hwmode
 channel=$ch
 ieee80211n=1
-ieee80211ac=1
+ieee80211ac=$vht
 wmm_enabled=1
 auth_algs=1
 wpa=2
@@ -498,6 +798,8 @@ status(){
   echo "--- local sing-box"; [ -f "$PIDF" ] && ps -o pid,etime,cmd -p "$(cat "$PIDF")" 2>/dev/null || echo "not running"
   echo "--- tun";        ip -br addr show "$TUN" 2>/dev/null || echo "no $TUN"
   echo "--- routes";     ip route show | grep -E '^(0\.0\.0\.0/1|128\.0\.0\.0/1|default|'"$CARRIER"')' || true
+  echo "--- timezone";   if [ -f "$TZFREEZE" ]; then echo "  $(current_tz) (frozen by globaltun)"
+                      else echo "  $(current_tz)$(command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "$TZUNIT" 2>/dev/null && echo ' (tracking geolocation -- will follow the gateway)')"; fi
   echo "--- tailscale";  tailscale status --peers=false 2>&1 | grep -E 'Health|DNS|^[0-9]' | head -3
   echo "--- egress v4";  curl -s --max-time 10 https://ifconfig.me 2>&1; echo
   echo "--- udp test";   command -v dig >/dev/null && dig +short +time=5 @8.8.8.8 example.com 2>&1 || echo "(no dig)"
@@ -515,5 +817,9 @@ case "${1:-}" in
   share)      share_up ;;
   unshare)    share_down ;;
   share-status) share_status ;;
-  *) echo "usage: $0 {up|down|status|verify|reload|reicmp|is-up|share|unshare|share-status}" >&2; exit 2 ;;
+  # Prints the path to the generated hop chain, or nothing when there are no
+  # jumps. Anything that must reach a hop on its own can use it with
+  # `ssh -F <path> gt-hop-N` instead of rebuilding the chain.
+  ssh-config) [ ${#JUMP_LIST[@]} -gt 0 ] && echo "$GT_SSHCFG" || true ;;
+  *) echo "usage: $0 {up|down|status|verify|reload|reicmp|is-up|share|unshare|share-status|ssh-config}" >&2; exit 2 ;;
 esac
