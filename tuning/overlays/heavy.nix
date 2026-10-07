@@ -190,6 +190,30 @@ else
       in
       if ccache.enable && ccache.normalize then stableSeed swapped else swapped;
 
+    /*
+      ONE tuned stdenv per (stdenv argument, mold), shared by every package that
+      swaps through it. mkStdenv builds a mold bintools, a ccache links
+      derivation, a cc-wrapper and the seed adapter; called per package, as it
+      used to be, that work was redone for each of the ~900 classifier names and
+      was the bulk of this overlay's eval cost (2026-10-08: the overlay was 2.25M
+      of 27.6M thunks). The values are the same expressions, so every
+      derivation is unchanged; they are just shared. Keyed by the arguments
+      `extras` actually use; any other name falls back to building its own.
+    */
+    stdenvArgs = lib.unique ([ "stdenv" ] ++ map (e: e.stdenvArg or "stdenv") extras);
+    tunedStdenv = lib.genAttrs stdenvArgs (
+      arg: {
+        mold = mkStdenv { useMold = true; } prev.${arg};
+        noMold = mkStdenv { useMold = false; } prev.${arg};
+      }
+    );
+    tunedFor =
+      arg: useMold:
+      if tunedStdenv ? ${arg} then
+        tunedStdenv.${arg}.${if useMold then "mold" else "noMold"}
+      else
+        mkStdenv { inherit useMold; } prev.${arg};
+
     # Only swap through an argument the package actually declares. abseil-cpp
     # takes no `stdenv` at all and `.override { stdenv = ...; }` throws
     # "called with unexpected argument"; a wrong guess must degrade to
@@ -201,7 +225,7 @@ else
     swapIn =
       pkg: arg: useMold:
       let
-        tuned = mkStdenv { inherit useMold; } prev.${arg};
+        tuned = tunedFor arg useMold;
         # Version shims like protobuf_35 = callPackage ./35.nix { } expose only
         # `callPackage` to override; thread the stdenv through it into the
         # generic below, but only if that generic actually takes it.
