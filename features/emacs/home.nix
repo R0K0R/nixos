@@ -83,6 +83,9 @@ lib.mkIf (cfg.enable && inScope) {
     doomDir = inputs.feat-emacs.doomDir;
     doomLocalDir = "${config.xdg.dataHome}/doom";
     emacs = emacsPackage;
+    # Evaluation-time helpers (Unstraightened's IFD) from upstream nixpkgs, so
+    # evaluating never has to build the tuned Emacs first (features/emacs/flake.nix).
+    ifdPackages = inputs.nixpkgs-upstream.legacyPackages.${pkgs.stdenv.buildPlatform.system};
     # Nix >2.18 breaks fetchGit's revision resolution for Unstraightened's
     # per-package fetches; fetchTree does not have that problem.
     experimentalFetchTree = true;
