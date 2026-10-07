@@ -1,0 +1,54 @@
+egismoc: retry, don't fail, on an SDCP identify response that does not verify
+
+On the Galaxy Book4 Pro 360 (Egis 1c7a:05a1) the first verify after fprintd
+starts often fails with
+
+    SDCP AuthorizedIdentity verification failed.
+    Device reported an error during verify: Device SDCP Identify response
+    was not valid
+
+-- always within a second or two of the daemon starting, after an earlier
+daemon was stopped mid-verify. The MAC is keyed by the session's
+application secret, so the likeliest reading is a reply to the previous
+session's request. FP_DEVICE_ERROR_DATA_INVALID ends the operation and
+pam_fprintd falls back to the password although the finger matched.
+
+Report FP_DEVICE_RETRY_GENERAL instead: fprintd asks for another scan and
+keeps listening. A retry authorizes nothing; the next scan is verified
+exactly as before.
+
+--- a/libfprint/drivers/egismoc/egismoc.c	2026-10-07 18:18:22.762539016 +0900
++++ b/libfprint/drivers/egismoc/egismoc.c	2026-10-07 18:18:22.809538804 +0900
+@@ -1518,14 +1518,27 @@
+           return;
+         }
+ 
+-      /* Ensure the returned identity is valid per SDCP. */
++      /* Ensure the returned identity is valid per SDCP. A response that fails
++         the check proves nothing either way -- in practice it is the device
++         answering a request from an earlier session (the previous daemon was
++         stopped mid-verify), MACed with that session's secret -- so ask for
++         another scan instead of failing the whole operation: a hard error
++         here made pam_fprintd give up and fall back to the password at once.
++         A retry grants nothing; the next scan must verify like any other. */
+       if (!fpi_sdcp_verify_authorized_identity (sdcp_dev, host_nonce,
+                                                 enrollment_id, device_mac))
+         {
+-          fpi_ssm_mark_failed (self->task_ssm,
+-                               fpi_device_error_new_msg (FP_DEVICE_ERROR_DATA_INVALID,
+-                                                         "Device SDCP Identify "
+-                                                         "response was not valid"));
++          fp_warn ("Device SDCP Identify response was not valid "
++                   "(stale session?), asking for another scan");
++
++          if (fpi_device_get_current_action (device) == FPI_DEVICE_ACTION_VERIFY)
++            fpi_device_verify_report (device, FPI_MATCH_ERROR, NULL,
++                                      fpi_device_retry_new (FP_DEVICE_RETRY_GENERAL));
++          else
++            fpi_device_identify_report (device, NULL, NULL,
++                                        fpi_device_retry_new (FP_DEVICE_RETRY_GENERAL));
++
++          fpi_ssm_next_state (self->task_ssm);
+           return;
+         }
+ 

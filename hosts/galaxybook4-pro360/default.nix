@@ -545,7 +545,15 @@ in
         # Tracked as TenSeventy7/libfprint-egismoc-sdcp#13, which is open with
         # no maintainer reply -- that fork's last push was 2025-07-29 and it
         # has 9 unmerged PRs, so this is not arriving from upstream.
-        patches = [ ../../features/samsung-galaxybook/libfprint-egismoc-open-busy.patch ];
+        #
+        # And the SDCP identify retry: the first verify after fprintd starts often
+        # failed its SDCP MAC check (a reply to the previous daemon's request, by
+        # every sign) and dropped PAM to the password although the finger matched.
+        # The patch turns that into "scan again". See its header.
+        patches = [
+          ../../features/samsung-galaxybook/libfprint-egismoc-open-busy.patch
+          ../../features/samsung-galaxybook/libfprint-egismoc-sdcp-identify-retry.patch
+        ];
       });
     })
   ];
