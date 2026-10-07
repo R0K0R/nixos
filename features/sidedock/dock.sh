@@ -261,12 +261,12 @@ undock() {  # strip the dock shape/tag and return a window to the tiling area
   d "hl.dsp.focus({window=\"address:$a\"})"
 }
 
-pip_make() {  # turn $1 into a keystone PiP: a standalone, pinned, tilted mini-card, bottom-right.
+# Size and park a PiP for the CURRENT geometry: fit the window's aspect inside ~1/3 of the
+# viewport each way, bottom-right. pip_make uses it, and relayout re-runs it on every PiP
+# so a rotation or scale change moves it to the new corner instead of leaving it at the
+# old coordinates (off-screen after a landscape -> portrait turn).
+pip_place() {
   local a="$1"
-  ensure_float "$a"
-  d "hl.dsp.window.tag({tag=\"+dock\", window=\"address:$a\"})"  # +dock => keystone tilt/shadow/input, all free
-  d "hl.dsp.window.tag({tag=\"+pip\", window=\"address:$a\"})"   # +pip  => the cascade (order/curfront/shownany) skips it
-  dock_chrome "$a"   # as dock_send: no border, keystone corners, warped shadow kept
   # ~1/3 of the viewport wide, KEEPING the window's current aspect, parked bottom-right (right
   # edge inset by HGAP so the keystone's flush right edge sits just off the screen edge).
   local cw ch pw ph px py mw mh
@@ -285,9 +285,17 @@ pip_make() {  # turn $1 into a keystone PiP: a standalone, pinned, tilted mini-c
   d "hl.dsp.window.set_prop({prop=\"max_size\", value=\"$pw $ph\", window=\"address:$a\"})"
   d "hl.dsp.window.resize({x=$pw, y=$ph, window=\"address:$a\"})"
   d "hl.dsp.window.set_prop({prop=\"min_size\", value=\"$pw $ph\", window=\"address:$a\"})"
+  mv "$a" "$px" "$py"
+}
+pip_make() {  # turn $1 into a keystone PiP: a standalone, pinned, tilted mini-card, bottom-right.
+  local a="$1"
+  ensure_float "$a"
+  d "hl.dsp.window.tag({tag=\"+dock\", window=\"address:$a\"})"  # +dock => keystone tilt/shadow/input, all free
+  d "hl.dsp.window.tag({tag=\"+pip\", window=\"address:$a\"})"   # +pip  => the cascade (order/curfront/shownany) skips it
+  dock_chrome "$a"   # as dock_send: no border, keystone corners, warped shadow kept
   to_regular "$a"   # a pin needs a regular workspace; a card would be on the dock workspace
   pin "$a" on
-  mv "$a" "$px" "$py"
+  pip_place "$a"
   ztop "$a"
   # If $a was a pile member (SUPER+P straight from the dock = the "pin clears dock" half), the
   # cascade now has a gap -- re-flow the survivors (order() already excludes this +pip window),
@@ -411,5 +419,8 @@ case "${1:-toggle}" in
       [ -n "$cur" ] && render "$cur"
     else
       park_all
-    fi ;;
+    fi
+    # PiPs are outside the pile: move each to the new bottom-right corner, re-sized
+    while read -r p; do [ -n "$p" ] && pip_place "$p"; done \
+      < <($J -r '.[]|select(.tags|any(rtrimstr("*")=="pip"))|.address' <<<"$CLIENTS") ;;
 esac
