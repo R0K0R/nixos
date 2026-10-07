@@ -183,15 +183,36 @@ do
       if n then return tonumber(n) end
     end
   end
+  -- Is point c on the card AS DRAWN? Cards are keystone trapezoids, not their flat boxes:
+  -- the front card's box reaches over the back cards' visible edges, so a box test sent
+  -- clicks on those edges to the front card. The trapezoid is fixed by keystone_inset /
+  -- keystone_shrink, pinned to the dock's PHYSICAL edge -- the window-unit point is mapped
+  -- into the canonical "pinned right edge" frame the same way the patch orients the warp
+  -- (ksOrientToEdge: transpose at 90, mirror at 180, both at 270). Its edges are straight.
+  local function onCard(w, c)
+    local u = (c.x - w.at.x) / w.size.x
+    local v = (c.y - w.at.y) / w.size.y
+    if u < 0 or u > 1 or v < 0 or v > 1 then return false end
+    local edge = ((w.monitor and w.monitor.transform) or 0) % 4
+    local cu, cv = u, v
+    if edge == 1 then cu, cv = v, u
+    elseif edge == 2 then cu, cv = 1 - u, v
+    elseif edge == 3 then cu, cv = 1 - v, u end
+    local inset  = tonumber(hl.get_config("decoration.keystone_inset")) or 0
+    local shrink = tonumber(hl.get_config("decoration.keystone_shrink")) or 0
+    if cu < inset then return false end
+    local t = (inset < 1) and (cu - inset) / (1 - inset) or 1 -- 0 at the far edge, 1 at the pinned one
+    local margin = shrink * (1 - t)
+    return cv >= margin and cv <= 1 - margin
+  end
+
   hl.bind("mouse:272", function()
     pcall(function()
       local c = hl.get_cursor_pos()
       local best, bestDepth
       for _, w in ipairs(hl.get_windows()) do
         if isDockWin(w) and not isPip(w) and not w.hidden
-           and w.workspace and w.workspace.name == "special:dock"
-           and c.x >= w.at.x and c.x < w.at.x + w.size.x
-           and c.y >= w.at.y and c.y < w.at.y + w.size.y then
+           and w.workspace and w.workspace.name == "special:dock" and onCard(w, c) then
           local d = depthOf(w)
           if d and (not bestDepth or d < bestDepth) then best, bestDepth = w, d end
         end
@@ -250,7 +271,7 @@ if nix.keystone then
     -- overshoots by keystone_bounce * keystone_bounce_decay^d -- a continuous formula,
     -- evaluated per card by the patch (each card gets its own curve, since Hyprland reads
     -- a curve live and a shared one switched between cards bent those already moving).
-    keystone_bounce = 0.10, keystone_bounce_decay = 0.8,
+    keystone_bounce = 0.05, keystone_bounce_decay = 0.2,
   } })
   -- A 3-finger swipe that starts on a pile card moves that card under the finger
   -- (trapezoid.patch's move gesture); on release this settles it: cycle or spring back.
