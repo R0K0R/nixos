@@ -151,6 +151,13 @@ in
       Mapping as lisgd's own wl_output handler does (lisgd.c display_handle_geometry):
       Hyprland/wl_output transform 1 (90 deg) is lisgd 3, transform 3 is lisgd 1. The
       static `orientation` option is the fallback before any rotation was recorded.
+
+      -w/-h are passed too, and that matters: without them lisgd asks Wayland for the
+      screen size AND takes the output's transform from the same reply, overriding -o.
+      The rotation hook restarts it while the panel is still turning, so it latched the
+      rotated transform and kept it -- in landscape, swipes acted as if the laptop were
+      turned (workspace swipes horizontal, the dock edge at the bottom). 2026-10-07.
+      The size is the output's mode, untransformed, as lisgd's own mode handler reads it.
     */
     staticOrientation = { normal = 0; right = 1; inverted = 2; left = 3; }.${cfg.orientation};
     lisgdStart = pkgs.writeShellScript "lisgd-start" ''
@@ -162,7 +169,10 @@ in
         1) o=3 ;; 3) o=1 ;; 2) o=2 ;; 0) o=0 ;;
         *) o=${toString staticOrientation} ;;
       esac
-      exec ${lib.escapeShellArgs [ (lib.getExe pkgs.lisgd) "-d" cfg.device ]} -o "$o" ${
+      size=$(${config.programs.hyprland.package}/bin/hyprctl monitors -j 2>/dev/null \
+        | ${lib.getExe pkgs.jq} -r '(.[] | select(.name == "${config.my.desktop.primaryOutput}")) // .[0] | "-w \(.width) -h \(.height)"' 2>/dev/null)
+      # shellcheck disable=SC2086 # $size is two flag pairs, or empty (falls back to Wayland)
+      exec ${lib.escapeShellArgs [ (lib.getExe pkgs.lisgd) "-d" cfg.device ]} -o "$o" $size ${
         lib.escapeShellArgs (lib.concatMap (g: [ "-g" g ]) (cfg.gestures ++ cfg.extraGestures))
       }
     '';
