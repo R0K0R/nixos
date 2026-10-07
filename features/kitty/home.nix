@@ -60,6 +60,10 @@ lib.mkIf (osConfig.my.kitty.enable && inScope) {
 
       # Needed for dots-hyprland-style search kitten (launch … kitty @ …).
       allow_remote_control = "yes";
+      # Also accept remote control on a socket, for tty-less callers (e.g. Claude
+      # Code's captured shells running `kitten @ launch … kitten icat`). Abstract
+      # socket, per-instance; children get it as $KITTY_LISTEN_ON.
+      listen_on = "unix:@kitty-{kitty_pid}";
 
       # Inspired by https://github.com/end-4/dots-hyprland/blob/main/dots/.config/kitty/kitty.conf
       window_margin_width = 21.75;

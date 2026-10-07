@@ -235,6 +235,9 @@ in
       # export-markdown, export-svg, info and the rest.
       extraBinPackages = [
         (pkgs.callPackage ../../features/hop/rhwp.nix { rhwpSrc = inputs.feat-hop.rhwp; })
+        # Inline images in replies via kitty Unicode placeholders; see
+        # ~/.claude/CLAUDE.md for how Claude is told to use it.
+        (pkgs.callPackage ../../features/claude-code/kitty-inline-img.nix { })
       ];
       shareWithRoot = true;
       gemma.enable = true;
