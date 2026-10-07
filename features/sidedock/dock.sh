@@ -99,7 +99,15 @@ to_dockws()   { in_dockws "$1" || d "hl.dsp.window.move({workspace=\"$SPECIAL\",
 to_regular()   { local ws; ws=$($HC monitors -j | $J -r '.[]|select(.focused)|.activeWorkspace.id')
                  [ -n "$ws" ] && d "hl.dsp.window.move({workspace=\"$ws\", follow=false, window=\"address:$1\"})"; }
 dockws_shown() { [ "$($HC monitors -j | $J -r --arg s "$SPECIAL" '.[]|select(.focused)|.specialWorkspace.name')" = "$SPECIAL" ]; }
-dockws_show()  { dockws_shown || d "hl.dsp.workspace.toggle_special(\"${SPECIAL#special:}\")"; }
+# Open it without the dim: Hyprland captures decoration:dim_special when a special
+# workspace opens, and the global value is the scratchpad's tint (features/hyprland).
+dockws_show()  {
+  dockws_shown && return 0
+  local dim; dim=$($HC getoption decoration:dim_special -j 2>/dev/null | $J -r '.float // 0')
+  $HC eval 'hl.config({ decoration = { dim_special = 0 } })' >/dev/null 2>&1
+  d "hl.dsp.workspace.toggle_special(\"${SPECIAL#special:}\")"
+  $HC eval "hl.config({ decoration = { dim_special = $dim } })" >/dev/null 2>&1
+}
 dockws_hide()  { dockws_shown && d "hl.dsp.workspace.toggle_special(\"${SPECIAL#special:}\")"; }
 
 # Lay out the cascade with $1 as the front. Rotates the stable order so the front

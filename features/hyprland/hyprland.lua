@@ -167,10 +167,13 @@ hl.config({
 
   decoration = {
     rounding = 16,
-    -- No dimming behind a shown special workspace by default: the side dock is the
-    -- `dock` special workspace, and opening a dock must not darken the whole screen.
-    -- The scratchpad turns it on for itself (workspace.special_active handler below).
-    dim_special = 0,
+    -- Dim behind a shown special workspace -- the scratchpad's tint, so you can tell it
+    -- is up. The side dock is a special workspace too and must not darken the screen:
+    -- Hyprland captures this value when a special workspace OPENS, so dock.sh sets it to
+    -- 0 for the instant it opens the dock workspace and restores it right after.
+    -- (Changing it from a workspace.special_active handler does not work: the event
+    -- fires after that capture.)
+    dim_special = 0.2,
     -- Glassmorphism: true backdrop blur behind translucent surfaces.
     -- Compositor-side half only. Blur applies to translucent WINDOWS
     -- automatically, but a layer surface has to opt in with a
@@ -717,13 +720,7 @@ hl.bind(mod .. " + CTRL + I", hl.dsp.window.move({ workspace = "+1", follow = tr
 -- window already on it, brings it back to the workspace underneath.
 -- Global, so features/sidedock can wrap it (Mod+Ctrl+C on a dock card undocks it).
 hl.bind(mod .. " + C", hl.dsp.workspace.toggle_special("scratch"))
--- The scratchpad, and only it, tints what is behind it. dim_special is one global
--- value, so it follows whichever special workspace just opened: the scratchpad gets
--- Hyprland's default 0.2, anything else (the side dock) none. ws is nil on close.
-hl.on("workspace.special_active", function(ws)
-  local dim = (ws ~= nil and ws.name == "special:scratch") and 0.2 or 0
-  hl.config({ decoration = { dim_special = dim } })
-end)
+
 function HyprScratchToggle()
   local w = hl.get_active_window()
   if not w then return end
