@@ -21,6 +21,10 @@ of cropped. Covers the surface tree's texture boxes and UVs, pointer / touch /
 tablet input (mapped back through the same scale; the letterbox margin is a
 miss) and commit damage (repaints the whole window). Inactive while the client's
 size matches, so well-behaved windows render 1:1 exactly as before.
+A fitted window also keeps its box below the client's minimum size: the commit-
+time clamp, which grows a floating window about its centre, is skipped for it,
+since the oversized surface is drawn scaled instead (it pushed a corner-parked
+PiP of Firefox off the monitor).
 Fourth, two dock-card render fixes on top of upstream's warp: the drop shadow is
 no longer clipped to the window's FLAT box (that left a shadow whose inner edge
 was the straight flat-box edge, not the trapezoid's; the shader's own cutout is
@@ -281,7 +285,7 @@ diff -ruN a/src/desktop/view/Subsurface.cpp c/src/desktop/view/Subsurface.cpp
          m_popupParent->recheckTree();
 diff -ruN a/src/desktop/view/Window.cpp c/src/desktop/view/Window.cpp
 --- a/src/desktop/view/Window.cpp	2026-10-05 19:57:04.449603878 +0900
-+++ c/src/desktop/view/Window.cpp	2026-10-06 16:30:11.234468221 +0900
++++ c/src/desktop/view/Window.cpp	2026-10-07 10:11:01.789580320 +0900
 @@ -1858,6 +1858,28 @@
      return nullptr;
  }
@@ -311,7 +315,22 @@ diff -ruN a/src/desktop/view/Window.cpp c/src/desktop/view/Window.cpp
  Vector2D CWindow::getReportedSize() {
      if (m_isX11)
          return m_reportedSize;
-@@ -2753,6 +2775,9 @@
+@@ -2739,7 +2761,13 @@
+     if (m_isX11)
+         m_reportedSize = m_pendingReportedSize;
+ 
+-    if (!m_isX11 && !Fullscreen::controller()->isFullscreen(m_self.lock()) && m_isFloating) {
++    // scale-to-fit windows (`fit` / side-dock and PiP cards, fitTransform) keep the size the
++    // compositor gave them even below the client's minimum: the oversized surface is drawn
++    // scaled into the box instead. Growing the box (about its centre) pushed a corner-parked
++    // PiP of e.g. Firefox off the monitor.
++    const bool FITTED = m_ruleApplicator && (m_ruleApplicator->m_tagKeeper.isTagged("fit", false) || m_ruleApplicator->m_tagKeeper.isTagged("dock", false));
++
++    if (!m_isX11 && !Fullscreen::controller()->isFullscreen(m_self.lock()) && m_isFloating && !FITTED) {
+         const auto MINSIZE = m_xdgSurface->m_toplevel->layoutMinSize();
+         const auto MAXSIZE = m_xdgSurface->m_toplevel->layoutMaxSize();
+ 
+@@ -2753,6 +2781,9 @@
      const auto PMONITOR = m_monitor.lock();
  
      g_pHyprRenderer->damageSurface(wlSurface()->resource(), m_realPosition->goal().x, m_realPosition->goal().y, m_isX11 ? 1.0 / m_X11SurfaceScaledBy : 1.0);
