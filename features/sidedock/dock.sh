@@ -372,10 +372,23 @@ case "${1:-toggle}" in
     exists "$2" || exit 0
     { is_dock "$2" || is_pip "$2"; } && exit 0
     dock_send "$2" ;;
+  stray)   # a window ($2) opened ON the dock workspace without joining the pile (a dialog,
+           # or anything opened while the workspace had focus but no card did). The dock
+           # workspace holds only cards: move it to the live regular workspace, and close
+           # the dock workspace if the pile is empty so focus goes back to that workspace.
+    exists "$2" || exit 0
+    { is_dock "$2" || is_pip "$2"; } && exit 0
+    in_dockws "$2" || exit 0
+    to_regular "$2"
+    snap; mapfile -t ORD < <(order); [ ${#ORD[@]} -eq 0 ] && dockws_hide
+    d "hl.dsp.focus({window=\"address:$2\"})" ;;
   orphan)  # a dock window ($2) just CLOSED: re-flow the survivors (if the pile is up)
     EXCLUDE="$2"; snap
     mapfile -t ORD < <(order)
-    [ ${#ORD[@]} -eq 0 ] && { : >"$STATE"; exit 0; }   # dock now empty
+    # Dock now empty: close the dock workspace too. Left open and empty it kept focus, so
+    # the next app opened ON it as a plain tiled window -- an unmarked special workspace
+    # that looked like a normal one and that Mod+C could not get you out of.
+    [ ${#ORD[@]} -eq 0 ] && { : >"$STATE"; dockws_hide; exit 0; }
     # Keep the remembered front if it survives; otherwise take the first.
     want=""; [ -f "$STATE" ] && want="$(cat "$STATE" 2>/dev/null)"
     if [ -z "$want" ] || [ "$want" = "$EXCLUDE" ] || ! printf '%s\n' "${ORD[@]}" | grep -qxF "$want"; then want="${ORD[0]}"; fi

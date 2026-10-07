@@ -85,6 +85,10 @@ do
     if focusAddr == w.address then dockHadFocus = prevFocusDock end
     if dockHadFocus and not w.floating then
       hl.dispatch(hl.dsp.exec_cmd(dock .. " send " .. w.address))
+    elseif w.workspace and w.workspace.name == "special:dock" then
+      -- opened on the dock workspace but not joining the pile: dock.sh moves it to the
+      -- regular workspace (the dock workspace holds only cards)
+      hl.dispatch(hl.dsp.exec_cmd(dock .. " stray " .. w.address))
     end
   end)
   hl.on("window.close", function(w)
