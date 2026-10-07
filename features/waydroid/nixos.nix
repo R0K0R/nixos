@@ -27,10 +27,18 @@ let
             H=${config.programs.hyprland.package}/bin/hyprctl
             J=${lib.getExe pkgs.jq}
             a=$("$H" clients -j 2>/dev/null | "$J" -r '.[]|select(.class=="Waydroid" and .workspace.name=="special:waydroid")|.address' | head -1)
+            # Wake unconditionally: the display can be off with the window still
+            # shown (an `off` whose hide failed), which looked like a black window
+            # that relaunching never fixed.
+            [ -w /run/waydroid-display ] && echo on > /run/waydroid-display
             if [ -n "$a" ]; then
-              [ -w /run/waydroid-display ] && echo on > /run/waydroid-display
               ws=$("$H" monitors -j | "$J" -r '.[]|select(.focused)|.activeWorkspace.id')
               "$H" dispatch "hl.dsp.window.move({workspace=\"$ws\", follow=true, window=\"address:$a\"})" >/dev/null
+              # A PiP had its pin dropped to be hidden (a pinned window cannot
+              # sit on a special workspace); give it back.
+              if "$H" clients -j | "$J" -e --arg a "$a" 'any(.[]; .address==$a and (.tags|any(rtrimstr("*")=="pip")))' >/dev/null; then
+                "$H" dispatch "hl.dsp.window.pin({action=\"on\", window=\"address:$a\"})" >/dev/null
+              fi
               "$H" dispatch "hl.dsp.focus({window=\"address:$a\"})" >/dev/null
             fi
           fi
@@ -144,6 +152,10 @@ in
           SocketGroup = "waydroid";
           SocketMode = "0620";
           RemoveOnStop = true;
+          # systemd applies its umask (022) on top of SocketMode, so the FIFO came
+          # out 0600 and every group write failed silently -- the display never
+          # went off and a hidden Waydroid kept the GPU busy. Set it outright.
+          ExecStartPost = "${pkgs.coreutils}/bin/chmod 0620 /run/waydroid-display";
         };
       };
       systemd.services.waydroid-display = {

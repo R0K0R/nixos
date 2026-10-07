@@ -13,6 +13,11 @@ let
   inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "waydroid"; };
   hide = pkgs.writeShellScript "waydroid-hide" ''
     a="$1"
+    # A pinned window (a sidedock PiP) refuses a special workspace and stayed on
+    # screen with its display off -- the black window. Unpin first; the
+    # `waydroid` wrapper re-pins it (it keeps its pip tag) on the way back.
+    ${osConfig.programs.hyprland.package}/bin/hyprctl dispatch \
+      "hl.dsp.window.pin({action=\"off\", window=\"address:$a\"})" >/dev/null
     ${osConfig.programs.hyprland.package}/bin/hyprctl dispatch \
       "hl.dsp.window.move({workspace=\"special:waydroid\", follow=false, window=\"address:$a\"})" >/dev/null
     [ -w /run/waydroid-display ] && echo off > /run/waydroid-display
