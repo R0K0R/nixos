@@ -254,7 +254,6 @@ hl.gesture({ fingers = 3, direction = "swipe", action = "move" })
 --
 -- The 4-finger VERTICAL swipe is further down, next to Mod+J/K: it runs
 -- HyprFocusOrWorkspace (walk the column, then change workspace).
--- features/sidedock replaces this horizontal one with the dock's interactive swipe.
 hl.gesture({ fingers = 4, direction = "horizontal", action = "scroll_move" })
 
 

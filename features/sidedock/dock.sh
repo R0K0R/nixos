@@ -328,17 +328,6 @@ geom; snap
 case "${1:-toggle}" in
   toggle)   # SUPER+S: show the pile if hidden, park it if shown
     if pile_shown; then hide_pile; else show_pile; fi ;;
-  settle)  # end of the interactive 4-finger touchpad swipe (sidedock/hyprland.lua), which has
-           # already dragged the cards part of the way: $2 = open | closed. Unlike show /
-           # hide this never skips, since mid-drag the pile is neither shown nor parked --
-           # it animates from wherever the fingers left the cards.
-    if [ "${2:-}" = open ]; then
-      show_pile
-    else
-      pile_shown && { cur="$(curfront)"; [ -n "$cur" ] && printf '%s' "$cur" >"$STATE"; }
-      park_all
-      dockws_hide
-    fi ;;
   show)     # directional gesture (3-finger swipe toward the dock): reveal the pile.
             # Idempotent -- a no-op if it is already shown, so repeated swipes don't flicker.
     pile_shown || show_pile ;;
