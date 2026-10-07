@@ -249,11 +249,14 @@ undock() {  # strip the dock shape/tag and return a window to the tiling area
   [ "$($HC clients -j | $J -r --arg a "$a" 'first(.[]|select(.address==$a)).floating // false')" = "true" ] \
     && d "hl.dsp.window.float({window=\"address:$a\"})"
   snap
-  # Re-lay whatever remains (only if the pile is on-screen), then hand focus back
-  # to the just-freed window -- you pulled it out to use it.
-  if pile_shown; then
-    local -a o; mapfile -t o < <(order)
-    [ ${#o[@]} -gt 0 ] && render "${o[0]}"
+  # Re-lay whatever remains (only if the pile is on-screen) -- or, if that was the last
+  # card, close the dock workspace rather than leave it open and empty -- then hand focus
+  # back to the just-freed window: you pulled it out to use it.
+  local -a o; mapfile -t o < <(order)
+  if [ ${#o[@]} -eq 0 ]; then
+    dockws_hide
+  elif pile_shown; then
+    render "${o[0]}"
   fi
   d "hl.dsp.focus({window=\"address:$a\"})"
 }
@@ -290,9 +293,11 @@ pip_make() {  # turn $1 into a keystone PiP: a standalone, pinned, tilted mini-c
   # cascade now has a gap -- re-flow the survivors (order() already excludes this +pip window),
   # then hand focus back to the PiP.
   snap
-  if pile_shown; then
-    local -a o; mapfile -t o < <(order)
-    [ ${#o[@]} -gt 0 ] && render "${o[0]}"
+  local -a o; mapfile -t o < <(order)
+  if [ ${#o[@]} -eq 0 ]; then
+    dockws_hide   # that was the last card: never leave the dock workspace open and empty
+  elif pile_shown; then
+    render "${o[0]}"
   fi
   d "hl.dsp.focus({window=\"address:$a\"})"
 }
