@@ -87,49 +87,22 @@ in
     };
     gestures = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [
-        # nfingers,gesture,edge,distance,command -- DU means down-to-up, i.e.
-        # swiping upward. Vertical to match the touchpad's `4, vertical,
-        # workspace` binding and the slidevert workspace animation.
-        # Lua dispatch form: with wayland.windowManager.hyprland.configType =
-        # "lua" (features/hyprland/home.nix), `hyprctl dispatch` no longer
-        # parses legacy dispatcher strings -- "workspace e+1" dies with
-        # "')' expected near 'e'" because the argument is evaluated as Lua
-        # (hyprctl's own hint: "dispatch in lua is a shorthand for
-        # hl.dispatch(...)"). The table has one field, so no commas -- which
-        # matters, commas would split this lisgd -g spec.
-        # RELATIVE, NOT e-RELATIVE. "e+1"/"e-1" walk only workspaces that
-        # already EXIST, so swiping up from workspace 10 with nothing above it
-        # wrapped back to 1 -- measured. That put the swipes at odds with the
-        # keybinds and made every page past the first unreachable by touch; see
-        # the paged strip in features/dms/plugins/workspaces. Plain "+1"/"-1"
-        # step into empty workspaces, creating them on demand, and "-1" clamps
-        # at workspace 1 rather than running negative.
-        # Now the SAME logic the Mod+J/K keybinds and the touchpad's vertical
-        # swipe use: walk the column first, change workspace only at its end.
-        # Previously these dispatched focus{workspace=...} directly, which
-        # matched the keys but not the touchpad's built-in `workspace` gesture
-        # -- the three disagreed most visibly on a blank workspace.
-        #
-        # HyprFocusOrWorkspace is a global Lua function defined in the compositor
-        # config (features/hyprland/home.nix), so this is `eval`, not `dispatch`:
-        # dispatch is shorthand for hl.dispatch(...) and only takes a dispatcher,
-        # while eval runs arbitrary Lua in the config's own state. Calling it
-        # there rather than reimplementing keeps one copy of the behaviour, and
-        # costs only this one IPC round-trip -- unavoidable from an external
-        # daemon, but far cheaper than spawning an interpreter per swipe.
-        # DU (swiping upward) pairs with Mod+J, i.e. "down" the column.
-        "${toString cfg.fingers},DU,*,*,hyprctl eval 'HyprFocusOrWorkspace(\"down\")'"
-        "${toString cfg.fingers},UD,*,*,hyprctl eval 'HyprFocusOrWorkspace(\"up\")'"
-        # Horizontal swipes walk the scrolling layout's tape, same dispatcher
-        # as the Mod+H/L keybinds (features/hyprland/home.nix) -- column data
-        # structure, not geometry, so it works on maximized windows too.
-        # lisgd is not limited to workspace switching: every gesture is just
-        # a command, so anything hyprctl can dispatch works here.
-        "${toString cfg.fingers},RL,*,*,hyprctl dispatch 'hl.dsp.layout(\"focus r\")'"
-        "${toString cfg.fingers},LR,*,*,hyprctl dispatch 'hl.dsp.layout(\"focus l\")'"
-      ];
-      defaultText = lib.literalExpression ''vertical workspace switching on `fingers` fingers'';
+      /*
+        EMPTY since 2026-10-08: the compositor now runs the touchpad's own
+        gestures for the touchscreen, live (patches/keystone/11-touchscreen-swipes:
+        4 fingers -> the column walk with its workspace handoff and scroll_move;
+        3-finger tap-then-drag -> the move gesture). lisgd could only fire a
+        command at release, and running both would act twice per swipe. What it
+        used to bind, for the record -- 4 fingers, each a hyprctl call:
+          DU/UD  hyprctl eval 'HyprFocusOrWorkspace("down"/"up")'  (Mod+J/K logic)
+          RL/LR  hyprctl dispatch 'hl.dsp.layout("focus r"/"focus l")'
+        Commands run through `hyprctl eval` for Lua functions (eval runs Lua in
+        the config's state; dispatch only takes a dispatcher), and a -g spec
+        must not contain commas. Features still add edge swipes through
+        extraGestures (features/sidedock: the dock).
+      */
+      default = [ ];
+      defaultText = lib.literalExpression "[ ]";
       description = ''
         Raw lisgd `-g` specs: `nfingers,gesture,edge,distance[,actmode],command`.
 
@@ -193,7 +166,9 @@ in
 
     environment.systemPackages = [ pkgs.lisgd ];
 
-    systemd.user.services.lisgd = {
+    # Only with something to do: given no -g at all, lisgd falls back to its
+    # compiled-in default gestures (lisgd.c, gestsarrlen == 0), not to nothing.
+    systemd.user.services.lisgd = lib.mkIf (cfg.gestures ++ cfg.extraGestures != [ ]) {
       description = "Touchscreen gesture daemon (lisgd)";
       # Needs the compositor up: every gesture runs hyprctl against its socket.
       partOf = [ "graphical-session.target" ];
