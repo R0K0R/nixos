@@ -263,7 +263,7 @@ end
 -- The pile slides as one; give window moves an ease-out without overshoot.
 hl.curve("dockslide", { type = "bezier", points = { { 0.16, 1.0 }, { 0.3, 1.0 } } })
 
-hl.animation({ leaf = "windowsMove", enabled = true, speed = 5, bezier = "dockslide" })
+hl.animation({ leaf = "windowsMove", enabled = true, speed = 3.5, bezier = "dockslide" })
 
 if nix.keystone then
   -- Keystone (my.hyprland.keystone, trapezoid.patch): dock windows render as a
