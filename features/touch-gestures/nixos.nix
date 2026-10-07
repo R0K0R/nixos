@@ -75,6 +75,14 @@ in
       '';
     };
 
+    # For other features to ADD gestures. Defining `gestures` itself from a feature would
+    # replace the defaults wholesale (a list option's default applies only when nothing
+    # defines it); this one merges, and is appended after them.
+    extraGestures = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = "Further lisgd `-g` specs, appended to `gestures`; same format.";
+    };
     gestures = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [
@@ -159,7 +167,7 @@ in
             "-o"
             cfg.orientation
           ]
-          ++ lib.concatMap (g: [ "-g" g ]) cfg.gestures
+          ++ lib.concatMap (g: [ "-g" g ]) (cfg.gestures ++ cfg.extraGestures)
         );
         Restart = "on-failure";
         RestartSec = 5;

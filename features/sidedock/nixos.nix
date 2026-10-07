@@ -42,6 +42,15 @@ in
     };
   };
 
-  # No system-level config: the dock is entirely home-manager -- a script plus
-  # Hyprland window rules and binds from features/sidedock/home.nix.
+  # Almost entirely home-manager -- a script plus Hyprland rules and binds
+  # (features/sidedock/home.nix, hyprland.lua). The one system-level piece is the
+  # touchscreen gesture, since lisgd (features/touch-gestures) is a system service:
+  # a ONE-finger swipe in from the right edge (edge R, right-to-left) toggles the dock,
+  # like a phone's side panel. One finger is safe only because it must START at the
+  # edge -- lisgd does not grab, so the app underneath sees the touch as well.
+  # SideDockToggle is a Lua global in hyprland.lua, hence `eval`. lisgd fires on
+  # completion only: unlike the touchpad's 4-finger swipe this is not interactive.
+  config = lib.mkIf (config.my.sidedock.enable && config.my.desktop.compositor == "hyprland") {
+    my.touch-gestures.extraGestures = [ "1,RL,R,*,hyprctl eval 'SideDockToggle()'" ];
+  };
 }

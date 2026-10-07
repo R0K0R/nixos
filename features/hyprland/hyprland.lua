@@ -156,6 +156,12 @@ hl.config({
   gestures = {
     workspace_swipe_touch = true,
     workspace_swipe_touch_invert = false,
+    -- The touchpad's interactive 4-finger workspace swipe (hl.gesture further down):
+    -- `r` steps through workspace ids including empty ones (the default `m` walks only
+    -- workspaces that exist), and swiping past the last one creates the next -- the
+    -- same "+1 / -1" stepping as Mod+J/K and Page_Up/Down.
+    workspace_swipe_use_r = true,
+    workspace_swipe_create_new = true,
   },
 
   -- NEITHER general.col.* NOR group.col.* is set here, deliberately.
@@ -252,9 +258,8 @@ hl.gesture({ fingers = 3, direction = "swipe", action = "move" })
 -- for the scrolling layout's tape -- live momentum + snap-to-column
 -- (gestures:scrolling:* defaults handle it).
 --
--- The 4-finger VERTICAL swipe is further down, next to Mod+J/K: it runs
--- HyprFocusOrWorkspace (walk the column, then change workspace), which needs
--- a Lua function action rather than one of the fixed string actions.
+-- The 4-finger VERTICAL swipe (workspaces) is further down, next to Mod+J/K.
+-- features/sidedock replaces this horizontal one with the dock's interactive swipe.
 hl.gesture({ fingers = 4, direction = "horizontal", action = "scroll_move" })
 
 
@@ -693,22 +698,14 @@ end
 hl.bind(mod .. " + K", function() HyprFocusOrWorkspace("up") end, { repeating = true })
 hl.bind(mod .. " + J", function() HyprFocusOrWorkspace("down") end, { repeating = true })
 
--- The touchpad's 4-finger vertical swipe, same function as J/K. Declared
--- as a function rather than a string action because only the Lua form
--- takes a FUNCTION as the action; a plain function is registered as the
--- gesture's END callback (LuaFunctionGesture's legacy-end-only ctor), so
--- it fires once per completed swipe rather than continuously -- discrete,
--- like the keybind. That does give up the built-in gesture's live
--- follow-the-finger animation, which is the price of the three paths
--- behaving identically.
---
--- Swipe UP maps to "down" (focus down the column, then workspace +1),
--- matching both Mod+J and the touchscreen's DU spec in
--- features/touch-gestures.
-hl.gesture({ fingers = 4, direction = "up",
-  action = function() HyprFocusOrWorkspace("down") end })
-hl.gesture({ fingers = 4, direction = "down",
-  action = function() HyprFocusOrWorkspace("up") end })
+-- The touchpad's 4-finger vertical swipe is Hyprland's built-in INTERACTIVE workspace
+-- swipe: the workspaces follow the fingers and settle on release, like the 3-finger
+-- move. It used to call HyprFocusOrWorkspace on release instead -- the same column-
+-- then-workspace walk as Mod+J/K, but discrete, a jump at the end of the swipe. The
+-- interactive one only changes workspace; walking a column stays on Mod+J/K and the
+-- touchscreen swipe (features/touch-gestures). gestures.workspace_swipe_* in the
+-- config table above make it step into empty workspaces like the keys do.
+hl.gesture({ fingers = 4, direction = "vertical", action = "workspace" })
 hl.bind(mod .. " + Page_Down", hl.dsp.focus({ workspace = "-1" }))
 hl.bind(mod .. " + Page_Up", hl.dsp.focus({ workspace = "+1" }))
 hl.bind(mod .. " + CTRL + U", hl.dsp.window.move({ workspace = "-1", follow = true }))
