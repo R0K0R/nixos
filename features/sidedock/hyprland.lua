@@ -62,9 +62,10 @@ do
   end
   -- three fingers tapped twice: PiP / un-PiP (Super+Ctrl+P)
   Touch.gesture({ fingers = 3, kind = "tap", taps = 2, action = function(g) onWindow(g, "pip-toggle") end })
-  -- four fingers tapped twice: into / out of the dock (Super+Ctrl+S). One four-finger
-  -- tap is spotlight (features/dms), which therefore waits double_tap_gap to fire.
-  Touch.gesture({ fingers = 4, kind = "tap", taps = 2, action = function(g) onWindow(g, "dock-toggle") end })
+  -- four fingers held: into / out of the dock (Super+Ctrl+S). A hold, not a double tap:
+  -- a double tap makes the single four-finger tap (spotlight, features/dms) wait out
+  -- double_tap_gap before it can fire, and spotlight should open at once.
+  Touch.gesture({ fingers = 4, kind = "hold", action = function(g) onWindow(g, "dock-toggle") end })
   -- five fingers tapped: hide the PiP under them, or bring back every hidden one (Super+P)
   Touch.gesture({ fingers = 5, kind = "tap", action = function(g) onWindow(g, "pip-showhide") end })
 

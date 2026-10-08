@@ -40,7 +40,7 @@ G({ fingers = 4, kind = "swipe", trackpad = 4 })
 G({ fingers = 3, kind = "tap", taps = 2, action = act("pip-toggle") })
 G({ fingers = 3, kind = "hold", action = act("float") })
 G({ fingers = 4, kind = "tap", action = act("spotlight") })
-G({ fingers = 4, kind = "tap", taps = 2, action = act("dock-toggle") })
+G({ fingers = 4, kind = "hold", action = act("dock-toggle") })
 G({ fingers = 5, kind = "tap", action = act("pip-showhide") })
 G({ fingers = 5, kind = "swipe", direction = "down", action = act("close") })
 G(with({ fingers = 2, kind = "tap_pinch", on = "pip" }, cont("pipzoom")))
@@ -80,11 +80,11 @@ local function check(name, want)
   log = {}; Touch._reset(); t = t + 5000
 end
 
-tap(4, 600, 500); wait(400)
-check("4-finger tap -> spotlight (after the double-tap window)", { "spotlight", absent = { "dock-toggle" } })
+tap(4, 600, 500)
+check("4-finger tap -> spotlight at once (no double tap defined, nothing to wait for)", { "spotlight", absent = { "dock-toggle" } })
 
-tap(4, 600, 500); t = t + 150; tap(4, 600, 500); wait(400)
-check("4-finger double tap -> dock toggle", { "dock-toggle", absent = { "spotlight" } })
+fingers(4, 600, 500); wait(600); lift(4)
+check("4-finger hold -> dock toggle", { "dock-toggle", absent = { "spotlight" } })
 
 tap(3, 600, 500); t = t + 150; fingers(3, 600, 500); for k = 1, 6 do t = t + 16; moveAll(3, 600 + k * 20, 500) end; lift(3)
 check("3-finger tap, then drag -> live trackpad move", { "swipe:begin:3", "swipe:update", "swipe:end" })
