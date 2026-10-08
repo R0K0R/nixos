@@ -254,13 +254,19 @@ render() {
 
 park_all() {
   # Slide the pile off to the right, BACK-to-FRONT with a small stagger so it ripples out
-  # instead of leaving as one block (matches the staggered slide-IN on show). order() is
-  # front..back, so reverse. The cards stay on the dock workspace; hide_pile closes it after.
-  local -a o; mapfile -t o < <(order)
+  # instead of leaving as one block (matches the staggered slide-IN on show): the
+  # deepest card first, the front one last. Ordered by the dockd<N> depth tag render()
+  # sets -- NOT by order(), which is sorted by window address, so reversing it made the
+  # cards leave in an arbitrary order. Untagged cards (never rendered) go first. The
+  # cards stay on the dock workspace; hide_pile closes it after.
+  local -a o; mapfile -t o < <($J -r --arg ex "$EXCLUDE" '
+    [.[] | select((.tags|any(rtrimstr("*")=="dock")) and (.tags|any(rtrimstr("*")=="pip")|not) and .address != $ex)
+         | {a: .address, d: ([.tags[] | rtrimstr("*") | select(test("^dockd[0-9]+$")) | ltrimstr("dockd") | tonumber] | first // 999)}]
+    | sort_by(-.d) | .[].a' <<<"$CLIENTS")
   local a i
-  for ((i=${#o[@]}-1; i>=0; i--)); do a="${o[$i]}"; [ -n "$a" ] || continue
+  for ((i=0; i<${#o[@]}; i++)); do a="${o[$i]}"; [ -n "$a" ] || continue
     ensure_float "$a"; cmv "$a" "$PARKED_X" "$DOCK_Y"
-    if [ "$i" -gt 0 ]; then sleep "$STAGGER" 2>/dev/null; fi
+    if [ "$i" -lt $(( ${#o[@]} - 1 )) ]; then sleep "$STAGGER" 2>/dev/null; fi
   done
 }
 # Hide: remember the front, slide the cards out, then close the dock workspace.
