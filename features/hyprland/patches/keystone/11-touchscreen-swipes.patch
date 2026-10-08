@@ -13,14 +13,17 @@ these deltas are logical: the dock card swipe maps them to the physical frame.
 The 4-finger vertical swipe hands off into the workspace swipe, which maps
 gestures:workspace_swipe_distance (touchpad units, 300) onto a whole monitor -- fed
 logical px of finger travel, the workspace ran about four times ahead of the finger on
-the 1200px panel. While m_fromTouchscreen is set, UnifiedWorkspaceSwipeGesture::update
-rescales the cumulative delta by distance / monitor extent on the animation axis, so
-the workspace follows the finger 1:1. The touchpad, scroll_move (already 1:1) and
-Hyprland's native touch edge swipe are unchanged.
+the 1200px panel. While m_fromTouchscreen is set, CWorkspaceSwipeGesture::update
+scales each STEP by distance / monitor extent on the animation axis, so the workspace
+follows the finger 1:1. Only the step: the running total is the unified swipe's own
+m_delta, and an earlier version that scaled the sum on every update decayed it
+geometrically (the workspace crept a few px, tracking speed rather than position).
+The touchpad, scroll_move (already 1:1) and Hyprland's native touch edge swipe are
+unchanged.
 
 diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.cpp
 --- a/src/config/values/ConfigValues.cpp
-+++ b/src/config/values/ConfigValues.cpp	2026-10-07 21:03:50.548349036 +0100
++++ b/src/config/values/ConfigValues.cpp	2026-10-08 09:25:21.720592912 +0900
 @@ -416,6 +416,11 @@
           */
  
@@ -35,7 +38,7 @@ diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.
          MS<Bool>("gestures:workspace_swipe_touch", "enable workspace swiping from the edge of a touchscreen", false),
 diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
 --- a/src/managers/input/Touch.cpp
-+++ b/src/managers/input/Touch.cpp	2026-10-07 21:03:50.548821568 +0100
++++ b/src/managers/input/Touch.cpp	2026-10-08 09:25:21.738592806 +0900
 @@ -13,6 +13,107 @@
  #include "../../protocols/core/DataDevice.hpp"
  #include "debug/log/Logger.hpp"
@@ -267,32 +270,46 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
      if (m_touchBorderResizeID && *m_touchBorderResizeID == e.touchID) {
          borderResizeMoveTo(m_touchData.lastTouchPos);
          return;
-diff -ruN a/src/managers/input/UnifiedWorkspaceSwipeGesture.cpp b/src/managers/input/UnifiedWorkspaceSwipeGesture.cpp
---- a/src/managers/input/UnifiedWorkspaceSwipeGesture.cpp
-+++ b/src/managers/input/UnifiedWorkspaceSwipeGesture.cpp	2026-10-07 21:04:19.166881488 +0100
-@@ -8,6 +8,7 @@
- #include "../../layout/space/Space.hpp"
- #include "../../layout/algorithm/Algorithm.hpp"
- #include "../../managers/fullscreen/FullscreenController.hpp"
-+#include "trackpad/TrackpadGestures.hpp"
+diff -ruN a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp b/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp
+--- a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp
++++ b/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp	2026-10-08 09:25:21.807599725 +0900
+@@ -6,6 +6,8 @@
+ #include "../../../../render/Renderer.hpp"
  
- bool CUnifiedWorkspaceSwipeGesture::isGestureInProgress() {
-     return !!m_workspaceBegin;
-@@ -66,6 +67,17 @@
-     const auto   YDISTANCE     = m_monitor->m_size.y + *PWORKSPACEGAP;
-     const auto   ANIMSTYLE     = m_workspaceBegin->m_renderOffset->getStyle();
-     const bool   VERTANIMS     = ANIMSTYLE == "slidevert" || ANIMSTYLE.starts_with("slidefadevert");
-+
-+    // A touchscreen swipe fed in as a trackpad one (keystone/11) arrives as the
-+    // finger's travel in logical px, while this maps workspace_swipe_distance --
-+    // touchpad units, 300 by default -- onto a whole monitor: the workspace ran
-+    // about four times ahead of the finger on a 1200px-tall screen. Rescale so a
-+    // full monitor of finger travel is a full workspace: content under the finger
-+    // stays under it. The delta is cumulative, so speed and the end() threshold
-+    // see the same units the touchpad gives.
-+    if (g_pTrackpadGestures->m_fromTouchscreen)
-+        delta *= sc<double>(SWIPEDISTANCE) / (VERTANIMS ? YDISTANCE : XDISTANCE);
-+
-     const double d             = m_delta - delta;
-     m_delta                    = delta;
+ #include "../../UnifiedWorkspaceSwipeGesture.hpp"
++#include "../TrackpadGestures.hpp"
++#include "../../../../output/Monitor.hpp"
  
+ void CWorkspaceSwipeGesture::begin(const ITrackpadGesture::STrackpadGestureBegin& e) {
+     ITrackpadGesture::begin(e);
+@@ -31,10 +33,29 @@
+     if (!g_pUnifiedWorkspaceSwipe->isGestureInProgress())
+         return;
+ 
+-    const float  DELTA = distance(e);
++    float        DELTA = distance(e);
+ 
+     static auto  PSWIPEINVR = CConfigValue<Config::INTEGER>("gestures:workspace_swipe_invert");
+ 
++    // A touchscreen swipe fed in as a trackpad one (keystone/11) moves by the finger's
++    // logical px, while the unified swipe maps gestures:workspace_swipe_distance --
++    // touchpad units, 300 by default -- onto a whole monitor: the workspace ran about
++    // four times ahead of the finger on the 1200px panel. Scale THIS STEP so a full
++    // monitor of finger travel is a full workspace. Only the step: the running total
++    // below is the unified swipe's own m_delta, and scaling the sum on every update
++    // (the first version of this, in UnifiedWorkspaceSwipeGesture::update) decayed it
++    // geometrically -- the workspace crept a few px, tracking speed, not position.
++    if (g_pTrackpadGestures->m_fromTouchscreen && g_pUnifiedWorkspaceSwipe->m_monitor && g_pUnifiedWorkspaceSwipe->m_workspaceBegin) {
++        static auto PSWIPEDIST    = CConfigValue<Config::INTEGER>("gestures:workspace_swipe_distance");
++        static auto PWORKSPACEGAP = CConfigValue<Config::INTEGER>("general:gaps_workspaces");
++        const auto  STYLE         = g_pUnifiedWorkspaceSwipe->m_workspaceBegin->m_renderOffset->getStyle();
++        const bool  VERT          = STYLE == "slidevert" || STYLE.starts_with("slidefadevert");
++        const auto  MON           = g_pUnifiedWorkspaceSwipe->m_monitor.lock();
++        const double EXTENT       = (VERT ? MON->m_size.y : MON->m_size.x) + *PWORKSPACEGAP;
++        if (EXTENT > 0)
++            DELTA *= sc<float>(std::clamp(*PSWIPEDIST, sc<int64_t>(1LL), sc<int64_t>(UINT32_MAX)) / EXTENT);
++    }
++
+     const double D = g_pUnifiedWorkspaceSwipe->m_delta + (*PSWIPEINVR ? -DELTA : DELTA);
+     g_pUnifiedWorkspaceSwipe->update(D);
+ }
