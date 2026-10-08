@@ -167,6 +167,23 @@ in
       description = "Remote builders, keyed by hostname.";
     };
 
+    evalWorker = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "victus-15";
+      description = ''
+        The machine that EVALUATES this host's system when rebuilding through it: a
+        peer name, or null for this machine. `nixos-rebuild-<evalWorker>` copies the
+        flake there, evaluates and builds on it, copies the result back and activates
+        it, falling back to evaluating here when the peer can't be reached (see
+        wrappers.nix). Every other `nixos-rebuild-<peer>` keeps evaluating here.
+
+        Evaluation is single-threaded and this host's IntraISACross closure is ~22k
+        derivations: ~19 s on victus-15 against ~39-72 s on the laptop depending on
+        its power profile (measured 2026-10-08, identical .drv).
+      '';
+    };
+
     substituters = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];

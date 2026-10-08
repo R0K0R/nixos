@@ -309,6 +309,9 @@ in
           speedFactor = 10;
           # No gccarch-meteorlake -- see victus-15 below. Neither peer is an
           # Intel machine, and neither is asked to EXECUTE meteorlake code:
+      # Evaluates this system for `nixos-rebuild-victus-15`: ~19 s there vs ~39-72 s
+      # here. The other peers' wrappers still evaluate on this machine.
+      evalWorker = "victus-15";
           # buildPlatform.canExecute hostPlatform is false here, so build-time
           # tools come from the untuned pkgsBuildBuild set. A peer only ever
           # compiles meteorlake code, which any x86_64 can do.
