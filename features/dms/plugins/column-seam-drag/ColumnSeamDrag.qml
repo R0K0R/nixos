@@ -138,6 +138,15 @@ PluginComponent {
         const byMon = {};
         const floatsByMon = {};
         for (const t of Hyprland.toplevels.values) {
+            // A toplevel with no Wayland handle is a window that is gone: the
+            // shell's Hyprland.toplevels can keep one it missed the close of,
+            // with its last IPC data frozen. A KDE Connect window that had
+            // closed still counted as a tiled column on workspace 1 at its old
+            // x (962), so a ghost seam sat at (1916 + 962) / 2 on the right of
+            // a single full-width window (2026-10-08). Live windows, hidden
+            // special-workspace ones included, always have the handle.
+            if (!t.wayland)
+                continue;
             const io = t.lastIpcObject;
             if (!io || !io.mapped || io.hidden)
                 continue;

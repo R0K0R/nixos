@@ -229,7 +229,10 @@ PluginComponent {
 
         readonly property int wsId: root.base + index + 1
         readonly property var ws: root.wsById[wsId] ?? null
-        readonly property var wins: (ws && ws.toplevels && ws.toplevels.values) ? ws.toplevels.values : []
+        // Live windows only: an entry without a Wayland handle is a window the
+        // shell missed the close of (a closed KDE Connect window kept workspace
+        // 1's icon as KDE Connect, 2026-10-08) -- see column-seam-drag, same cause.
+        readonly property var wins: (ws && ws.toplevels && ws.toplevels.values) ? Array.from(ws.toplevels.values).filter(t => t.wayland) : []
         readonly property bool occupied: wins.length > 0
         readonly property bool active: wsId === root.activeId
         readonly property bool urgent: (ws && ws.urgent) ?? false
