@@ -5,65 +5,24 @@ import qs.Common
 import qs.Widgets
 import qs.Modules.Plugins
 
-// wvkbd is a plain layer-shell client with no IPC of its own: "toggle" just
-// means "is our Process still alive". Killing it externally (or it crashing)
-// is picked up by onExited so the bar icon never gets stuck lit.
+// Bar pill for the on-screen keyboard. The keyboard itself is the oskKeyboard
+// daemon plugin (features/dms/plugins/osk-keyboard: QML, replaced wvkbd for pen
+// support, a Super key and the look); this pill shows and hides it and toggles
+// pin, through the daemon instance DMS keeps in pluginDaemonInstances -- one
+// keyboard however many bars carry a pill.
 PluginComponent {
     id: root
 
-    readonly property bool kbdVisible: oskProcess.running
-
-    /*
-      Pinned: the keyboard reserves its height the way the bar does (an exclusive
-      zone), so windows shrink above it instead of being covered. Floating (the
-      default): it hovers over them. wvkbd has no runtime control, so switching
-      restarts it -- a brief flicker. Remembered in the plugin's settings.
-    */
-    property bool pinned: pluginData.pinned === true
-    function setPinned(v) {
-        pinned = v
-        if (pluginService)
-            pluginService.savePluginData(pluginId, "pinned", v)
-        if (oskProcess.running) {
-            oskProcess.running = false
-            restart.restart()
-        }
-    }
-    // the old process must have exited before the new one claims the layer
-    Timer { id: restart; interval: 150; onTriggered: oskProcess.running = true }
-
-    Process {
-        id: oskProcess
-        command: [
-            "wvkbd-mobintl",
-            // Default wvkbd reserves an exclusive zone at its anchor edge,
-            // pushing other layout out of the way -- reads as "docked", not
-            // floating. That is exactly what pinned wants.
-        ].concat(root.pinned ? [] : [
-            "--non-exclusive",
-            // --width is a local patch (plugins.nix, wvkbdFloating): upstream
-            // hardcodes the layer-shell anchor to BOTTOM|LEFT|RIGHT with no
-            // way to not span the full output width otherwise. Pinned keeps
-            // the full width, like the bar.
-            "--width", "1200"
-        ]).concat([
-            // Default landscape height (120px) is what produced the very
-            // flat, wide keys -- 1200/~10 cols vs 320 tall gives a much
-            // less squashed per-key aspect ratio.
-            "-L", "320",
-            "-H", "420",
-            "-R", "24",
-            // Same 0.65-ish opacity as the rest of the glass system
-            // (cursor.nix, qt-theming.nix); actual blur-behind comes from
-            // the wvkbd layerrule in wayland/hyprland.nix.
-            "--alpha", "170",
-            "--bg", "000000"
-        ])
-        running: false
-    }
-
+    readonly property var osk: pluginService && pluginService.pluginDaemonInstances
+        ? (pluginService.pluginDaemonInstances["oskKeyboard"] || null) : null
+    readonly property bool kbdVisible: osk ? osk.shown : false
+    // Pinned: the keyboard reserves its height like the bar, windows shrink above
+    // it. Floating: it hovers over them. The state lives in the keyboard plugin.
+    readonly property bool pinned: osk ? osk.pinned : false
+    function setPinned(v) { if (osk) osk.setPinned(v) }
     function toggle() {
-        oskProcess.running = !oskProcess.running
+        if (osk) osk.toggle()
+        else Quickshell.execDetached(["dms", "ipc", "call", "osk", "toggle"])   // instance not resolved
     }
 
     horizontalBarPill: Component {

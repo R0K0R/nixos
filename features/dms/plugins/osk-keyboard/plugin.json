@@ -1,0 +1,12 @@
+{
+    "id": "oskKeyboard",
+    "name": "On-Screen Keyboard",
+    "description": "QML on-screen keyboard: touch, S Pen and mouse; every modifier incl. Super; pin (reserve space) or float; Hangul labels from fcitx",
+    "version": "1.0.0",
+    "author": "r0k0r (layout after end-4/dots-hyprland, GPL-3.0)",
+    "type": "daemon",
+    "component": "./OskKeyboard.qml",
+    "icon": "keyboard",
+    "capabilities": ["ipc"],
+    "permissions": ["process", "settings_read", "settings_write"]
+}

@@ -22,10 +22,8 @@ require("dms.colors")
 -- skips near-fully-transparent pixels (the empty regions of the bar
 -- surface) so they don't render as a hazy smear.
 hl.layer_rule({ match = { namespace = "^(dms.*)$" }, no_anim = true, blur = true, ignore_alpha = 0.05 })
--- Same glass treatment for the OSK (./plugins/osk-toggle): wvkbd's own
--- --alpha only sets its drawn pixels' transparency, the actual frosted
--- backdrop still needs Hyprland's blur behind it.
-hl.layer_rule({ match = { namespace = "^(wvkbd)$" }, blur = true, ignore_alpha = 0.05 })
+-- The on-screen keyboard (./plugins/osk-keyboard) is the "dms-osk" layer, so the
+-- rule above frosts it too.
 
 -- Shell surfaces.
 hl.bind(mod .. " + space", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
