@@ -22,6 +22,14 @@ require("dms.colors")
 -- skips near-fully-transparent pixels (the empty regions of the bar
 -- surface) so they don't render as a hazy smear.
 hl.layer_rule({ match = { namespace = "^(dms.*)$" }, no_anim = true, blur = true, ignore_alpha = 0.05 })
+-- The on-screen keyboard (plugins/osk-keyboard, namespace dms-osk) above every other
+-- Overlay surface. Spotlight is on Overlay too here (modalDarkenBackground puts DMS
+-- modals there), and within a layer the last-mapped surface is on top: opened while
+-- the keyboard was up, spotlight's full-screen click-catcher covered it, and the first
+-- key tapped closed spotlight instead of typing. `order` sorts a layer descending
+-- (Renderer.cpp arrangeLayersForMonitor), first drawn = bottom, and hit tests walk it
+-- from the top -- so a NEGATIVE order is above the default 0, for drawing and input.
+hl.layer_rule({ match = { namespace = "^(dms-osk)$" }, order = -100 })
 -- The on-screen keyboard (./plugins/osk-keyboard) is the "dms-osk" layer, so the
 -- rule above frosts it too.
 
