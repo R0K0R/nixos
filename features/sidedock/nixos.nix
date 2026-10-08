@@ -43,25 +43,10 @@ in
     };
   };
 
-  # Almost entirely home-manager -- a script plus Hyprland rules and binds
-  # (features/sidedock/home.nix, hyprland.lua). The one system-level piece is the
-  # touchscreen gesture, since lisgd (features/touch-gestures) is a system service:
-  # FIVE fingers, right-to-left shows the dock and left-to-right hides it.
-  #
-  # Five because every smaller count is taken. It used to be one finger swiped in from
-  # the right edge, which collided with touch border-resize (patches/keystone/10) on any
-  # window touching that edge; three and four fingers belong to the compositor's live
-  # touch gestures (patches/keystone/11); two is app scrolling. lisgd can't do taps (its
-  # gestures are swipes only), so a multi-finger tap was not an option without patching it.
-  #
-  # Directions are PHYSICAL (followRotation = false): the dock sits on the panel's
-  # physical right edge at every rotation, so "toward the left" means the same motion of
-  # the hand however the picture is turned. lisgd fires on completion only.
+  # Entirely home-manager: a script plus Hyprland rules, binds and touch gestures
+  # (features/sidedock/home.nix, hyprland.lua). The 5-finger dock swipes used to be
+  # lisgd's (a system service, hence this file); they are Touch.gesture definitions in
+  # hyprland.lua now (2026-10-08), and with nothing left for it lisgd does not run.
   config = lib.mkIf (config.my.sidedock.enable && config.my.desktop.compositor == "hyprland") {
-    my.touch-gestures.extraGestures = [
-      "5,RL,*,*,hyprctl eval 'SideDockShow()'"
-      "5,LR,*,*,hyprctl eval 'SideDockHide()'"
-    ];
-    my.touch-gestures.followRotation = lib.mkDefault false;
   };
 }

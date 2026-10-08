@@ -44,7 +44,8 @@
     tap_rotate   continuous. a tap (tap_fingers, default 1) then a 2+-finger twist.
     swipe        discrete, or continuous if it has trackpad/begin/update. direction
                  ("left" "right" "up" "down" "up_left" "up_right" "down_left"
-                 "down_right" "horizontal" "vertical" "diagonal" or nil = any),
+                 "down_right" "horizontal" "vertical" "diagonal", nil = any, or a
+                 function(direction) -> bool decided at match time),
                  min (px), distance ("short" "medium" "long": at least that share of
                  the screen along the swipe), edge / corner (where the centroid
                  started: "left" "right" "top" "bottom" / "top_left" ...).
@@ -179,6 +180,9 @@ local function direction8(dx, dy)
 end
 local function dirMatches(want, got)
   if want == nil or want == "any" then return true end
+  -- a function decides at match time: e.g. a direction in the panel's PHYSICAL frame,
+  -- which moves with the monitor transform (features/sidedock's dock swipes)
+  if type(want) == "function" then return want(got) == true end
   if want == "horizontal" then return got == "left" or got == "right" end
   if want == "vertical" then return got == "up" or got == "down" end
   if want == "diagonal" then return got:find("_") ~= nil end

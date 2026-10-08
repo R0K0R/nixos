@@ -754,8 +754,9 @@ do
     if at(g) then hl.dispatch(hl.dsp.window.float({ window = at(g) })) end
   end })
   -- five fingers down the screen: close the window under them. A swipe, not a tap --
-  -- closing should be hard to do by accident. (5-finger left/right is lisgd's dock
-  -- show/hide, features/sidedock.)
+  -- closing should be hard to do by accident. (5-finger left/right is the dock's
+  -- show/hide, features/sidedock, in the panel's physical frame -- it wins when a
+  -- rotation makes it a vertical swipe.)
   Touch.gesture({ fingers = 5, kind = "swipe", direction = "down", action = function(g)
     HyprCloseWindow(g.window)
   end })

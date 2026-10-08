@@ -67,6 +67,30 @@ do
   Touch.gesture({ fingers = 4, kind = "tap", taps = 2, action = function(g) onWindow(g, "dock-toggle") end })
   -- five fingers tapped: hide the PiP under them, or bring back every hidden one (Super+P)
   Touch.gesture({ fingers = 5, kind = "tap", action = function(g) onWindow(g, "pip-showhide") end })
+
+  -- Five-finger swipe away from the dock's edge shows it, toward the edge hides it --
+  -- in the panel's PHYSICAL frame, since the dock stays on the physical right edge at
+  -- every rotation (logical bottom at 90 deg). Moved here from lisgd (2026-10-08), which
+  -- had them as 5,RL / 5,LR at -o 0. The swipe direction the recognizer reports is
+  -- logical, so "toward the dock" is looked up from the monitor transform at match time.
+  -- priority: rotated, one of these is a logical up/down and must beat the 5-finger
+  -- swipe-down close (features/hyprland) -- the dock is what that motion means there.
+  local function towardDock()
+    local t = 0
+    pcall(function()
+      local c = hl.get_cursor_pos()
+      local m = hl.get_monitor_at({ x = c.x, y = c.y })
+      t = (m and m.transform or 0) % 4
+    end)
+    return ({ [0] = "right", [1] = "down", [2] = "left", [3] = "up" })[t]
+  end
+  local opposite = { right = "left", left = "right", up = "down", down = "up" }
+  Touch.gesture({ fingers = 5, kind = "swipe", priority = 50,
+    direction = function(d) return d == opposite[towardDock()] end,
+    action = function() SideDockShow() end })
+  Touch.gesture({ fingers = 5, kind = "swipe", priority = 50,
+    direction = function(d) return d == towardDock() end,
+    action = function() SideDockHide() end })
 end
 -- How small a PiP's content is drawn (it lays out for keystone_pip_zoom x its box):
 -- Mod+Alt+minus shrinks the content, Mod+Alt+equal enlarges it, like browser zoom.
