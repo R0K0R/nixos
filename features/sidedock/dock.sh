@@ -23,6 +23,13 @@ HC=hyprctl; J=jq
 STATE="${XDG_RUNTIME_DIR:-/run/user/1000}/sidedock.front"   # remembers the front across hide
 # Hidden PiPs, one "address x y w h" line each, most recent last (pip-showhide).
 PIPSTATE="${XDG_RUNTIME_DIR:-/run/user/1000}/sidedock.piphidden"
+# The pile's layout, for the live 5-finger show/hide (sidedock/hyprland.lua): a header
+# "v1 <transform> <monitor-x> <monitor-y> <logical-w> <logical-h>", then one line per card,
+# front first: "<address> <depth> <shown-x> <shown-y> <parked-x> <parked-y>", logical.
+# Written by every layout pass (render, and relayout while hidden), so it always holds
+# where `settle show` would put the cards. Lua reads it once per gesture -- a file read,
+# not a process, since Hyprland's Lua runs on the compositor thread.
+LAYOUT="${XDG_RUNTIME_DIR:-/run/user/1000}/sidedock.layout"
 
 geom() {
   # LOGICAL geometry of the FOCUSED monitor: window moves are in logical coordinates,
@@ -156,21 +163,47 @@ dockws_hide()  { dockws_shown && d "hl.dsp.workspace.toggle_special(\"${SPECIAL#
 # is depth 0, places each window at its depth (front at base, full opacity; the rest
 # fanned+dimmed), raises deepest->front so the front lands on top, then focuses
 # the front. All placement is by address; only the final focus touches focus.
-render() {
-  local front="$1" stagger="${2:-0}" i d dd x y cw ch cx cy op ov scp
-  local -a ord rot MX MY
+# The cascade's geometry for $1 as the front, into ROT (front..back), MX/MY (shown, logical),
+# LW_/LH_ (logical size), SCP (shrink %) and PX/PY (parked, logical), and the LAYOUT cache.
+# Pure arithmetic over the snapshot: no dispatch, so relayout can refresh the cache while
+# the pile stays hidden.
+layout() {
+  local front="$1" i dd x y cw ch px py
+  local -a ord
+  ROT=(); MX=(); MY=(); LW_=(); LH_=(); SCP=(); PX=(); PY=()
   mapfile -t ord < <(order)
   [ ${#ord[@]} -eq 0 ] && return 1
   local fi=0
   for i in "${!ord[@]}"; do [ "${ord[$i]}" = "$front" ] && fi=$i && break; done
-  for ((i=0; i<${#ord[@]}; i++)); do rot+=("${ord[$(( (fi+i) % ${#ord[@]} ))]}"); done
-  # Floating is a prerequisite AND a toggle, so it can't go in the batch; dock
-  # windows are already floating, so this is normally a no-op.
-  local a; for a in "${rot[@]}"; do ensure_float "$a"; to_dockws "$a"; done
-  dockws_show
+  for ((i=0; i<${#ord[@]}; i++)); do ROT+=("${ord[$(( (fi+i) % ${#ord[@]} ))]}"); done
   # Front card vertical CENTRE -- back cards keep this SAME midline (no diagonal-down);
   # they only shrink and step a little LEFT, so their left edge peeks out to the left.
   local CY0=$(( DOCK_Y + DOCK_H/2 ))
+  local cache="v1 $EDGE $X0 $Y0 $LW $LH"$'\n'
+  for ((i=0; i<${#ROT[@]}; i++)); do
+    dd=$(( i < MAXD ? i : MAXD ))
+    SCP[$i]=$(( 100 - dd*SHRINK )); [ "${SCP[$i]}" -lt 55 ] && SCP[$i]=55   # depth shrink (% of front, floored)
+    cw=$(( DW*SCP[i]/100 )); ch=$(( DOCK_H*SCP[i]/100 ))
+    x=$(( SHOWN_X - dd*DLEFT ))                                 # LEFT edge steps slightly left (peek)
+    y=$(( CY0 - ch/2 ))                                         # vertically CENTERED on the front midline
+    # where park_all leaves it: past the edge, top-aligned at DOCK_Y
+    read -r px py _ _ < <(lrect "$PARKED_X" "$DOCK_Y" "$cw" "$ch")
+    # canonical -> the real (physical-right) edge: logical position and size
+    read -r x y cw ch < <(lrect "$x" "$y" "$cw" "$ch")
+    MX[$i]=$x; MY[$i]=$y; LW_[$i]=$cw; LH_[$i]=$ch; PX[$i]=$px; PY[$i]=$py
+    cache+="${ROT[$i]} $i $x $y $px $py"$'\n'
+  done
+  printf '%s' "$cache" >"$LAYOUT.new" 2>/dev/null && command mv -f "$LAYOUT.new" "$LAYOUT"
+}
+
+render() {
+  local front="$1" stagger="${2:-0}" i d dd cw ch op ov scp a x y
+  layout "$front" || return 1
+  local -a rot=("${ROT[@]}")
+  # Floating is a prerequisite AND a toggle, so it can't go in the batch; dock
+  # windows are already floating, so this is normally a no-op.
+  for a in "${rot[@]}"; do ensure_float "$a"; to_dockws "$a"; done
+  dockws_show
   # ONE atomic batch (size, opacity, pin, focusability, z-order, focus) so nothing flashes
   # to the top mid-shuffle. The MOVE is in the batch ONLY when not staggering; on show it
   # is done per-card with a small delay below (the "feel"). Back cards are smaller BOXES,
@@ -178,13 +211,7 @@ render() {
   local batch=""
   for ((i=0; i<${#rot[@]}; i++)); do
     d=$i; dd=$(( d < MAXD ? d : MAXD )); a="${rot[$i]}"
-    scp=$(( 100 - dd*SHRINK )); [ "$scp" -lt 55 ] && scp=55     # depth shrink (% of front, floored)
-    cw=$(( DW*scp/100 )); ch=$(( DOCK_H*scp/100 ))
-    x=$(( SHOWN_X - dd*DLEFT ))                                 # LEFT edge steps slightly left (peek)
-    y=$(( CY0 - ch/2 ))                                         # vertically CENTERED on the front midline
-    # canonical -> the real (physical-right) edge: logical position and size
-    read -r x y cw ch < <(lrect "$x" "$y" "$cw" "$ch")
-    MX[$i]=$x; MY[$i]=$y
+    scp=${SCP[$i]}; cw=${LW_[$i]}; ch=${LH_[$i]}; x=${MX[$i]}; y=${MY[$i]}   # from layout()
     if [ "$d" -eq 0 ]; then op="1.0 1.0"; else ov=$(( 60 - (dd-1)*14 )); [ "$ov" -lt 30 ] && ov=30; op="0.$ov 0.$ov"; fi
     # Tags first: the patch reads them when the resize below re-sends the client its size.
     #  dockd<i>       this card's moves get their own curve, overshooting by
@@ -467,6 +494,17 @@ case "${1:-toggle}" in
   hide)     # directional gesture (3-finger swipe away): hide the pile. Remembers the front
             # (like toggle) so the next show restores it. No-op if already hidden.
     pile_shown && hide_pile ;;
+  settle)   # the live 5-finger swipe let go (sidedock/hyprland.lua): finish from wherever the
+            # cards are -- `show` lays the pile out (render animates the rest of the way with
+            # the usual bounce curves), `hide` parks it and closes the dock workspace. Unlike
+            # show/hide, no "already there?" test: mid-swipe the cards are neither, and a card
+            # dragged fully off-screen must still be parked properly and its workspace closed.
+    case "${2:-}" in
+      show) w=""; [ -f "$STATE" ] && w="$(cat "$STATE" 2>/dev/null)"
+            { [ -z "$w" ] || ! exists "$w"; } && w="$(order | head -1)"
+            [ -n "$w" ] && render "$w" ;;
+      hide) hide_pile ;;
+    esac ;;
   next|prev)   # SUPER+ALT+right / SUPER+ALT+left while focused on the dock: shift the pile
     mapfile -t ORD < <(order)
     [ ${#ORD[@]} -eq 0 ] && exit 0
@@ -581,6 +619,10 @@ case "${1:-toggle}" in
       cur="$(curfront)"; { [ -z "$cur" ] || ! exists "$cur"; } && cur="$(order | head -1)"
       [ -n "$cur" ] && render "$cur"
     else
+      # keep the live-show cache true to the new geometry (rotation) while hidden
+      cur=""; [ -f "$STATE" ] && cur="$(cat "$STATE" 2>/dev/null)"
+      { [ -z "$cur" ] || ! exists "$cur"; } && cur="$(order | head -1)"
+      [ -n "$cur" ] && layout "$cur"
       park_all
     fi
     # PiPs are outside the pile: move each to the new bottom-right corner, re-sized

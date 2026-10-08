@@ -19,8 +19,12 @@ let
   dockTermClass = "sidedock-term";
 
 in
-# The Lua itself is ./hyprland.lua (lib/hypr-lua.nix).
-lib.mkIf (cfg.enable && inScope && osConfig.my.desktop.compositor == "hyprland") (import ../../lib/hypr-lua.nix { inherit lib; } {
+# The Lua itself is ./hyprland.lua (lib/hypr-lua.nix), plus ./dockswipe.lua: the live
+# 5-finger show/hide, a module that hyprland.lua requires as feat.dockswipe (installed
+# beside the feature files, never listed in the generated hyprland.lua itself).
+lib.mkIf (cfg.enable && inScope && osConfig.my.desktop.compositor == "hyprland") (lib.mkMerge [
+{ xdg.configFile."hypr/feat/dockswipe.lua".source = ./dockswipe.lua; }
+(import ../../lib/hypr-lua.nix { inherit lib; } {
   name = "sidedock";
   src = ./hyprland.lua;
   values = {
@@ -31,3 +35,4 @@ lib.mkIf (cfg.enable && inScope && osConfig.my.desktop.compositor == "hyprland")
     classes = cfg.apps ++ [ dockTermClass ];
   };
 })
+])

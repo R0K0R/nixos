@@ -163,5 +163,77 @@ G({ fingers = 7, kind = "tap", action = function(g) log[#log + 1] = "layer:" .. 
 for i = 1, 7 do downL(i, 200 + i * 40, 1100, WIN, "wvkbd") end; t = t + 80; lift(7); wait(400)
 check("a tap on a layer surface reports g.layer and no window", { "layer:wvkbd:nil" })
 
+-- ---------------------------------------------------------------- live 5-finger dock swipe
+-- features/sidedock/dockswipe.lua driven through the recognizer, as sidedock/hyprland.lua
+-- wires it, with the dock side mocked: a layout cache file, the shown special workspace,
+-- the monitor transform. Moves, no_anim and settle calls are logged.
+local DS = dofile("features/sidedock/dockswipe.lua")
+local LAYOUT = os.tmpname()
+local mon = { transform = 0, special = nil }
+local function writeLayout(tr, cards)
+  local f = io.open(LAYOUT, "w"); f:write(("v1 %d 0 0 1920 1200\n"):format(tr))
+  for _, c in ipairs(cards) do f:write(table.concat(c, " ") .. "\n") end
+  f:close()
+end
+-- landscape: the dock on the right, cards slide in along x (parked at 1920)
+local LANDSCAPE = { { "0xa", 0, 1248, 84, 1920, 84 }, { "0xb", 1, 1227, 133, 1920, 84 } }
+-- 90 deg: the dock along the bottom, cards slide up from y = 1920 (logical 1200x1920)
+local PORTRAIT = { { "0xa", 0, 84, 1248, 84, 1920 }, { "0xb", 1, 133, 1227, 84, 1920 } }
+local lastMove = {}
+local Live = DS.new({
+  layout = LAYOUT,
+  settle = function(m) log[#log + 1] = "settle:" .. m end,
+  discrete = function(m) log[#log + 1] = "discrete:" .. m end,
+  monitor = function() return { transform = mon.transform, special = mon.special } end,
+  windows = function() return { ["0xa"] = true, ["0xb"] = true } end,
+  setNoAnim = function(a, on) log[#log + 1] = ("noanim:%s:%s"):format(a, on and "on" or "off") end,
+  move = function(a, x, y) lastMove[a] = { x, y }; if a == "0xa" then log[#log + 1] = "move" end end,
+  openDock = function() log[#log + 1] = "open" end,
+})
+local toward = function() return ({ [0] = "right", [1] = "down", [2] = "left", [3] = "up" })[mon.transform % 4] end
+local opp = { right = "left", left = "right", up = "down", down = "up" }
+for _, m in ipairs({ "show", "hide" }) do
+  G({ fingers = 5, kind = "swipe", priority = 50,
+      direction = function(d) if m == "show" then return d == opp[toward()] end; return d == toward() end,
+      begin = function(g) Live.begin(m, g) end, update = function(g) Live.update(g) end,
+      finish = function(g) Live.finish(g) end, cancel = function() Live.cancel() end })
+end
+-- n steps of (dx, dy) every ms milliseconds, five fingers
+local function swipe5(x, y, dx, dy, n, ms)
+  fingers(5, x, y); for k = 1, n do t = t + ms; moveAll(5, x + k * dx, y + k * dy) end; lift(5)
+end
+
+writeLayout(0, LANDSCAPE); mon.transform = 0; mon.special = nil
+swipe5(1000, 600, -40, 0, 10, 30)  -- 400 px left over 300 ms: p ~ 0.6
+check("dock hidden, 5-finger swipe away from the edge -> live show, commits", { "open", "noanim:0xa:on", "move", "noanim:0xa:off", "settle:show", absent = { "settle:hide", "close" } })
+local mid = lastMove["0xa"] and lastMove["0xa"][1]
+print(((mid and mid < 1920 and mid > 1248) and "PASS " or "FAIL ") .. "front card tracked the fingers (x " .. tostring(mid) .. ")")
+if not (mid and mid < 1920 and mid > 1248) then fails = fails + 1 end
+
+swipe5(1000, 600, -10, 0, 15, 40)  -- 150 px slowly: p ~ 0.22, no flick
+check("short slow show swipe -> springs back", { "settle:hide", absent = { "settle:show" } })
+
+swipe5(1000, 600, -50, 0, 3, 16)   -- 150 px in 48 ms: a flick
+check("short fast show flick -> commits", { "settle:show" })
+
+mon.special = "special:dock"
+swipe5(1000, 600, -40, 0, 10, 30)
+check("dock already shown: a show swipe does nothing", { absent = { "move", "settle", "open", "discrete" } })
+
+swipe5(1000, 600, 40, 0, 10, 30)   -- toward the edge
+check("dock shown, swipe toward the edge -> live hide, commits", { "noanim:0xa:on", "move", "settle:hide", absent = { "open", "settle:show" } })
+
+writeLayout(1, PORTRAIT); mon.transform = 1; mon.special = nil
+swipe5(600, 1000, 0, -40, 10, 30)  -- 90 deg: away from the bottom edge = up
+check("rotated 90: swipe up (away from the physical edge) -> live show", { "open", "move", "settle:show", absent = { "close" } })
+mon.special = "special:dock"
+swipe5(600, 600, 0, 40, 10, 30)    -- rotated, toward the dock = down: beats the 5-finger close
+check("rotated 90: swipe down -> live hide, not close", { "settle:hide", absent = { "close" } })
+
+writeLayout(0, LANDSCAPE); mon.transform = 1; mon.special = nil  -- cache from before a rotation
+swipe5(600, 1000, 0, -40, 10, 30)
+check("stale cache (other transform) -> discrete show at the end", { "discrete:show", absent = { "move", "settle" } })
+os.remove(LAYOUT)
+
 print(fails == 0 and "all passed" or (fails .. " failed"))
 os.exit(fails == 0 and 0 or 1)

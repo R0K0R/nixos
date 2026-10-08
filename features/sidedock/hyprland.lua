@@ -86,12 +86,52 @@ do
     return ({ [0] = "right", [1] = "down", [2] = "left", [3] = "up" })[t]
   end
   local opposite = { right = "left", left = "right", up = "down", down = "up" }
-  Touch.gesture({ fingers = 5, kind = "swipe", priority = 50,
-    direction = function(d) return d == opposite[towardDock()] end,
-    action = function() SideDockShow() end })
-  Touch.gesture({ fingers = 5, kind = "swipe", priority = 50,
-    direction = function(d) return d == towardDock() end,
-    action = function() SideDockHide() end })
+
+  -- LIVE: the pile follows the fingers and letting go finishes or springs back
+  -- (feat.dockswipe; dock.sh writes the layout cache it reads and `settle`s the end).
+  local Live = require("feat.dockswipe").new({
+    layout = (os.getenv("XDG_RUNTIME_DIR") or "/run/user/1000") .. "/sidedock.layout",
+    settle = function(m) hl.dispatch(hl.dsp.exec_cmd(dock .. " settle " .. m)) end,
+    discrete = function(m) if m == "show" then SideDockShow() else SideDockHide() end end,
+    monitor = function()
+      local r = {}
+      pcall(function()
+        local c = hl.get_cursor_pos()
+        local m = hl.get_monitor_at({ x = c.x, y = c.y })
+        r.transform = m.transform or 0
+        r.special = m.active_special_workspace and m.active_special_workspace.name or nil
+      end)
+      return r
+    end,
+    windows = function()
+      local set = {}
+      for _, w in ipairs(hl.get_windows()) do set[w.address] = true end
+      return set
+    end,
+    setNoAnim = function(a, on)
+      hl.dispatch(hl.dsp.window.set_prop({ prop = "no_anim", value = on and "true" or "unset", window = "address:" .. a }))
+    end,
+    move = function(a, x, y) hl.dispatch(hl.dsp.window.move({ x = x, y = y, window = "address:" .. a })) end,
+    -- as dock.sh's dockws_show: Hyprland captures dim_special when a special workspace
+    -- opens, and the global value is the scratchpad's tint
+    openDock = function()
+      local ok, dim = pcall(hl.get_config, "decoration.dim_special")
+      hl.config({ decoration = { dim_special = 0 } })
+      hl.dispatch(hl.dsp.workspace.toggle_special("dock"))
+      hl.config({ decoration = { dim_special = (ok and tonumber(dim)) or 0 } })
+    end,
+  })
+  for _, m in ipairs({ "show", "hide" }) do
+    Touch.gesture({ fingers = 5, kind = "swipe", priority = 50,
+      direction = function(d)
+        if m == "show" then return d == opposite[towardDock()] end
+        return d == towardDock()
+      end,
+      begin = function(g) Live.begin(m, g) end,
+      update = function(g) Live.update(g) end,
+      finish = function(g) Live.finish(g) end,
+      cancel = function() Live.cancel() end })
+  end
 end
 -- How small a PiP's content is drawn (it lays out for keystone_pip_zoom x its box):
 -- Mod+Alt+minus shrinks the content, Mod+Alt+equal enlarges it, like browser zoom.
