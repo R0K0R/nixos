@@ -32,6 +32,19 @@ in
   ];
 
   services.tailscale.enable = true;
+  /*
+    DNS through systemd-resolved, for tailscale's sake. Without it tailscaled ran in
+    "direct" mode: it rewrote /etc/resolv.conf to 100.100.100.100 and forwarded every
+    non-tailnet name to "upstream" resolvers it had captured from the network config.
+    A network change (Wi-Fi roam, NetworkManager reconnect, a tunnel coming up) could
+    leave that captured list empty -- then every lookup outside the tailnet got
+    SERVFAIL ("dns: resolver: forward: no upstream resolvers set", journal 2026-10-08)
+    until `systemctl restart tailscaled` re-captured it. With resolved, tailscale only
+    registers its DNS on tailscale0 through resolved's API and NetworkManager hands the
+    real upstream servers to resolved per link: nothing is captured, nothing goes stale.
+    NetworkManager switches to resolved by itself when this is on.
+  */
+  services.resolved.enable = true;
 
   system.stateVersion = "26.05";
 
