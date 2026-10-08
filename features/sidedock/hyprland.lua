@@ -48,6 +48,26 @@ hl.bind(mod .. " + " .. nix.keys.pipToggle, hl.dsp.exec_cmd(dock .. " pip-toggle
 -- Hide the focused PiP out of the way (it keeps running), or bring back the last
 -- hidden one where it was.
 hl.bind(mod .. " + " .. nix.keys.pip, hl.dsp.exec_cmd(dock .. " pip-showhide"))
+
+-- Touchscreen equivalents (features/hyprland/touch.lua). dock.sh's verbs act on the
+-- focused window, so each first focuses the window under the fingers -- the same verb as
+-- the key, aimed by touch.
+do
+  local Touch = require("feat.touch")
+  local function onWindow(g, verb)
+    if g.window and g.window.address then
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. g.window.address }))
+    end
+    hl.dispatch(hl.dsp.exec_cmd(dock .. " " .. verb))
+  end
+  -- three fingers tapped twice: PiP / un-PiP (Super+Ctrl+P)
+  Touch.gesture({ fingers = 3, kind = "tap", taps = 2, action = function(g) onWindow(g, "pip-toggle") end })
+  -- four fingers tapped twice: into / out of the dock (Super+Ctrl+S). One four-finger
+  -- tap is spotlight (features/dms), which therefore waits double_tap_gap to fire.
+  Touch.gesture({ fingers = 4, kind = "tap", taps = 2, action = function(g) onWindow(g, "dock-toggle") end })
+  -- five fingers tapped: hide the PiP under them, or bring back every hidden one (Super+P)
+  Touch.gesture({ fingers = 5, kind = "tap", action = function(g) onWindow(g, "pip-showhide") end })
+end
 -- How small a PiP's content is drawn (it lays out for keystone_pip_zoom x its box):
 -- Mod+Alt+minus shrinks the content, Mod+Alt+equal enlarges it, like browser zoom.
 hl.bind(mod .. " + ALT + minus", hl.dsp.exec_cmd(dock .. " pip-zoom out"))
@@ -296,6 +316,36 @@ hl.curve("dockslide", { type = "bezier", points = { { 0.16, 1.0 }, { 0.3, 1.0 } 
 hl.animation({ leaf = "windowsMove", enabled = true, speed = 3.5, bezier = "dockslide" })
 
 if nix.keystone then
+  -- Tap a PiP, then pinch it: live zoom, the continuous form of Super+Alt+minus/equal
+  -- (dock.sh pip-zoom). keystone_pip_zoom is how many times its box the client is told it
+  -- is; spreading the fingers shows the content larger, i.e. a smaller zoom. Same 1..8
+  -- range. The PiP under the fingers is nudged on each step so its client is re-told; at
+  -- the end every PiP is (the value is global), as pip-zoom does.
+  do
+    local Touch = require("feat.touch")
+    local z0, last = 3, nil
+    local function nudge(addr)
+      hl.dispatch(hl.dsp.window.resize({ x = 1, y = 0, relative = true, window = "address:" .. addr }))
+      hl.dispatch(hl.dsp.window.resize({ x = -1, y = 0, relative = true, window = "address:" .. addr }))
+    end
+    Touch.gesture({ fingers = 2, kind = "tap_pinch", on = "pip",
+      begin = function() z0 = tonumber(hl.get_config("decoration.keystone_pip_zoom")) or 3; last = z0 end,
+      update = function(g)
+        local z = math.max(1, math.min(8, z0 / math.max(g.scale, 0.05)))
+        if last and math.abs(z - last) < last * 0.03 then return end -- ~3% steps: each one re-lays out the client
+        last = z
+        hl.config({ decoration = { keystone_pip_zoom = z } })
+        if g.window then nudge(g.window.address) end
+      end,
+      finish = function()
+        for _, w in ipairs(hl.get_windows()) do
+          for _, t in ipairs(w.tags or {}) do
+            if t == "pip" or t == "pip*" then nudge(w.address); break end
+          end
+        end
+      end,
+    })
+  end
   -- Keystone (my.hyprland.keystone, features/hyprland/patches/keystone/01-keystone-render.patch): dock windows render as a
   -- perspective trapezoid. Only valid with the patch; stock Hyprland rejects these.
   -- Values from sihooleebd/nixos 0a7686c. rounding = corner radius (px) of the

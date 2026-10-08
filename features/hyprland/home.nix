@@ -210,4 +210,11 @@ lib.mkMerge [
   (lib.mkIf (osConfig.my.desktop.compositor == "hyprland") {
     xdg.configFile."hypr/stubs".source = "${osConfig.programs.hyprland.package}/share/hypr/stubs";
   })
+
+  # The touch gesture recognizer (./touch.lua): a module, not a config file -- each
+  # feature that defines gestures does `require("feat.touch")`, so it is installed beside
+  # the feature files but never listed in the generated hyprland.lua itself.
+  (lib.mkIf (osConfig.my.desktop.compositor == "hyprland") {
+    xdg.configFile."hypr/feat/touch.lua".source = ./touch.lua;
+  })
 ]

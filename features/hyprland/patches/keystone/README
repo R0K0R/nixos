@@ -1,7 +1,9 @@
 Hyprland patch series for the side dock (features/sidedock), applied in order by
 features/hyprland/nixos.nix under my.hyprland.keystone. Split 2026-10-08 from the
 single trapezoid.patch; applying 01..11 onto the same base gives byte-for-byte the
-tree trapezoid.patch did (11 has since gained the 1:1 touch workspace swipe). Each
+tree trapezoid.patch did. 11 has since changed: it gained the 1:1 touch workspace swipe,
+and on 2026-10-08 its hardcoded touch recognizers became a touch stream for Lua
+(features/hyprland/touch.lua), touch claiming and hl.touch_swipe. Each
 patch's own header says what it does and why.
 
 Base: Hyprland 0.56.2 + nixpkgs' monitor-soft-apply-logical-size.patch + the other

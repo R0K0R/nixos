@@ -1,14 +1,35 @@
-Touchscreen swipes as trackpad gestures (Touch.cpp): the touch path synthesizes swipe
-begin/update/end into g_pTrackpadGestures, so the configured hl.gesture entries run
-live for touch as on the touchpad. Four fingers whose centroid travels
-gestures:touch_swipe_threshold px become a 4-finger swipe; a 3-finger tap followed by
-three fingers down again (gestures:touch_move_tap_ms, touch_move_gap_ms,
-touch_move_slop) becomes a 3-finger swipe -- the `move` gesture, dock card swipe
-included. The delta is the centroid's logical-px travel times
-gestures:touch_swipe_scale, in finger direction like libinput's; the gesture's
-touches are cancelled for the client, a lift ends it, another finger cancels it.
-While one runs, g_pTrackpadGestures->m_fromTouchscreen (declared by 04) is set, since
-these deltas are logical: the dock card swipe maps them to the physical frame.
+Touchscreen gestures: a touch stream for Lua, touch claiming, and Lua-driven trackpad swipes.
+
+The compositor recognizes no touch gestures itself. Every touch reaches Lua as
+input.touch.down / move / up / cancel (one table: id, x, y in global layout
+coordinates, time, count, claimed; window under the finger on down; resizing on move),
+and features/hyprland/touch.lua recognizes gestures from that stream -- taps and tap
+chains, holds, swipes, flicks, edge swipes and slides, pinch, rotate, pan, chords,
+drawn shapes, shakes, and the tap-then-drag / tap-then-pinch combinations -- so a
+gesture is config, changed with a reload and never a rebuild. (Until 2026-10-08 this
+patch hardcoded two: the 3-finger double-tap-drag and the 4-finger swipe.)
+
+What only the compositor can do, it offers:
+
+- Claiming. A claimed touch sequence is cancelled for its client (wl_touch.cancel is
+  per sequence) and from then on its fingers -- those down and any landing before all
+  lift -- reach Lua only. Claimed automatically once gestures:touch_claim_fingers
+  (default 3, 0 = never) fingers are down at once, before the down event reaches Lua,
+  so Lua sees claimed = true; on demand with hl.touch_claim([id]) / hl.touch_claim_all().
+  A claimed finger the client saw go down still goes up to it (the seat counts every
+  delivered down). A device cancel (previously dropped) now withdraws the sequence from
+  clients and Lua alike (input.touch.cancel).
+- hl.touch_swipe(phase, fingers, dx, dy): "begin" / "update" / "end" / "cancel" into
+  g_pTrackpadGestures, the dispatcher libinput's touchpad swipes feed, so a touch gesture
+  runs any hl.gesture entry live -- the workspace swipe, scroll_move, move and the
+  side-dock card swipe. dx, dy are logical px of finger travel times
+  gestures:touch_swipe_scale. g_pTrackpadGestures->m_fromTouchscreen (declared by 04) is
+  set between begin and end: the dock card swipe maps these logical deltas to the
+  physical frame.
+
+A finger that starts a border resize (keystone/10) keeps resizing: the resize branch
+runs before the claim check on move and up, the finger is not counted towards the
+claim threshold, and Lua sees it with resizing = true.
 
 The 4-finger vertical swipe hands off into the workspace swipe, which maps
 gestures:workspace_swipe_distance (touchpad units, 300) onto a whole monitor -- fed
@@ -21,258 +42,418 @@ geometrically (the workspace crept a few px, tracking speed rather than position
 The touchpad, scroll_move (already 1:1) and Hyprland's native touch edge swipe are
 unchanged.
 
+diff -ruN a/src/config/lua/bindings/LuaBindingsConfigRules.cpp b/src/config/lua/bindings/LuaBindingsConfigRules.cpp
+--- a/src/config/lua/bindings/LuaBindingsConfigRules.cpp
++++ b/src/config/lua/bindings/LuaBindingsConfigRules.cpp	2026-10-08 14:45:33.395673299 +0900
+@@ -30,6 +30,8 @@
+ #include "../../../animation/AnimationManager.hpp"
+ #include "../../../managers/input/InputManager.hpp"
+ #include "../../../managers/input/trackpad/TrackpadGestures.hpp"
++#include "../../../helpers/time/Time.hpp"
++#include "../../ConfigValue.hpp"
+ #include "../../../managers/input/trackpad/gestures/CloseGesture.hpp"
+ #include "../../../managers/input/trackpad/gestures/CursorZoomGesture.hpp"
+ #include "../../../managers/input/trackpad/gestures/DispatcherGesture.hpp"
+@@ -742,6 +744,63 @@
+     return 0;
+ }
+ 
++/*
++  Touch gestures are recognized in Lua (features/hyprland/touch.lua) from the
++  input.touch.* stream; these are the two things only the compositor can do for it.
++
++  hl.touch_claim([id]) / hl.touch_claim_all(): take the current touch sequence from
++  its client now (wl_touch.cancel is per sequence, so an id only checks that finger is
++  down). Returns false when no such finger is down.
++
++  hl.touch_swipe(phase, fingers, dx, dy): drive the TRACKPAD gesture machinery from a
++  touch gesture -- phase "begin" (fingers), "update" (dx, dy: logical px of finger
++  travel, times gestures:touch_swipe_scale), "end" or "cancel". Every hl.gesture entry
++  for that finger count then runs live exactly as on the touchpad (workspace swipe,
++  scroll_move, move and the side-dock card swipe). m_fromTouchscreen is set between
++  begin and end: the dock card swipe maps these logical deltas to the physical frame,
++  and the workspace swipe scales them 1:1 (WorkspaceSwipeGesture).
++*/
++static uint32_t s_touchSwipeFingers = 0;
++
++static int hlTouchClaim(lua_State* L) {
++    if (lua_isinteger(L, 1) && !g_pInputManager->m_touchSeq.down.contains(sc<int32_t>(lua_tointeger(L, 1)))) {
++        lua_pushboolean(L, false);
++        return 1;
++    }
++    lua_pushboolean(L, g_pInputManager->claimTouchSequence());
++    return 1;
++}
++
++static int hlTouchSwipe(lua_State* L) {
++    const std::string PHASE = luaL_checkstring(L, 1);
++    const uint32_t    NOW   = static_cast<uint32_t>(Time::millis(Time::steadyNow()));
++    static auto       PSCALE = CConfigValue<Config::FLOAT>("gestures:touch_swipe_scale");
++
++    const auto        finish = [NOW](bool cancelled) {
++        if (!s_touchSwipeFingers)
++            return;
++        g_pTrackpadGestures->gestureEnd(IPointer::SSwipeEndEvent{.timeMs = NOW, .cancelled = cancelled});
++        g_pTrackpadGestures->m_fromTouchscreen = false;
++        s_touchSwipeFingers                    = 0;
++    };
++
++    if (PHASE == "begin") {
++        finish(true); // a swipe still open is superseded
++        s_touchSwipeFingers                    = sc<uint32_t>(luaL_checkinteger(L, 2));
++        g_pTrackpadGestures->m_fromTouchscreen = true;
++        g_pTrackpadGestures->gestureBegin(IPointer::SSwipeBeginEvent{.timeMs = NOW, .fingers = s_touchSwipeFingers});
++    } else if (PHASE == "update") {
++        if (!s_touchSwipeFingers)
++            return 0;
++        const Vector2D DELTA = Vector2D{luaL_optnumber(L, 3, 0), luaL_optnumber(L, 4, 0)} * sc<double>(*PSCALE);
++        g_pTrackpadGestures->gestureUpdate(IPointer::SSwipeUpdateEvent{.timeMs = NOW, .fingers = s_touchSwipeFingers, .delta = DELTA});
++    } else if (PHASE == "end" || PHASE == "cancel")
++        finish(PHASE == "cancel");
++    else
++        return Internal::configError(L, "hl.touch_swipe: phase must be \"begin\", \"update\", \"end\" or \"cancel\"");
++    return 0;
++}
++
+ static int hlGesture(lua_State* L) {
+     if (!lua_istable(L, 1))
+         return Internal::configError(L, R"(hl.gesture: expected a table, e.g. { fingers = 3, direction = "horizontal", action = "workspace" })");
+@@ -1416,6 +1475,9 @@
+ 
+     Internal::setFn(L, "gesture", hlGesture);
+     Internal::setFn(L, "gesture_handoff", hlGestureHandoff);
++    Internal::setFn(L, "touch_claim", hlTouchClaim);
++    Internal::setFn(L, "touch_claim_all", hlTouchClaim);
++    Internal::setFn(L, "touch_swipe", hlTouchSwipe);
+     Internal::setFn(L, "curve", hlCurve);
+     Internal::setFn(L, "animation", hlAnimation);
+ }
+diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.cpp
+--- a/src/config/lua/LuaEventHandler.cpp
++++ b/src/config/lua/LuaEventHandler.cpp	2026-10-08 14:45:33.406442063 +0900
+@@ -14,6 +14,11 @@
+ #include "../../devices/Tablet.hpp"
+ #include "../../managers/input/InputManager.hpp"
+ #include "../../managers/eventLoop/EventLoopManager.hpp"
++#include "../../desktop/state/ViewState.hpp"
++#include "../../desktop/state/ViewStateTracker.hpp"
++#include "../../desktop/state/ViewHitTester.hpp"
++#include "../../desktop/view/Window.hpp"
++#include <unordered_map>
+ #include <expected>
+ #include <vector>
+ 
+@@ -105,7 +110,7 @@
+     m_listeners.push_back(bus()->m_events.window.active.listen([this](PHLWINDOW w, Desktop::eFocusReason r) {
+         dispatch("window.active", 2, [&](lua_State* L) {
+             CLuaWindow::push(L, w);
+-            lua_pushinteger(L, sc<lua_Integer>(r));
++            lua_pushinteger(L, static_cast<lua_Integer>(r));
+         });
+     }));
+     m_listeners.push_back(bus()->m_events.window.urgent.listen([this](PHLWINDOW w) { dispatch("window.urgent", 1, [&](lua_State* L) { CLuaWindow::push(L, w); }); }));
+@@ -156,14 +161,14 @@
+ 
+     m_listeners.push_back(bus()->m_events.config.reloaded.listen([this] { dispatch("config.reloaded", 0, [](lua_State* L) {}); }));
+     m_listeners.push_back(bus()->m_events.config.props_refreshed.listen(
+-        [this](const bool execdAsScheduled) { dispatch("config.props_refreshed", 1, [&](lua_State* L) { lua_pushboolean(L, sc<lua_Integer>(execdAsScheduled)); }); }));
++        [this](const bool execdAsScheduled) { dispatch("config.props_refreshed", 1, [&](lua_State* L) { lua_pushboolean(L, static_cast<lua_Integer>(execdAsScheduled)); }); }));
+ 
+     m_listeners.push_back(
+         bus()->m_events.keybinds.submap.listen([this](const std::string& submap) { dispatch("keybinds.submap", 1, [&](lua_State* L) { lua_pushstring(L, submap.c_str()); }); }));
+     m_listeners.push_back(bus()->m_events.screenshare.state.listen([this](bool state, uint8_t type, const std::string& name) {
+         dispatch("screenshare.state", 3, [&](lua_State* L) {
+             lua_pushboolean(L, state);
+-            lua_pushinteger(L, sc<lua_Integer>(type));
++            lua_pushinteger(L, static_cast<lua_Integer>(type));
+             lua_pushstring(L, name.c_str());
+         });
+     }));
+@@ -200,18 +205,84 @@
+         lua_pushnumber(L, p.y);
+         lua_setfield(L, -2, "y");
+     };
+-    m_listeners.push_back(bus()->m_events.input.touch.down.listen([this, pushPoint](const ITouch::SDownEvent& e, const SCallbackInfo& _) {
++    /*
++      The touch stream (keystone/11): one table per event, so Lua can recognize any gesture.
++        input.touch.down   {id, x, y, time, count, claimed, window = <window under it | nil>}
++        input.touch.move   {id, x, y, time, count, claimed, resizing}
++        input.touch.up     {id, x, y, time, count, claimed}      -- x, y: its last position
++        input.touch.cancel {id, x, y, time, count, claimed}      -- the device cancelled it
++      Global layout coordinates (hl.get_cursor_pos()'s space). count = fingers down
++      including this one on down, excluding it on up. A claimed sequence reaches Lua
++      only (see managers/input/Touch.cpp).
++    */
++    const auto pushTouch = [](lua_State* L, int32_t id, const Vector2D& p, uint32_t timeMs) {
++        lua_createtable(L, 0, 8);
++        lua_pushinteger(L, id);
++        lua_setfield(L, -2, "id");
++        lua_pushnumber(L, p.x);
++        lua_setfield(L, -2, "x");
++        lua_pushnumber(L, p.y);
++        lua_setfield(L, -2, "y");
++        lua_pushinteger(L, timeMs);
++        lua_setfield(L, -2, "time");
++        lua_pushinteger(L, static_cast<lua_Integer>(g_pInputManager->m_touchSeq.down.size()));
++        lua_setfield(L, -2, "count");
++        lua_pushboolean(L, g_pInputManager->m_touchSeq.claimed);
++        lua_setfield(L, -2, "claimed");
++    };
++    // the last position of each finger, for up/cancel (which carry none)
++    static std::unordered_map<int32_t, Vector2D> s_touchPos;
++
++    m_listeners.push_back(bus()->m_events.input.touch.down.listen([this, pushTouch](const ITouch::SDownEvent& e, const SCallbackInfo& _) {
+         // same monitor choice as CInputManager::onTouchDown
+         auto PMONITOR = State::monitorState()->query().name(e.device && !e.device->m_boundOutput.empty() ? e.device->m_boundOutput : "").run();
+         PMONITOR      = PMONITOR ? PMONITOR : Desktop::focusState()->monitor();
+         if (!PMONITOR)
+             return;
+         const Vector2D POS = PMONITOR->m_position + e.pos * PMONITOR->m_size;
+-        dispatch("input.touch.down", 2, [&](lua_State* L) {
+-            pushPoint(L, POS);
+-            lua_pushinteger(L, e.touchID);
++        s_touchPos[e.touchID] = POS;
++        const auto WINDOW     = Desktop::viewState()->hitTest().windowAt(POS, Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
++        dispatch("input.touch.down", 1, [&](lua_State* L) {
++            pushTouch(L, e.touchID, POS, e.timeMs);
++            if (WINDOW)
++                CLuaWindow::push(L, WINDOW);
++            else
++                lua_pushnil(L);
++            lua_setfield(L, -2, "window");
+         });
+     }));
++    m_listeners.push_back(bus()->m_events.input.touch.motion.listen([this, pushTouch](const ITouch::SMotionEvent& e, const SCallbackInfo& _) {
++        // same mapping as CInputManager::onTouchMove (the focused monitor)
++        const auto PMONITOR = Desktop::focusState()->monitor();
++        if (!PMONITOR)
++            return;
++        const Vector2D POS    = PMONITOR->m_position + e.pos * PMONITOR->m_size;
++        s_touchPos[e.touchID] = POS;
++        dispatch("input.touch.move", 1, [&](lua_State* L) {
++            pushTouch(L, e.touchID, POS, e.timeMs);
++            lua_pushboolean(L, g_pInputManager->m_touchBorderResizeID && *g_pInputManager->m_touchBorderResizeID == e.touchID);
++            lua_setfield(L, -2, "resizing");
++        });
++    }));
++    m_listeners.push_back(bus()->m_events.input.touch.up.listen([this, pushTouch](const ITouch::SUpEvent& e, const SCallbackInfo& _) {
++        const auto IT  = s_touchPos.find(e.touchID);
++        const auto POS = IT != s_touchPos.end() ? IT->second : Vector2D{};
++        if (IT != s_touchPos.end())
++            s_touchPos.erase(IT);
++        dispatch("input.touch.up", 1, [&](lua_State* L) {
++            pushTouch(L, e.touchID, POS, e.timeMs);
++            // count excludes the finger lifting (Touch.cpp erases it after this emit)
++            lua_pushinteger(L, static_cast<lua_Integer>(g_pInputManager->m_touchSeq.down.size() - (g_pInputManager->m_touchSeq.down.contains(e.touchID) ? 1 : 0)));
++            lua_setfield(L, -2, "count");
++        });
++    }));
++    m_listeners.push_back(bus()->m_events.input.touch.cancel.listen([this, pushTouch](const ITouch::SCancelEvent& e, const SCallbackInfo& _) {
++        const auto IT  = s_touchPos.find(e.touchID);
++        const auto POS = IT != s_touchPos.end() ? IT->second : Vector2D{};
++        if (IT != s_touchPos.end())
++            s_touchPos.erase(IT);
++        dispatch("input.touch.cancel", 1, [&](lua_State* L) { pushTouch(L, e.touchID, POS, e.timeMs); });
++    }));
+     m_listeners.push_back(bus()->m_events.input.tablet.tip.listen([this, pushPoint](const CTablet::STipEvent& e, const SCallbackInfo& _) {
+         if (!e.in)
+             return;
+@@ -336,6 +407,9 @@
+         "hyprland.shutdown",
+         "input.keyboard.key",
+         "input.touch.down",
++        "input.touch.move",
++        "input.touch.up",
++        "input.touch.cancel",
+         "input.tablet.tip",
+     };
+     for (auto& kv : Event::bus()->m_events.plugin)
 diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.cpp
 --- a/src/config/values/ConfigValues.cpp
-+++ b/src/config/values/ConfigValues.cpp	2026-10-08 09:25:21.720592912 +0900
-@@ -416,6 +416,11 @@
++++ b/src/config/values/ConfigValues.cpp	2026-10-08 14:43:56.463549399 +0900
+@@ -416,6 +416,8 @@
           */
  
          MS<Int>("gestures:workspace_swipe_distance", "in px, the distance of the touchpad gesture", 300, {.min = 0, .max = 2000}),
-+        MS<Int>("gestures:touch_move_tap_ms", "touchscreen 3-finger double-tap-drag: the first tap's fingers must all lift within this many ms", 250, {.min = 50, .max = 2000}),
-+        MS<Int>("gestures:touch_move_gap_ms", "touchscreen 3-finger double-tap-drag: the second touch must start within this many ms of the tap", 400, {.min = 50, .max = 2000}),
-+        MS<Int>("gestures:touch_move_slop", "touchscreen 3-finger double-tap-drag: a tap finger may move at most this many px", 20, {.min = 0, .max = 200}),
-+        MS<Float>("gestures:touch_swipe_scale", "touchscreen swipes fed to the trackpad gestures: logical px of finger travel -> trackpad delta", 1.f, {.min = 0.1f, .max = 10.f}),
-+        MS<Int>("gestures:touch_swipe_threshold", "touchscreen 4-finger swipe: centroid travel in px before it becomes a gesture (and the touches are taken from the client)", 15, {.min = 1, .max = 200}),
++        MS<Int>("gestures:touch_claim_fingers", "touchscreen: once this many fingers are down at once, the whole touch sequence is taken from the client and reported to Lua only (0 = never)", 3, {.min = 0, .max = 10}),
++        MS<Float>("gestures:touch_swipe_scale", "hl.touch_swipe: logical px of finger travel -> trackpad delta", 1.f, {.min = 0.1f, .max = 10.f}),
          MS<String>("gestures:dock_swipe_exec", "side dock: command run on release of a move gesture that began on a dock card, with next/prev/none and the front card's address", STRVAL_EMPTY),
          MS<Float>("gestures:dock_swipe_follow", "side dock: on a swipe away from the dock edge, the fraction of the previous card's travel each deeper card follows (the lag)", 0.75f, {.min = 0.f, .max = 1.f}),
          MS<Bool>("gestures:workspace_swipe_touch", "enable workspace swiping from the edge of a touchscreen", false),
+diff -ruN a/src/managers/input/InputManager.hpp b/src/managers/input/InputManager.hpp
+--- a/src/managers/input/InputManager.hpp
++++ b/src/managers/input/InputManager.hpp	2026-10-08 14:43:56.462650847 +0900
+@@ -2,6 +2,7 @@
+ 
+ #include "../../defines.hpp"
+ #include <list>
++#include <unordered_map>
+ #include <any>
+ #include "../../helpers/WLClasses.hpp"
+ #include "../../helpers/time/Timer.hpp"
+@@ -144,6 +145,22 @@
+     void               onTouchUp(ITouch::SUpEvent);
+     void               onTouchMove(ITouch::SMotionEvent);
+ 
++    /*
++      Touch claiming (keystone/11). The compositor recognizes no touch gestures itself:
++      it streams every touch to Lua (input.touch.down/move/up/cancel) and lets the Lua
++      side take touches away from clients. A CLAIMED sequence is cancelled for its client
++      (wl_touch.cancel covers the whole sequence) and from then on its fingers -- the ones
++      down now and any that land before all lift -- reach Lua only. Claimed automatically
++      once gestures:touch_claim_fingers are down at once; on demand by hl.touch_claim.
++    */
++    struct STouchSequence {
++        std::unordered_map<int32_t, bool> down; // finger -> delivered to a client (sendTouchDown)
++        bool                              claimed   = false;
++        uint32_t                          lastDownMs = 0;
++    } m_touchSeq;
++    bool               claimTouchSequence(); // false if no finger is down
++    void               onTouchCancelAll();   // the device cancelled its touches
++
+     // resize_on_border for pen and touch, which never reach processMouseDownNormal's
+     // border press: the same keystone-aware zone test, then the same MBIND_RESIZE drag,
+     // driven by the cursor (pen) or the touch point warped onto it (touch).
 diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
 --- a/src/managers/input/Touch.cpp
-+++ b/src/managers/input/Touch.cpp	2026-10-08 09:25:21.738592806 +0900
-@@ -13,6 +13,107 @@
- #include "../../protocols/core/DataDevice.hpp"
++++ b/src/managers/input/Touch.cpp	2026-10-08 14:44:27.837571798 +0900
+@@ -14,6 +14,50 @@
  #include "debug/log/Logger.hpp"
  #include "UnifiedWorkspaceSwipeGesture.hpp"
-+#include "trackpad/TrackpadGestures.hpp"
-+
+ 
 +#include <algorithm>
-+#include <optional>
-+#include <unordered_map>
-+#include <vector>
 +
 +/*
-+  Touchscreen swipes as TRACKPAD gestures: the touch path synthesizes swipe begin /
-+  update / end into g_pTrackpadGestures, the same dispatcher libinput's touchpad swipes
-+  feed, so the configured hl.gesture entries run live for touch exactly as they do on the
-+  touchpad. The delta is the touch centroid's travel in logical px (times
-+  gestures:touch_swipe_scale), in finger direction like libinput's -- with the default
-+  gestures:workspace_swipe_invert the content follows the fingers. Two entries:
++  Touch gestures live in Lua (features/hyprland/touch.lua), not here. This file only
++  tracks the current touch sequence (m_touchSeq) and honours CLAIMS: a claimed
++  sequence is cancelled for its client and its fingers go to Lua only (the
++  input.touch.* events, emitted from the event bus at the top of each handler, see
++  config/lua/LuaEventHandler.cpp). Claimed automatically once
++  gestures:touch_claim_fingers fingers are down at once, or by hl.touch_claim.
 +
-+  - 4 fingers: once exactly four are down and their centroid has travelled
-+    gestures:touch_swipe_threshold px -> a 4-finger swipe (the column walk with its
-+    workspace handoff, scroll_move).
-+  - 3 fingers, double-tap-then-drag: a 3-finger tap (all up within
-+    gestures:touch_move_tap_ms, none moved past gestures:touch_move_slop), then three
-+    fingers down again within gestures:touch_move_gap_ms -> a 3-finger swipe from the
-+    third finger on, i.e. the `move` gesture: a window follows the fingers, a side-dock
-+    card swipes and gestures:dock_swipe_exec settles it. A plain 3-finger swipe stays
-+    the client's.
-+
-+  From the start the gesture's touches are cancelled for the client. Lifting a finger
-+  ends it; another finger landing cancels it.
++  A finger that starts a border resize (keystone/10) keeps resizing: the resize branch
++  runs before the claim check on move and up, and that finger is not counted towards
++  the claim threshold. Lua still sees it (resizing = true on its move events).
 +*/
-+namespace {
-+    struct STouchSwipeState {
-+        struct SPoint {
-+            Vector2D start, last;
-+        };
-+        std::unordered_map<int32_t, SPoint> points; // every finger currently down
-+        size_t                              maxFingers = 0;
-+        uint32_t                            seqStartMs = 0;
-+        bool                                seqMoved   = false;
-+        bool                                seqGesture = false; // this sequence became a gesture
-+        std::optional<uint32_t>             lastTapEndMs;       // a qualifying 3-finger tap ended
-+
-+        bool                                pending4 = false; // four down, waiting for the threshold
-+        Vector2D                            pendingStart;
-+
-+        bool                                active  = false;
-+        uint32_t                            fingers = 0;
-+        std::vector<int32_t>                ids;         // the gesture's fingers, swallowed until lifted
-+        std::optional<int32_t>              undelivered; // the finger that started it never reached the client
-+        Vector2D                            lastCentroid;
-+    };
-+    STouchSwipeState g_touchSwipe;
-+
-+    bool isGestureFinger(int32_t id) {
-+        return std::ranges::find(g_touchSwipe.ids, id) != g_touchSwipe.ids.end();
-+    }
-+
-+    Vector2D centroidOf(const std::vector<int32_t>& ids) {
-+        Vector2D sum;
-+        size_t   n = 0;
-+        for (const auto id : ids) {
-+            if (const auto it = g_touchSwipe.points.find(id); it != g_touchSwipe.points.end()) {
-+                sum = sum + it->second.last;
-+                n++;
-+            }
-+        }
-+        return n ? sum / sc<double>(n) : g_touchSwipe.lastCentroid;
-+    }
-+
-+    std::vector<int32_t> allDown() {
-+        std::vector<int32_t> ids;
-+        for (auto const& [id, _] : g_touchSwipe.points)
-+            ids.push_back(id);
-+        return ids;
-+    }
-+
-+    void swipeUpdate(uint32_t timeMs, const Vector2D& delta) {
-+        static auto                       PSCALE = CConfigValue<Config::FLOAT>("gestures:touch_swipe_scale");
-+        const IPointer::SSwipeUpdateEvent UPDATE = {.timeMs = timeMs, .fingers = g_touchSwipe.fingers, .delta = delta * sc<double>(*PSCALE)};
-+        g_pTrackpadGestures->gestureUpdate(UPDATE);
-+    }
-+
-+    // take the current fingers from the client and start a synthetic swipe
-+    void swipeBegin(uint32_t timeMs, uint32_t fingers, const Vector2D& centroid) {
-+        auto& S        = g_touchSwipe;
-+        S.active       = true;
-+        S.seqGesture   = true;
-+        S.pending4     = false;
-+        S.fingers      = fingers;
-+        S.ids          = allDown();
-+        S.lastCentroid = centroid;
++bool CInputManager::claimTouchSequence() {
++    if (m_touchSeq.down.empty())
++        return false;
++    if (m_touchSeq.claimed)
++        return true;
++    m_touchSeq.claimed = true;
++    // wl_touch.cancel is per sequence: every delivered finger is withdrawn at once. Their
++    // ups are still sent later -- the seat counts each delivered down (m_touchLocks).
++    if (std::ranges::any_of(m_touchSeq.down, [](const auto& kv) { return kv.second; }))
 +        g_pSeatManager->sendTouchCancel();
-+        // these deltas are logical finger travel, not physical: the dock swipe converts them
-+        g_pTrackpadGestures->m_fromTouchscreen = true;
-+        g_pTrackpadGestures->gestureBegin(IPointer::SSwipeBeginEvent{.timeMs = timeMs, .fingers = fingers});
-+    }
-+
-+    void swipeEnd(uint32_t timeMs, bool cancelled) {
-+        g_touchSwipe.active = false;
-+        g_pTrackpadGestures->gestureEnd(IPointer::SSwipeEndEvent{.timeMs = timeMs, .cancelled = cancelled});
-+        g_pTrackpadGestures->m_fromTouchscreen = false;
-+    }
++    return true;
 +}
- 
++
++void CInputManager::onTouchCancelAll() {
++    for (const auto& [id, _] : m_touchSeq.down) {
++        Event::SCallbackInfo info;
++        Event::bus()->m_events.input.touch.cancel.emit(ITouch::SCancelEvent{.timeMs = 0, .touchID = id}, info);
++    }
++    const bool DELIVERED   = std::ranges::any_of(m_touchSeq.down, [](const auto& kv) { return kv.second; });
++    const bool WASCLAIMED  = m_touchSeq.claimed; // its client was cancelled already
++    m_touchSeq.down.clear();
++    m_touchSeq.claimed = false;
++    if (m_touchBorderResizeID) {
++        m_touchBorderResizeID.reset();
++        endBorderResize();
++    }
++    if (DELIVERED && !WASCLAIMED)
++        g_pSeatManager->sendTouchCancel();
++}
++
  void CInputManager::onTouchDown(ITouch::SDownEvent e) {
      m_lastInputTouch = true;
-@@ -43,6 +144,43 @@
+ 
+@@ -24,6 +68,23 @@
+     auto                 gapsOut     = *PGAPSOUT;
+     static auto          PBORDERSIZE = CConfigValue<Config::INTEGER>("general:border_size");
+     static auto          PSWIPEINVR  = CConfigValue<Config::INTEGER>("gestures:workspace_swipe_touch_invert");
++    static auto          PCLAIM      = CConfigValue<Config::INTEGER>("gestures:touch_claim_fingers");
++
++    // the touch sequence (see the top of this file). A finger whose up never came must not
++    // wedge it: a sequence with no new finger for 10s is dropped.
++    if (!m_touchSeq.down.empty() && e.timeMs - m_touchSeq.lastDownMs > 10000) {
++        m_touchSeq.down.clear();
++        m_touchSeq.claimed = false;
++    }
++    if (m_touchSeq.down.empty())
++        m_touchSeq.claimed = false;
++    m_touchSeq.down[e.touchID] = false;
++    m_touchSeq.lastDownMs      = e.timeMs;
++    if (*PCLAIM > 0) {
++        const size_t COUNTED = m_touchSeq.down.size() - (m_touchBorderResizeID && m_touchSeq.down.contains(*m_touchBorderResizeID) ? 1 : 0);
++        if (COUNTED >= sc<size_t>(*PCLAIM))
++            claimTouchSequence();
++    }
+ 
+     Event::SCallbackInfo info;
+     Event::bus()->m_events.input.touch.down.emit(e, info);
+@@ -43,6 +104,10 @@
  
      refocus(TOUCH_COORDS);
  
-+    // touchscreen swipes as trackpad gestures (see the top of this file)
-+    {
-+        static auto PGAP = CConfigValue<Config::INTEGER>("gestures:touch_move_gap_ms");
-+        auto&       S    = g_touchSwipe;
-+        // a finger whose up never came (device cancel) must not wedge the tracking
-+        if (!S.points.empty() && !S.active && e.timeMs - S.seqStartMs > 10000) {
-+            S.points.clear();
-+            S.ids.clear();
-+            S.pending4 = false;
-+        }
-+        if (S.points.empty()) {
-+            S.maxFingers = 0;
-+            S.seqStartMs = e.timeMs;
-+            S.seqMoved   = false;
-+            S.seqGesture = false;
-+        }
-+        S.points[e.touchID] = {.start = TOUCH_COORDS, .last = TOUCH_COORDS};
-+        S.maxFingers        = std::max(S.maxFingers, S.points.size());
-+
-+        if (S.active) { // another finger landing cancels a running gesture
-+            swipeEnd(e.timeMs, true);
-+        } else if (S.ids.empty() && !m_touchBorderResizeID && !g_pUnifiedWorkspaceSwipe->isGestureInProgress()) {
-+            S.pending4 = S.points.size() == 4;
-+            if (S.pending4)
-+                S.pendingStart = centroidOf(allDown());
-+
-+            if (S.points.size() == 3 && S.lastTapEndMs && S.seqStartMs >= *S.lastTapEndMs && S.seqStartMs - *S.lastTapEndMs <= sc<uint32_t>(*PGAP)) {
-+                S.lastTapEndMs.reset();
-+                const auto C = centroidOf(allDown());
-+                refocus(C); // the move acts on the focused window: the one under the fingers
-+                swipeBegin(e.timeMs, 3, C);
-+                S.undelivered = e.touchID;
-+                return;
-+            }
-+        }
-+    }
++    // claimed (by the threshold above or by Lua during the emit): Lua's alone
++    if (m_touchSeq.claimed)
++        return;
 +
      if (m_clickBehavior == CLICKMODE_KILL) {
          IPointer::SButtonEvent e;
          e.state = WL_POINTER_BUTTON_STATE_PRESSED;
-@@ -137,6 +275,42 @@
+@@ -126,6 +191,7 @@
+     } else
+         return; // oops, nothing found.
+ 
++    m_touchSeq.down[e.touchID] = true;
+     g_pSeatManager->sendTouchDown(m_touchData.touchFocusSurface.lock(), e.timeMs, e.touchID, local);
+ }
+ 
+@@ -137,12 +203,28 @@
      if (info.cancelled)
          return;
  
-+    // touchscreen swipes as trackpad gestures (see the top of this file)
-+    {
-+        static auto PTAP    = CConfigValue<Config::INTEGER>("gestures:touch_move_tap_ms");
-+        auto&       S       = g_touchSwipe;
-+        bool        swallow    = false;
-+        const bool  wasGesture = isGestureFinger(e.touchID);
-+        S.pending4             = false;
-+        if (wasGesture) {
-+            if (S.active) // lifting any of its fingers ends it
-+                swipeEnd(e.timeMs, false);
-+            std::erase(S.ids, e.touchID);
-+        }
-+        if (S.undelivered && *S.undelivered == e.touchID) {
-+            S.undelivered.reset();
-+            swallow = true; // the client never saw it go down
-+        }
-+        if (S.points.erase(e.touchID) && S.points.empty()) {
-+            const bool TAP = S.maxFingers == 3 && !S.seqMoved && !S.seqGesture && e.timeMs - S.seqStartMs <= sc<uint32_t>(*PTAP);
-+            if (TAP)
-+                S.lastTapEndMs = e.timeMs;
-+            else
-+                S.lastTapEndMs.reset();
-+        }
-+        if (swallow)
-+            return;
-+        // a gesture's delivered fingers still go up: the client was cancelled, but the seat
-+        // counts every delivered down (m_touchLocks) and must see its up. Nothing else --
-+        // the touch workspace-swipe branch below keys on m_touchID, which a gesture's
-+        // workspace handoff never set.
-+        if (wasGesture) {
-+            if (m_touchData.touchFocusSurface)
-+                g_pSeatManager->sendTouchUp(e.timeMs, e.touchID);
-+            return;
-+        }
-+    }
++    const auto SEQ       = m_touchSeq.down.find(e.touchID);
++    const bool KNOWN     = SEQ != m_touchSeq.down.end();
++    const bool DELIVERED = KNOWN && SEQ->second;
++    const bool CLAIMED   = m_touchSeq.claimed;
++    if (KNOWN)
++        m_touchSeq.down.erase(SEQ);
++    if (m_touchSeq.down.empty())
++        m_touchSeq.claimed = false;
 +
      if (m_touchBorderResizeID && *m_touchBorderResizeID == e.touchID) {
          m_touchBorderResizeID.reset();
          endBorderResize();
-@@ -170,6 +344,35 @@
-     if (info.cancelled)
          return;
+     }
  
-+    // touchscreen swipes as trackpad gestures (see the top of this file)
-+    {
-+        static auto PSLOP      = CConfigValue<Config::INTEGER>("gestures:touch_move_slop");
-+        static auto PTHRESHOLD = CConfigValue<Config::INTEGER>("gestures:touch_swipe_threshold");
-+        auto&       S          = g_touchSwipe;
-+        if (const auto it = S.points.find(e.touchID); it != S.points.end()) {
-+            it->second.last = m_touchData.lastTouchPos;
-+            if ((it->second.last - it->second.start).size() > sc<double>(*PSLOP))
-+                S.seqMoved = true;
-+        }
-+        if (S.pending4 && S.points.size() == 4 && !g_pUnifiedWorkspaceSwipe->isGestureInProgress()) {
-+            const auto C = centroidOf(allDown());
-+            if ((C - S.pendingStart).size() > sc<double>(*PTHRESHOLD)) {
-+                swipeBegin(e.timeMs, 4, S.pendingStart);
-+                swipeUpdate(e.timeMs, C - S.lastCentroid); // the travel so far, so the dispatcher sees the direction
-+                S.lastCentroid = C;
-+                return;
-+            }
-+        }
-+        if (isGestureFinger(e.touchID)) {
-+            if (S.active) {
-+                const auto C = centroidOf(S.ids);
-+                swipeUpdate(e.timeMs, C - S.lastCentroid);
-+                S.lastCentroid = C;
-+            }
-+            return; // cancelled for the client
-+        }
++    if (CLAIMED && KNOWN) {
++        // the client was cancelled, but a finger it saw go down still goes up (m_touchLocks)
++        if (DELIVERED && m_touchData.touchFocusSurface)
++            g_pSeatManager->sendTouchUp(e.timeMs, e.touchID);
++        return;
 +    }
 +
-     if (m_touchBorderResizeID && *m_touchBorderResizeID == e.touchID) {
-         borderResizeMoveTo(m_touchData.lastTouchPos);
+     if (g_pUnifiedWorkspaceSwipe->isGestureInProgress()) {
+         // If there was a swipe from this finger, end it.
+         if (e.touchID == g_pUnifiedWorkspaceSwipe->m_touchID)
+@@ -175,6 +257,10 @@
          return;
+     }
+ 
++    // a claimed finger moves for Lua only
++    if (m_touchSeq.claimed && m_touchSeq.down.contains(e.touchID))
++        return;
++
+     if (g_pUnifiedWorkspaceSwipe->isGestureInProgress()) {
+         // Do nothing if this is using a different finger.
+         if (e.touchID != g_pUnifiedWorkspaceSwipe->m_touchID)
 diff -ruN a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp b/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp
 --- a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp
-+++ b/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp	2026-10-08 09:25:21.807599725 +0900
++++ b/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp	2026-10-08 14:43:46.536160163 +0900
 @@ -6,6 +6,8 @@
  #include "../../../../render/Renderer.hpp"
  
@@ -313,3 +494,19 @@ diff -ruN a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp b/src
      const double D = g_pUnifiedWorkspaceSwipe->m_delta + (*PSWIPEINVR ? -DELTA : DELTA);
      g_pUnifiedWorkspaceSwipe->update(D);
  }
+diff -ruN a/src/pointer/PointerManager.cpp b/src/pointer/PointerManager.cpp
+--- a/src/pointer/PointerManager.cpp
++++ b/src/pointer/PointerManager.cpp	2026-10-08 14:44:49.460563030 +0900
+@@ -1086,9 +1086,9 @@
+         PROTO::idle->onActivity();
+     });
+ 
+-    listener->cancel = touch->m_touchEvents.cancel.listen([] {
+-        //
+-    });
++    // keystone/11: a device cancel withdraws the whole touch sequence -- from clients and
++    // from Lua (input.touch.cancel), so neither keeps fingers that will never lift
++    listener->cancel = touch->m_touchEvents.cancel.listen([] { g_pInputManager->onTouchCancelAll(); });
+ 
+     listener->frame = touch->m_touchEvents.frame.listen([] { g_pSeatManager->sendTouchFrame(); });
+ 

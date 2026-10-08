@@ -29,6 +29,12 @@ hl.layer_rule({ match = { namespace = "^(wvkbd)$" }, blur = true, ignore_alpha =
 
 -- Shell surfaces.
 hl.bind(mod .. " + space", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
+-- ... and a four-finger tap on the touchscreen (features/hyprland/touch.lua)
+pcall(function()
+  require("feat.touch").gesture({ fingers = 4, kind = "tap", action = function()
+    hl.dispatch(hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
+  end })
+end)
 -- Alt+Tab = Spotlight pre-filled with the altTab plugin's trigger
 -- (plugins.nix, ./plugins/alt-tab): windows in MRU order, live
 -- previews. openQuery rather than toggleQuery so a second Alt+Tab

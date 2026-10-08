@@ -471,7 +471,17 @@ hl.bind(mod .. " + E", hl.dsp.exec_cmd("emacsclient -c"))
 hl.bind("Hangul", hl.dsp.exec_cmd(nix.hangulToggle))
 
 -- Window management
-hl.bind(mod .. " + Q", hl.dsp.window.close())
+-- One way to close a window, for the key and the touch gesture alike. Global so a
+-- feature can wrap it: features/waydroid hides the Waydroid window instead (closing it
+-- crashes Android's hwcomposer).
+function HyprCloseWindow(w)
+  if w and w.address then
+    hl.dispatch(hl.dsp.window.close({ window = "address:" .. w.address }))
+  else
+    hl.dispatch(hl.dsp.window.close())
+  end
+end
+hl.bind(mod .. " + Q", function() HyprCloseWindow(hl.get_active_window()) end)
 hl.bind(mod .. " + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 -- niri's maximize-column, now a real TOGGLE on Mod+D (end-4's key for
 -- it; Mod+D is free now that its earlier weirdness is understood --
@@ -724,6 +734,31 @@ do
       step = nil
     end,
   } })
+end
+-- Touchscreen gestures (features/hyprland/touch.lua): recognized in Lua from the
+-- compositor's touch stream, so they change with a reload, never a rebuild (until
+-- 2026-10-08 the two live ones below were hardcoded in keystone/11's Touch.cpp). Kinds,
+-- parameters and conflict rules are documented at the top of touch.lua. Features add
+-- their own (side dock: features/sidedock/hyprland.lua; spotlight: features/dms).
+-- 3 and more fingers are taken from the app automatically (gestures:touch_claim_fingers).
+do
+  local Touch = require("feat.touch")
+  local function at(g) return g.window and ("address:" .. g.window.address) end
+  -- tap with three fingers, then three fingers down again and drag: the touchpad's
+  -- 3-finger `move` gesture, live -- a window follows, a dock card swipes.
+  Touch.gesture({ fingers = 3, kind = "tap_drag", trackpad = 3 })
+  -- four fingers: the touchpad's 4-finger swipes, live (the column walk with its
+  -- workspace handoff above, and scroll_move)
+  Touch.gesture({ fingers = 4, kind = "swipe", trackpad = 4 })
+  Touch.gesture({ fingers = 3, kind = "hold", action = function(g)
+    if at(g) then hl.dispatch(hl.dsp.window.float({ window = at(g) })) end
+  end })
+  -- five fingers down the screen: close the window under them. A swipe, not a tap --
+  -- closing should be hard to do by accident. (5-finger left/right is lisgd's dock
+  -- show/hide, features/sidedock.)
+  Touch.gesture({ fingers = 5, kind = "swipe", direction = "down", action = function(g)
+    HyprCloseWindow(g.window)
+  end })
 end
 hl.bind(mod .. " + Page_Down", hl.dsp.focus({ workspace = "-1" }))
 hl.bind(mod .. " + Page_Up", hl.dsp.focus({ workspace = "+1" }))
