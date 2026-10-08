@@ -194,10 +194,21 @@ PluginComponent {
     }
 
     // --- window --------------------------------------------------------------
+    /*
+      Show/hide animation: the keyboard slides up from the bottom edge and fades in,
+      and the reverse. Hyprland does not animate it (the dms-* layer rule sets no_anim,
+      which the bar wants), so it is done here. The window stays mapped until the
+      slide-out ends, or hiding would cut it off at once. A pinned keyboard reserves
+      its height when shown and gives it back when the window unmaps: animating the
+      exclusive zone would resize every window on every frame.
+    */
+    property real reveal: shown ? 1 : 0
+    Behavior on reveal { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+
     PanelWindow {
         id: win
         screen: Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
-        visible: root.shown
+        visible: root.shown || root.reveal > 0.001
         color: "transparent"
 
         // dms-* is blurred by features/dms/hyprland.lua's layer rule: the frosted glass
@@ -238,6 +249,10 @@ PluginComponent {
             // bar's exclusive zone (measured: y 42, height 1158 of 1200)
             y: root.pinned ? 0 : Math.max(0, win.height - root.floatY - height)
             color: Theme.withAlpha(Theme.surface, 0.55)
+            // the show/hide slide (root.reveal): down by its own height plus a margin
+            // at 0, in place at 1
+            opacity: root.reveal
+            transform: Translate { y: (1 - root.reveal) * (body.height + 24) }
             radius: root.pinned ? 0 : 20
             border.width: root.pinned ? 0 : 1
             border.color: Theme.withAlpha(Theme.outlineVariant, 0.6)
