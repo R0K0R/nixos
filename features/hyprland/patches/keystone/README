@@ -6,7 +6,7 @@ patch's own header says what it does and why.
 
 Base: Hyprland 0.56.2 + nixpkgs' monitor-soft-apply-logical-size.patch + the other
 patches listed before this series in nixos.nix (layoutmanager-guard-null-space,
-gamma-refused-control-zombie, swipe-abandon-on-monitor-loss,
+gamma-refused-control-zombie, input-on-monitor-loss,
 soft-apply-mark-blur-dirty).
 
 Bisectability: every prefix was checked for references to identifiers a later patch

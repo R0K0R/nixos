@@ -100,19 +100,16 @@
             # control request left a zombie that claimed eDP-1 for good.
             # See the patch header.
             ./gamma-refused-control-zombie.patch
-            # Touchscreen workspace swipe crashing (SIGSEGV in end()/update())
-            # when its monitor vanishes mid-gesture -- reachable here because
-            # the lid-close handler disables eDP-1. See the patch header.
-            ./swipe-abandon-on-monitor-loss.patch
+            # Input with its monitor gone crashing (SIGSEGV): a touchscreen
+            # workspace swipe (end()/update()) or a touch motion (onTouchMove)
+            # when the output vanishes mid-touch -- reachable here because the
+            # lid-close handler disables eDP-1. See the patch header.
+            ./input-on-monitor-loss.patch
             # Blur behind windows kept the pre-rotation orientation: the soft
             # rule-apply path (rotation) never dirtied the pre-blurred cache.
             # Applies after the fork's monitor-soft-apply-logical-size.patch,
             # which edits the same function.
             ./soft-apply-mark-blur-dirty.patch
-            # A finger moving while the panel's output is gone (lid close
-            # disables eDP-1, then re-enables it) crashed onTouchMove on an
-            # expired monitor. See the patch header.
-            ./touch-move-monitor-loss.patch
           ]
           # Perspective-trapezoid rendering for side-dock windows and the dock's
           # input/gesture support, as an ordered series (patches/keystone/README);
