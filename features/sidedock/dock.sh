@@ -278,7 +278,7 @@ dock_send() {  # give a window the dock shape + tag, then lay it out as the fron
   snap; render "$a"
 }
 undock() {  # strip the dock shape/tag and return a window to the tiling area
-  local a="$1"
+  local a="$1" want="${2:-}"   # $2: the card to put in front of the remaining pile
   # Clear the size LOCK first (so the window can retile freely): zero the min and
   # blow the max wide open -- no_max_size alone left the rule's 640x928 max in
   # force, which is the "no resize / janky" state. Then drop pin/dim/tag.
@@ -303,6 +303,12 @@ undock() {  # strip the dock shape/tag and return a window to the tiling area
   local gbrd; gbrd=$($HC getoption general:border_size -j 2>/dev/null | $J -r '.int // 0')
   d "hl.dsp.window.set_prop({prop=\"border_size\", value=$gbrd, window=\"address:$a\"})"
   d "hl.dsp.window.tag({tag=\"-dock\", window=\"address:$a\"})"
+  # ...and the pile tags render() left on it, as pip_make drops them: a stray
+  # dockscale<P> keeps the patch reporting the client a box*100/P size after it is out.
+  local t
+  while read -r t; do
+    [ -n "$t" ] && d "hl.dsp.window.tag({tag=\"-$t\", window=\"address:$a\"})"
+  done < <($J -r --arg a "$a" 'first(.[]|select(.address==$a)).tags[]? | rtrimstr("*") | select(test("^dock(d|scale)[0-9]+$"))' <<<"$CLIENTS")
   # Tile it: read LIVE float state (not the pre-undock snapshot) and unfloat if
   # still floating, so it joins the layout like any normal app.
   [ "$($HC clients -j | $J -r --arg a "$a" 'first(.[]|select(.address==$a)).floating // false')" = "true" ] \
@@ -315,7 +321,8 @@ undock() {  # strip the dock shape/tag and return a window to the tiling area
   if [ ${#o[@]} -eq 0 ]; then
     dockws_hide
   elif pile_shown; then
-    render "${o[0]}"
+    { [ -n "$want" ] && printf '%s\n' "${o[@]}" | grep -qxF "$want"; } || want="${o[0]}"
+    render "$want"
   fi
   d "hl.dsp.focus({window=\"address:$a\"})"
 }
@@ -476,7 +483,8 @@ case "${1:-toggle}" in
                  # and $3 = the front card at swipe start (its dockd0 tag, so right on any
                  # edge). Toward the dock edge = next: the front leaves and the card right
                  # behind it comes up. Away = prev: the pile slides off and the last card
-                 # comes up. none = too short, spring back. Either way render() animates
+                 # comes up. out = dragged far away (gestures:dock_swipe_pullout): the front
+                 # card is pulled out of the dock. none = too short, spring back. Either way render() animates
                  # the pile from wherever the fingers left it. (l / r: what a Hyprland built
                  # before 2026-10-08 sends -- finger left = next -- kept until it rebuilds.)
     mapfile -t ORD < <(order); [ ${#ORD[@]} -eq 0 ] && exit 0
@@ -487,6 +495,11 @@ case "${1:-toggle}" in
     case "${2:-}" in
       next|l) render "${ORD[$(( (ci+1) % ${#ORD[@]} ))]}" ;;
       prev|r) render "${ORD[$(( (ci-1+${#ORD[@]}) % ${#ORD[@]} ))]}" ;;
+      # out: dragged past the pull-out line -- the front card leaves the dock for the
+      # tiling area (the layout places it; it is not dropped at the finger), and the card
+      # right behind it comes up, as when the front card closes.
+      out)    nxt=""; [ ${#ORD[@]} -gt 1 ] && nxt="${ORD[$(( (ci+1) % ${#ORD[@]} ))]}"
+              undock "$cur" "$nxt" ;;
       *)      render "$cur" ;;
     esac ;;
   dock-toggle)   # SUPER+CTRL+S: toggle the focused window's DOCK membership. pin and dock are
