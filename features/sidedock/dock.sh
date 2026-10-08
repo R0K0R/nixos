@@ -555,11 +555,14 @@ case "${1:-toggle}" in
     z=$($HC getoption decoration:keystone_pip_zoom -j 2>/dev/null | $J -r '.float // 3')
     z=$(awk -v z="$z" -v d="${2:-out}" 'BEGIN { z = (d == "in") ? z / 1.25 : z * 1.25; if (z < 1) z = 1; if (z > 8) z = 8; printf "%.3f", z }')
     $HC eval "hl.config({ decoration = { keystone_pip_zoom = $z } })" >/dev/null 2>&1
-    while read -r p; do
+    # Grow 1 px and shrink back so the client is re-told -- then move it back: a floating
+    # window resizes about its centre and each nudge left it 1 px further right (measured).
+    while read -r p x y; do
       [ -n "$p" ] || continue
       d "hl.dsp.window.resize({x=1, y=0, relative=true, window=\"address:$p\"})"
       d "hl.dsp.window.resize({x=-1, y=0, relative=true, window=\"address:$p\"})"
-    done < <($J -r '.[]|select(.tags|any(rtrimstr("*")=="pip"))|.address' <<<"$CLIENTS") ;;
+      d "hl.dsp.window.move({x=$x, y=$y, window=\"address:$p\"})"
+    done < <($J -r '.[]|select(.tags|any(rtrimstr("*")=="pip"))|"\(.address) \(.at[0]) \(.at[1])"' <<<"$CLIENTS") ;;
   pip-showhide)  # SUPER+P: hide the focused PiP, or bring back every hidden one.
     a="$(active)"
     if [ -n "$a" ] && is_pip "$a" && ! is_piphidden "$a"; then pip_hide "$a"; else pip_show; fi

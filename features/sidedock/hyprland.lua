@@ -397,9 +397,19 @@ if nix.keystone then
   do
     local Touch = require("feat.touch")
     local z0, last = 3, nil
+    -- Re-tell the client its size: grow 1 px and shrink back. A floating window resizes
+    -- about its centre, and the half pixels round the same way both times, so each
+    -- nudge moved it 1 px right -- measured, and over a pinch's dozens of steps the PiP
+    -- crept visibly rightward whichever way the fingers went. Put it back where it was.
     local function nudge(addr)
-      hl.dispatch(hl.dsp.window.resize({ x = 1, y = 0, relative = true, window = "address:" .. addr }))
-      hl.dispatch(hl.dsp.window.resize({ x = -1, y = 0, relative = true, window = "address:" .. addr }))
+      local at
+      for _, w in ipairs(hl.get_windows()) do
+        if w.address == addr then at = w.at; break end
+      end
+      local win = "address:" .. addr
+      hl.dispatch(hl.dsp.window.resize({ x = 1, y = 0, relative = true, window = win }))
+      hl.dispatch(hl.dsp.window.resize({ x = -1, y = 0, relative = true, window = win }))
+      if at then hl.dispatch(hl.dsp.window.move({ x = at.x, y = at.y, window = win })) end
     end
     -- tap_fingers = 2: a two-finger tap, then the pinch -- the user's choice over the
     -- one-finger default, which they found unnatural (2026-10-08).
