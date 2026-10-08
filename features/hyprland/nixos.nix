@@ -109,6 +109,10 @@
             # Applies after the fork's monitor-soft-apply-logical-size.patch,
             # which edits the same function.
             ./soft-apply-mark-blur-dirty.patch
+            # A finger moving while the panel's output is gone (lid close
+            # disables eDP-1, then re-enables it) crashed onTouchMove on an
+            # expired monitor. See the patch header.
+            ./touch-move-monitor-loss.patch
           ]
           # Perspective-trapezoid rendering for side-dock windows and the dock's
           # input/gesture support, as an ordered series (patches/keystone/README);
