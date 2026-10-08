@@ -236,8 +236,18 @@ PluginComponent {
         implicitWidth: kbW
         implicitHeight: root.pinned ? body.implicitHeight : screenH
 
-        // input only where the keyboard is drawn
-        mask: Region { item: body }
+        // Input only where the keyboard is drawn. Explicit geometry, not `item: body`:
+        // the item form captured the region once and kept it -- on first show (before
+        // the floating layout had settled) it stayed empty or stale, so touches fell
+        // straight through to the window behind (logged 2026-10-08: layer=nil under
+        // every tap) until a pin/unpin toggle happened to rebuild it. Bindings follow
+        // every move and resize.
+        mask: Region {
+            x: body.x
+            y: body.y
+            width: body.width
+            height: body.height
+        }
 
         Rectangle {
             id: body
