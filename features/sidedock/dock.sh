@@ -548,9 +548,16 @@ case "${1:-toggle}" in
     # the next app opened ON it as a plain tiled window -- an unmarked special workspace
     # that looked like a normal one and that Mod+C could not get you out of.
     [ ${#ORD[@]} -eq 0 ] && { : >"$STATE"; dockws_hide; exit 0; }
-    # Keep the remembered front if it survives; otherwise take the first.
+    # Keep the remembered front if it survives. If the FRONT closed, the card that was
+    # right behind it comes forward -- what a swipe brings forward too. The pile is
+    # order() rotated to start at the front, so "behind" is the next address after the
+    # closed one in order()'s sort (wrapping). It used to fall back to ORD[0], the
+    # lowest address, which could pull a card from deep in the pile to the front.
     want=""; [ -f "$STATE" ] && want="$(cat "$STATE" 2>/dev/null)"
-    if [ -z "$want" ] || [ "$want" = "$EXCLUDE" ] || ! printf '%s\n' "${ORD[@]}" | grep -qxF "$want"; then want="${ORD[0]}"; fi
+    if [ -z "$want" ] || [ "$want" = "$EXCLUDE" ] || ! printf '%s\n' "${ORD[@]}" | grep -qxF "$want"; then
+      want="$( { printf '%s\n' "${ORD[@]}"; echo "$EXCLUDE"; } | LC_ALL=C sort | grep -A1 -xF "$EXCLUDE" | sed -n 2p)"
+      [ -n "$want" ] || want="${ORD[0]}"
+    fi
     pile_shown && render "$want"
     printf '%s' "$want" >"$STATE" ;;
   relayout)  # the monitor layout/scale changed (e.g. wdisplays) -> re-apply the CURRENT
