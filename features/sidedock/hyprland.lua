@@ -248,6 +248,29 @@ do
     if not isDockWin(hl.get_active_window()) then hl.dispatch(fullscreen) end
   end)
 
+  -- Same for the keyboard moves: SUPER+CTRL+H/J/K/L and arrows move a window in
+  -- a direction, SUPER+SHIFT+CTRL to another monitor. On a pile card they shoved
+  -- the floating card across the screen; the pile's layout is dock.sh's alone. A
+  -- PiP (dock-tagged too) keeps them, as it keeps SUPER+drag below.
+  local function guardMove(keys, arg)
+    local action = hl.dsp.window.move(arg)
+    hl.unbind(mod .. " + " .. keys)
+    hl.bind(mod .. " + " .. keys, function()
+      local w = hl.get_active_window()
+      if not (isDockWin(w) and not isPip(w)) then hl.dispatch(action) end
+    end)
+  end
+  for _, m in ipairs({
+    { "CTRL + left", { direction = "left" } }, { "CTRL + H", { direction = "left" } },
+    { "CTRL + down", { direction = "down" } }, { "CTRL + J", { direction = "down" } },
+    { "CTRL + up", { direction = "up" } },     { "CTRL + K", { direction = "up" } },
+    { "CTRL + right", { direction = "right" } }, { "CTRL + L", { direction = "right" } },
+    { "SHIFT + CTRL + left", { monitor = "l" } }, { "SHIFT + CTRL + H", { monitor = "l" } },
+    { "SHIFT + CTRL + down", { monitor = "d" } }, { "SHIFT + CTRL + J", { monitor = "d" } },
+    { "SHIFT + CTRL + up", { monitor = "u" } },   { "SHIFT + CTRL + K", { monitor = "u" } },
+    { "SHIFT + CTRL + right", { monitor = "r" } }, { "SHIFT + CTRL + L", { monitor = "r" } },
+  }) do guardMove(m[1], m[2]) end
+
   local startDrag = hl.dsp.window.drag()
   hl.unbind(mod .. " + mouse:272")
   hl.bind(mod .. " + mouse:272", function()
