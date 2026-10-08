@@ -6,6 +6,7 @@
     ./hardware.nix
     ./fan-and-power.nix
     ./filesystems.nix
+    ./llm-completion.nix
   ];
 
   networking.hostName = "victus-15";
