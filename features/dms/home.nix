@@ -114,8 +114,11 @@ in
         # target ("Can't create temporary file ...: Permission denied").
         # Make just this subtree writable; fixupPhase re-applies store
         # permissions afterwards.
-        chmod -R u+w "$d/Modules/ControlCenter"
+        chmod -R u+w "$d/Modules/ControlCenter" "$d/Modules/DankBar/Widgets"
         ${lib.getExe pkgs.patch} -p1 -d "$d" < ${./dragdropgrid-any-columns.patch}
+        # The focused-window title vanished while a window on a shown special
+        # workspace (the side dock, the scratchpad) had focus. See the patch header.
+        ${lib.getExe pkgs.patch} -p1 -d "$d" < ${./focusedapp-special-workspace.patch}
       '';
     });
 

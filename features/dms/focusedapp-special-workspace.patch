@@ -1,0 +1,28 @@
+FocusedApp: show the focused window when it is on a shown special workspace.
+
+hasWindowsOnCurrentWorkspace hid the widget unless the focused window's
+workspace was Hyprland's focused (regular) workspace. A window on a special
+workspace overlaid on this monitor -- features/sidedock's dock cards on
+special:dock, the special:scratch scratchpad -- is focused all the same, but
+the title vanished whenever one had focus. Accept a special workspace that is
+currently shown on the widget's own monitor.
+
+--- a/Modules/DankBar/Widgets/FocusedApp.qml	2026-10-08 15:25:41.003486893 +0900
++++ b/Modules/DankBar/Widgets/FocusedApp.qml	2026-10-08 15:25:41.042656889 +0900
+@@ -191,7 +191,15 @@
+                     return false;
+                 }
+ 
+-                return activeHyprToplevel.workspace.id === Hyprland.focusedWorkspace.id;
++                const ws = activeHyprToplevel.workspace;
++                if (ws.id === Hyprland.focusedWorkspace.id)
++                    return true;
++                // A special workspace shown over this monitor's workspace (a side
++                // dock, a scratchpad) holds the focused window just as much.
++                if (!(ws.name || "").startsWith("special:"))
++                    return false;
++                const mon = Array.from(Hyprland.monitors.values).find(m => m?.name === (parentScreen?.name ?? ""));
++                return mon?.lastIpcObject?.specialWorkspace?.name === ws.name;
+             } catch (e) {
+                 return false;
+             }
