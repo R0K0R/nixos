@@ -319,6 +319,19 @@
 
   networking.firewall.enable = false;
   services.openssh.enable = true;
+  /*
+    Drop clients that have gone away. Remote builds arrive as ssh-ng sessions, each
+    with a root nix-daemon worker behind it; when the laptop's end vanished without a
+    FIN (suspend, lid close, a network/route change), sshd kept the half-open session
+    -- TCP keepalive alone waits 2h+ -- and its worker kept its store path locks. On
+    2026-10-08 one such worker held basedpyright's .lock for 2.5h while four new
+    workers queued behind it, and the laptop's build sat on "waiting for the upload
+    lock" indefinitely. 30s x 4 unanswered probes: a dead client is gone in ~2min.
+  */
+  services.openssh.settings = {
+    ClientAliveInterval = 30;
+    ClientAliveCountMax = 4;
+  };
 
   /*
     Plain Tailscale, not features/headscale -- this talks to Tailscale's own
