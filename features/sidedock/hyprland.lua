@@ -389,7 +389,7 @@ hl.curve("dockslide", { type = "bezier", points = { { 0.16, 1.0 }, { 0.3, 1.0 } 
 hl.animation({ leaf = "windowsMove", enabled = true, speed = 3.5, bezier = "dockslide" })
 
 if nix.keystone then
-  -- Tap a PiP, then pinch it: live zoom, the continuous form of Super+Alt+minus/equal
+  -- Two-finger tap a PiP, then pinch it: live zoom, the continuous form of Super+Alt+minus/equal
   -- (dock.sh pip-zoom). keystone_pip_zoom is how many times its box the client is told it
   -- is; spreading the fingers shows the content larger, i.e. a smaller zoom. Same 1..8
   -- range. The PiP under the fingers is nudged on each step so its client is re-told; at
@@ -401,7 +401,9 @@ if nix.keystone then
       hl.dispatch(hl.dsp.window.resize({ x = 1, y = 0, relative = true, window = "address:" .. addr }))
       hl.dispatch(hl.dsp.window.resize({ x = -1, y = 0, relative = true, window = "address:" .. addr }))
     end
-    Touch.gesture({ fingers = 2, kind = "tap_pinch", on = "pip",
+    -- tap_fingers = 2: a two-finger tap, then the pinch -- the user's choice over the
+    -- one-finger default, which they found unnatural (2026-10-08).
+    Touch.gesture({ fingers = 2, kind = "tap_pinch", tap_fingers = 2, on = "pip",
       begin = function() z0 = tonumber(hl.get_config("decoration.keystone_pip_zoom")) or 3; last = z0 end,
       update = function(g)
         local z = math.max(1, math.min(8, z0 / math.max(g.scale, 0.05)))

@@ -43,7 +43,7 @@ G({ fingers = 4, kind = "tap", action = act("spotlight") })
 G({ fingers = 4, kind = "hold", action = act("dock-toggle") })
 G({ fingers = 5, kind = "tap", action = act("pip-showhide") })
 G({ fingers = 5, kind = "swipe", direction = "down", action = act("close") })
-G(with({ fingers = 2, kind = "tap_pinch", on = "pip" }, cont("pipzoom")))
+G(with({ fingers = 2, kind = "tap_pinch", tap_fingers = 2, on = "pip" }, cont("pipzoom")))
 -- extra kinds, exercised here only
 G({ fingers = 1, kind = "draw", shape = "circle_cw", action = act("draw") })
 G({ fingers = 1, kind = "draw", shape = "v", action = act("draw") })
@@ -104,10 +104,15 @@ check("5-finger swipe down -> close", { "close", absent = { "pip-showhide" } })
 tap(5, 400, 500)
 check("5-finger tap -> pip show/hide", { "pip-showhide" })
 
+tap(2, 1700, 1000, PIP); t = t + 150
+down(1, 1700, 1000, PIP); down(2, 1760, 1000, PIP)
+for k = 1, 6 do t = t + 16; move(1, 1700 - k * 15, 1000); move(2, 1760 + k * 15, 1000) end; up(1); up(2)
+check("two-finger tap, then pinch on a PiP -> live PiP zoom, claimed", { "claim", "pipzoom:begin", "pipzoom:update", "pipzoom:finish" })
+
 tap(1, 1700, 1000, PIP); t = t + 150
 down(1, 1700, 1000, PIP); down(2, 1760, 1000, PIP)
 for k = 1, 6 do t = t + 16; move(1, 1700 - k * 15, 1000); move(2, 1760 + k * 15, 1000) end; up(1); up(2)
-check("tap, then pinch on a PiP -> live PiP zoom, claimed", { "claim", "pipzoom:begin", "pipzoom:update", "pipzoom:finish" })
+check("one-finger tap, then pinch on a PiP -> not a zoom (needs two)", { absent = { "pipzoom" } })
 
 down(1, 1700, 1000, WIN); down(2, 1760, 1000, WIN)
 for k = 1, 6 do t = t + 16; move(1, 1700 - k * 15, 1000); move(2, 1760 + k * 15, 1000) end; up(1); up(2)
@@ -154,10 +159,10 @@ check("2-finger hold, then drag -> hold_drag", { "holddrag:begin", "holddrag:fin
 -- A first finger on a layer surface (the on-screen keyboard drawn over a PiP): the
 -- sequence has no window, so `on =` gestures don't match, and g.layer names the surface.
 local function downL(id, x, y, w, layer) Touch._down({ id = id, x = x, y = y, time = t, window = w, layer = layer }) end
-downL(1, 1700, 1000, PIP, "wvkbd"); t = t + 80; up(1); t = t + 150
+downL(1, 1700, 1000, PIP, "wvkbd"); downL(2, 1760, 1000, PIP, "wvkbd"); t = t + 80; up(1); up(2); t = t + 150
 downL(1, 1700, 1000, PIP, "wvkbd"); downL(2, 1760, 1000, PIP, "wvkbd")
 for k = 1, 6 do t = t + 16; move(1, 1700 - k * 15, 1000); move(2, 1760 + k * 15, 1000) end; up(1); up(2)
-check("tap, then pinch on the keyboard over a PiP -> not a PiP zoom", { absent = { "pipzoom", "claim" } })
+check("two-finger tap, then pinch on the keyboard over a PiP -> not a PiP zoom", { absent = { "pipzoom", "claim" } })
 
 G({ fingers = 7, kind = "tap", action = function(g) log[#log + 1] = "layer:" .. tostring(g.layer) .. ":" .. tostring(g.window) end })
 for i = 1, 7 do downL(i, 200 + i * 40, 1100, WIN, "wvkbd") end; t = t + 80; lift(7); wait(400)
