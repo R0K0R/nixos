@@ -42,19 +42,30 @@ geometrically (the workspace crept a few px, tracking speed rather than position
 The touchpad, scroll_move (already 1:1) and Hyprland's native touch edge swipe are
 unchanged.
 
+Layer surfaces take presses ahead of windows: input.touch.down carries `layer` (the
+namespace) and no window when one does, input.tablet.tip carries `layer` when the
+pen's pointer focus after the warp is one, and hl.layer_at({x, y}) answers the same
+for the mouse -- all from CInputManager::inputLayerAt, which checks exclusive layers,
+layer popups, overlay and top in mouseMoveUnified's own order. features/sidedock's
+click-to-front only looked at its dock cards' trapezoids, so a tap on the on-screen
+keyboard's 'o' -- drawn over a back card's edge in landscape -- also raised the card
+(2026-10-08).
+
 diff -ruN a/src/config/lua/bindings/LuaBindingsConfigRules.cpp b/src/config/lua/bindings/LuaBindingsConfigRules.cpp
 --- a/src/config/lua/bindings/LuaBindingsConfigRules.cpp
-+++ b/src/config/lua/bindings/LuaBindingsConfigRules.cpp	2026-10-08 14:45:33.395673299 +0900
-@@ -30,6 +30,8 @@
++++ b/src/config/lua/bindings/LuaBindingsConfigRules.cpp	2026-10-08 15:04:32.189508066 +0900
+@@ -29,7 +29,10 @@
+ #include "../../../layout/supplementary/WorkspaceAlgoMatcher.hpp"
  #include "../../../animation/AnimationManager.hpp"
  #include "../../../managers/input/InputManager.hpp"
++#include "../../../desktop/view/LayerSurface.hpp"
  #include "../../../managers/input/trackpad/TrackpadGestures.hpp"
 +#include "../../../helpers/time/Time.hpp"
 +#include "../../ConfigValue.hpp"
  #include "../../../managers/input/trackpad/gestures/CloseGesture.hpp"
  #include "../../../managers/input/trackpad/gestures/CursorZoomGesture.hpp"
  #include "../../../managers/input/trackpad/gestures/DispatcherGesture.hpp"
-@@ -742,6 +744,63 @@
+@@ -742,6 +745,96 @@
      return 0;
  }
  
@@ -75,6 +86,39 @@ diff -ruN a/src/config/lua/bindings/LuaBindingsConfigRules.cpp b/src/config/lua/
 +  and the workspace swipe scales them 1:1 (WorkspaceSwipeGesture).
 +*/
 +static uint32_t s_touchSwipeFingers = 0;
++
++/*
++  hl.layer_at({ x, y }) / hl.layer_at(x, y): the layer surface that takes input at that
++  global point ahead of any window -- { namespace, layer } (layer: 0 background .. 3
++  overlay) -- or nil. The mouse's counterpart of input.touch.down's `layer`: a press on
++  the on-screen keyboard or the bar is the shell's, whatever window is drawn beneath.
++*/
++static int hlLayerAt(lua_State* L) {
++    double x = 0, y = 0;
++    if (lua_istable(L, 1)) {
++        const auto tx = Internal::tableOptNum(L, 1, "x");
++        const auto ty = Internal::tableOptNum(L, 1, "y");
++        if (!tx || !ty)
++            return Internal::configError(L, "hl.layer_at: expected a table { x, y }");
++        x = *tx;
++        y = *ty;
++    } else {
++        x = luaL_checknumber(L, 1);
++        y = luaL_checknumber(L, 2);
++    }
++
++    const auto LS = g_pInputManager->inputLayerAt(Vector2D{x, y});
++    if (!LS) {
++        lua_pushnil(L);
++        return 1;
++    }
++    lua_createtable(L, 0, 2);
++    lua_pushstring(L, LS->m_namespace.c_str());
++    lua_setfield(L, -2, "namespace");
++    lua_pushinteger(L, sc<lua_Integer>(LS->m_layer));
++    lua_setfield(L, -2, "layer");
++    return 1;
++}
 +
 +static int hlTouchClaim(lua_State* L) {
 +    if (lua_isinteger(L, 1) && !g_pInputManager->m_touchSeq.down.contains(sc<int32_t>(lua_tointeger(L, 1)))) {
@@ -118,10 +162,11 @@ diff -ruN a/src/config/lua/bindings/LuaBindingsConfigRules.cpp b/src/config/lua/
  static int hlGesture(lua_State* L) {
      if (!lua_istable(L, 1))
          return Internal::configError(L, R"(hl.gesture: expected a table, e.g. { fingers = 3, direction = "horizontal", action = "workspace" })");
-@@ -1416,6 +1475,9 @@
+@@ -1416,6 +1509,10 @@
  
      Internal::setFn(L, "gesture", hlGesture);
      Internal::setFn(L, "gesture_handoff", hlGestureHandoff);
++    Internal::setFn(L, "layer_at", hlLayerAt);
 +    Internal::setFn(L, "touch_claim", hlTouchClaim);
 +    Internal::setFn(L, "touch_claim_all", hlTouchClaim);
 +    Internal::setFn(L, "touch_swipe", hlTouchSwipe);
@@ -130,8 +175,8 @@ diff -ruN a/src/config/lua/bindings/LuaBindingsConfigRules.cpp b/src/config/lua/
  }
 diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.cpp
 --- a/src/config/lua/LuaEventHandler.cpp
-+++ b/src/config/lua/LuaEventHandler.cpp	2026-10-08 14:45:33.406442063 +0900
-@@ -14,6 +14,11 @@
++++ b/src/config/lua/LuaEventHandler.cpp	2026-10-08 15:04:44.643016108 +0900
+@@ -14,6 +14,14 @@
  #include "../../devices/Tablet.hpp"
  #include "../../managers/input/InputManager.hpp"
  #include "../../managers/eventLoop/EventLoopManager.hpp"
@@ -139,11 +184,14 @@ diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.
 +#include "../../desktop/state/ViewStateTracker.hpp"
 +#include "../../desktop/state/ViewHitTester.hpp"
 +#include "../../desktop/view/Window.hpp"
++#include "../../desktop/view/WLSurface.hpp"
++#include "../../desktop/view/LayerSurface.hpp"
++#include "../../managers/SeatManager.hpp"
 +#include <unordered_map>
  #include <expected>
  #include <vector>
  
-@@ -105,7 +110,7 @@
+@@ -105,7 +113,7 @@
      m_listeners.push_back(bus()->m_events.window.active.listen([this](PHLWINDOW w, Desktop::eFocusReason r) {
          dispatch("window.active", 2, [&](lua_State* L) {
              CLuaWindow::push(L, w);
@@ -152,7 +200,7 @@ diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.
          });
      }));
      m_listeners.push_back(bus()->m_events.window.urgent.listen([this](PHLWINDOW w) { dispatch("window.urgent", 1, [&](lua_State* L) { CLuaWindow::push(L, w); }); }));
-@@ -156,14 +161,14 @@
+@@ -156,14 +164,14 @@
  
      m_listeners.push_back(bus()->m_events.config.reloaded.listen([this] { dispatch("config.reloaded", 0, [](lua_State* L) {}); }));
      m_listeners.push_back(bus()->m_events.config.props_refreshed.listen(
@@ -169,17 +217,23 @@ diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.
              lua_pushstring(L, name.c_str());
          });
      }));
-@@ -200,18 +205,84 @@
+@@ -200,18 +208,96 @@
          lua_pushnumber(L, p.y);
          lua_setfield(L, -2, "y");
      };
 -    m_listeners.push_back(bus()->m_events.input.touch.down.listen([this, pushPoint](const ITouch::SDownEvent& e, const SCallbackInfo& _) {
 +    /*
 +      The touch stream (keystone/11): one table per event, so Lua can recognize any gesture.
-+        input.touch.down   {id, x, y, time, count, claimed, window = <window under it | nil>}
++        input.touch.down   {id, x, y, time, count, claimed, window = <window under it | nil>,
++                            layer = <namespace of the layer surface that takes it | nil>}
 +        input.touch.move   {id, x, y, time, count, claimed, resizing}
 +        input.touch.up     {id, x, y, time, count, claimed}      -- x, y: its last position
 +        input.touch.cancel {id, x, y, time, count, claimed}      -- the device cancelled it
++      A touch that lands on a layer surface (the on-screen keyboard, the bar, a popout)
++      carries its namespace as `layer` and no window: the window is only drawn beneath,
++      the surface takes the touch (CInputManager::inputLayerAt -- the order onTouchDown's
++      refocus uses). A tap on the keyboard's 'o' over a back dock card's edge raised the
++      card when this said only `window` (2026-10-08).
 +      Global layout coordinates (hl.get_cursor_pos()'s space). count = fingers down
 +      including this one on down, excluding it on up. A claimed sequence reaches Lua
 +      only (see managers/input/Touch.cpp).
@@ -213,7 +267,9 @@ diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.
 -            pushPoint(L, POS);
 -            lua_pushinteger(L, e.touchID);
 +        s_touchPos[e.touchID] = POS;
-+        const auto WINDOW     = Desktop::viewState()->hitTest().windowAt(POS, Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
++        const auto LAYER      = g_pInputManager->inputLayerAt(POS);
++        const auto WINDOW     = LAYER ? nullptr :
++                                        Desktop::viewState()->hitTest().windowAt(POS, Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
 +        dispatch("input.touch.down", 1, [&](lua_State* L) {
 +            pushTouch(L, e.touchID, POS, e.timeMs);
 +            if (WINDOW)
@@ -221,8 +277,12 @@ diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.
 +            else
 +                lua_pushnil(L);
 +            lua_setfield(L, -2, "window");
-         });
-     }));
++            if (LAYER) {
++                lua_pushstring(L, LAYER->m_namespace.c_str());
++                lua_setfield(L, -2, "layer");
++            }
++        });
++    }));
 +    m_listeners.push_back(bus()->m_events.input.touch.motion.listen([this, pushTouch](const ITouch::SMotionEvent& e, const SCallbackInfo& _) {
 +        // same mapping as CInputManager::onTouchMove (the focused monitor)
 +        const auto PMONITOR = Desktop::focusState()->monitor();
@@ -246,8 +306,8 @@ diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.
 +            // count excludes the finger lifting (Touch.cpp erases it after this emit)
 +            lua_pushinteger(L, static_cast<lua_Integer>(g_pInputManager->m_touchSeq.down.size() - (g_pInputManager->m_touchSeq.down.contains(e.touchID) ? 1 : 0)));
 +            lua_setfield(L, -2, "count");
-+        });
-+    }));
+         });
+     }));
 +    m_listeners.push_back(bus()->m_events.input.touch.cancel.listen([this, pushTouch](const ITouch::SCancelEvent& e, const SCallbackInfo& _) {
 +        const auto IT  = s_touchPos.find(e.touchID);
 +        const auto POS = IT != s_touchPos.end() ? IT->second : Vector2D{};
@@ -258,7 +318,30 @@ diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.
      m_listeners.push_back(bus()->m_events.input.tablet.tip.listen([this, pushPoint](const CTablet::STipEvent& e, const SCallbackInfo& _) {
          if (!e.in)
              return;
-@@ -336,6 +407,9 @@
+@@ -219,7 +305,21 @@
+         // The lock dies with this handler (config reload), cancelling a pending call.
+         m_tabletTipLater = g_pEventLoopManager->doLaterLock([this, pushPoint] {
+             const Vector2D POS = g_pInputManager->getMouseCoordsInternal();
+-            dispatch("input.tablet.tip", 1, [&](lua_State* L) { pushPoint(L, POS); });
++            // `layer`: the pen's target after the warp is the pointer focus; when that is a
++            // layer surface (the on-screen keyboard, the bar), the press is the shell's, not
++            // the window's beneath (same reason as touch.down's `layer`)
++            std::string LAYERNS;
++            if (const auto HLS = Desktop::View::CWLSurface::fromResource(g_pSeatManager->m_state.pointerFocus.lock()); HLS) {
++                if (const auto LS = Desktop::View::CLayerSurface::fromView(HLS->view()); LS)
++                    LAYERNS = LS->m_namespace.empty() ? std::string{"?"} : LS->m_namespace;
++            }
++            dispatch("input.tablet.tip", 1, [&](lua_State* L) {
++                pushPoint(L, POS);
++                if (!LAYERNS.empty()) {
++                    lua_pushstring(L, LAYERNS.c_str());
++                    lua_setfield(L, -2, "layer");
++                }
++            });
+         });
+     }));
+ }
+@@ -336,6 +436,9 @@
          "hyprland.shutdown",
          "input.keyboard.key",
          "input.touch.down",
@@ -270,7 +353,7 @@ diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.
      for (auto& kv : Event::bus()->m_events.plugin)
 diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.cpp
 --- a/src/config/values/ConfigValues.cpp
-+++ b/src/config/values/ConfigValues.cpp	2026-10-08 14:43:56.463549399 +0900
++++ b/src/config/values/ConfigValues.cpp	2026-10-08 15:04:03.592479144 +0900
 @@ -416,6 +416,8 @@
           */
  
@@ -280,9 +363,41 @@ diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.
          MS<String>("gestures:dock_swipe_exec", "side dock: command run on release of a move gesture that began on a dock card, with next/prev/none and the front card's address", STRVAL_EMPTY),
          MS<Float>("gestures:dock_swipe_follow", "side dock: on a swipe away from the dock edge, the fraction of the previous card's travel each deeper card follows (the lag)", 0.75f, {.min = 0.f, .max = 1.f}),
          MS<Bool>("gestures:workspace_swipe_touch", "enable workspace swiping from the edge of a touchscreen", false),
+diff -ruN a/src/managers/input/InputManager.cpp b/src/managers/input/InputManager.cpp
+--- a/src/managers/input/InputManager.cpp
++++ b/src/managers/input/InputManager.cpp	2026-10-08 15:04:32.180776109 +0900
+@@ -1004,6 +1004,28 @@
+     return grab.containsPoint(MC) && (!real.containsPoint(MC) || w->isInCurvedCorner(MC.x, MC.y)) && !w->hasPopupAt(coords);
+ }
+ 
++PHLLS CInputManager::inputLayerAt(const Vector2D& pos) {
++    const auto PMONITOR = State::monitorState()->query().vec(pos).run();
++    Vector2D   local;
++    PHLLS      found;
++
++    if (!m_exclusiveLSes.empty()) {
++        if (Desktop::viewState()->hitTest().layerPopupSurfaceAt(pos, &m_exclusiveLSes, &local, &found) && found)
++            return found;
++        if (Desktop::viewState()->hitTest().layerSurfaceAt(pos, &m_exclusiveLSes, &local, &found) && found)
++            return found;
++    }
++    if (!PMONITOR)
++        return nullptr;
++    if (Desktop::viewState()->hitTest().layerPopupSurfaceAt(pos, PMONITOR, &local, &found) && found)
++        return found;
++    if (Desktop::viewState()->hitTest().layerSurfaceAt(pos, &PMONITOR->m_layerSurfaceLayers[ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY], &local, &found) && found)
++        return found;
++    if (Desktop::viewState()->hitTest().layerSurfaceAt(pos, &PMONITOR->m_layerSurfaceLayers[ZWLR_LAYER_SHELL_V1_LAYER_TOP], &local, &found) && found)
++        return found;
++    return nullptr;
++}
++
+ bool CInputManager::beginBorderResizeAt(const Vector2D& coords) {
+     // callers have just refocus()ed at coords, so a layer surface there (a bar, a panel)
+     // shows up here and takes the press instead
 diff -ruN a/src/managers/input/InputManager.hpp b/src/managers/input/InputManager.hpp
 --- a/src/managers/input/InputManager.hpp
-+++ b/src/managers/input/InputManager.hpp	2026-10-08 14:43:56.462650847 +0900
++++ b/src/managers/input/InputManager.hpp	2026-10-08 15:04:32.179370181 +0900
 @@ -2,6 +2,7 @@
  
  #include "../../defines.hpp"
@@ -291,7 +406,7 @@ diff -ruN a/src/managers/input/InputManager.hpp b/src/managers/input/InputManage
  #include <any>
  #include "../../helpers/WLClasses.hpp"
  #include "../../helpers/time/Timer.hpp"
-@@ -144,6 +145,22 @@
+@@ -144,6 +145,27 @@
      void               onTouchUp(ITouch::SUpEvent);
      void               onTouchMove(ITouch::SMotionEvent);
  
@@ -310,13 +425,18 @@ diff -ruN a/src/managers/input/InputManager.hpp b/src/managers/input/InputManage
 +    } m_touchSeq;
 +    bool               claimTouchSequence(); // false if no finger is down
 +    void               onTouchCancelAll();   // the device cancelled its touches
++    // The layer surface that takes input at `pos` ahead of any window, or null:
++    // exclusive layers, layer popups, then overlay and top -- mouseMoveUnified's own
++    // order before it looks at windows. For Lua: a press there belongs to the shell
++    // surface (the on-screen keyboard, the bar), not to the window drawn beneath it.
++    PHLLS              inputLayerAt(const Vector2D& pos);
 +
      // resize_on_border for pen and touch, which never reach processMouseDownNormal's
      // border press: the same keystone-aware zone test, then the same MBIND_RESIZE drag,
      // driven by the cursor (pen) or the touch point warped onto it (touch).
 diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
 --- a/src/managers/input/Touch.cpp
-+++ b/src/managers/input/Touch.cpp	2026-10-08 14:44:27.837571798 +0900
++++ b/src/managers/input/Touch.cpp	2026-10-08 15:04:03.612197291 +0900
 @@ -14,6 +14,50 @@
  #include "debug/log/Logger.hpp"
  #include "UnifiedWorkspaceSwipeGesture.hpp"
@@ -453,7 +573,7 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
          if (e.touchID != g_pUnifiedWorkspaceSwipe->m_touchID)
 diff -ruN a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp b/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp
 --- a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp
-+++ b/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp	2026-10-08 14:43:46.536160163 +0900
++++ b/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp	2026-10-08 15:04:03.611220974 +0900
 @@ -6,6 +6,8 @@
  #include "../../../../render/Renderer.hpp"
  
@@ -496,7 +616,7 @@ diff -ruN a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp b/src
  }
 diff -ruN a/src/pointer/PointerManager.cpp b/src/pointer/PointerManager.cpp
 --- a/src/pointer/PointerManager.cpp
-+++ b/src/pointer/PointerManager.cpp	2026-10-08 14:44:49.460563030 +0900
++++ b/src/pointer/PointerManager.cpp	2026-10-08 15:04:03.616164777 +0900
 @@ -1086,9 +1086,9 @@
          PROTO::idle->onActivity();
      });

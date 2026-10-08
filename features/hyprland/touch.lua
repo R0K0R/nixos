@@ -66,9 +66,11 @@
     shake        discrete (alias scrub). rapid back-and-forth: shake_reversals turns of
                  at least shake_amplitude px within shake_ms.
 
-  g, given to every callback: fingers, window, centroid {x,y}, start {x,y}, delta {x,y}
-  (since the gesture started), scale, rotation, velocity (px/ms), direction, edge,
-  corner, distance, taps, duration (ms), shape, score.
+  g, given to every callback: fingers, window, layer, centroid {x,y}, start {x,y},
+  delta {x,y} (since the gesture started), scale, rotation, velocity (px/ms), direction,
+  edge, corner, distance, taps, duration (ms), shape, score. layer: the namespace of the
+  layer surface the first finger landed on (the on-screen keyboard, the bar), with
+  window nil -- `on =` filters never match such a sequence.
 
   CONFLICTS: of the gestures that match, the most specific wins -- more fingers, then
   more taps, then a window filter, then `priority`. A tap whose chain could still grow
@@ -335,7 +337,7 @@ end
 
 local function makeG(spec, extra)
   local ids = down()
-  local g = { fingers = spec and spec.fingers or #ids, window = seq and seq.win, taps = 0, scale = 1, rotation = 0, velocity = 0 }
+  local g = { fingers = spec and spec.fingers or #ids, window = seq and seq.win, layer = seq and seq.layer, taps = 0, scale = 1, rotation = 0, velocity = 0 }
   if #ids > 0 then local cx, cy = centroid(ids); g.centroid = { x = cx, y = cy } end
   for k, v in pairs(extra or {}) do g[k] = v end
   return g
@@ -487,9 +489,9 @@ local function maxTapsFor(n, w)
   return m
 end
 
-local function fireTap(n, count, w, x, y)
+local function fireTap(n, count, w, x, y, layer)
   local c = candidates(set("tap"), n, w, function(s) return s.taps == count end)
-  if c[1] then call(c[1].action, { fingers = n, taps = count, window = w, centroid = { x = x, y = y }, start = { x = x, y = y }, delta = { x = 0, y = 0 }, scale = 1, rotation = 0, velocity = 0 }) end
+  if c[1] then call(c[1].action, { fingers = n, taps = count, window = w, layer = layer, centroid = { x = x, y = y }, start = { x = x, y = y }, delta = { x = 0, y = 0 }, scale = 1, rotation = 0, velocity = 0 }) end
 end
 
 local function countReversals(path, horizontal, amp)
@@ -532,9 +534,9 @@ local function endSequence(now)
     lastTap = { fingers = n, count = count, tEnd = now, x = sx, y = sy, win = w }
     if count < maxTapsFor(n, w) then
       pendingTap = true
-      at("tap", now + D.double_tap_gap, function() pendingTap = nil; fireTap(n, count, w, sx, sy) end)
+      at("tap", now + D.double_tap_gap, function() pendingTap = nil; fireTap(n, count, w, sx, sy, s.layer) end)
     else
-      fireTap(n, count, w, sx, sy)
+      fireTap(n, count, w, sx, sy, s.layer)
     end
     return
   end
@@ -552,7 +554,7 @@ local function endSequence(now)
   local share = d / extent
   local distance = share >= 0.66 and "long" or (share >= 0.33 and "medium" or "short")
   local CLASS = { short = 1, medium = 2, long = 3 }
-  local g = { fingers = n, window = w, start = { x = sx, y = sy }, centroid = { x = ex, y = ey }, delta = { x = dx, y = dy },
+  local g = { fingers = n, window = w, layer = s.layer, start = { x = sx, y = sy }, centroid = { x = ex, y = ey }, delta = { x = dx, y = dy },
               velocity = vel, direction = dirn, edge = edge, corner = corner, distance = distance, duration = dur,
               taps = 0, scale = 1, rotation = 0 }
 
@@ -617,7 +619,11 @@ function Touch._down(e)
   lastTime = math.max(lastTime, now)
   flushFrame()
   if not seq then
-    seq = { t0 = now, maxFingers = 0, finished = {}, win = e.window, firstId = e.id, moved = false }
+    -- A first finger on a layer surface (the on-screen keyboard, the bar: e.layer, set
+    -- by keystone/11) belongs to the shell, not to the window drawn beneath it -- so the
+    -- sequence has no window and `on =` filters don't match; g.layer says which surface.
+    seq = { t0 = now, maxFingers = 0, finished = {}, win = (not e.layer) and e.window or nil, layer = e.layer,
+            firstId = e.id, moved = false }
     -- a tap just before arms the tap_* kinds
     if lastTap and now - lastTap.tEnd <= D.tap_gesture_gap then seq.armed = lastTap end
     -- a pending tap chain is superseded by this new sequence (it may extend it)

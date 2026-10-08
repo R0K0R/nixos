@@ -257,8 +257,16 @@ do
     return cv >= margin and cv <= 1 - margin
   end
 
-  -- Bring the back card under point c to the front.
+  -- Bring the back card under point c to the front -- unless a layer surface took the
+  -- press: c.layer (touch and pen events carry it, keystone/11) or, for the mouse,
+  -- hl.layer_at. The on-screen keyboard's 'o' sits over a back card's edge in
+  -- landscape, and tapping it raised the card as well (2026-10-08).
   local function frontAt(c)
+    if c.layer then return end
+    if hl.layer_at then
+      local ok, ls = pcall(hl.layer_at, { x = c.x, y = c.y })
+      if ok and ls then return end
+    end
     pcall(function()
       local best, bestDepth
       for _, w in ipairs(hl.get_windows()) do
