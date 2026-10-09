@@ -107,7 +107,9 @@ let
     in
     pkgs.writeShellScriptBin scriptName ''
       set -uo pipefail
-      fallback() { echo "${scriptName}: $1 -- falling back to local evaluation" >&2; exec ${local} "$@"; }
+      # $1 is the reason, the rest the caller's own arguments -- shift, or the reason is
+      # handed to nixos-rebuild as an argument (it was: "unrecognized arguments")
+      fallback() { echo "${scriptName}: $1 -- falling back to local evaluation" >&2; shift; exec ${local} "$@"; }
       action="''${1:-}"
       case "$action" in
         --local-eval) shift; exec ${local} "$@" ;;
