@@ -30,6 +30,9 @@ PIPSTATE="${XDG_RUNTIME_DIR:-/run/user/1000}/sidedock.piphidden"
 # where `settle show` would put the cards. Lua reads it once per gesture -- a file read,
 # not a process, since Hyprland's Lua runs on the compositor thread.
 LAYOUT="${XDG_RUNTIME_DIR:-/run/user/1000}/sidedock.layout"
+# The pile's cycle, one address per line (order() below). Only adopt writes it; a card
+# missing from it (docked by dock-toggle, or after a session restart) sorts in at the end.
+ORDERF="${XDG_RUNTIME_DIR:-/run/user/1000}/sidedock.order"
 
 geom() {
   # LOGICAL geometry of the FOCUSED monitor: window moves are in logical coordinates,
@@ -109,11 +112,36 @@ snap() { CLIENTS=$($HC clients -j); }
 # the layout (set by 'orphan' on window.close). Empty = exclude nothing.
 EXCLUDE=""
 # Dock-tagged windows: a rule tag renders as 'dock*', a dispatcher tag as 'dock';
-# rtrimstr collapses both. Sorted by address for a stable cycle order.
+# rtrimstr collapses both. The cycle order is ORDERF's, then any card it does not list,
+# by address. A bare address sort put a newborn card wherever its address fell -- in
+# practice last, so the card that had been in front ended up at the very back.
 # A "dock card" for the CASCADE = tagged dock but NOT pip. A PiP (my.sidedock keystone PiP)
 # is tagged dock too (so it gets the keystone look/shadow/input for free) but pip excludes it
 # from the pile, so it floats standalone wherever pip_make parked it.
-order()    { $J -r --arg ex "$EXCLUDE" '[.[]|select((.tags|any(rtrimstr("*")=="dock")) and (.tags|any(rtrimstr("*")=="pip")|not) and .address != $ex)|.address]|sort|.[]' <<<"$CLIENTS"; }
+order()    {
+  local a; local -A live=() seen=()
+  local -a all; mapfile -t all < <($J -r --arg ex "$EXCLUDE" '[.[]|select((.tags|any(rtrimstr("*")=="dock")) and (.tags|any(rtrimstr("*")=="pip")|not) and .address != $ex)|.address]|sort|.[]' <<<"$CLIENTS")
+  for a in "${all[@]}"; do live[$a]=1; done
+  if [ -f "$ORDERF" ]; then
+    while read -r a; do
+      [ -n "$a" ] && [ -n "${live[$a]:-}" ] && [ -z "${seen[$a]:-}" ] && { printf '%s\n' "$a"; seen[$a]=1; }
+    done <"$ORDERF"
+  fi
+  for a in "${all[@]}"; do [ -z "${seen[$a]:-}" ] && printf '%s\n' "$a"; done
+  return 0
+}
+# A newborn card $1 goes into the cycle right BEFORE the front $2, so rendering it as the
+# front leaves the old front directly behind it and the rest of the pile as it was.
+order_insert() {
+  local a out="" placed=""
+  while read -r a; do
+    [ "$a" = "$1" ] && continue
+    [ -z "$placed" ] && [ "$a" = "$2" ] && { out+="$1"$'\n'; placed=1; }
+    out+="$a"$'\n'
+  done < <(order)
+  [ -z "$placed" ] && out="$1"$'\n'"$out"
+  printf '%s' "$out" >"$ORDERF.new" 2>/dev/null && command mv -f "$ORDERF.new" "$ORDERF"
+}
 # Current front = the on-screen dock window nearest the base (largest canonical x).
 curfront() { $J -r --argjson px "$PARKED_X" '[.[]|select((.tags|any(rtrimstr("*")=="dock")) and (.tags|any(rtrimstr("*")=="pip")|not) and ('"$CXQ"' < $px))]|max_by('"$CXQ"')?|.address // ""' <<<"$CLIENTS"; }
 shownany() { $J -r --argjson px "$PARKED_X" 'any(.[]; (.tags|any(rtrimstr("*")=="dock")) and (.tags|any(rtrimstr("*")=="pip")|not) and ('"$CXQ"' < $px))' <<<"$CLIENTS"; }
@@ -295,8 +323,16 @@ dock_chrome() {  # the auto-route rule's chrome, for a window docked after it op
   d "hl.dsp.window.set_prop({prop=\"rounding\", value=\"0\", window=\"address:$1\"})"
   d "hl.dsp.window.set_prop({prop=\"no_shadow\", value=\"false\", window=\"address:$1\"})"
 }
+# The front a newly joining card $1 lands on: the one every render records (shown or
+# hidden), else the shown front -- never the joiner itself, which may already sit there.
+joinfront() {
+  local fr=""; [ -f "$STATE" ] && fr="$(cat "$STATE" 2>/dev/null)"
+  { [ -z "$fr" ] || [ "$fr" = "$1" ] || ! exists "$fr" || ! is_dock "$fr"; } && fr="$(curfront)"
+  [ "$fr" = "$1" ] && fr=""
+  printf '%s' "$fr"
+}
 dock_send() {  # give a window the dock shape + tag, then lay it out as the front
-  local a="$1"
+  local a="$1" fr; fr="$(joinfront "$a")"
   ensure_float "$a"
   d "hl.dsp.window.tag({tag=\"+dock\", window=\"address:$a\"})"
   # (size + lock is applied by render(), from the live geometry -- not here.)
@@ -308,7 +344,7 @@ dock_send() {  # give a window the dock shape + tag, then lay it out as the fron
   # before the shadow was warped -- which left manually-docked cards shadowless.)
   # The RULE does this for cfg.apps; a sent window never hit it, so do it here.
   dock_chrome "$a"
-  snap; render "$a"
+  snap; order_insert "$a" "$fr"; render "$a"
 }
 undock() {  # strip the dock shape/tag and return a window to the tiling area
   local a="$1" want="${2:-}"   # $2: the card to put in front of the remaining pile
@@ -590,8 +626,10 @@ case "${1:-toggle}" in
            # hence dynamic.) Re-tag for safety, re-snapshot so order() sees it, then
            # cascade it to the front: render's move slides it in from the side.
     exists "$2" || exit 0
+    fr="$(joinfront "$2")"
     d "hl.dsp.window.tag({tag=\"+dock\", window=\"address:$2\"})"
     snap
+    order_insert "$2" "$fr"
     render "$2" ;;
   stray)   # a window ($2) opened ON the dock workspace without joining the pile (a dialog,
            # or anything opened while the workspace had focus but no card did). The dock
