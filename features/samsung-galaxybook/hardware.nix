@@ -125,9 +125,9 @@ lib.mkIf config.my.samsung-galaxybook.enable {
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       ExecStart = "${pkgs.python3.interpreter} ${pkgs.writeText "fprintd-tablet-guard.py" ''
-        import errno, fcntl, os, select, subprocess, time
+        import errno, fcntl, glob, os, select, subprocess, time
 
-        DEV = "/dev/input/by-path/platform-INTC1077:00-event"   # Intel HID switches
+        NAME = "Intel HID switches"   # INTC1077's switch device
         FLAG = "/run/fprintd-tablet-mode"
         SW_TABLET_MODE = 1
         SYSTEMCTL = "${config.systemd.package}/bin/systemctl"
@@ -143,42 +143,65 @@ lib.mkIf config.my.samsung-galaxybook.enable {
                 except FileNotFoundError:
                     pass
 
+        # Found by NAME, not by /dev/input/by-path/platform-INTC1077:00-event: INTC1077
+        # has three event devices (HID events, 5 button array, switches) and that one
+        # by-path name points at whichever udev handled last. At boot it was the events
+        # device, which has no switches -- EVIOCGSW read "laptop" forever and never
+        # failed, so tablet mode never reached fprintd (2026-10-09). intel-hid also
+        # creates and recreates the switches device after boot (resume, the first fold),
+        # so the node is looked up again every pass and a changed one is reopened.
+        def switch_node():
+            for n in glob.glob("/sys/class/input/event*/device/name"):
+                try:
+                    if open(n).read().strip() == NAME:
+                        return "/dev/input/" + n.split("/")[4]
+                except OSError:
+                    pass
+            return None
+
         def tablet_now(fd):
             bits = bytearray(8)
             fcntl.ioctl(fd, EVIOCGSW, bits)
             return bool(bits[0] & (1 << SW_TABLET_MODE))
 
         # The STATE is what matters, so it is re-read rather than reconstructed from
-        # events: on every event, and every few seconds regardless. The device is
-        # recreated on resume (its node was newer than this process, 2026-10-07), and
-        # the old version -- one EVIOCGSW at start, then blocking reads -- sat on the
-        # dead fd for hours: tablet mode never reached fprintd. A vanished device
-        # raises (ENODEV) on the ioctl, which reopens it.
+        # events: on every event, and every few seconds regardless. No switches device
+        # at all reads as laptop mode -- intel-hid has not seen a fold yet.
         last = None
+        fd, node = None, None
         while True:
+            want = switch_node()
+            if want != node:
+                if fd is not None:
+                    os.close(fd)
+                fd, node = None, None
+                if want:
+                    try:
+                        fd, node = os.open(want, os.O_RDONLY | os.O_NONBLOCK), want
+                    except OSError:
+                        pass
             try:
-                fd = os.open(DEV, os.O_RDONLY | os.O_NONBLOCK)
-            except OSError:
-                time.sleep(2)
-                continue
-            try:
-                while True:
-                    cur = tablet_now(fd)
-                    if cur != last:
-                        apply(cur)
-                        last = cur
-                    if select.select([fd], [], [], 3)[0]:
-                        try:
-                            while os.read(fd, 4096):   # drain; the state is re-read above
-                                pass
-                        except BlockingIOError:
-                            pass
+                cur = tablet_now(fd) if fd is not None else False
             except OSError as e:
                 if e.errno not in (errno.ENODEV, errno.ENOENT, errno.EIO):
                     raise
-            finally:
                 os.close(fd)
-            time.sleep(1)
+                fd, node = None, None
+                time.sleep(1)
+                continue
+            if cur != last:
+                apply(cur)
+                last = cur
+            if fd is None:
+                time.sleep(3)
+            elif select.select([fd], [], [], 3)[0]:
+                try:
+                    while os.read(fd, 4096):   # drain; the state is re-read above
+                        pass
+                except BlockingIOError:
+                    pass
+                except OSError:
+                    pass   # gone: the next pass finds the new node
       ''}";
       Restart = "always";
       RestartSec = 2;
