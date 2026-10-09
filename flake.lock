@@ -429,6 +429,21 @@
       },
       "parent": []
     },
+    "feat-hyprland": {
+      "inputs": {
+        "hyprland-keystone": "hyprland-keystone",
+        "hyprland-nixos": "hyprland-nixos"
+      },
+      "locked": {
+        "path": "./features/hyprland",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/hyprland",
+        "type": "path"
+      },
+      "parent": []
+    },
     "feat-niri": {
       "inputs": {
         "niri": "niri",
@@ -532,6 +547,40 @@
         "owner": "golbin",
         "ref": "v0.4.1",
         "repo": "hop",
+        "type": "github"
+      }
+    },
+    "hyprland-keystone": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791530607,
+        "narHash": "sha256-D00y44xZq35ONBv+nf1RKKkTTx62d4BO+DNbGdvM+WE=",
+        "owner": "R0K0R",
+        "repo": "Hyprland",
+        "rev": "10dfd55f7211a0b01867581a9e4ab6e5a960d3f2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "ref": "keystone",
+        "repo": "Hyprland",
+        "type": "github"
+      }
+    },
+    "hyprland-nixos": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791530607,
+        "narHash": "sha256-XuGRGw+FR/ktMxxu8Mx++ivaEip4HrjRGS0EVefHDXY=",
+        "owner": "R0K0R",
+        "repo": "Hyprland",
+        "rev": "f4c2e6bf2251d16d0685dc263d021fd2202705e6",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "ref": "nixos",
+        "repo": "Hyprland",
         "type": "github"
       }
     },
@@ -694,6 +743,7 @@
         "feat-emacs": "feat-emacs",
         "feat-hakuspace": "feat-hakuspace",
         "feat-hop": "feat-hop",
+        "feat-hyprland": "feat-hyprland",
         "feat-niri": "feat-niri",
         "feat-samsung-galaxybook": "feat-samsung-galaxybook",
         "home-manager": "home-manager",

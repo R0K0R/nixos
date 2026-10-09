@@ -317,7 +317,7 @@ do
   end
 
   -- Bring the back card under point c to the front -- unless a layer surface took the
-  -- press: c.layer (touch and pen events carry it, keystone/11) or, for the mouse,
+  -- press: c.layer (touch and pen events carry it: the Hyprland fork's touchscreen-swipes commit) or, for the mouse,
   -- hl.layer_at. The on-screen keyboard's 'o' sits over a back card's edge in
   -- landscape, and tapping it raised the card as well (2026-10-08).
   local function frontAt(c)
@@ -343,7 +343,7 @@ do
 
   hl.bind("mouse:272", function() frontAt(hl.get_cursor_pos()) end, { non_consuming = true })
   -- A finger or the pen press through the touch/tablet path, not the button one, so the
-  -- bind above never sees them; features/hyprland/patches/keystone/08-lua-touch-pen-events.patch reports both as Lua events with the point.
+  -- bind above never sees them; Hyprland fork, keystone lua-touch-pen-events reports both as Lua events with the point.
   -- pcall: a Hyprland without the patch rejects the unknown event names.
   pcall(hl.on, "input.touch.down", function(p) frontAt(p) end)
   pcall(hl.on, "input.tablet.tip", function(p) frontAt(p) end)
@@ -449,7 +449,7 @@ if nix.keystone then
       end,
     })
   end
-  -- Keystone (my.hyprland.keystone, features/hyprland/patches/keystone/01-keystone-render.patch): dock windows render as a
+  -- Keystone (my.hyprland.keystone; the Hyprland fork's keystone-render commit): dock windows render as a
   -- perspective trapezoid. Only valid with the patch; stock Hyprland rejects these.
   -- Values from sihooleebd/nixos 0a7686c. rounding = corner radius (px) of the
   -- trapezoid plus edge anti-aliasing; the shadow is warped with the card.
@@ -464,7 +464,7 @@ if nix.keystone then
     keystone_bounce = 0.2, keystone_bounce_decay = 0.5,
   } })
   -- A 3-finger swipe that starts on a pile card drives the pile live, in the panel's
-  -- PHYSICAL frame (features/hyprland/patches/keystone/04-dock-move-gestures.patch):
+  -- PHYSICAL frame (Hyprland fork, keystone dock-move-gestures):
   -- toward the dock edge the front card follows the fingers out and the one behind it
   -- comes up; away from it every card but the last follows, each deeper one lagging by
   -- dock_swipe_follow, and the last comes up. On release this settles it, or springs back.

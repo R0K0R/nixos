@@ -59,7 +59,7 @@ in
         Finger count for the default gestures. lisgd does not grab the device,
         so one- and two-finger swipes would fire *in addition* to whatever the
         application does with them. Four, not three, since 2026-10-08: three
-        fingers on the touchscreen belong to the compositor (features/hyprland/patches/keystone/11-touchscreen-swipes.patch's
+        fingers on the touchscreen belong to the compositor (the Hyprland fork's keystone touchscreen-swipes commit's
         3-finger double-tap-and-drag live move), whose drag lisgd would also
         read as a swipe -- and four matches the touchpad, where the vertical
         4-finger swipe walks the column and changes workspace too.
@@ -102,7 +102,7 @@ in
       type = lib.types.listOf lib.types.str;
       /*
         EMPTY since 2026-10-08: the compositor now runs the touchpad's own
-        gestures for the touchscreen, live (patches/keystone/11-touchscreen-swipes:
+        gestures for the touchscreen, live (Hyprland fork, keystone touchscreen-swipes:
         4 fingers -> the column walk with its workspace handoff and scroll_move;
         3-finger tap-then-drag -> the move gesture). lisgd could only fire a
         command at release, and running both would act twice per swipe. What it

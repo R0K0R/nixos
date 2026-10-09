@@ -25,6 +25,7 @@
     feat-claude-science.url = "path:./features/claude-science";
     feat-samsung-galaxybook.url = "path:./features/samsung-galaxybook";
     feat-easyeffects.url = "path:./features/easyeffects";
+    feat-hyprland.url = "path:./features/hyprland";
 
     # Module/overlay-providing sub-flakes need the second half of the two-level
     # follows -- see each sub-flake's own header for why both are required.

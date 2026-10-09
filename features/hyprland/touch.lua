@@ -1,7 +1,7 @@
 --[[
   features/hyprland/touch.lua -- touchscreen gestures, recognized in Lua.
 
-  The compositor (patches/keystone/11-touchscreen-swipes) recognizes nothing itself:
+  The compositor (Hyprland fork, keystone touchscreen-swipes) recognizes nothing itself:
   it streams every touch here as input.touch.down / move / up / cancel and offers two
   primitives -- hl.touch_claim() (take the sequence from its client) and
   hl.touch_swipe(phase, fingers, dx, dy) (drive the TRACKPAD gesture machinery, so a
@@ -620,7 +620,7 @@ function Touch._down(e)
   flushFrame()
   if not seq then
     -- A first finger on a layer surface (the on-screen keyboard, the bar: e.layer, set
-    -- by keystone/11) belongs to the shell, not to the window drawn beneath it -- so the
+    -- by the Hyprland fork's touchscreen-swipes commit) belongs to the shell, not to the window drawn beneath it -- so the
     -- sequence has no window and `on =` filters don't match; g.layer says which surface.
     seq = { t0 = now, maxFingers = 0, finished = {}, win = (not e.layer) and e.window or nil, layer = e.layer,
             firstId = e.id, moved = false }

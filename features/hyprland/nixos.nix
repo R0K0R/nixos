@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, inputs, ... }:
 
 {
   /*
@@ -20,11 +20,12 @@
   options.my.hyprland = {
     keystone.enable = lib.mkEnableOption ''
       EXPERIMENTAL per-window perspective-trapezoid rendering for windows tagged
-      "dock" (my.sidedock). Patches the compositor (./patches/keystone/, from
-      sihooleebd/nixos): the texture vertex shaders honour a projective w, and
-      renderTextureInternal post-multiplies a yaw homography into the projection
-      for dock windows; every other window renders as before. Touches the same
-      renderer as the blur and rotation patches here -- check a rotated output'';
+      "dock" (my.sidedock). Builds the compositor from the fork's `keystone`
+      branch (the overlay below; rendering from sihooleebd/nixos): the texture
+      vertex shaders honour a projective w, and renderTextureInternal
+      post-multiplies a yaw homography into the projection for dock windows;
+      every other window renders as before. Touches the same renderer as the
+      fork's blur and rotation fixes -- check a rotated output'';
 
     modKey = lib.mkOption {
       type = lib.types.str;
@@ -70,65 +71,45 @@
 
   config = lib.mkIf (config.my.desktop.compositor == "hyprland") {
     /*
-      A crash fix carried locally until it is upstream.
+      Hyprland from the R0K0R/Hyprland fork (features/hyprland/flake.nix says
+      how it is laid out): `nixos` = nixpkgs' tag + the local bug fixes, each
+      also on its own pr/* branch; `keystone` = that + the side-dock series.
+      It replaced a stack of patch files here (layoutmanager null space, gamma
+      zombie, input on monitor loss, soft-apply blur, keystone/01..11); each is
+      now one commit in the fork, its old header the commit message.
 
-      Hyprland 0.56.2 segfaults on a three-finger trackpad swipe -- the `move`
-      gesture configured in this feature's home half -- whenever the focused
-      window is floating and its layout target has no space. Four identical
-      crashes here (2026-08-04 x2, 2026-09-16, 2026-09-23), every one of them:
+      patches = [ ]: nixpkgs' own patch (monitor-soft-apply-logical-size, from
+      the nixpkgs fork) is a commit in the fork too and would not apply twice.
 
-        CMoveTrackpadGesture::update
-          Layout::CLayoutManager::moveTarget
-            Layout::CSpace::moveTarget     <- SEGV at +0x15
-
-      The null is the SPACE, not the window: MoveGesture.cpp already returns
-      early on a null window, and entering CSpace::moveTarget through an empty
-      SP<CSpace> faults on its first member read. LayoutManager.cpp already
-      guards exactly this in changeFloatingMode() and moveTargetInDirection(),
-      so moveTarget() is simply missing the check its siblings have.
-
-      Expect this to FAIL LOUDLY on a nixpkgs bump that moves the file -- which
-      is the point. When it does, check whether upstream has fixed it and drop
-      the patch rather than rebasing it by reflex.
+      FAILS LOUDLY when nixpkgs moves Hyprland off the fork's base tag: the rest
+      of the toolchain (hyprutils, aquamarine, ...) moves with it, so rebase the
+      fork onto the new tag -- dropping fixes upstream has taken -- and bump
+      forkBase, rather than building an old Hyprland against new libraries.
     */
     nixpkgs.overlays = [
-      (final: prev: {
-        hyprland = prev.hyprland.overrideAttrs (old: {
-          patches = (old.patches or [ ]) ++ [
-            ./layoutmanager-guard-null-space.patch
-            # Night mode dead until Hyprland restarts: one refused gamma
-            # control request left a zombie that claimed eDP-1 for good.
-            # See the patch header.
-            ./gamma-refused-control-zombie.patch
-            # Input with its monitor gone crashing (SIGSEGV): a touchscreen
-            # workspace swipe (end()/update()) or a touch motion (onTouchMove)
-            # when the output vanishes mid-touch -- reachable here because the
-            # lid-close handler disables eDP-1. See the patch header.
-            ./input-on-monitor-loss.patch
-            # Blur behind windows kept the pre-rotation orientation: the soft
-            # rule-apply path (rotation) never dirtied the pre-blurred cache.
-            # Applies after the fork's monitor-soft-apply-logical-size.patch,
-            # which edits the same function.
-            ./soft-apply-mark-blur-dirty.patch
-          ]
-          # Perspective-trapezoid rendering for side-dock windows and the dock's
-          # input/gesture support, as an ordered series (patches/keystone/README);
-          # see the keystone option. Rendering from sihooleebd/nixos (1d5e9bf).
-          ++ lib.optionals config.my.hyprland.keystone.enable [
-            ./patches/keystone/01-keystone-render.patch
-            ./patches/keystone/02-scale-to-fit.patch
-            ./patches/keystone/03-keystone-input.patch
-            ./patches/keystone/04-dock-move-gestures.patch
-            ./patches/keystone/05-dock-bounce-curves.patch
-            ./patches/keystone/06-gesture-handoff.patch
-            ./patches/keystone/07-keystone-overview.patch
-            ./patches/keystone/08-lua-touch-pen-events.patch
-            ./patches/keystone/09-special-recentre-exemption.patch
-            ./patches/keystone/10-touch-pen-border-resize.patch
-            ./patches/keystone/11-touchscreen-swipes.patch
-          ];
-        });
-      })
+      (final: prev:
+        let
+          forkBase = "0.56.2";
+          branch = if config.my.hyprland.keystone.enable then "keystone" else "nixos";
+          src = inputs.feat-hyprland.src.${branch};
+        in
+        {
+          hyprland =
+            assert lib.assertMsg (prev.hyprland.version == forkBase)
+              "features/hyprland: nixpkgs has Hyprland ${prev.hyprland.version}, the R0K0R/Hyprland fork is based on ${forkBase} -- rebase the fork";
+            prev.hyprland.overrideAttrs (old: {
+              inherit src;
+              patches = [ ];
+              # shown in `hyprctl version`
+              env = old.env // {
+                GIT_BRANCH = branch;
+                GIT_COMMIT_HASH = src.rev;
+                GIT_COMMIT_DATE = toString src.lastModified;
+              };
+              # upstream's points at finalAttrs.src.tag, which a flake input has not got
+              meta = old.meta // { changelog = "https://github.com/R0K0R/Hyprland/commits/${branch}"; };
+            });
+        })
     ];
 
     programs.hyprland = {

@@ -312,7 +312,7 @@ show_pile() {
   local want=""; [ -f "$STATE" ] && want="$(cat "$STATE" 2>/dev/null)"
   { [ -z "$want" ] || ! exists "$want"; } && want="${o[0]}"
   # Slide in from past the edge. Each card's move overshoots by its own, damped amount
-  # (its dockd<depth> tag, set in render; features/hyprland/patches/keystone/05-dock-bounce-curves.patch).
+  # (its dockd<depth> tag, set in render; Hyprland fork, keystone dock-bounce-curves).
   render "$want" 1
 }
 active() { $J -r '.address // ""' < <($HC activewindow -j); }
@@ -410,7 +410,7 @@ pip_place() {   # $1 = window, $2 = "keep" to keep its current size (relayout)
     [ "$ph" -gt $(( LH - 2*VGAP )) ] && ph=$(( LH - 2*VGAP ))
   else
     # A third of the viewport each way, i.e. the SCREEN's aspect. The client is told it is
-    # keystone_pip_zoom (default 3) times this box (features/hyprland/patches/keystone/02-scale-to-fit.patch, realToReportSize for
+    # keystone_pip_zoom (default 3) times this box (Hyprland fork, keystone scale-to-fit, realToReportSize for
     # `pip`), so it lays out as it would fullscreen, and scale-to-fit shrinks that into the
     # box, filling it. Resize it by its edges or Mod+right-drag (tall works too: the layout
     # follows the box's shape); Mod+Alt+minus/equal change how small the content is drawn.
@@ -557,7 +557,7 @@ case "${1:-toggle}" in
     if [ "$1" = "next" ]; then ni=$(( (ci+1) % ${#ORD[@]} )); else ni=$(( (ci-1+${#ORD[@]}) % ${#ORD[@]} )); fi
     render "${ORD[$ni]}" ;;
   gesture-move)  # Release of a 3-finger swipe that began on a pile card. Hyprland's move
-                 # gesture (features/hyprland/patches/keystone/04-dock-move-gestures.patch)
+                 # gesture (Hyprland fork, keystone dock-move-gestures)
                  # has already moved the cards under the fingers -- in the PHYSICAL frame,
                  # so the same on every rotation -- and hands over $2 = next / prev / none
                  # and $3 = the front card at swipe start (its dockd0 tag, so right on any
