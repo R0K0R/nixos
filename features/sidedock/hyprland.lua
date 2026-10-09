@@ -33,7 +33,14 @@ end
 -- The same birth for any other window that opens ON the dock workspace while a card has
 -- focus: it joins the pile (window.open below). Modal dialogs are left alone. Enabled
 -- only while a card has focus -- see syncOpenRules() further down.
-local dockBirth = hl.window_rule({ match = { workspace = "special:dock", modal = false }, float = true,
+-- Never fcitx5's own X11 popup: switching the input method in an XWayland card (wine
+-- KakaoTalk) maps a "Fcitx5 Input Window" -- the IM indicator -- on the dock workspace.
+-- It was born a card: sized 33%x88% (a blank card), brought to the front, and on its
+-- close a moment later `orphan` focused the card behind it, so the card you were typing
+-- in lost the keyboard. Matched by title: its WM_CLASS reads "fcitx\0fcit".
+local imePopupTitle = "Fcitx5 Input Window"
+local dockBirth = hl.window_rule({ match = { workspace = "special:dock", modal = false,
+  title = "negative:^(" .. imePopupTitle .. ")$" }, float = true,
   size = "33% 88%", move = "100% 8%", border_size = 0, rounding = 0, enabled = false })
 
 hl.bind(mod .. " + " .. nix.keys.toggle, hl.dsp.exec_cmd(dock .. " toggle"))
@@ -204,8 +211,14 @@ do
   -- out or drawn, and focus has not moved to it yet, so focusDock is still "a card had
   -- focus". A window joining the pile gets the dynamic dock tag here, so the keystone
   -- warps it from its very first frame (the rules above already float it off-screen).
+  -- The IM popup (see dockBirth) is no card and no stray: it floats over the card it
+  -- belongs to and closes by itself; moving or focusing it is what broke typing.
+  local function isImePopup(w)
+    return w.title == imePopupTitle or (w.class or ""):find("^fcitx") ~= nil
+  end
+
   hl.on("window.open_early", function(w)
-    if not w then return end
+    if not w or isImePopup(w) then return end
     local onDockWs = w.workspace ~= nil and w.workspace.name == "special:dock"
     if (w.class and dockClasses[w.class]) or (onDockWs and focusDock) then
       hl.dispatch(hl.dsp.window.tag({ tag = "+dock", window = "address:" .. w.address }))
@@ -213,7 +226,7 @@ do
   end)
 
   hl.on("window.open", function(w)
-    if not w then return end
+    if not w or isImePopup(w) then return end
     if isDockWin(w) and not isPip(w) then
       -- born a card (open_early): slide it in from the side and make it the front
       hl.dispatch(hl.dsp.exec_cmd(dock .. " adopt " .. w.address))
