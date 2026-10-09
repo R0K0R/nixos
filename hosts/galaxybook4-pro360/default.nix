@@ -32,6 +32,10 @@ in
   ];
 
   services.tailscale.enable = true;
+  # `tailscale up/login/set/...` as r0k0r without sudo. Tailscale has no group for
+  # this: the operator is one user, stored in tailscaled's prefs, and applied by
+  # the module's tailscaled-set unit on every boot.
+  services.tailscale.extraSetFlags = [ "--operator=r0k0r" ];
   /*
     DNS through systemd-resolved, for tailscale's sake. Without it tailscaled ran in
     "direct" mode: it rewrote /etc/resolv.conf to 100.100.100.100 and forwarded every
