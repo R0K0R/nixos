@@ -133,6 +133,16 @@ in
       # hiPrio: the launcher wrapper above shadows the package's own `waydroid`
       environment.systemPackages = [ pkgs.wl-clipboard (lib.hiPrio waydroidCli) ];
 
+      # Android drawn at 0.75 of its window with black around it, some time into a
+      # session: the vendor hwcomposer lets a later wl_output.scale (2) replace the
+      # fractional scale (1.5) Android was sized with. Patched copy of the vendor
+      # library, through the vendor overlay, before every container start; the
+      # script says what it does and refuses any vendor build but the one it was
+      # made for. The fork's pr/wl-output-scale-on-change takes away the trigger.
+      systemd.services.waydroid-container.serviceConfig.ExecStartPre = [
+        "${pkgs.python3.interpreter} ${./hwc-scale-fix.py} ${pkgs.e2fsprogs}/bin/debugfs"
+      ];
+
       /*
         Android's display on/off, as root (`waydroid shell` needs it), behind a
         FIFO the `waydroid` group may write: `echo off > /run/waydroid-display`
