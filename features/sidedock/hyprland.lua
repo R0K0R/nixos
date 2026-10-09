@@ -39,6 +39,11 @@ end
 -- close a moment later `orphan` focused the card behind it, so the card you were typing
 -- in lost the keyboard. Matched by title: its WM_CLASS reads "fcitx\0fcit".
 local imePopupTitle = "Fcitx5 Input Window"
+-- Kept out of the pile it is still a managed window, so on its own it would TILE -- over
+-- the whole dock workspace, a big blank box around a few characters. Float it at the size
+-- it asks for, and never focus it, wherever it opens.
+hl.window_rule({ match = { title = "^(" .. imePopupTitle .. ")$" }, float = true,
+  no_focus = true, no_initial_focus = true, border_size = 0, no_shadow = true })
 local dockBirth = hl.window_rule({ match = { workspace = "special:dock", modal = false,
   title = "negative:^(" .. imePopupTitle .. ")$" }, float = true,
   size = "33% 88%", move = "100% 8%", border_size = 0, rounding = 0, enabled = false })
