@@ -32,7 +32,7 @@ let
   };
 
   # Bump: features/kakaotalk/update.sh.
-  kakaotalk = pkgs.callPackage ./package.nix { wine = cfg.winePackage; };
+  kakaotalk = pkgs.callPackage ./package.nix { wine = cfg.winePackage; inherit (cfg) dpi; };
 in
 {
   options.my.kakaotalk = {
@@ -71,6 +71,21 @@ in
         Worth reaching for the matching `staging` attribute if a release starts
         misbehaving; staging carries the patches that usually land such fixes
         first, at the cost of building from source.
+      '';
+    };
+
+    dpi = lib.mkOption {
+      type = lib.types.ints.positive;
+      # fromJSON parses the scale's literal text ("1.5") as a number.
+      default = builtins.floor (96 * builtins.fromJSON config.my.desktop.primaryOutputScale + 0.5);
+      defaultText = lib.literalExpression "96 * my.desktop.primaryOutputScale, rounded";
+      description = ''
+        Wine's system DPI for the KakaoTalk prefix, written into it on launch.
+
+        Hyprland runs XWayland with force_zero_scaling, so a wine window gets
+        the panel's real pixels and only scales by this value; the default
+        follows the panel (144 at 1.5). Takes effect on the next start of the
+        client, after its wineserver exits.
       '';
     };
   };

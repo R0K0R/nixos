@@ -11,6 +11,19 @@ let
     file, no coupling between them.
   */
   pkgSet = import ./packages.nix { inherit pkgs; };
+
+  # Zoom's launcher, with the panel scale put into its config -- see below.
+  zoomScaled = ''
+    conf="''${XDG_CONFIG_HOME:-$HOME/.config}/zoomus.conf"
+    scale=${config.my.desktop.primaryOutputScale}
+    if ! ${pkgs.gnugrep}/bin/grep -qx 'autoScale=false' "$conf" 2>/dev/null ||
+       ! ${pkgs.gnugrep}/bin/grep -qx "scaleFactor=$scale" "$conf" 2>/dev/null; then
+      [ -s "$conf" ] || printf '[General]\n' >"$conf"
+      ${pkgs.gnused}/bin/sed -i -e '/^autoScale=/d' -e '/^scaleFactor=/d' \
+        -e "/^\[General\]$/a autoScale=false\nscaleFactor=$scale" "$conf"
+    fi
+    exec ${pkgs.zoom-us}/bin/zoom "$@"
+  '';
 in
 {
   options.my.desktop-apps.enable = lib.mkEnableOption "GUI applications and the icon/theme packages they resolve against";
@@ -95,6 +108,25 @@ in
     }
 
     (lib.mkIf (pkgSet ? system) { environment.systemPackages = pkgSet.system; })
+
+    (lib.mkIf (builtins.elem pkgs.zoom-us (pkgSet.system or [ ])) {
+      /*
+        Zoom at the panel's scale. It runs under XWayland (zoomus.conf
+        xwayland=true), and Hyprland's xwayland force_zero_scaling hands X11
+        clients unscaled pixels, so Zoom has to scale itself -- its own
+        auto-detection sees a 96-dpi X screen and stays at 1x, two-thirds size
+        on the 1.5 panel. Its manual setting is the autoScale/scaleFactor pair
+        in [General]. Zoom owns and rewrites that file, so a home-manager file
+        would fight it; instead `zoom` (and `zoom-us`) set the two keys just
+        before starting it. hiPrio shadows the package's own binaries, and the
+        desktop entry runs a bare `zoom`, so it goes through this too.
+      */
+      environment.systemPackages = [
+        (lib.hiPrio (pkgs.writeShellScriptBin "zoom" zoomScaled))
+        (lib.hiPrio (pkgs.writeShellScriptBin "zoom-us" zoomScaled))
+      ];
+    })
+
     # Emitted only when non-empty, and keyed by this feature's `users`
     # scope rather than by a hardcoded account -- see lib/user-scope.nix.
     (lib.mkIf (pkgSet ? user) { my.packages.perUser = lib.genAttrs config.my.desktop-apps.users (_: pkgSet.user); })

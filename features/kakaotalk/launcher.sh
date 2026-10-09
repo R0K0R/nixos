@@ -86,6 +86,28 @@ if [ ! -f "$stamp" ] || [ "$(cat "$stamp")" != "@installer@" ]; then
   printf '%s\n' "@installer@" >"$stamp"
 fi
 
+# HiDPI. Hyprland runs XWayland with force_zero_scaling (features/hyprland), so
+# X11 clients get the panel's real pixels and must scale themselves -- left at
+# wine's default 96 dpi, KakaoTalk is two-thirds size on the 1.5 panel. Wine
+# takes its system DPI from LogPixels under HKCU\Software\Wine\Fonts and the
+# HKEY_CURRENT_CONFIG fonts key (what winecfg's "Screen resolution" writes);
+# both are set. Checked against the hive files first, because `wine reg` costs
+# a wineserver round-trip and this is otherwise a no-op on every launch.
+set_dpi() {
+  local want hex
+  want=@dpi@
+  hex=$(printf 'dword:%08x' "$want")
+  if [ "$(awk '/^\[/{s=$0} s ~ /^\[Software\\\\Wine\\\\Fonts\]/ && /^"LogPixels"=/{sub(/^"LogPixels"=/,""); print}' "$WINEPREFIX/user.reg" 2>/dev/null)" = "$hex" ] &&
+     [ "$(awk '/^\[/{s=$0} s ~ /Hardware Profiles\\\\Current\\\\Software\\\\Fonts\]/ && /^"LogPixels"=/{sub(/^"LogPixels"=/,""); print}' "$WINEPREFIX/system.reg" 2>/dev/null)" = "$hex" ]; then
+    return
+  fi
+  echo "kakaotalk: setting wine DPI to $want" >&2
+  wine reg add 'HKCU\Software\Wine\Fonts' /v LogPixels /t REG_DWORD /d "$want" /f >/dev/null 2>&1 || true
+  wine reg add 'HKLM\System\CurrentControlSet\Hardware Profiles\Current\Software\Fonts' \
+    /v LogPixels /t REG_DWORD /d "$want" /f >/dev/null 2>&1 || true
+}
+set_dpi
+
 # Located rather than hardcoded: the installer picks Program Files vs
 # Program Files (x86) itself, and has moved between them across releases.
 exe="$(find "$WINEPREFIX/drive_c" -iname 'KakaoTalk.exe' \

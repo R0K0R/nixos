@@ -42,6 +42,8 @@
     passes upstream nixpkgs instead, which substitutes.
   */
   wine,
+  # Wine's system DPI, set in the prefix by the launcher (96 = unscaled).
+  dpi ? 96,
 }:
 
 let
@@ -110,7 +112,8 @@ stdenvNoCC.mkDerivation {
     substituteInPlace $out/bin/kakaotalk \
       --replace-fail '@installer@' '${installer}' \
       --replace-fail '@version@'   '${version}' \
-      --replace-fail '@fontFiles@' '${lib.concatStringsSep " " fontFiles}'
+      --replace-fail '@fontFiles@' '${lib.concatStringsSep " " fontFiles}' \
+      --replace-fail '@dpi@'       '${toString dpi}'
 
     wrapProgram $out/bin/kakaotalk \
       --prefix PATH : ${lib.makeBinPath [ wine coreutils findutils bash ]}
