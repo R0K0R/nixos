@@ -333,6 +333,13 @@ joinfront() {
 }
 dock_send() {  # give a window the dock shape + tag, then lay it out as the front
   local a="$1" fr; fr="$(joinfront "$a")"
+  # A window that was ALREADY floating is tiled first, so it joins as a fresh float with
+  # nothing carried over from its old floating life (KakaoTalk -- Wine, X11 -- misbehaved
+  # as a card it had been floating before). The float dispatcher toggles.
+  if [ "$(isfloat "$a")" = "true" ]; then
+    d "hl.dsp.window.float({window=\"address:$a\"})"
+    snap
+  fi
   ensure_float "$a"
   d "hl.dsp.window.tag({tag=\"+dock\", window=\"address:$a\"})"
   # (size + lock is applied by render(), from the live geometry -- not here.)
