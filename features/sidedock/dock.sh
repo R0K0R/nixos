@@ -659,15 +659,30 @@ case "${1:-toggle}" in
     # that looked like a normal one and that Mod+C could not get you out of.
     [ ${#ORD[@]} -eq 0 ] && { : >"$STATE"; dockws_hide; exit 0; }
     # Keep the remembered front if it survives. If the FRONT closed, the card that was
-    # right behind it comes forward -- what a swipe brings forward too. The pile is
-    # order() rotated to start at the front, so "behind" is the next address after the
-    # closed one in order()'s sort (wrapping). It used to fall back to ORD[0], the
-    # lowest address, which could pull a card from deep in the pile to the front.
+    # right behind it comes forward -- what a swipe brings forward too. The pile is the
+    # cycle rotated to start at the front, so "behind" is the next survivor after the
+    # closed card IN THE CYCLE (ORDERF, wrapping). An address sort stood in for the
+    # cycle before ORDERF existed, and kept doing so after: once adopt put new cards
+    # before the front, the sort and the pile disagreed and a close pulled up the wrong
+    # card. A card the cycle file does not list falls back to that sort.
     want=""; [ -f "$STATE" ] && want="$(cat "$STATE" 2>/dev/null)"
     if [ -z "$want" ] || [ "$want" = "$EXCLUDE" ] || ! printf '%s\n' "${ORD[@]}" | grep -qxF "$want"; then
-      want="$( { printf '%s\n' "${ORD[@]}"; echo "$EXCLUDE"; } | LC_ALL=C sort | grep -A1 -xF "$EXCLUDE" | sed -n 2p)"
+      want=""
+      if [ -f "$ORDERF" ]; then
+        mapfile -t CYC <"$ORDERF"
+        for ((ci = 0; ci < ${#CYC[@]}; ci++)); do [ "${CYC[$ci]}" = "$EXCLUDE" ] && break; done
+        if [ "$ci" -lt ${#CYC[@]} ]; then
+          for ((k = 1; k < ${#CYC[@]}; k++)); do
+            c="${CYC[$(( (ci + k) % ${#CYC[@]} ))]}"
+            printf '%s\n' "${ORD[@]}" | grep -qxF "$c" && { want="$c"; break; }
+          done
+        fi
+      fi
+      [ -n "$want" ] || want="$( { printf '%s\n' "${ORD[@]}"; echo "$EXCLUDE"; } | LC_ALL=C sort | grep -A1 -xF "$EXCLUDE" | sed -n 2p)"
       [ -n "$want" ] || want="${ORD[0]}"
     fi
+    # the survivors, in cycle order: drops the closed card (and any long-dead one)
+    printf '%s\n' "${ORD[@]}" >"$ORDERF.new" 2>/dev/null && command mv -f "$ORDERF.new" "$ORDERF"
     pile_shown && render "$want"
     printf '%s' "$want" >"$STATE" ;;
   relayout)  # the monitor layout/scale changed (e.g. wdisplays) -> re-apply the CURRENT
