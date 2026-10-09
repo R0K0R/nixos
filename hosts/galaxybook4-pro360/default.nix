@@ -46,6 +46,67 @@ in
   */
   services.resolved.enable = true;
 
+  /*
+    Two tailscale failures resolved alone does not cover (2026-10-09):
+
+    1. Wrong clock at boot. After the battery ran flat the clock came up a month
+       ahead, TLS rejected the control server's certificate ("x509: certificate has
+       expired or is not yet valid"), tailscaled stayed logged out with no peers,
+       and every MagicDNS name failed. Once NTP has synced, restart tailscaled if it
+       is not running properly. tailscaled itself is NOT ordered after time sync:
+       offline, that would stall it forever.
+
+    2. Tailnet names not resolving with tailscale itself fine: `tailscale ip victus-15`
+       answered and so did 100.100.100.100, but glibc did not -- nsncd had started
+       while resolv.conf pointed at the router and kept that view. resolved removes
+       that (resolv.conf stays on its stub); the watchdog below catches it, and any
+       stale MagicDNS table, whatever the cause: every 2 min it resolves each online
+       peer the way programs do, and restarts nscd + tailscaled on a miss, at most
+       once per 10 min.
+  */
+  systemd.services.systemd-time-wait-sync.wantedBy = [ "multi-user.target" ];
+  systemd.services.tailscale-after-timesync = {
+    description = "Restart tailscaled once the clock is synced, if it failed to log in";
+    wantedBy = [ "multi-user.target" ];
+    wants = [ "time-sync.target" ];
+    after = [ "time-sync.target" "tailscaled.service" ];
+    path = [ pkgs.tailscale pkgs.jq pkgs.systemd ];
+    serviceConfig.Type = "oneshot";
+    script = ''
+      state=$(tailscale status --json 2>/dev/null | jq -r '.BackendState // "unknown"')
+      [ "$state" = Running ] || systemctl restart tailscaled
+    '';
+  };
+  systemd.services.tailscale-dns-watchdog = {
+    description = "Restart tailscaled and nscd when tailnet names stop resolving";
+    path = [ pkgs.tailscale pkgs.jq pkgs.systemd pkgs.getent pkgs.coreutils ];
+    serviceConfig.Type = "oneshot";
+    # Checks EVERY online peer, through the system's own path (glibc via nsncd), not
+    # dig at 100.100.100.100: on 2026-10-09 the resolver answered fine while glibc
+    # still failed -- nsncd had started while resolv.conf pointed at the router and
+    # kept using that -- and a single picked peer (another user's node) resolved
+    # while victus-15 did not. Restarts nscd too, for that half.
+    script = ''
+      st=$(tailscale status --json 2>/dev/null) || exit 0
+      [ "$(jq -r '.BackendState' <<<"$st")" = Running ] || exit 0   # the boot unit's case
+      miss=""
+      for peer in $(jq -r '.Peer[] | select(.Online == true) | .DNSName | rtrimstr(".")' <<<"$st"); do
+        getent ahostsv4 "$peer" >/dev/null || miss="$miss $peer"
+      done
+      [ -n "$miss" ] || exit 0
+      stamp=/run/tailscale-dns-watchdog.last
+      now=$(date +%s); last=$(cat "$stamp" 2>/dev/null || echo 0)
+      [ $(( now - last )) -ge 600 ] || exit 0
+      echo "$now" > "$stamp"
+      echo "tailnet names not resolving:$miss -- restarting nscd and tailscaled"
+      systemctl restart nscd tailscaled
+    '';
+  };
+  systemd.timers.tailscale-dns-watchdog = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = { OnBootSec = "3min"; OnUnitActiveSec = "2min"; };
+  };
+
   system.stateVersion = "26.05";
 
   # Kernel choice stays in the host file: it is a property of this machine's
