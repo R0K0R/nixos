@@ -6,7 +6,8 @@ and on 2026-10-08 its hardcoded touch recognizers became a touch stream for Lua
 (features/hyprland/touch.lua), touch claiming and hl.touch_swipe, then gained layer
 awareness (touch/pen events' `layer`, hl.layer_at). 04 gained the far-toward-the-edge
 dock dismiss (gestures:dock_swipe_dismiss) on 2026-10-09; the same day 03 mapped the pen
-and touch motion through the keystone on every card, and touch-down on X11 cards. Each
+and touch motion through the keystone on every card, and touch-down on X11 cards, and 02
+extended back-card scale-to-fit (dockscale) to X11 cards. Each
 patch's own header says what it does and why.
 
 Base: Hyprland 0.56.2 + nixpkgs' monitor-soft-apply-logical-size.patch + the other

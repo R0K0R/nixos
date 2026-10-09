@@ -523,7 +523,7 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
      if (m_clickBehavior == CLICKMODE_KILL) {
          IPointer::SButtonEvent e;
          e.state = WL_POINTER_BUTTON_STATE_PRESSED;
-@@ -133,6 +198,7 @@
+@@ -137,6 +202,7 @@
      } else
          return; // oops, nothing found.
  
@@ -531,7 +531,7 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
      g_pSeatManager->sendTouchDown(m_touchData.touchFocusSurface.lock(), e.timeMs, e.touchID, local);
  }
  
-@@ -144,12 +210,28 @@
+@@ -148,12 +214,28 @@
      if (info.cancelled)
          return;
  
@@ -560,7 +560,7 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
      if (g_pUnifiedWorkspaceSwipe->isGestureInProgress()) {
          // If there was a swipe from this finger, end it.
          if (e.touchID == g_pUnifiedWorkspaceSwipe->m_touchID)
-@@ -182,6 +264,10 @@
+@@ -186,6 +268,10 @@
          return;
      }
  

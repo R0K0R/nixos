@@ -14,7 +14,8 @@ windows get the same mapping (keystoneSurfaceLocal).
   landed beside where it was drawn); touch motion on any card was the down point's
   fixed offset, which a perspective warp is not (a drag drifted off the finger); pen
   motion was flat for every card. The touch origin is kept in the unwarped frame and
-  each motion point is re-mapped.
+  each motion point is re-mapped. An X11 back card drawn shrunk (02) maps on through
+  scale-to-fit in keystoneSurfaceLocal too.
 
 diff -ruN a/src/desktop/state/ViewHitTester.cpp b/src/desktop/state/ViewHitTester.cpp
 --- a/src/desktop/state/ViewHitTester.cpp
@@ -27,7 +28,7 @@ diff -ruN a/src/desktop/state/ViewHitTester.cpp b/src/desktop/state/ViewHitTeste
  #include "../../state/WorkspaceState.hpp"
  #include "../../xwayland/XWayland.hpp"
  #include "../../managers/fullscreen/FullscreenController.hpp"
-@@ -254,6 +255,116 @@
+@@ -254,6 +255,122 @@
      return windowForWorkspace(false);
  }
  
@@ -132,19 +133,25 @@ diff -ruN a/src/desktop/state/ViewHitTester.cpp b/src/desktop/state/ViewHitTeste
 +}
 +
 +Vector2D CViewHitTester::keystoneSurfaceLocal(const Vector2D& pos, PHLWINDOW window) const {
-+    if (window->m_ruleApplicator && window->m_ruleApplicator->m_tagKeeper.isTagged("dock", false))
++    if (window->m_ruleApplicator && window->m_ruleApplicator->m_tagKeeper.isTagged("dock", false)) {
 +        // Either a real hit inside the trapezoid, OR the sentinel (x < -1e5) for a hit in the
 +        // vacated strip beside it. Return the sentinel too (don't fall back to the flat coord):
 +        // the caller leaves foundSurface null on a sentinel so the empty margin is a clean MISS
 +        // instead of registering offset. Non-dock windows get the plain flat coord below.
-+        return ksHitInverse(window, pos - window->position(Desktop::View::IGeometric::GEOMETRIC_GOAL));
++        // A back card drawn shrunk (scale-to-fit, CWindow::fitTransform) maps on into the
++        // client's logical surface coords; InputManager applies the X11 factor after.
++        auto rel = ksHitInverse(window, pos - window->position(Desktop::View::IGeometric::GEOMETRIC_GOAL));
++        if (const auto FIT = window->fitTransform(); FIT.active && rel.x > -1.0e5)
++            rel = (rel - FIT.offset) / FIT.scale;
++        return rel;
++    }
 +    return pos - window->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
 +}
 +
  SP<CWLSurfaceResource> CViewHitTester::windowSurfaceAt(const Vector2D& pos, PHLWINDOW window, Vector2D& surfaceLocal) const {
      if (!validMapped(window))
          return nullptr;
-@@ -270,6 +381,9 @@
+@@ -270,6 +387,9 @@
      }
  
      Vector2D ksRel = pos - window->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
@@ -287,7 +294,7 @@ diff -ruN a/src/managers/input/Tablets.cpp b/src/managers/input/Tablets.cpp
 diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
 --- a/src/managers/input/Touch.cpp
 +++ b/src/managers/input/Touch.cpp
-@@ -94,15 +94,22 @@
+@@ -94,19 +94,26 @@
          local                          = TOUCH_COORDS - PMONITOR->m_position;
          m_touchData.touchSurfaceOrigin = TOUCH_COORDS - local;
      } else if (!m_touchData.touchFocusWindow.expired()) {
@@ -299,9 +306,13 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
 +        // box before, so a tap on a tilted card landed beside where it was drawn.
 +        const auto UNWARPED = Desktop::viewState()->hitTest().keystoneUnwarpGlobal(TOUCH_COORDS, m_touchData.touchFocusWindow.lock());
          if (m_touchData.touchFocusWindow->m_isX11) {
--            local = (TOUCH_COORDS - m_touchData.touchFocusWindow->position(Desktop::View::IGeometric::GEOMETRIC_GOAL)) * m_touchData.touchFocusWindow->m_X11SurfaceScaledBy;
-+            local = (UNWARPED - m_touchData.touchFocusWindow->position(Desktop::View::IGeometric::GEOMETRIC_GOAL)) * m_touchData.touchFocusWindow->m_X11SurfaceScaledBy;
-             m_touchData.touchSurfaceOrigin = m_touchData.touchFocusWindow->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
+             // scale-to-fit (an X11 dock back card): logical surface coords first, then the
+             // usual X11 factor -- onTouchMove divides by touchSurfaceScale the same way
+             const auto FIT                 = m_touchData.touchFocusWindow->fitTransform();
+             m_touchData.touchSurfaceScale  = FIT.active ? FIT.scale : 1.0;
+             m_touchData.touchSurfaceOrigin = m_touchData.touchFocusWindow->position(Desktop::View::IGeometric::GEOMETRIC_GOAL) + (FIT.active ? FIT.offset : Vector2D{});
+-            local = (TOUCH_COORDS - m_touchData.touchSurfaceOrigin) / m_touchData.touchSurfaceScale * m_touchData.touchFocusWindow->m_X11SurfaceScaledBy;
++            local = (UNWARPED - m_touchData.touchSurfaceOrigin) / m_touchData.touchSurfaceScale * m_touchData.touchFocusWindow->m_X11SurfaceScaledBy;
          } else {
              Desktop::viewState()->hitTest().windowSurfaceAt(TOUCH_COORDS, m_touchData.touchFocusWindow.lock(), local);
              // scale-to-fit: local is in the client's unscaled coords, the origin in global ones
@@ -312,7 +323,7 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
          }
      } else if (!m_touchData.touchFocusLS.expired()) {
          PHLLS    foundSurf;
-@@ -205,7 +212,9 @@
+@@ -209,7 +216,9 @@
          if (!PMONITOR)
              return;
          const auto TOUCH_COORDS = PMONITOR->m_position + (e.pos * PMONITOR->m_size);

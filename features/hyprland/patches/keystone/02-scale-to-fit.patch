@@ -17,6 +17,12 @@ windows render 1:1 exactly as before.
   box's own shape and scale-to-fit shrinks that into the box; the box can be resized.
 - A back dock card (tag `dockscale<P>`) is told the FRONT card's size, box / P%, and
   drawn shrunk by scale-to-fit, so moving back in the pile never re-lays it out.
+  X11 (Wine) cards included, since 2026-10-09: before, they were really resized to the
+  smaller box and KakaoTalk visibly redrew on every reorder. Scale-to-fit compares an
+  X11 surface in logical px (its XWayland pixels / m_X11SurfaceScaledBy), so input maps
+  to logical coords and the usual X11 factor applies after; a back X11 card refuses the
+  client's own configure requests (sendWindowSize instead), or the bigger reported size
+  would come back as its box and grow the card.
 
 diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.cpp
 --- a/src/config/values/ConfigValues.cpp
@@ -84,7 +90,19 @@ diff -ruN a/src/desktop/view/Subsurface.cpp b/src/desktop/view/Subsurface.cpp
 diff -ruN a/src/desktop/view/Window.cpp b/src/desktop/view/Window.cpp
 --- a/src/desktop/view/Window.cpp
 +++ b/src/desktop/view/Window.cpp
-@@ -1683,6 +1683,36 @@
+@@ -1554,8 +1554,10 @@
+ 
+     g_pHyprRenderer->damageWindow(m_self.lock());
+ 
++    // A side-dock back card (dockscale) is told a bigger size than its box (realToReportSize);
++    // taking the client's own geometry back as the box would grow the card to it.
+     if (!m_isFloating || Fullscreen::controller()->isFullscreen(m_self.lock()) || g_layoutManager->dragController()->target() == layoutTarget() ||
+-        (m_suppressedEvents & Desktop::View::SUPPRESS_X11_CONFIGURE_REQUEST)) {
++        (m_suppressedEvents & Desktop::View::SUPPRESS_X11_CONFIGURE_REQUEST) || dockScalePercent() > 0) {
+         sendWindowSize(true);
+         g_pInputManager->refocus();
+         g_pHyprRenderer->damageWindow(m_self.lock());
+@@ -1683,12 +1685,38 @@
  }
  
  Vector2D CWindow::realToReportSize() {
@@ -97,18 +115,14 @@ diff -ruN a/src/desktop/view/Window.cpp b/src/desktop/view/Window.cpp
 +    // set by features/sidedock): tell the client the FRONT card's size -- box / P% -- so it
 +    // never re-lays out when it moves back in the pile, and scale-to-fit (fitTransform)
 +    // draws it shrunk. The shrink is only apparent, as for Waydroid.
-+    if (!m_isX11 && m_ruleApplicator && m_ruleApplicator->m_tagKeeper.isTagged("dock", false) && !m_ruleApplicator->m_tagKeeper.isTagged("pip", false)) {
-+        for (auto const& t : m_ruleApplicator->m_tagKeeper.getTags()) {
-+            std::string s = t;
-+            if (!s.empty() && s.back() == '*')
-+                s.pop_back();
-+            if (s.size() > 9 && s.starts_with("dockscale") && std::all_of(s.begin() + 9, s.end(), [](char c) { return c >= '0' && c <= '9'; })) {
-+                const int P = std::stoi(s.substr(9));
-+                if (P > 0 && P < 100)
-+                    return (m_realSize->goal() * (100.0 / P)).round();
-+                break;
-+            }
-+        }
++    // X11 (Wine) back cards too: they were really resized to the smaller box, so the
++    // client re-laid itself out -- a visible refresh -- every time the pile reordered.
++    // Their report size goes through the XWayland scaling below like any other.
++    Vector2D BOXSIZE = m_realSize->goal();
++    if (const int P = dockScalePercent(); P > 0) {
++        if (!m_isX11)
++            return (BOXSIZE * (100.0 / P)).round();
++        BOXSIZE = BOXSIZE * (100.0 / P);
 +    }
 +
 +    if (!m_isX11 && m_ruleApplicator && m_ruleApplicator->m_tagKeeper.isTagged("pip", false)) {
@@ -121,19 +135,46 @@ diff -ruN a/src/desktop/view/Window.cpp b/src/desktop/view/Window.cpp
      if (!m_isX11)
          return m_realSize->goal().clamp(Vector2D{0, 0}, Math::VECTOR2D_MAX);
  
-@@ -1858,6 +1888,28 @@
+     static auto PXWLFORCESCALEZERO = CConfigValue<Config::INTEGER>("xwayland:force_zero_scaling");
+ 
+-    const auto  REPORTSIZE = m_realSize->goal().clamp(Vector2D{1, 1}, Math::VECTOR2D_MAX);
++    const auto  REPORTSIZE = BOXSIZE.clamp(Vector2D{1, 1}, Math::VECTOR2D_MAX);
+     const auto  PMONITOR   = m_monitor.lock();
+ 
+     if (*PXWLFORCESCALEZERO && PMONITOR)
+@@ -1858,6 +1886,48 @@
      return nullptr;
  }
  
++int CWindow::dockScalePercent() const {
++    if (!m_ruleApplicator || !m_ruleApplicator->m_tagKeeper.isTagged("dock", false) || m_ruleApplicator->m_tagKeeper.isTagged("pip", false))
++        return 0;
++    for (auto const& t : m_ruleApplicator->m_tagKeeper.getTags()) {
++        std::string s = t;
++        if (!s.empty() && s.back() == '*')
++            s.pop_back();
++        if (s.size() > 9 && s.starts_with("dockscale") && std::all_of(s.begin() + 9, s.end(), [](char c) { return c >= '0' && c <= '9'; })) {
++            const int P = std::stoi(s.substr(9));
++            return P > 0 && P < 100 ? P : 0;
++        }
++    }
++    return 0;
++}
++
 +CWindow::SFitTransform CWindow::fitTransform() const {
 +    SFitTransform fit;
-+    if (m_isX11 || !m_isMapped || !m_ruleApplicator || !m_wlSurface || !m_wlSurface->resource())
++    if (!m_isMapped || !m_ruleApplicator || !m_wlSurface || !m_wlSurface->resource())
 +        return fit;
 +    const auto& TAGS = m_ruleApplicator->m_tagKeeper;
 +    if (!TAGS.isTagged("fit", false) && !TAGS.isTagged("dock", false))
 +        return fit;
 +
-+    const Vector2D CONTENT = m_wlSurface->resource()->m_current.size;
++    // An X11 surface is in XWayland's pixels: m_X11SurfaceScaledBy (the monitor scale under
++    // xwayland:force_zero_scaling) of them per logical px. Compare and scale in logical px,
++    // so input maps to logical surface coords and the usual X11 factor still applies after.
++    Vector2D CONTENT = m_wlSurface->resource()->m_current.size;
++    if (m_isX11 && m_X11SurfaceScaledBy > 0)
++        CONTENT = CONTENT / m_X11SurfaceScaledBy;
 +    const Vector2D BOX     = size(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
 +    if (CONTENT.x < 1 || CONTENT.y < 1 || BOX.x < 1 || BOX.y < 1)
 +        return fit;
@@ -150,7 +191,7 @@ diff -ruN a/src/desktop/view/Window.cpp b/src/desktop/view/Window.cpp
  Vector2D CWindow::getReportedSize() {
      if (m_isX11)
          return m_reportedSize;
-@@ -2739,7 +2791,13 @@
+@@ -2739,7 +2809,13 @@
      if (m_isX11)
          m_reportedSize = m_pendingReportedSize;
  
@@ -165,7 +206,7 @@ diff -ruN a/src/desktop/view/Window.cpp b/src/desktop/view/Window.cpp
          const auto MINSIZE = m_xdgSurface->m_toplevel->layoutMinSize();
          const auto MAXSIZE = m_xdgSurface->m_toplevel->layoutMaxSize();
  
-@@ -2753,6 +2811,9 @@
+@@ -2753,6 +2829,9 @@
      const auto PMONITOR = m_monitor.lock();
  
      g_pHyprRenderer->damageSurface(wlSurface()->resource(), m_realPosition->goal().x, m_realPosition->goal().y, m_isX11 ? 1.0 / m_X11SurfaceScaledBy : 1.0);
@@ -178,7 +219,7 @@ diff -ruN a/src/desktop/view/Window.cpp b/src/desktop/view/Window.cpp
 diff -ruN a/src/desktop/view/Window.hpp b/src/desktop/view/Window.hpp
 --- a/src/desktop/view/Window.hpp
 +++ b/src/desktop/view/Window.hpp
-@@ -420,6 +420,18 @@
+@@ -420,6 +420,21 @@
          bool                              priorityFocus();
          SP<CWLSurfaceResource>            getSolitaryResource();
          Vector2D                          getReportedSize();
@@ -194,6 +235,9 @@ diff -ruN a/src/desktop/view/Window.hpp b/src/desktop/view/Window.hpp
 +            Vector2D offset; // of the scaled content inside the window box, logical px
 +        };
 +        SFitTransform fitTransform() const;
++        // side-dock back card: P of its `dockscale<P>` tag (its size in % of the front
++        // card), or 0 if it has none
++        int dockScalePercent() const;
          std::optional<Vector2D>           calculateExpression(const std::string& s);
          std::optional<Vector2D>           calculateExpression(const Math::SExpressionVec2& expr);
          std::optional<Vector2D>           minSize();
@@ -230,7 +274,7 @@ diff -ruN a/src/managers/input/Tablets.cpp b/src/managers/input/Tablets.cpp
 diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
 --- a/src/managers/input/Touch.cpp
 +++ b/src/managers/input/Touch.cpp
-@@ -88,6 +88,7 @@
+@@ -88,17 +88,25 @@
      }
  
      Vector2D local;
@@ -238,8 +282,17 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
  
      if (m_touchData.touchFocusLockSurface) {
          local                          = TOUCH_COORDS - PMONITOR->m_position;
-@@ -98,7 +99,10 @@
-             m_touchData.touchSurfaceOrigin = m_touchData.touchFocusWindow->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
+         m_touchData.touchSurfaceOrigin = TOUCH_COORDS - local;
+     } else if (!m_touchData.touchFocusWindow.expired()) {
+         if (m_touchData.touchFocusWindow->m_isX11) {
+-            local = (TOUCH_COORDS - m_touchData.touchFocusWindow->position(Desktop::View::IGeometric::GEOMETRIC_GOAL)) * m_touchData.touchFocusWindow->m_X11SurfaceScaledBy;
+-            m_touchData.touchSurfaceOrigin = m_touchData.touchFocusWindow->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
++            // scale-to-fit (an X11 dock back card): logical surface coords first, then the
++            // usual X11 factor -- onTouchMove divides by touchSurfaceScale the same way
++            const auto FIT                 = m_touchData.touchFocusWindow->fitTransform();
++            m_touchData.touchSurfaceScale  = FIT.active ? FIT.scale : 1.0;
++            m_touchData.touchSurfaceOrigin = m_touchData.touchFocusWindow->position(Desktop::View::IGeometric::GEOMETRIC_GOAL) + (FIT.active ? FIT.offset : Vector2D{});
++            local = (TOUCH_COORDS - m_touchData.touchSurfaceOrigin) / m_touchData.touchSurfaceScale * m_touchData.touchFocusWindow->m_X11SurfaceScaledBy;
          } else {
              Desktop::viewState()->hitTest().windowSurfaceAt(TOUCH_COORDS, m_touchData.touchFocusWindow.lock(), local);
 -            m_touchData.touchSurfaceOrigin = TOUCH_COORDS - local;
@@ -250,7 +303,7 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
          }
      } else if (!m_touchData.touchFocusLS.expired()) {
          PHLLS    foundSurf;
-@@ -201,7 +205,7 @@
+@@ -201,7 +209,7 @@
          if (!PMONITOR)
              return;
          const auto TOUCH_COORDS = PMONITOR->m_position + (e.pos * PMONITOR->m_size);
@@ -295,7 +348,7 @@ diff -ruN a/src/render/Renderer.cpp b/src/render/Renderer.cpp
 diff -ruN a/src/render/pass/SurfacePassElement.cpp b/src/render/pass/SurfacePassElement.cpp
 --- a/src/render/pass/SurfacePassElement.cpp
 +++ b/src/render/pass/SurfacePassElement.cpp
-@@ -28,6 +28,22 @@
+@@ -28,6 +28,25 @@
      auto         PSURFACE                    = Desktop::View::CWLSurface::fromResource(m_data.surface);
  
      CBox         windowBox;
@@ -305,7 +358,10 @@ diff -ruN a/src/render/pass/SurfacePassElement.cpp b/src/render/pass/SurfacePass
 +    // scaled about the window origin into the window box, so nothing is cropped.
 +    if (m_data.pWindow && m_data.surface && m_data.squishOversized && !m_data.popup) {
 +        if (const auto FIT = m_data.pWindow->fitTransform(); FIT.active) {
-+            const Vector2D SURFSIZE = m_data.surface->m_current.size;
++            // in logical px: an X11 surface is in XWayland's pixels (CWindow::fitTransform)
++            Vector2D SURFSIZE = m_data.surface->m_current.size;
++            if (m_data.pWindow->m_isX11 && m_data.pWindow->m_X11SurfaceScaledBy > 0)
++                SURFSIZE = SURFSIZE / m_data.pWindow->m_X11SurfaceScaledBy;
 +            windowBox      = {sc<int>(outputX) + m_data.pos.x + FIT.offset.x + m_data.localPos.x * FIT.scale,
 +                              sc<int>(outputY) + m_data.pos.y + FIT.offset.y + m_data.localPos.y * FIT.scale, std::max(SURFSIZE.x * FIT.scale, 2.0),
 +                              std::max(SURFSIZE.y * FIT.scale, 2.0)};

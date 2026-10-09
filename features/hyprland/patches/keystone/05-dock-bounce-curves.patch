@@ -81,7 +81,7 @@ diff -ruN a/src/desktop/view/Window.cpp b/src/desktop/view/Window.cpp
  }
  
  void CWindow::onWorkspaceAnimUpdate() {
-@@ -2095,6 +2138,7 @@
+@@ -2113,6 +2156,7 @@
  
      if (animvar->m_Context.pWindow) {
          animvar->m_Context.pWindow->m_animatingIn = false;
@@ -92,10 +92,10 @@ diff -ruN a/src/desktop/view/Window.cpp b/src/desktop/view/Window.cpp
 diff -ruN a/src/desktop/view/Window.hpp b/src/desktop/view/Window.hpp
 --- a/src/desktop/view/Window.hpp
 +++ b/src/desktop/view/Window.hpp
-@@ -432,6 +432,15 @@
-             Vector2D offset; // of the scaled content inside the window box, logical px
-         };
-         SFitTransform fitTransform() const;
+@@ -435,6 +435,15 @@
+         // side-dock back card: P of its `dockscale<P>` tag (its size in % of the front
+         // card), or 0 if it has none
+         int dockScalePercent() const;
 +
 +        // Side dock: a card's position moves get their OWN animation config whose curve
 +        // overshoots by keystone_bounce * keystone_bounce_decay^depth -- depth from a

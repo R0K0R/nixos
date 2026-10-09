@@ -305,7 +305,7 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
      // could have abovelock surface, thus only use lock if no ls found
      if (g_pSessionLockManager->isSessionLocked() && m_foundLSToFocus.expired()) {
          m_touchData.touchFocusLockSurface = g_pSessionLockManager->getSessionLockSurfaceForMonitor(PMONITOR->m_id);
-@@ -136,6 +144,12 @@
+@@ -140,6 +148,12 @@
      if (info.cancelled)
          return;
  
@@ -318,7 +318,7 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
      if (g_pUnifiedWorkspaceSwipe->isGestureInProgress()) {
          // If there was a swipe from this finger, end it.
          if (e.touchID == g_pUnifiedWorkspaceSwipe->m_touchID)
-@@ -163,6 +177,11 @@
+@@ -167,6 +181,11 @@
      if (info.cancelled)
          return;
  
