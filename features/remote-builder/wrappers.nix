@@ -131,8 +131,20 @@ let
       # (2026-10-08). The build stays as it was: dispatched from here, with this store
       # supplying the inputs.
       echo ">> evaluating on ${name}" >&2
-      drv=$(ssh -o BatchMode=yes ${name} nix eval --raw "'$src#${attr}.drvPath'") \
-        || { echo "${scriptName}: evaluation failed on ${name} (see above)" >&2; exit 1; }
+      # With no tty on its stderr nix prints only warnings and errors -- no progress bar,
+      # no IFD build logs -- so an interactive run gets one (ssh -t) and the drvPath goes
+      # to a file on the peer instead of stdout, which a pty would mix with the log.
+      eval_cmd="nix eval -L --raw '$src#${attr}.drvPath'"
+      if [ -t 0 ] && [ -t 2 ]; then
+        tmp=$(ssh -o BatchMode=yes ${name} mktemp) \
+          || fallback "mktemp on ${name} failed" "$@"
+        ssh -qtt -o BatchMode=yes ${name} "$eval_cmd > $tmp" >&2 \
+          || { ssh -o BatchMode=yes ${name} rm -f "$tmp"; echo "${scriptName}: evaluation failed on ${name} (see above)" >&2; exit 1; }
+        drv=$(ssh -o BatchMode=yes ${name} "cat $tmp; rm -f $tmp")
+      else
+        drv=$(ssh -o BatchMode=yes ${name} "$eval_cmd") \
+          || { echo "${scriptName}: evaluation failed on ${name} (see above)" >&2; exit 1; }
+      fi
       case "$drv" in /nix/store/*.drv) ;; *) echo "${scriptName}: no .drv from ${name}: $drv" >&2; exit 1 ;; esac
 
       echo ">> copying the derivations back" >&2
