@@ -51,131 +51,9 @@ click-to-front only looked at its dock cards' trapezoids, so a tap on the on-scr
 keyboard's 'o' -- drawn over a back card's edge in landscape -- also raised the card
 (2026-10-08).
 
-diff -ruN a/src/config/lua/bindings/LuaBindingsConfigRules.cpp b/src/config/lua/bindings/LuaBindingsConfigRules.cpp
---- a/src/config/lua/bindings/LuaBindingsConfigRules.cpp	2026-10-09 12:33:10.358974317 +0900
-+++ b/src/config/lua/bindings/LuaBindingsConfigRules.cpp	2026-10-09 12:32:06.713296072 +0900
-@@ -29,7 +29,10 @@
- #include "../../../layout/supplementary/WorkspaceAlgoMatcher.hpp"
- #include "../../../animation/AnimationManager.hpp"
- #include "../../../managers/input/InputManager.hpp"
-+#include "../../../desktop/view/LayerSurface.hpp"
- #include "../../../managers/input/trackpad/TrackpadGestures.hpp"
-+#include "../../../helpers/time/Time.hpp"
-+#include "../../ConfigValue.hpp"
- #include "../../../managers/input/trackpad/gestures/CloseGesture.hpp"
- #include "../../../managers/input/trackpad/gestures/CursorZoomGesture.hpp"
- #include "../../../managers/input/trackpad/gestures/DispatcherGesture.hpp"
-@@ -742,6 +745,96 @@
-     return 0;
- }
- 
-+/*
-+  Touch gestures are recognized in Lua (features/hyprland/touch.lua) from the
-+  input.touch.* stream; these are the two things only the compositor can do for it.
-+
-+  hl.touch_claim([id]) / hl.touch_claim_all(): take the current touch sequence from
-+  its client now (wl_touch.cancel is per sequence, so an id only checks that finger is
-+  down). Returns false when no such finger is down.
-+
-+  hl.touch_swipe(phase, fingers, dx, dy): drive the TRACKPAD gesture machinery from a
-+  touch gesture -- phase "begin" (fingers), "update" (dx, dy: logical px of finger
-+  travel, times gestures:touch_swipe_scale), "end" or "cancel". Every hl.gesture entry
-+  for that finger count then runs live exactly as on the touchpad (workspace swipe,
-+  scroll_move, move and the side-dock card swipe). m_fromTouchscreen is set between
-+  begin and end: the dock card swipe maps these logical deltas to the physical frame,
-+  and the workspace swipe scales them 1:1 (WorkspaceSwipeGesture).
-+*/
-+static uint32_t s_touchSwipeFingers = 0;
-+
-+/*
-+  hl.layer_at({ x, y }) / hl.layer_at(x, y): the layer surface that takes input at that
-+  global point ahead of any window -- { namespace, layer } (layer: 0 background .. 3
-+  overlay) -- or nil. The mouse's counterpart of input.touch.down's `layer`: a press on
-+  the on-screen keyboard or the bar is the shell's, whatever window is drawn beneath.
-+*/
-+static int hlLayerAt(lua_State* L) {
-+    double x = 0, y = 0;
-+    if (lua_istable(L, 1)) {
-+        const auto tx = Internal::tableOptNum(L, 1, "x");
-+        const auto ty = Internal::tableOptNum(L, 1, "y");
-+        if (!tx || !ty)
-+            return Internal::configError(L, "hl.layer_at: expected a table { x, y }");
-+        x = *tx;
-+        y = *ty;
-+    } else {
-+        x = luaL_checknumber(L, 1);
-+        y = luaL_checknumber(L, 2);
-+    }
-+
-+    const auto LS = g_pInputManager->inputLayerAt(Vector2D{x, y});
-+    if (!LS) {
-+        lua_pushnil(L);
-+        return 1;
-+    }
-+    lua_createtable(L, 0, 2);
-+    lua_pushstring(L, LS->m_namespace.c_str());
-+    lua_setfield(L, -2, "namespace");
-+    lua_pushinteger(L, sc<lua_Integer>(LS->m_layer));
-+    lua_setfield(L, -2, "layer");
-+    return 1;
-+}
-+
-+static int hlTouchClaim(lua_State* L) {
-+    if (lua_isinteger(L, 1) && !g_pInputManager->m_touchSeq.down.contains(sc<int32_t>(lua_tointeger(L, 1)))) {
-+        lua_pushboolean(L, false);
-+        return 1;
-+    }
-+    lua_pushboolean(L, g_pInputManager->claimTouchSequence());
-+    return 1;
-+}
-+
-+static int hlTouchSwipe(lua_State* L) {
-+    const std::string PHASE = luaL_checkstring(L, 1);
-+    const uint32_t    NOW   = static_cast<uint32_t>(Time::millis(Time::steadyNow()));
-+    static auto       PSCALE = CConfigValue<Config::FLOAT>("gestures:touch_swipe_scale");
-+
-+    const auto        finish = [NOW](bool cancelled) {
-+        if (!s_touchSwipeFingers)
-+            return;
-+        g_pTrackpadGestures->gestureEnd(IPointer::SSwipeEndEvent{.timeMs = NOW, .cancelled = cancelled});
-+        g_pTrackpadGestures->m_fromTouchscreen = false;
-+        s_touchSwipeFingers                    = 0;
-+    };
-+
-+    if (PHASE == "begin") {
-+        finish(true); // a swipe still open is superseded
-+        s_touchSwipeFingers                    = sc<uint32_t>(luaL_checkinteger(L, 2));
-+        g_pTrackpadGestures->m_fromTouchscreen = true;
-+        g_pTrackpadGestures->gestureBegin(IPointer::SSwipeBeginEvent{.timeMs = NOW, .fingers = s_touchSwipeFingers});
-+    } else if (PHASE == "update") {
-+        if (!s_touchSwipeFingers)
-+            return 0;
-+        const Vector2D DELTA = Vector2D{luaL_optnumber(L, 3, 0), luaL_optnumber(L, 4, 0)} * sc<double>(*PSCALE);
-+        g_pTrackpadGestures->gestureUpdate(IPointer::SSwipeUpdateEvent{.timeMs = NOW, .fingers = s_touchSwipeFingers, .delta = DELTA});
-+    } else if (PHASE == "end" || PHASE == "cancel")
-+        finish(PHASE == "cancel");
-+    else
-+        return Internal::configError(L, "hl.touch_swipe: phase must be \"begin\", \"update\", \"end\" or \"cancel\"");
-+    return 0;
-+}
-+
- static int hlGesture(lua_State* L) {
-     if (!lua_istable(L, 1))
-         return Internal::configError(L, R"(hl.gesture: expected a table, e.g. { fingers = 3, direction = "horizontal", action = "workspace" })");
-@@ -1416,6 +1509,10 @@
- 
-     Internal::setFn(L, "gesture", hlGesture);
-     Internal::setFn(L, "gesture_handoff", hlGestureHandoff);
-+    Internal::setFn(L, "layer_at", hlLayerAt);
-+    Internal::setFn(L, "touch_claim", hlTouchClaim);
-+    Internal::setFn(L, "touch_claim_all", hlTouchClaim);
-+    Internal::setFn(L, "touch_swipe", hlTouchSwipe);
-     Internal::setFn(L, "curve", hlCurve);
-     Internal::setFn(L, "animation", hlAnimation);
- }
 diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.cpp
---- a/src/config/lua/LuaEventHandler.cpp	2026-10-09 12:33:10.442189470 +0900
-+++ b/src/config/lua/LuaEventHandler.cpp	2026-10-09 12:32:06.714118943 +0900
+--- a/src/config/lua/LuaEventHandler.cpp
++++ b/src/config/lua/LuaEventHandler.cpp
 @@ -14,6 +14,14 @@
  #include "../../devices/Tablet.hpp"
  #include "../../managers/input/InputManager.hpp"
@@ -351,9 +229,131 @@ diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.
          "input.tablet.tip",
      };
      for (auto& kv : Event::bus()->m_events.plugin)
+diff -ruN a/src/config/lua/bindings/LuaBindingsConfigRules.cpp b/src/config/lua/bindings/LuaBindingsConfigRules.cpp
+--- a/src/config/lua/bindings/LuaBindingsConfigRules.cpp
++++ b/src/config/lua/bindings/LuaBindingsConfigRules.cpp
+@@ -29,7 +29,10 @@
+ #include "../../../layout/supplementary/WorkspaceAlgoMatcher.hpp"
+ #include "../../../animation/AnimationManager.hpp"
+ #include "../../../managers/input/InputManager.hpp"
++#include "../../../desktop/view/LayerSurface.hpp"
+ #include "../../../managers/input/trackpad/TrackpadGestures.hpp"
++#include "../../../helpers/time/Time.hpp"
++#include "../../ConfigValue.hpp"
+ #include "../../../managers/input/trackpad/gestures/CloseGesture.hpp"
+ #include "../../../managers/input/trackpad/gestures/CursorZoomGesture.hpp"
+ #include "../../../managers/input/trackpad/gestures/DispatcherGesture.hpp"
+@@ -742,6 +745,96 @@
+     return 0;
+ }
+ 
++/*
++  Touch gestures are recognized in Lua (features/hyprland/touch.lua) from the
++  input.touch.* stream; these are the two things only the compositor can do for it.
++
++  hl.touch_claim([id]) / hl.touch_claim_all(): take the current touch sequence from
++  its client now (wl_touch.cancel is per sequence, so an id only checks that finger is
++  down). Returns false when no such finger is down.
++
++  hl.touch_swipe(phase, fingers, dx, dy): drive the TRACKPAD gesture machinery from a
++  touch gesture -- phase "begin" (fingers), "update" (dx, dy: logical px of finger
++  travel, times gestures:touch_swipe_scale), "end" or "cancel". Every hl.gesture entry
++  for that finger count then runs live exactly as on the touchpad (workspace swipe,
++  scroll_move, move and the side-dock card swipe). m_fromTouchscreen is set between
++  begin and end: the dock card swipe maps these logical deltas to the physical frame,
++  and the workspace swipe scales them 1:1 (WorkspaceSwipeGesture).
++*/
++static uint32_t s_touchSwipeFingers = 0;
++
++/*
++  hl.layer_at({ x, y }) / hl.layer_at(x, y): the layer surface that takes input at that
++  global point ahead of any window -- { namespace, layer } (layer: 0 background .. 3
++  overlay) -- or nil. The mouse's counterpart of input.touch.down's `layer`: a press on
++  the on-screen keyboard or the bar is the shell's, whatever window is drawn beneath.
++*/
++static int hlLayerAt(lua_State* L) {
++    double x = 0, y = 0;
++    if (lua_istable(L, 1)) {
++        const auto tx = Internal::tableOptNum(L, 1, "x");
++        const auto ty = Internal::tableOptNum(L, 1, "y");
++        if (!tx || !ty)
++            return Internal::configError(L, "hl.layer_at: expected a table { x, y }");
++        x = *tx;
++        y = *ty;
++    } else {
++        x = luaL_checknumber(L, 1);
++        y = luaL_checknumber(L, 2);
++    }
++
++    const auto LS = g_pInputManager->inputLayerAt(Vector2D{x, y});
++    if (!LS) {
++        lua_pushnil(L);
++        return 1;
++    }
++    lua_createtable(L, 0, 2);
++    lua_pushstring(L, LS->m_namespace.c_str());
++    lua_setfield(L, -2, "namespace");
++    lua_pushinteger(L, sc<lua_Integer>(LS->m_layer));
++    lua_setfield(L, -2, "layer");
++    return 1;
++}
++
++static int hlTouchClaim(lua_State* L) {
++    if (lua_isinteger(L, 1) && !g_pInputManager->m_touchSeq.down.contains(sc<int32_t>(lua_tointeger(L, 1)))) {
++        lua_pushboolean(L, false);
++        return 1;
++    }
++    lua_pushboolean(L, g_pInputManager->claimTouchSequence());
++    return 1;
++}
++
++static int hlTouchSwipe(lua_State* L) {
++    const std::string PHASE = luaL_checkstring(L, 1);
++    const uint32_t    NOW   = static_cast<uint32_t>(Time::millis(Time::steadyNow()));
++    static auto       PSCALE = CConfigValue<Config::FLOAT>("gestures:touch_swipe_scale");
++
++    const auto        finish = [NOW](bool cancelled) {
++        if (!s_touchSwipeFingers)
++            return;
++        g_pTrackpadGestures->gestureEnd(IPointer::SSwipeEndEvent{.timeMs = NOW, .cancelled = cancelled});
++        g_pTrackpadGestures->m_fromTouchscreen = false;
++        s_touchSwipeFingers                    = 0;
++    };
++
++    if (PHASE == "begin") {
++        finish(true); // a swipe still open is superseded
++        s_touchSwipeFingers                    = sc<uint32_t>(luaL_checkinteger(L, 2));
++        g_pTrackpadGestures->m_fromTouchscreen = true;
++        g_pTrackpadGestures->gestureBegin(IPointer::SSwipeBeginEvent{.timeMs = NOW, .fingers = s_touchSwipeFingers});
++    } else if (PHASE == "update") {
++        if (!s_touchSwipeFingers)
++            return 0;
++        const Vector2D DELTA = Vector2D{luaL_optnumber(L, 3, 0), luaL_optnumber(L, 4, 0)} * sc<double>(*PSCALE);
++        g_pTrackpadGestures->gestureUpdate(IPointer::SSwipeUpdateEvent{.timeMs = NOW, .fingers = s_touchSwipeFingers, .delta = DELTA});
++    } else if (PHASE == "end" || PHASE == "cancel")
++        finish(PHASE == "cancel");
++    else
++        return Internal::configError(L, "hl.touch_swipe: phase must be \"begin\", \"update\", \"end\" or \"cancel\"");
++    return 0;
++}
++
+ static int hlGesture(lua_State* L) {
+     if (!lua_istable(L, 1))
+         return Internal::configError(L, R"(hl.gesture: expected a table, e.g. { fingers = 3, direction = "horizontal", action = "workspace" })");
+@@ -1416,6 +1509,10 @@
+ 
+     Internal::setFn(L, "gesture", hlGesture);
+     Internal::setFn(L, "gesture_handoff", hlGestureHandoff);
++    Internal::setFn(L, "layer_at", hlLayerAt);
++    Internal::setFn(L, "touch_claim", hlTouchClaim);
++    Internal::setFn(L, "touch_claim_all", hlTouchClaim);
++    Internal::setFn(L, "touch_swipe", hlTouchSwipe);
+     Internal::setFn(L, "curve", hlCurve);
+     Internal::setFn(L, "animation", hlAnimation);
+ }
 diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.cpp
---- a/src/config/values/ConfigValues.cpp	2026-10-09 12:33:10.600188554 +0900
-+++ b/src/config/values/ConfigValues.cpp	2026-10-09 12:33:26.709605358 +0900
+--- a/src/config/values/ConfigValues.cpp
++++ b/src/config/values/ConfigValues.cpp
 @@ -416,6 +416,8 @@
           */
  
@@ -364,8 +364,8 @@ diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.
          MS<Float>("gestures:dock_swipe_follow", "side dock: on a swipe away from the dock edge, the fraction of the previous card's travel each deeper card follows (the lag)", 0.75f, {.min = 0.f, .max = 1.f}),
          MS<Float>("gestures:dock_swipe_pullout", "side dock: a swipe away from the dock edge further than this fraction of the monitor (along the dock axis) pulls the front card out of the dock", 0.35f, {.min = 0.05f, .max = 1.f}),
 diff -ruN a/src/managers/input/InputManager.cpp b/src/managers/input/InputManager.cpp
---- a/src/managers/input/InputManager.cpp	2026-10-09 12:33:10.602364315 +0900
-+++ b/src/managers/input/InputManager.cpp	2026-10-09 12:32:06.715900050 +0900
+--- a/src/managers/input/InputManager.cpp
++++ b/src/managers/input/InputManager.cpp
 @@ -1004,6 +1004,28 @@
      return grab.containsPoint(MC) && (!real.containsPoint(MC) || w->isInCurvedCorner(MC.x, MC.y)) && !w->hasPopupAt(coords);
  }
@@ -396,8 +396,8 @@ diff -ruN a/src/managers/input/InputManager.cpp b/src/managers/input/InputManage
      // callers have just refocus()ed at coords, so a layer surface there (a bar, a panel)
      // shows up here and takes the press instead
 diff -ruN a/src/managers/input/InputManager.hpp b/src/managers/input/InputManager.hpp
---- a/src/managers/input/InputManager.hpp	2026-10-09 12:33:10.603160667 +0900
-+++ b/src/managers/input/InputManager.hpp	2026-10-09 12:32:06.716658378 +0900
+--- a/src/managers/input/InputManager.hpp
++++ b/src/managers/input/InputManager.hpp
 @@ -2,6 +2,7 @@
  
  #include "../../defines.hpp"
@@ -435,8 +435,8 @@ diff -ruN a/src/managers/input/InputManager.hpp b/src/managers/input/InputManage
      // border press: the same keystone-aware zone test, then the same MBIND_RESIZE drag,
      // driven by the cursor (pen) or the touch point warped onto it (touch).
 diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
---- a/src/managers/input/Touch.cpp	2026-10-09 12:33:10.603847498 +0900
-+++ b/src/managers/input/Touch.cpp	2026-10-09 12:32:06.717101359 +0900
+--- a/src/managers/input/Touch.cpp
++++ b/src/managers/input/Touch.cpp
 @@ -14,6 +14,50 @@
  #include "debug/log/Logger.hpp"
  #include "UnifiedWorkspaceSwipeGesture.hpp"
@@ -523,7 +523,7 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
      if (m_clickBehavior == CLICKMODE_KILL) {
          IPointer::SButtonEvent e;
          e.state = WL_POINTER_BUTTON_STATE_PRESSED;
-@@ -126,6 +191,7 @@
+@@ -133,6 +198,7 @@
      } else
          return; // oops, nothing found.
  
@@ -531,7 +531,7 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
      g_pSeatManager->sendTouchDown(m_touchData.touchFocusSurface.lock(), e.timeMs, e.touchID, local);
  }
  
-@@ -137,12 +203,28 @@
+@@ -144,12 +210,28 @@
      if (info.cancelled)
          return;
  
@@ -560,7 +560,7 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
      if (g_pUnifiedWorkspaceSwipe->isGestureInProgress()) {
          // If there was a swipe from this finger, end it.
          if (e.touchID == g_pUnifiedWorkspaceSwipe->m_touchID)
-@@ -175,6 +257,10 @@
+@@ -182,6 +264,10 @@
          return;
      }
  
@@ -572,8 +572,8 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
          // Do nothing if this is using a different finger.
          if (e.touchID != g_pUnifiedWorkspaceSwipe->m_touchID)
 diff -ruN a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp b/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp
---- a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp	2026-10-09 12:32:05.767794619 +0900
-+++ b/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp	2026-10-09 12:32:06.717415948 +0900
+--- a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp
++++ b/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp
 @@ -6,6 +6,8 @@
  #include "../../../../render/Renderer.hpp"
  
@@ -615,8 +615,8 @@ diff -ruN a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp b/src
      g_pUnifiedWorkspaceSwipe->update(D);
  }
 diff -ruN a/src/pointer/PointerManager.cpp b/src/pointer/PointerManager.cpp
---- a/src/pointer/PointerManager.cpp	2026-10-09 12:32:05.773693385 +0900
-+++ b/src/pointer/PointerManager.cpp	2026-10-09 12:32:06.717952626 +0900
+--- a/src/pointer/PointerManager.cpp
++++ b/src/pointer/PointerManager.cpp
 @@ -1086,9 +1086,9 @@
          PROTO::idle->onActivity();
      });

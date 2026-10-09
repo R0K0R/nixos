@@ -9,6 +9,12 @@ windows get the same mapping (keystoneSurfaceLocal).
   arrives with 10-touch-pen-border-resize, which moves it into a shared helper.)
 - A pointer drag with a button held (text selection) maps through the keystone and
   scale-to-fit like the hit test, instead of the held surface's flat offset.
+- Touch and pen go through the same inverse warp (keystoneUnwarpGlobal), on Wayland
+  and X11 cards alike. X11 touch-down took the flat box (a tap on a tilted Wine card
+  landed beside where it was drawn); touch motion on any card was the down point's
+  fixed offset, which a perspective warp is not (a drag drifted off the finger); pen
+  motion was flat for every card. The touch origin is kept in the unwarped frame and
+  each motion point is re-mapped.
 
 diff -ruN a/src/desktop/state/ViewHitTester.cpp b/src/desktop/state/ViewHitTester.cpp
 --- a/src/desktop/state/ViewHitTester.cpp
@@ -246,3 +252,74 @@ diff -ruN a/src/managers/input/InputManager.cpp b/src/managers/input/InputManage
      CBox                 box              = w->getWindowMainSurfaceBox();
      eBorderIconDirection direction        = BORDERICON_NONE;
      CBox                 boxFullGrabInput = {box.x - *PEXTENDBORDERGRAB - BORDERSIZE, box.y - *PEXTENDBORDERGRAB - BORDERSIZE, box.width + 2 * (*PEXTENDBORDERGRAB + BORDERSIZE),
+diff -ruN a/src/managers/input/Tablets.cpp b/src/managers/input/Tablets.cpp
+--- a/src/managers/input/Tablets.cpp
++++ b/src/managers/input/Tablets.cpp
+@@ -1,5 +1,6 @@
+ #include "InputManager.hpp"
+ #include "../../desktop/view/Window.hpp"
++#include "../../desktop/state/ViewState.hpp"
+ #include "../../protocols/Tablet.hpp"
+ #include "../../devices/Tablet.hpp"
+ #include "../../pointer/PointerManager.hpp"
+@@ -84,14 +85,19 @@
+         return;
+     }
+ 
+-    auto local = CURSORPOS - BOX->pos();
++    // Dock keystone: a dock card is drawn as a trapezoid, so the pen goes through its
++    // inverse warp first, as pointer and touch hits do (keystoneUnwarpGlobal; the identity
++    // for any other window). Without it the pen hit the flat box -- beside the drawn card,
++    // on Wayland and X11 (Wine) cards alike.
++    const auto PENPOS = WINDOW ? Desktop::viewState()->hitTest().keystoneUnwarpGlobal(CURSORPOS, WINDOW) : CURSORPOS;
++    auto       local  = PENPOS - BOX->pos();
+ 
+     // scale-to-fit (CWindow::fitTransform): BOX is the unscaled surface box, so map the
+     // cursor through the window's scale first, as the pointer path does
+     if (WINDOW) {
+         if (const auto FIT = WINDOW->fitTransform(); FIT.active) {
+             const auto WPOS = WINDOW->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
+-            local           = (CURSORPOS - WPOS - FIT.offset) / FIT.scale - (BOX->pos() - WPOS);
++            local           = (PENPOS - WPOS - FIT.offset) / FIT.scale - (BOX->pos() - WPOS);
+         }
+     }
+ 
+diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
+--- a/src/managers/input/Touch.cpp
++++ b/src/managers/input/Touch.cpp
+@@ -94,15 +94,22 @@
+         local                          = TOUCH_COORDS - PMONITOR->m_position;
+         m_touchData.touchSurfaceOrigin = TOUCH_COORDS - local;
+     } else if (!m_touchData.touchFocusWindow.expired()) {
++        // Dock keystone: a dock card is drawn as a trapezoid, so the finger is mapped back
++        // through the card's inverse warp (keystoneUnwarpGlobal; the identity for any other
++        // window) and the origin is kept in that UNWARPED frame. onTouchMove re-maps every
++        // point the same way -- a perspective warp is not a fixed offset, so mapping only the
++        // first point let a drag drift away from the finger. X11 cards (Wine) took the flat
++        // box before, so a tap on a tilted card landed beside where it was drawn.
++        const auto UNWARPED = Desktop::viewState()->hitTest().keystoneUnwarpGlobal(TOUCH_COORDS, m_touchData.touchFocusWindow.lock());
+         if (m_touchData.touchFocusWindow->m_isX11) {
+-            local = (TOUCH_COORDS - m_touchData.touchFocusWindow->position(Desktop::View::IGeometric::GEOMETRIC_GOAL)) * m_touchData.touchFocusWindow->m_X11SurfaceScaledBy;
++            local = (UNWARPED - m_touchData.touchFocusWindow->position(Desktop::View::IGeometric::GEOMETRIC_GOAL)) * m_touchData.touchFocusWindow->m_X11SurfaceScaledBy;
+             m_touchData.touchSurfaceOrigin = m_touchData.touchFocusWindow->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
+         } else {
+             Desktop::viewState()->hitTest().windowSurfaceAt(TOUCH_COORDS, m_touchData.touchFocusWindow.lock(), local);
+             // scale-to-fit: local is in the client's unscaled coords, the origin in global ones
+             const auto FIT                 = m_touchData.touchFocusWindow->fitTransform();
+             m_touchData.touchSurfaceScale  = FIT.active ? FIT.scale : 1.0;
+-            m_touchData.touchSurfaceOrigin = TOUCH_COORDS - local * m_touchData.touchSurfaceScale;
++            m_touchData.touchSurfaceOrigin = UNWARPED - local * m_touchData.touchSurfaceScale;
+         }
+     } else if (!m_touchData.touchFocusLS.expired()) {
+         PHLLS    foundSurf;
+@@ -205,7 +212,9 @@
+         if (!PMONITOR)
+             return;
+         const auto TOUCH_COORDS = PMONITOR->m_position + (e.pos * PMONITOR->m_size);
+-        auto       local        = (TOUCH_COORDS - m_touchData.touchSurfaceOrigin) / m_touchData.touchSurfaceScale;
++        // through the dock keystone's inverse warp, as onTouchDown did (the origin is unwarped)
++        const auto UNWARPED     = Desktop::viewState()->hitTest().keystoneUnwarpGlobal(TOUCH_COORDS, m_touchData.touchFocusWindow.lock());
++        auto       local        = (UNWARPED - m_touchData.touchSurfaceOrigin) / m_touchData.touchSurfaceScale;
+         if (m_touchData.touchFocusWindow->m_isX11)
+             local = local * m_touchData.touchFocusWindow->m_X11SurfaceScaledBy;
+ 
