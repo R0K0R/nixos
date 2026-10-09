@@ -102,7 +102,9 @@ lib.mkIf (osConfig.my.kitty.enable && inScope) {
 
       clipboard_control write-clipboard read-clipboard write-primary read-primary
 
-      map ctrl+c copy_or_interrupt
+      # copy and drop the selection: a selection kitty keeps while output scrolls on
+      # (e.g. after copying build logs) otherwise swallows every later ^C as a copy
+      map ctrl+c copy_and_clear_or_interrupt
 
       map ctrl+f launch --location=hsplit --allow-remote-control kitty +kitten search.py @active-kitty-window-id
       map kitty_mod+f launch --location=hsplit --allow-remote-control kitty +kitten search.py @active-kitty-window-id
