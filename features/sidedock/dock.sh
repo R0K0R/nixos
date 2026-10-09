@@ -528,7 +528,9 @@ case "${1:-toggle}" in
                  # edge). Toward the dock edge = next: the front leaves and the card right
                  # behind it comes up. Away = prev: the pile slides off and the last card
                  # comes up. out = dragged far away (gestures:dock_swipe_pullout): the front
-                 # card is pulled out of the dock. none = too short, spring back. Either way render() animates
+                 # card is pulled out of the dock. hide = dragged far toward the edge
+                 # (gestures:dock_swipe_dismiss): the whole pile followed the fingers off it,
+                 # so the dock hides. none = too short, spring back. Either way render() animates
                  # the pile from wherever the fingers left it. (l / r: what a Hyprland built
                  # before 2026-10-08 sends -- finger left = next -- kept until it rebuilds.)
     mapfile -t ORD < <(order); [ ${#ORD[@]} -eq 0 ] && exit 0
@@ -544,6 +546,9 @@ case "${1:-toggle}" in
       # right behind it comes up, as when the front card closes.
       out)    nxt=""; [ ${#ORD[@]} -gt 1 ] && nxt="${ORD[$(( (ci+1) % ${#ORD[@]} ))]}"
               undock "$cur" "$nxt" ;;
+      # hide: the cards are part-way off the edge -- park them from there, as `settle hide`
+      # does (no pile_shown test: mid-swipe the pile is neither shown nor hidden).
+      hide)   hide_pile ;;
       *)      render "$cur" ;;
     esac ;;
   dock-toggle)   # SUPER+CTRL+S: toggle the focused window's DOCK membership. pin and dock are

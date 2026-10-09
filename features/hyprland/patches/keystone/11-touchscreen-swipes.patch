@@ -52,8 +52,8 @@ keyboard's 'o' -- drawn over a back card's edge in landscape -- also raised the 
 (2026-10-08).
 
 diff -ruN a/src/config/lua/bindings/LuaBindingsConfigRules.cpp b/src/config/lua/bindings/LuaBindingsConfigRules.cpp
---- a/src/config/lua/bindings/LuaBindingsConfigRules.cpp	2026-10-08 15:31:21.212013101 +0900
-+++ b/src/config/lua/bindings/LuaBindingsConfigRules.cpp	2026-10-08 15:31:21.303735960 +0900
+--- a/src/config/lua/bindings/LuaBindingsConfigRules.cpp	2026-10-09 12:33:10.358974317 +0900
++++ b/src/config/lua/bindings/LuaBindingsConfigRules.cpp	2026-10-09 12:32:06.713296072 +0900
 @@ -29,7 +29,10 @@
  #include "../../../layout/supplementary/WorkspaceAlgoMatcher.hpp"
  #include "../../../animation/AnimationManager.hpp"
@@ -174,8 +174,8 @@ diff -ruN a/src/config/lua/bindings/LuaBindingsConfigRules.cpp b/src/config/lua/
      Internal::setFn(L, "animation", hlAnimation);
  }
 diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.cpp
---- a/src/config/lua/LuaEventHandler.cpp	2026-10-08 15:31:21.215736129 +0900
-+++ b/src/config/lua/LuaEventHandler.cpp	2026-10-08 15:31:21.307735953 +0900
+--- a/src/config/lua/LuaEventHandler.cpp	2026-10-09 12:33:10.442189470 +0900
++++ b/src/config/lua/LuaEventHandler.cpp	2026-10-09 12:32:06.714118943 +0900
 @@ -14,6 +14,14 @@
  #include "../../devices/Tablet.hpp"
  #include "../../managers/input/InputManager.hpp"
@@ -352,20 +352,20 @@ diff -ruN a/src/config/lua/LuaEventHandler.cpp b/src/config/lua/LuaEventHandler.
      };
      for (auto& kv : Event::bus()->m_events.plugin)
 diff -ruN a/src/config/values/ConfigValues.cpp b/src/config/values/ConfigValues.cpp
---- a/src/config/values/ConfigValues.cpp	2026-10-08 15:31:21.275736014 +0900
-+++ b/src/config/values/ConfigValues.cpp	2026-10-08 15:31:33.940545093 +0900
+--- a/src/config/values/ConfigValues.cpp	2026-10-09 12:33:10.600188554 +0900
++++ b/src/config/values/ConfigValues.cpp	2026-10-09 12:33:26.709605358 +0900
 @@ -416,6 +416,8 @@
           */
  
          MS<Int>("gestures:workspace_swipe_distance", "in px, the distance of the touchpad gesture", 300, {.min = 0, .max = 2000}),
 +        MS<Int>("gestures:touch_claim_fingers", "touchscreen: once this many fingers are down at once, the whole touch sequence is taken from the client and reported to Lua only (0 = never)", 3, {.min = 0, .max = 10}),
 +        MS<Float>("gestures:touch_swipe_scale", "hl.touch_swipe: logical px of finger travel -> trackpad delta", 1.f, {.min = 0.1f, .max = 10.f}),
-         MS<String>("gestures:dock_swipe_exec", "side dock: command run on release of a move gesture that began on a dock card, with next/prev/out/none and the front card's address", STRVAL_EMPTY),
+         MS<String>("gestures:dock_swipe_exec", "side dock: command run on release of a move gesture that began on a dock card, with next/prev/out/hide/none and the front card's address", STRVAL_EMPTY),
          MS<Float>("gestures:dock_swipe_follow", "side dock: on a swipe away from the dock edge, the fraction of the previous card's travel each deeper card follows (the lag)", 0.75f, {.min = 0.f, .max = 1.f}),
          MS<Float>("gestures:dock_swipe_pullout", "side dock: a swipe away from the dock edge further than this fraction of the monitor (along the dock axis) pulls the front card out of the dock", 0.35f, {.min = 0.05f, .max = 1.f}),
 diff -ruN a/src/managers/input/InputManager.cpp b/src/managers/input/InputManager.cpp
---- a/src/managers/input/InputManager.cpp	2026-10-08 15:31:21.243736075 +0900
-+++ b/src/managers/input/InputManager.cpp	2026-10-08 15:31:21.334735901 +0900
+--- a/src/managers/input/InputManager.cpp	2026-10-09 12:33:10.602364315 +0900
++++ b/src/managers/input/InputManager.cpp	2026-10-09 12:32:06.715900050 +0900
 @@ -1004,6 +1004,28 @@
      return grab.containsPoint(MC) && (!real.containsPoint(MC) || w->isInCurvedCorner(MC.x, MC.y)) && !w->hasPopupAt(coords);
  }
@@ -396,8 +396,8 @@ diff -ruN a/src/managers/input/InputManager.cpp b/src/managers/input/InputManage
      // callers have just refocus()ed at coords, so a layer surface there (a bar, a panel)
      // shows up here and takes the press instead
 diff -ruN a/src/managers/input/InputManager.hpp b/src/managers/input/InputManager.hpp
---- a/src/managers/input/InputManager.hpp	2026-10-08 15:31:21.243736075 +0900
-+++ b/src/managers/input/InputManager.hpp	2026-10-08 15:31:21.334735901 +0900
+--- a/src/managers/input/InputManager.hpp	2026-10-09 12:33:10.603160667 +0900
++++ b/src/managers/input/InputManager.hpp	2026-10-09 12:32:06.716658378 +0900
 @@ -2,6 +2,7 @@
  
  #include "../../defines.hpp"
@@ -435,8 +435,8 @@ diff -ruN a/src/managers/input/InputManager.hpp b/src/managers/input/InputManage
      // border press: the same keystone-aware zone test, then the same MBIND_RESIZE drag,
      // driven by the cursor (pen) or the touch point warped onto it (touch).
 diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
---- a/src/managers/input/Touch.cpp	2026-10-08 15:31:21.243736075 +0900
-+++ b/src/managers/input/Touch.cpp	2026-10-08 15:31:21.335735899 +0900
+--- a/src/managers/input/Touch.cpp	2026-10-09 12:33:10.603847498 +0900
++++ b/src/managers/input/Touch.cpp	2026-10-09 12:32:06.717101359 +0900
 @@ -14,6 +14,50 @@
  #include "debug/log/Logger.hpp"
  #include "UnifiedWorkspaceSwipeGesture.hpp"
@@ -572,8 +572,8 @@ diff -ruN a/src/managers/input/Touch.cpp b/src/managers/input/Touch.cpp
          // Do nothing if this is using a different finger.
          if (e.touchID != g_pUnifiedWorkspaceSwipe->m_touchID)
 diff -ruN a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp b/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp
---- a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp	2026-10-08 15:31:21.241736079 +0900
-+++ b/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp	2026-10-08 15:31:21.334735901 +0900
+--- a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp	2026-10-09 12:32:05.767794619 +0900
++++ b/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp	2026-10-09 12:32:06.717415948 +0900
 @@ -6,6 +6,8 @@
  #include "../../../../render/Renderer.hpp"
  
@@ -615,8 +615,8 @@ diff -ruN a/src/managers/input/trackpad/gestures/WorkspaceSwipeGesture.cpp b/src
      g_pUnifiedWorkspaceSwipe->update(D);
  }
 diff -ruN a/src/pointer/PointerManager.cpp b/src/pointer/PointerManager.cpp
---- a/src/pointer/PointerManager.cpp	2026-10-08 15:31:21.247736067 +0900
-+++ b/src/pointer/PointerManager.cpp	2026-10-08 15:31:21.339735892 +0900
+--- a/src/pointer/PointerManager.cpp	2026-10-09 12:32:05.773693385 +0900
++++ b/src/pointer/PointerManager.cpp	2026-10-09 12:32:06.717952626 +0900
 @@ -1086,9 +1086,9 @@
          PROTO::idle->onActivity();
      });

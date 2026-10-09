@@ -4,7 +4,8 @@ single trapezoid.patch; applying 01..11 onto the same base gives byte-for-byte t
 tree trapezoid.patch did. 11 has since changed: it gained the 1:1 touch workspace swipe,
 and on 2026-10-08 its hardcoded touch recognizers became a touch stream for Lua
 (features/hyprland/touch.lua), touch claiming and hl.touch_swipe, then gained layer
-awareness (touch/pen events' `layer`, hl.layer_at). Each
+awareness (touch/pen events' `layer`, hl.layer_at). 04 gained the far-toward-the-edge
+dock dismiss (gestures:dock_swipe_dismiss) on 2026-10-09. Each
 patch's own header says what it does and why.
 
 Base: Hyprland 0.56.2 + nixpkgs' monitor-soft-apply-logical-size.patch + the other
