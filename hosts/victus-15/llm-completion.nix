@@ -5,7 +5,7 @@
 #
 # Listens on the Tailscale address only.  The firewall is off on this host and
 # it also sits on school Wi-Fi, so 0.0.0.0 would serve the whole network.
-{ pkgs, ... }:
+{ lib, pkgs, ... }:
 
 let
   # Pinned to the Hugging Face commit the benchmark used.
@@ -29,10 +29,11 @@ in
 
   # The Tailscale address does not exist until tailscaled has brought the
   # interface up; until then binding it fails, so retry soon rather than after
-  # the module's five minutes.
+  # the module's five minutes. mkForce: the module sets its 300 at normal
+  # priority since nixpkgs e7439b6, and two plain values conflict.
   systemd.services.llama-cpp = {
     after = [ "tailscaled.service" ];
     wants = [ "tailscaled.service" ];
-    serviceConfig.RestartSec = 10;
+    serviceConfig.RestartSec = lib.mkForce 10;
   };
 }
