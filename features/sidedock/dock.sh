@@ -71,11 +71,16 @@ geom() {
                                      # edge (~40 logical on a 2400 view ~= 0.5cm physical).
                                      # Divisor DOWN = more inset (W/30 ~1cm), UP = less.
   VGAP=$((H/28))                     # top/bottom margin (~48 on a 1350-tall view)
-  # CASCADE DEPTH ("floating stack, receding"): back cards SHRINK by SHRINK% per depth and
-  # their CENTER stays on the front card's midline (NO diagonal-down) -- they only drift a
-  # little LEFT by DLEFT, so the pile reads as cards going back into the distance.
-  DLEFT=$((DW/30))                   # per-depth LEFT drift of the card center (slight)
-  SHRINK=9; MAXD=3                   # per-depth size shrink (%); deepest visible depth
+  # CASCADE DEPTH ("floating stack, receding"): back cards shrink, fade and drift LEFT while
+  # their CENTER stays on the front card's midline (NO diagonal-down), so the pile reads as
+  # cards going back into the distance. All three follow ONE logarithmic curve of depth,
+  # g(i) = log4(1 + i): 0, .5, .79, 1 at depths 0-3 (about the old linear steps), then
+  # 1.5 at 7, 2 at 15. Every card therefore peeks out past the one in front of it, by an
+  # ever thinner sliver (~1/i) -- the old linear steps stopped at depth 3 and stacked every
+  # deeper card exactly on top of it. Unbounded in principle; memory runs out first.
+  DLEFT=$((DW/10))                   # LEFT drift at g = 1 (depth 3): ~64 on a 640 card
+  SHRINK=27; SCMIN=25                # size shrink (%) at g = 1; smallest size (% of front)
+  OPMAX=60; OPSTEP=28; OPMIN=15      # back-card opacity (%): 60 at depth 1, -28 per g, floor
   STAGGER=0.035                      # seconds between cards on show/park -> a bit of "feel"
   # canonical (origin 0): x runs toward the dock edge, y along it
   DOCK_Y=$((RT + VGAP))
@@ -208,11 +213,20 @@ layout() {
   # they only shrink and step a little LEFT, so their left edge peeks out to the left.
   local CY0=$(( DOCK_Y + DOCK_H/2 ))
   local cache="v1 $EDGE $X0 $Y0 $LW $LH"$'\n'
+  # the depth curve, one "drift scale opacity" line per card (bash has no log)
+  local -a CURVE; OPV=()
+  mapfile -t CURVE < <(awk -v n=${#ROT[@]} -v dl="$DLEFT" -v sh="$SHRINK" -v smin="$SCMIN" \
+      -v omax="$OPMAX" -v ostep="$OPSTEP" -v omin="$OPMIN" 'BEGIN {
+    for (i = 0; i < n; i++) {
+      g = log(1 + i) / log(4)
+      s = int(100 - sh * g + 0.5); if (s < smin) s = smin
+      o = int(omax - ostep * (log(1 + i) / log(2) - 1) + 0.5); if (o < omin) o = omin; if (o > omax) o = omax
+      printf "%d %d %d\n", int(dl * g + 0.5), s, o
+    } }')
   for ((i=0; i<${#ROT[@]}; i++)); do
-    dd=$(( i < MAXD ? i : MAXD ))
-    SCP[$i]=$(( 100 - dd*SHRINK )); [ "${SCP[$i]}" -lt 55 ] && SCP[$i]=55   # depth shrink (% of front, floored)
+    read -r dd SCP[$i] OPV[$i] <<<"${CURVE[$i]}"                # drift, size %, opacity %
     cw=$(( DW*SCP[i]/100 )); ch=$(( DOCK_H*SCP[i]/100 ))
-    x=$(( SHOWN_X - dd*DLEFT ))                                 # LEFT edge steps slightly left (peek)
+    x=$(( SHOWN_X - dd ))                                       # LEFT edge steps left (peek)
     y=$(( CY0 - ch/2 ))                                         # vertically CENTERED on the front midline
     # where park_all leaves it: past the edge, top-aligned at DOCK_Y
     read -r px py _ _ < <(lrect "$PARKED_X" "$DOCK_Y" "$cw" "$ch")
@@ -238,9 +252,9 @@ render() {
   # but their apps keep the front card's size and are drawn shrunk (dockscale tag below).
   local batch=""
   for ((i=0; i<${#rot[@]}; i++)); do
-    d=$i; dd=$(( d < MAXD ? d : MAXD )); a="${rot[$i]}"
+    d=$i; a="${rot[$i]}"
     scp=${SCP[$i]}; cw=${LW_[$i]}; ch=${LH_[$i]}; x=${MX[$i]}; y=${MY[$i]}   # from layout()
-    if [ "$d" -eq 0 ]; then op="1.0 1.0"; else ov=$(( 60 - (dd-1)*14 )); [ "$ov" -lt 30 ] && ov=30; op="0.$ov 0.$ov"; fi
+    if [ "$d" -eq 0 ]; then op="1.0 1.0"; else ov=$(printf '%02d' "${OPV[$i]}"); op="0.$ov 0.$ov"; fi
     # Tags first: the patch reads them when the resize below re-sends the client its size.
     #  dockd<i>       this card's moves get their own curve, overshooting by
     #                 keystone_bounce * keystone_bounce_decay^i (hyprland.lua) -- the
