@@ -1,8 +1,8 @@
 {
-  capturedAt = "2026-10-06T01:50:00Z";
+  capturedAt = "2026-10-10T10:59:40Z";
   host = "galaxybook4-pro360";
-  nixpkgsNarHash = "sha256-9XvwcfNE3mxLdmydbleqiFgiKpaZmL/4bSWP+0RXj5A=";
-  nixpkgsRev = "8bd9aa1a1dfaecd290302f5f9c2f0bbbb674557c";
+  nixpkgsNarHash = "sha256-r/2XjQlYYp6c0SGTY1lRabdI7zwSZ8ub9nlmQEqBIPc=";
+  nixpkgsRev = "f376d9bcc9c063e0887e73c0a96ab628b28e2f69";
   runtimeNames = [
     "Algorithm-Diff"
     "Archive-Zip"
@@ -464,6 +464,8 @@
     "flycheck-popup-tip"
     "flymake"
     "fmt"
+    "foldpen"
+    "foldpen-apk"
     "font-util"
     "fontconfig"
     "fontmath"
@@ -529,6 +531,7 @@
     "glu"
     "gmp-with-cxx"
     "gnome-desktop"
+    "gnome-network-displays"
     "gnugrep"
     "gnum4"
     "gnupg"
@@ -558,11 +561,14 @@
     "gst-plugins-base"
     "gst-plugins-good"
     "gst-plugins-ugly"
+    "gst-rtsp-server"
     "gstreamer"
     "gtest"
     "gtk+3"
+    "gtk-layer-shell"
     "gtk4"
     "gtksourceview"
+    "gtrelay"
     "gumbo"
     "gupnp"
     "gupnp-igd"
@@ -873,6 +879,7 @@
     "libplist"
     "libpng"
     "libpng-apng"
+    "libportal-gtk4"
     "libppd"
     "libpq"
     "libproxy"
@@ -1059,6 +1066,7 @@
     "metis"
     "mimalloc"
     "minizip-ng"
+    "minuet"
     "mjpegtools"
     "mkpasswd"
     "mktemp"
@@ -1192,6 +1200,7 @@
     "org-pdftools"
     "orgit"
     "orgit-forge"
+    "osk-vk"
     "ostree"
     "ov02c10-26mhz-fix"
     "overseer"
@@ -1232,6 +1241,7 @@
     "plasma-activities"
     "plasma-activities-stats"
     "playerctl"
+    "plz"
     "polkit"
     "polkit-qt-1"
     "poppler-data"
@@ -1434,9 +1444,9 @@
     "tevent"
     "tex4ht-jar"
     "texinfo-interactive"
+    "texlive"
     "texlive-bin"
     "texlive-bin-big"
-    "texlive-combined"
     "time"
     "tinymist"
     "tinysparql"
@@ -1866,7 +1876,6 @@
     "woff2"
     "wpa_supplicant"
     "ws-butler"
-    "wvkbd"
     "x264"
     "x265"
     "x42-plugins"

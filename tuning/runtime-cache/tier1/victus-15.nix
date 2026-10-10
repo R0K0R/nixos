@@ -1,8 +1,8 @@
 {
-  capturedAt = "2026-10-07T20:12:13Z";
+  capturedAt = "2026-10-10T11:02:00Z";
   host = "victus-15";
-  nixpkgsNarHash = "sha256-9XvwcfNE3mxLdmydbleqiFgiKpaZmL/4bSWP+0RXj5A=";
-  nixpkgsRev = "8bd9aa1a1dfaecd290302f5f9c2f0bbbb674557c";
+  nixpkgsNarHash = "sha256-r/2XjQlYYp6c0SGTY1lRabdI7zwSZ8ub9nlmQEqBIPc=";
+  nixpkgsRev = "f376d9bcc9c063e0887e73c0a96ab628b28e2f69";
   runtimeNames = [
     "a"
     "abseil-cpp"
