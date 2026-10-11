@@ -3,13 +3,13 @@
     "claude-science-bin": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-8/8N6aagaDu8DGO8miD3W3DLwogrCWcgvJ6IqjBDbhE=",
+        "narHash": "sha256-LlU9hrLsypPg29REDiSdnkGRQp80BqkZgYoqDVkQHk4=",
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-science/0.1.50/linux-x64"
+        "url": "https://downloads.claude.ai/claude-science/0.1.60/linux-x64"
       },
       "original": {
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-science/0.1.50/linux-x64"
+        "url": "https://downloads.claude.ai/claude-science/0.1.60/linux-x64"
       }
     },
     "root": {

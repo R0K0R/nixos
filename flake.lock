@@ -31,13 +31,13 @@
     "claude-code-bin": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-JoD19Rhmw6S1PYQBhxuh5BfM1ija29RzBQIPVYDG52U=",
+        "narHash": "sha256-Ny0spTzoBsY/+24GU/h8e6KY2Ko8FPHnCoq5XhG6yy0=",
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-code-releases/2.1.284/linux-x64/claude"
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.296/linux-x64/claude"
       },
       "original": {
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-code-releases/2.1.284/linux-x64/claude"
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.296/linux-x64/claude"
       }
     },
     "claude-desktop-bin": {
@@ -71,13 +71,13 @@
     "claude-science-bin": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-8/8N6aagaDu8DGO8miD3W3DLwogrCWcgvJ6IqjBDbhE=",
+        "narHash": "sha256-LlU9hrLsypPg29REDiSdnkGRQp80BqkZgYoqDVkQHk4=",
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-science/0.1.50/linux-x64"
+        "url": "https://downloads.claude.ai/claude-science/0.1.60/linux-x64"
       },
       "original": {
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-science/0.1.50/linux-x64"
+        "url": "https://downloads.claude.ai/claude-science/0.1.60/linux-x64"
       }
     },
     "dank-greeter": {

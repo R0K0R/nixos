@@ -8,7 +8,7 @@
   # unusable as a pin. The versioned path serves the same bytes and is what
   # ./update.sh rewrites.
   inputs.claude-science-bin = {
-    url = "file+https://downloads.claude.ai/claude-science/0.1.50/linux-x64";
+    url = "file+https://downloads.claude.ai/claude-science/0.1.60/linux-x64";
     flake = false;
   };
 
@@ -16,6 +16,6 @@
     { claude-science-bin, ... }:
     {
       src = claude-science-bin;
-      version = "0.1.50";
+      version = "0.1.60";
     };
 }

@@ -17,17 +17,17 @@
 }:
 
 let
-  rev = "81d808d5d71bb22a02b1bdc3df293a2d93422778";
+  rev = "c5297e9e69fec0779c29127c7892427e673fafd9";
 in
 stdenvNoCC.mkDerivation {
   pname = "watermarks-remover";
-  version = "0.7.0-unstable-2026-09-10";
+  version = "0.7.0-unstable-2026-10-09";
 
   src = fetchFromGitHub {
     owner = "guillaumemeyer";
     repo = "watermarks-remover";
     inherit rev;
-    hash = "sha256-e2/2+CBWkTwrUNvrwXSLbfk4q5fwtZXL/HNtHNEOl90=";
+    hash = "sha256-cUHA0wuMHpgM8z1e6xlKNrMQYRbZoUur+nt1ILcfWWU=";
   };
 
   nativeBuildInputs = [ makeWrapper ];
