@@ -47,7 +47,7 @@
 }:
 
 let
-  version = "26.8.0.5312";
+  version = "26.8.2.5324";
 
   /*
     The URL carries no version: it always serves the current build, so the hash
@@ -57,7 +57,7 @@ let
   */
   installer = fetchurl {
     url = "https://app-pc.kakaocdn.net/talk/win32/KakaoTalk_Setup.exe";
-    hash = "sha256-H3RL8CCEPgwXK7K/TRI+YiByzGdaeTrkSLjsx2LhU/g=";
+    hash = "sha256-87IbktvhfxPoYGqR3y4uMu9P/UBUsAckLmvjLkW/fiw=";
   };
 
   /*
