@@ -1,5 +1,5 @@
 {
-  anchorCount = 291;
+  anchorCount = 293;
   buildOnly = [
     "ccache"
     "mold"
@@ -29,6 +29,8 @@
     "nix-shell-local"
     "nixos-rebuild-victus-15"
     "nixos-rebuild-yulee"
+    "nixos-rebuild-victus-15-local-eval"
+    "nixos-rebuild"
     "nix-shell-victus-15"
     "nix-shell-yulee"
     "wl-clipboard"
@@ -1262,10 +1264,10 @@
     "pycparser"
     "die-hook"
   ];
-  capturedAt = "2026-10-10T10:59:04Z";
+  capturedAt = "2026-10-11T12:34:02Z";
   host = "galaxybook4-pro360";
-  nixpkgsNarHash = "sha256-r/2XjQlYYp6c0SGTY1lRabdI7zwSZ8ub9nlmQEqBIPc=";
-  nixpkgsRev = "f376d9bcc9c063e0887e73c0a96ab628b28e2f69";
+  nixpkgsNarHash = "sha256-3C/H6O0qO3fmpe5csFzaAW9J5nNshnBaHr/Rh/JO1nE=";
+  nixpkgsRev = "c692c14cbea0a4cfd04cd13507a73e19b1bdb09a";
   runtimeNames = [
     "cache-refresh"
     "cache-refresh-local"
@@ -1278,6 +1280,8 @@
     "nix-shell-local"
     "nixos-rebuild-victus-15"
     "nixos-rebuild-yulee"
+    "nixos-rebuild-victus-15-local-eval"
+    "nixos-rebuild"
     "nix-shell-victus-15"
     "nix-shell-yulee"
     "wl-clipboard"

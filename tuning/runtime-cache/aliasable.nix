@@ -1,5 +1,5 @@
 {
-  capturedAt = "2026-10-10T10:58:22Z";
+  capturedAt = "2026-10-11T12:33:21Z";
   names = [
     "AMB-plugins"
     "ArchiSteamFarm"
@@ -25180,8 +25180,8 @@
     "zzuf"
     "zzz"
   ];
-  nixpkgsNarHash = "sha256-r/2XjQlYYp6c0SGTY1lRabdI7zwSZ8ub9nlmQEqBIPc=";
-  nixpkgsRev = "f376d9bcc9c063e0887e73c0a96ab628b28e2f69";
+  nixpkgsNarHash = "sha256-3C/H6O0qO3fmpe5csFzaAW9J5nNshnBaHr/Rh/JO1nE=";
+  nixpkgsRev = "c692c14cbea0a4cfd04cd13507a73e19b1bdb09a";
   pnames = {
     AMB-plugins = "amb-plugins";
     ArchiSteamFarm = "archisteamfarm";
