@@ -96,13 +96,15 @@ REPLACEMENTS = [
     # transparent draggable div, so nothing else paints it.
     #
     # SHAPE CHANGED in 1.40609.1: was a double-quoted ternary
-    # `?"#1f1f1e":"#fdfdfc"`, now an object literal with backticks, read by
-    # `function _P(){return nativeTheme.shouldUseDarkColors?fKt.dark:fKt.light}`.
-    # Anchored on the whole literal rather than on `dark:` alone so it stays
-    # unique, and not on the minified name `fKt`, which moves every build.
+    # `?"#1f1f1e":"#fdfdfc"`, then an object literal with backticks; in
+    # 2.31226.1 the same object with double quotes again, read by
+    # `function xI(){return nativeTheme.shouldUseDarkColors?DLn.dark:DLn.light}`
+    # (1.40609.1: `_P()` and `fKt`). Anchored on the whole literal rather than
+    # on `dark:` alone so it stays unique, and not on the minified name, which
+    # moves every build.
     ("electron-window-bg",
-     b"{light:`#fcfcfb`,dark:`#151515`}",
-     b"{light:`#fcfcfb`,dark:`#000000`}"),
+     b'{light:"#fcfcfb",dark:"#151515"}',
+     b'{light:"#fcfcfb",dark:"#000000"}'),
 ]
 
 for _group, old, new in REPLACEMENTS:
@@ -127,9 +129,10 @@ RESIZING_EDITS = [
     #
     # transparent+#00000000 only make the window capable of alpha; what actually
     # paints the glass is the preload's rgba() base below. Both are needed.
-    # Anchored on `opacity:+!!i.earlyWindowShow`, which is unique to the main
-    # window -- the About and 3P-inference windows also call backgroundColor:_P()
-    # and must stay opaque.
+    # Anchored on `show:i&&!0,...,opacity:1,`, unique to the main window (it was
+    # `opacity:+!!i.earlyWindowShow` before 2.31226.1) -- the About, Code,
+    # Design and 3P-inference windows also call backgroundColor:xI() and must
+    # stay opaque.
     # The claude.ai content is a WebContentsView laid over the window, and it is
     # created with no setBackgroundColor at all -- so it keeps Electron's
     # default view background and the transparent window behind it never shows
@@ -138,37 +141,38 @@ RESIZING_EDITS = [
     # sweep could not touch, while regions outside the view showed through.
     (
         "claude-view-transparent",
-        b"return V=new o.WebContentsView(e),ui(V.webContents,li.CLAUDE_AI_WEB)",
-        b"return V=new o.WebContentsView(e),V.setBackgroundColor(`#00000000`),"
-        b"ui(V.webContents,li.CLAUDE_AI_WEB)",
+        b"return B=new a.WebContentsView(e),xi(B.webContents,bi.CLAUDE_AI_WEB)",
+        b'return B=new a.WebContentsView(e),B.setBackgroundColor("#00000000"),'
+        b"xi(B.webContents,bi.CLAUDE_AI_WEB)",
     ),
     # And the window's own transparency was being undone after the fact. A
-    # nativeTheme `updated` handler calls setBackgroundColor(_P()), and _P()
+    # nativeTheme `updated` handler calls setBackgroundColor(xI()), and xI()
     # returns the patched-to-opaque #000000, so the window is created
     # transparent and then made opaque again on the first theme update. Pinned
-    # to the transparent literal here rather than changing _P(), which the
+    # to the transparent literal here rather than changing xI(), which the
     # About and 3P-inference windows also use and which must stay opaque.
     (
         "theme-update-keeps-transparent",
-        b"Ra?.setBackgroundColor(_P())",
-        b"Ra?.setBackgroundColor(`#00000000`)",
+        b"ao?.setBackgroundColor(xI())",
+        b'ao?.setBackgroundColor("#00000000")',
     ),
     # The window-controls strip (min/max/close) is Electron's native
     # titleBarOverlay, painted outside any document, so no preload CSS reaches
-    # it. Its colour comes from gP(): `t = gKt ? EKt(_P()) : _P()`, and gKt is
-    # !1, so t is just _P() -- the fKt.dark we patched to opaque #000000. That
-    # is the black box in the corner. Pinning t to a transparent literal changes
-    # the overlay and nothing else: both theme branches read `t`, and _P()
-    # itself is untouched for the windows that must stay opaque.
+    # it. Its colour comes from GLn(): `i = n ? HLn(xI()) : xI()` (n only while
+    # a page tints the title bar), so i is xI() -- the DLn.dark we patched to
+    # opaque #000000. That is the black box in the corner. Pinning i to a
+    # transparent literal changes the overlay and nothing else: both theme
+    # branches read `i` as `color`, and xI() itself is untouched for the windows
+    # that must stay opaque. (1.40609.1: gP(), `t = gKt ? EKt(_P()) : _P()`.)
     (
         "title-bar-overlay-transparent",
-        b"t=gKt?EKt(_P()):_P()",
-        b"t=`#00000000`",
+        b"i=n?HLn(xI()):xI()",
+        b'i="#00000000"',
     ),
     (
         "main-window-transparent",
-        b"backgroundColor:_P(),opacity:+!!i.earlyWindowShow",
-        b"backgroundColor:`#00000000`,transparent:!0,opacity:+!!i.earlyWindowShow",
+        b"show:i&&!0,backgroundColor:xI(),opacity:1,",
+        b'show:i&&!0,backgroundColor:"#00000000",transparent:!0,opacity:1,',
     ),
 ]
 

@@ -3,13 +3,13 @@
     "claude-desktop-bin": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-eQ1r5F+nS+99JHqZvI8dq5xNRnRN5HE3fJnHco0W/MI=",
+        "narHash": "sha256-l72DSyLqKmfVNkA69tRXcdE7ayOaN9zrryk2WjDNzvY=",
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.40609.1_amd64.deb"
+        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_2.31226.1_amd64.deb"
       },
       "original": {
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.40609.1_amd64.deb"
+        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_2.31226.1_amd64.deb"
       }
     },
     "root": {
