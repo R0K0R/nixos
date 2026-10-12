@@ -24,6 +24,8 @@
   Already in the target state (a "show" swipe with the dock up) the gesture does nothing.
   A missing or stale cache (wrong monitor transform, unknown windows) falls back to the
   discrete show/hide at the end, as before.
+
+  M.wants decides at match time whether a swipe IS the dock's (see there).
 ]]
 
 local M = {}
@@ -157,6 +159,29 @@ function M.new(o)
 
   function C.state() return st end
   return C
+end
+
+-- Whether a 5-finger swipe in logical `direction`, the fingers down at `start`, is the
+-- dock's `mode` swipe. Away from the dock's edge shows it, toward the edge hides it, in
+-- the panel's PHYSICAL frame: the dock stays on the physical right edge at every
+-- rotation, so "toward" is looked up from the monitor transform. `m`: the transform,
+-- the shown special workspace, and the monitor's logical y and height.
+-- Rotated, one of these is a vertical swipe and shares the 5-finger swipe-down close
+-- (features/hyprland), so:
+--   - only a swipe that would change the dock counts: a "hide" with the dock already
+--     hidden is left to the close instead of claiming the fingers and doing nothing;
+--   - at 270 deg the dock is on the logical top and showing it is a swipe down, the
+--     close motion itself: it counts only from the third of the screen next to the
+--     dock, a swipe down from further away closes.
+local TOWARD = { [0] = "right", [1] = "down", [2] = "left", [3] = "up" }
+local OPPOSITE = { right = "left", left = "right", up = "down", down = "up" }
+function M.wants(mode, direction, start, m)
+  local toward = TOWARD[(m.transform or 0) % 4]
+  local shown = m.special == "special:dock"
+  if mode == "hide" then return shown and direction == toward end
+  if shown or direction ~= OPPOSITE[toward] then return false end
+  if direction == "down" and start and m.h then return start.y - (m.y or 0) <= m.h / 3 end
+  return true
 end
 
 M.readLayout = readLayout

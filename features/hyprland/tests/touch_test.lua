@@ -195,11 +195,11 @@ local Live = DS.new({
   move = function(a, x, y) lastMove[a] = { x, y }; if a == "0xa" then log[#log + 1] = "move" end end,
   openDock = function() log[#log + 1] = "open" end,
 })
-local toward = function() return ({ [0] = "right", [1] = "down", [2] = "left", [3] = "up" })[mon.transform % 4] end
-local opp = { right = "left", left = "right", up = "down", down = "up" }
+-- the logical height: 1200 landscape, 1920 rotated
+local function dockMon() return { transform = mon.transform, special = mon.special, y = 0, h = mon.transform % 2 == 1 and 1920 or 1200 } end
 for _, m in ipairs({ "show", "hide" }) do
   G({ fingers = 5, kind = "swipe", priority = 50,
-      direction = function(d) if m == "show" then return d == opp[toward()] end; return d == toward() end,
+      direction = function(d, start) return DS.wants(m, d, start, dockMon()) end,
       begin = function(g) Live.begin(m, g) end, update = function(g) Live.update(g) end,
       finish = function(g) Live.finish(g) end, cancel = function() Live.cancel() end })
 end
@@ -234,6 +234,19 @@ check("rotated 90: swipe up (away from the physical edge) -> live show", { "open
 mon.special = "special:dock"
 swipe5(600, 600, 0, 40, 10, 30)    -- rotated, toward the dock = down: beats the 5-finger close
 check("rotated 90: swipe down -> live hide, not close", { "settle:hide", absent = { "close" } })
+mon.special = nil
+swipe5(600, 600, 0, 40, 10, 30)    -- the same swipe with the dock hidden: nothing to hide
+check("rotated 90, dock hidden: swipe down -> close, not a no-op hide", { "close", absent = { "settle:hide", "discrete:hide", "move" } })
+
+-- 270 deg: the dock along the logical top, showing it is a swipe down -- the close motion
+mon.transform = 3; mon.special = nil
+swipe5(600, 900, 0, 40, 10, 30)    -- from the middle of the screen
+check("rotated 270, dock hidden: swipe down from the middle -> close", { "close", absent = { "open", "discrete:show", "settle:show" } })
+swipe5(600, 300, 0, 40, 10, 30)    -- from the top third, next to the dock
+check("rotated 270, dock hidden: swipe down from the top third -> show, not close", { "discrete:show", absent = { "close" } })
+mon.special = "special:dock"
+swipe5(600, 900, 0, -40, 10, 30)   -- toward the dock = up
+check("rotated 270, dock shown: swipe up -> hide", { "discrete:hide", absent = { "close" } })
 
 writeLayout(0, LANDSCAPE); mon.transform = 1; mon.special = nil  -- cache from before a rotation
 swipe5(600, 1000, 0, -40, 10, 30)

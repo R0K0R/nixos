@@ -84,37 +84,32 @@ do
   -- Five-finger swipe away from the dock's edge shows it, toward the edge hides it --
   -- in the panel's PHYSICAL frame, since the dock stays on the physical right edge at
   -- every rotation (logical bottom at 90 deg). Moved here from lisgd (2026-10-08), which
-  -- had them as 5,RL / 5,LR at -o 0. The swipe direction the recognizer reports is
-  -- logical, so "toward the dock" is looked up from the monitor transform at match time.
-  -- priority: rotated, one of these is a logical up/down and must beat the 5-finger
-  -- swipe-down close (features/hyprland) -- the dock is what that motion means there.
-  local function towardDock()
-    local t = 0
+  -- had them as 5,RL / 5,LR at -o 0. Which swipe is the dock's is decided at match time
+  -- by DockSwipe.wants: rotated, one of them is vertical and shares the 5-finger
+  -- swipe-down close (features/hyprland); priority makes a swipe that IS the dock's win.
+  local DockSwipe = require("feat.dockswipe")
+  -- the monitor under the cursor: transform, shown special workspace, logical y/height
+  local function dockMonitor()
+    local r = {}
     pcall(function()
       local c = hl.get_cursor_pos()
       local m = hl.get_monitor_at({ x = c.x, y = c.y })
-      t = (m and m.transform or 0) % 4
+      r.transform = m.transform or 0
+      r.special = m.active_special_workspace and m.active_special_workspace.name or nil
+      local sc = (m.scale and m.scale > 0) and m.scale or 1
+      r.y = m.y
+      r.h = ((r.transform % 2 == 1) and m.width or m.height) / sc -- width/height are the mode's, unrotated
     end)
-    return ({ [0] = "right", [1] = "down", [2] = "left", [3] = "up" })[t]
+    return r
   end
-  local opposite = { right = "left", left = "right", up = "down", down = "up" }
 
   -- LIVE: the pile follows the fingers and letting go finishes or springs back
   -- (feat.dockswipe; dock.sh writes the layout cache it reads and `settle`s the end).
-  local Live = require("feat.dockswipe").new({
+  local Live = DockSwipe.new({
     layout = (os.getenv("XDG_RUNTIME_DIR") or "/run/user/1000") .. "/sidedock.layout",
     settle = function(m) hl.dispatch(hl.dsp.exec_cmd(dock .. " settle " .. m)) end,
     discrete = function(m) if m == "show" then SideDockShow() else SideDockHide() end end,
-    monitor = function()
-      local r = {}
-      pcall(function()
-        local c = hl.get_cursor_pos()
-        local m = hl.get_monitor_at({ x = c.x, y = c.y })
-        r.transform = m.transform or 0
-        r.special = m.active_special_workspace and m.active_special_workspace.name or nil
-      end)
-      return r
-    end,
+    monitor = dockMonitor,
     windows = function()
       local set = {}
       for _, w in ipairs(hl.get_windows()) do set[w.address] = true end
@@ -135,10 +130,7 @@ do
   })
   for _, m in ipairs({ "show", "hide" }) do
     Touch.gesture({ fingers = 5, kind = "swipe", priority = 50,
-      direction = function(d)
-        if m == "show" then return d == opposite[towardDock()] end
-        return d == towardDock()
-      end,
+      direction = function(d, start) return DockSwipe.wants(m, d, start, dockMonitor()) end,
       begin = function(g) Live.begin(m, g) end,
       update = function(g) Live.update(g) end,
       finish = function(g) Live.finish(g) end,

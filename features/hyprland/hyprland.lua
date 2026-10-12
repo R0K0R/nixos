@@ -755,8 +755,9 @@ do
   end })
   -- five fingers down the screen: close the window under them. A swipe, not a tap --
   -- closing should be hard to do by accident. (5-finger left/right is the dock's
-  -- show/hide, features/sidedock, in the panel's physical frame -- it wins when a
-  -- rotation makes it a vertical swipe.)
+  -- show/hide, features/sidedock, in the panel's physical frame. Rotated it is vertical:
+  -- a swipe down that would show or hide the dock does that instead, see
+  -- feat.dockswipe's M.wants.)
   Touch.gesture({ fingers = 5, kind = "swipe", direction = "down", action = function(g)
     HyprCloseWindow(g.window)
   end })

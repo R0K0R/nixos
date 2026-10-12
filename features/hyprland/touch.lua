@@ -45,7 +45,8 @@
     swipe        discrete, or continuous if it has trackpad/begin/update. direction
                  ("left" "right" "up" "down" "up_left" "up_right" "down_left"
                  "down_right" "horizontal" "vertical" "diagonal", nil = any, or a
-                 function(direction) -> bool decided at match time),
+                 function(direction, start) -> bool decided at match time; start is
+                 the centroid where the fingers came down, {x, y}),
                  min (px), distance ("short" "medium" "long": at least that share of
                  the screen along the swipe), edge / corner (where the centroid
                  started: "left" "right" "top" "bottom" / "top_left" ...).
@@ -180,11 +181,11 @@ local function direction8(dx, dy)
   local i = math.floor((a / (math.pi / 4)) + 0.5) % 8
   return DIRS[i + 1]
 end
-local function dirMatches(want, got)
+local function dirMatches(want, got, start)
   if want == nil or want == "any" then return true end
   -- a function decides at match time: e.g. a direction in the panel's PHYSICAL frame,
   -- which moves with the monitor transform (features/sidedock's dock swipes)
-  if type(want) == "function" then return want(got) == true end
+  if type(want) == "function" then return want(got, start) == true end
   if want == "horizontal" then return got == "left" or got == "right" end
   if want == "vertical" then return got == "up" or got == "down" end
   if want == "diagonal" then return got:find("_") ~= nil end
@@ -469,7 +470,7 @@ local function tryContinuous(now)
       end
     elseif k == "pan" then ok = travel >= slop
     elseif k == "swipe" and (s.trackpad or s.begin or s.update) then
-      ok = travel >= slop and dirMatches(s.direction, direction8(cx - base.cx, cy - base.cy))
+      ok = travel >= slop and dirMatches(s.direction, direction8(cx - base.cx, cy - base.cy), { x = base.cx, y = base.cy })
            and (s.edge == nil or s.edge == base.edge) and (s.corner == nil or s.corner == base.corner)
     end
     if ok then startActive(s, now, base); return end
@@ -571,12 +572,12 @@ local function endSequence(now)
       local name, score = matchShape(first.path)
       if name == c.shape and score <= opt(c, "draw_score") then ok = true; g.shape = name; g.score = score end
     elseif kd == "flick" then
-      ok = vel >= opt(c, "flick_velocity") and dur <= opt(c, "flick_ms") and dirMatches(c.direction, dirn)
+      ok = vel >= opt(c, "flick_velocity") and dur <= opt(c, "flick_ms") and dirMatches(c.direction, dirn, g.start)
     elseif kd == "edge_swipe" then
-      ok = d >= opt(c, "swipe_min") and edge ~= nil and dirMatches(c.direction, dirn)
+      ok = d >= opt(c, "swipe_min") and edge ~= nil and dirMatches(c.direction, dirn, g.start)
            and (c.edge == nil or c.edge == edge) and (c.corner == nil or c.corner == corner)
     elseif kd == "swipe" and not (c.trackpad or c.begin or c.update) then
-      ok = d >= (c.min or opt(c, "swipe_min")) and dirMatches(c.direction, dirn)
+      ok = d >= (c.min or opt(c, "swipe_min")) and dirMatches(c.direction, dirn, g.start)
            and (c.distance == nil or CLASS[distance] >= CLASS[c.distance])
            and (c.edge == nil or c.edge == edge) and (c.corner == nil or c.corner == corner)
     end
