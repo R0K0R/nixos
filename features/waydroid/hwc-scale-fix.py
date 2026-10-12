@@ -36,7 +36,16 @@ patching bytes at an offset that may now be something else.
 """
 import hashlib, os, subprocess, sys, tempfile
 
-IMG = "/var/lib/waydroid/images/vendor.img"
+def images_path():
+    # waydroid.cfg's images_path: /etc/waydroid-extra/images when the module manages the
+    # images (features/waydroid, `images`), /var/lib/waydroid/images otherwise
+    import configparser
+    c = configparser.ConfigParser()
+    c.read("/var/lib/waydroid/waydroid.cfg")
+    return c.get("waydroid", "images_path", fallback="/var/lib/waydroid/images")
+
+
+IMG = images_path() + "/vendor.img"
 REL = "lib64/hw/hwcomposer.waydroid.so"
 OUT = "/var/lib/waydroid/overlay/vendor/" + REL
 DEBUGFS = sys.argv[1]

@@ -13,6 +13,62 @@ let
   hyprland = config.programs.hyprland.enable or false;
 
   /*
+    The Android images, as `waydroid upgrade` would download them (system: LineageOS 20
+    GAPPS, vendor: MAINLINE -- what this machine was initialised with). ota.waydro.id
+    lists each zip with its sha256 as "id":
+      curl -s https://ota.waydro.id/system/lineage/waydroid_x86_64/GAPPS.json | jq '.response[0]'
+      curl -s https://ota.waydro.id/vendor/waydroid_x86_64/MAINLINE.json | jq '.response[0]'
+    Bumping: url, hash (nix hash convert --hash-algo sha256 --to sri <id>) and datetime of
+    each, then check hwc-scale-fix.py knows the new vendor's hwcomposer.
+  */
+  # Run before each container start (see the `images` option). Not initialised yet: a
+  # plain `waydroid init` finds the preinstalled images by itself.
+  useImages = pkgs.writeShellScript "waydroid-use-images" ''
+    wcfg=/var/lib/waydroid/waydroid.cfg
+    [ -r "$wcfg" ] || exit 0
+    want=/etc/waydroid-extra/images
+    src=$(readlink -f "$want")
+    stamp=/var/lib/waydroid/images-source
+    sed=${lib.getExe pkgs.gnused}
+    grep -qxF "images_path = $want" "$wcfg" || "$sed" -i "s|^images_path = .*|images_path = $want|" "$wcfg"
+    if [ "$(cat "$stamp" 2>/dev/null)" != "$src" ]; then
+      echo "waydroid-use-images: images changed to $src; waydroid upgrade --offline"
+      "$sed" -i -e "s/^system_datetime = .*/system_datetime = ${toString cfg.images.systemDatetime or 0}/" \
+                -e "s/^vendor_datetime = .*/vendor_datetime = ${toString cfg.images.vendorDatetime or 0}/" "$wcfg"
+      ${waydroidPkg}/bin/waydroid upgrade --offline
+      echo "$src" > "$stamp"
+    fi
+  '';
+
+  waydroidImages =
+    let
+      system = {
+        url = "https://sourceforge.net/projects/waydroid/files/images/system/lineage/waydroid_x86_64/lineage-20.0-20260927-GAPPS-waydroid_x86_64-system.zip/download";
+        hash = "sha256-HXnfCxerj3nWb9O1+UUAzALxq+FJz4yqOROACS7ebio=";
+        datetime = 1790512621;
+      };
+      vendor = {
+        url = "https://sourceforge.net/projects/waydroid/files/images/vendor/waydroid_x86_64/lineage-20.0-20260927-MAINLINE-waydroid_x86_64-vendor.zip/download";
+        hash = "sha256-2RG4NT9sgHuUeQscQcZ+hjqfPc0c8+wCMjUTmCNa/Xo=";
+        datetime = 1790542319;
+      };
+      zip = i: pkgs.fetchurl { inherit (i) url hash; name = "waydroid-${toString i.datetime}.zip"; };
+    in
+    pkgs.runCommand "waydroid-images-20260927"
+      {
+        nativeBuildInputs = [ pkgs.buildPackages.unzip ];
+        passthru = {
+          systemDatetime = system.datetime;
+          vendorDatetime = vendor.datetime;
+        };
+      }
+      ''
+        mkdir $out
+        unzip -q ${zip system} system.img -d $out
+        unzip -q ${zip vendor} vendor.img -d $out
+      '';
+
+  /*
     The `waydroid` users run (launcher entries: `waydroid`, `waydroid app launch
     <pkg>`): before handing over, bring back a window that Super+Q put away with
     the display off (features/waydroid/hyprland.lua) -- wake Android's display and
@@ -95,6 +151,25 @@ in
       '';
     };
 
+    images = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      default = waydroidImages;
+      defaultText = lib.literalMD "LineageOS 20 GAPPS system + MAINLINE vendor, pinned in this module";
+      description = ''
+        The Android images (a directory with system.img and vendor.img), linked at
+        /etc/waydroid-extra/images: a path Waydroid knows as preinstalled, so it reads
+        them from there and an online `waydroid upgrade` refuses instead of
+        downloading over them. Before each container start, waydroid.cfg is pointed
+        at it, and when the images changed `waydroid upgrade --offline` re-derives
+        the base props from them, as an upgrade would. The overlay
+        (/var/lib/waydroid/overlay: libndk_translation, the hwcomposer patch) and
+        Android's data are untouched.
+
+        null leaves the images to `waydroid init` / `upgrade` in
+        /var/lib/waydroid/images, as before.
+      '';
+    };
+
     androidSettings = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = {
@@ -130,6 +205,8 @@ in
       # `RuntimeError … waydroid-net.sh start` is common (`networking.nftables.enable` is often unset).
       virtualisation.waydroid.package = waydroidPkg;
 
+      environment.etc."waydroid-extra/images" = lib.mkIf (cfg.images != null) { source = cfg.images; };
+
       # hiPrio: the launcher wrapper above shadows the package's own `waydroid`
       environment.systemPackages = [ pkgs.wl-clipboard (lib.hiPrio waydroidCli) ];
 
@@ -139,9 +216,9 @@ in
       # library, through the vendor overlay, before every container start; the
       # script says what it does and refuses any vendor build but the ones it was
       # made for. The fork's pr/wl-output-scale-on-change takes away the trigger.
-      systemd.services.waydroid-container.serviceConfig.ExecStartPre = [
-        "${pkgs.python3.interpreter} ${./hwc-scale-fix.py} ${pkgs.e2fsprogs}/bin/debugfs"
-      ];
+      systemd.services.waydroid-container.serviceConfig.ExecStartPre =
+        lib.optional (cfg.images != null) "${useImages}"
+        ++ [ "${pkgs.python3.interpreter} ${./hwc-scale-fix.py} ${pkgs.e2fsprogs}/bin/debugfs" ];
 
       /*
         Android's display on/off, as root (`waydroid shell` needs it), behind a
