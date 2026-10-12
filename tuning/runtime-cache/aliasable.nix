@@ -1,5 +1,5 @@
 {
-  capturedAt = "2026-10-12T00:10:51Z";
+  capturedAt = "2026-10-12T05:44:07Z";
   names = [
     "AMB-plugins"
     "ArchiSteamFarm"
@@ -860,7 +860,6 @@
     "argagg"
     "argbash"
     "argc"
-    "argo-expr"
     "argo-rollouts"
     "argo-workflows"
     "argocd"
@@ -1245,7 +1244,6 @@
     "awk-language-server"
     "aws-adfs"
     "aws-assume-role"
-    "aws-azure-login"
     "aws-c-auth"
     "aws-c-cal"
     "aws-c-common"
@@ -17026,7 +17024,6 @@
     "poco"
     "pod2mdoc"
     "podget"
-    "podgrab"
     "podiff"
     "podlet"
     "podman"
@@ -21714,8 +21711,6 @@
     "thunar-vcs-plugin"
     "thunar-volman"
     "thunderbird"
-    "thunderbird-140"
-    "thunderbird-140-unwrapped"
     "thunderbird-153"
     "thunderbird-153-unwrapped"
     "thunderbird-bin"
@@ -22327,7 +22322,6 @@
     "turnon"
     "turnstile"
     "turntable"
-    "turses"
     "turso"
     "turso-cli"
     "turtle"
@@ -25180,8 +25174,8 @@
     "zzuf"
     "zzz"
   ];
-  nixpkgsNarHash = "sha256-Mn/kSj/dao/nL94YGNF4g5q4aApqefIi+W4R3UgnEv8=";
-  nixpkgsRev = "6d42d1495ec0497e67bf74187b717c7ce03aabfa";
+  nixpkgsNarHash = "sha256-fEqG+EBsSsm8bQQ5zRw6ydMtKX39ahJ2rgHtSCNpZ3Y=";
+  nixpkgsRev = "2bd3b6b066eca11a41bbc6de49e428ab3351a5fe";
   pnames = {
     AMB-plugins = "amb-plugins";
     ArchiSteamFarm = "archisteamfarm";
@@ -27929,8 +27923,6 @@
     thcrap-steam-proton-wrapper = "thcrap-proton";
     thunar-dropbox-plugin = "thunar-dropbox";
     thunar-unwrapped = "thunar";
-    thunderbird-140 = "thunderbird";
-    thunderbird-140-unwrapped = "thunderbird-unwrapped";
     thunderbird-153 = "thunderbird";
     thunderbird-153-unwrapped = "thunderbird-unwrapped";
     thunderbird-esr = "thunderbird";
@@ -28218,7 +28210,6 @@
     whisper-cpp-vulkan = "whisper-cpp";
     whitebox-tools = "whitebox_tools";
     whitesur-icon-theme = "Whitesur-icon-theme";
-    wiiuse = "WiiUse";
     winbox3 = "winbox";
     winbox4 = "winbox";
     windsurf = "devin-desktop";
