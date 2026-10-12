@@ -630,10 +630,10 @@
     "pycairo"
     "gobject-introspection-wrapped"
   ];
-  capturedAt = "2026-10-12T12:50:15Z";
+  capturedAt = "2026-10-12T13:47:40Z";
   host = "victus-15";
-  nixpkgsNarHash = "sha256-HRSliEzF1Wm3wxST/P7VisImQq2cmwSYUm8oeUehy7k=";
-  nixpkgsRev = "0a8ccf8c597402ac1d68aac7d989bb09b2b33be2";
+  nixpkgsNarHash = "sha256-ecEr5HpY9vP6435MgC3/3/4gduy+gr48ECwxrfC9nGM=";
+  nixpkgsRev = "ccf14c2ece90f8b707821347843d5d774ab61a94";
   runtimeNames = [
     "vim"
     "git"
