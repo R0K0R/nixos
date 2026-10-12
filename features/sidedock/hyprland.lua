@@ -275,6 +275,8 @@ do
   -- A pile card leaving without closing (features/waydroid hides Waydroid on Mod+Q):
   -- out of the pile, and the card behind comes forward as for a close.
   function SideDockRelease(w) hl.dispatch(hl.dsp.exec_cmd(dock .. " release " .. w.address)) end
+  -- ...and back in: features/waydroid relaunching a hidden Waydroid while the dock is open.
+  function SideDockSend(addr) hl.dispatch(hl.dsp.exec_cmd(dock .. " send " .. addr)) end
 
   -- Click a BACK card to bring it to the front. Back cards refuse focus (dock.sh sets
   -- no_focus, so hovering one with focus-follows-mouse cannot shuffle the pile), so

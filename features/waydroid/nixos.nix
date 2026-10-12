@@ -88,12 +88,25 @@ let
             # that relaunching never fixed.
             [ -w /run/waydroid-display ] && echo on > /run/waydroid-display
             if [ -n "$a" ]; then
+              # Read before moving anything: following the window to a regular
+              # workspace closes an open special one.
+              sp=$("$H" monitors -j | "$J" -r '.[]|select(.focused)|.specialWorkspace.name')
               ws=$("$H" monitors -j | "$J" -r '.[]|select(.focused)|.activeWorkspace.id')
-              "$H" dispatch "hl.dsp.window.move({workspace=\"$ws\", follow=true, window=\"address:$a\"})" >/dev/null
-              # A PiP had its pin dropped to be hidden (a pinned window cannot
-              # sit on a special workspace); give it back.
               if "$H" clients -j | "$J" -e --arg a "$a" 'any(.[]; .address==$a and (.tags|any(rtrimstr("*")=="pip")))' >/dev/null; then
+                # A PiP had its pin dropped to be hidden (a pinned window cannot
+                # sit on a special workspace); give it back.
+                "$H" dispatch "hl.dsp.window.move({workspace=\"$ws\", follow=true, window=\"address:$a\"})" >/dev/null
                 "$H" dispatch "hl.dsp.window.pin({action=\"on\", window=\"address:$a\"})" >/dev/null
+              elif [ "$sp" = "special:dock" ]; then
+                # The side dock is open: back into its pile (features/sidedock).
+                "$H" eval "if SideDockSend then SideDockSend('$a') end" >/dev/null
+              else
+                # A window hidden from the dock keeps its floating card size; tile it,
+                # or Android stays at the card's shape.
+                "$H" dispatch "hl.dsp.window.move({workspace=\"$ws\", follow=true, window=\"address:$a\"})" >/dev/null
+                if "$H" clients -j | "$J" -e --arg a "$a" 'any(.[]; .address==$a and .floating)' >/dev/null; then
+                  "$H" dispatch "hl.dsp.window.float({window=\"address:$a\"})" >/dev/null
+                fi
               fi
               "$H" dispatch "hl.dsp.focus({window=\"address:$a\"})" >/dev/null
             fi

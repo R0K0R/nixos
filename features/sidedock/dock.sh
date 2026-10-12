@@ -671,6 +671,11 @@ case "${1:-toggle}" in
     [ "$(isfloat "$2")" = "true" ] && d "hl.dsp.window.float({window=\"address:$2\"})"
     snap; mapfile -t ORD < <(order); [ ${#ORD[@]} -eq 0 ] && dockws_hide
     d "hl.dsp.focus({window=\"address:$2\"})" ;;
+  send)  # dock a window ($2) by address, as dock-toggle docks the focused one: features/waydroid
+         # puts a hidden Waydroid back into the pile when it is relaunched with the dock open
+    exists "$2" || exit 0
+    { is_dock "$2" || is_pip "$2"; } && exit 0
+    dock_send "$2" ;;
   release)  # a pile card ($2) leaves without closing: features/waydroid hides Waydroid on
              # Mod+Q instead (closing it crashes Android's hwcomposer). Out of the pile where
              # it stands (the caller moves it), then the survivors re-flow as for a close:
