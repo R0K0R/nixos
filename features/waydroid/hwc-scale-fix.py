@@ -30,7 +30,7 @@ This one, which had to fit the old handler's 32 bytes, differs only on a
 compositor WITHOUT fractional scaling and several outputs: the first output's
 scale wins, not the largest.)
 
-It is tied to one vendor build by hash. Any other build is left alone (and a
+It is tied to known vendor builds by hash. Any other build is left alone (and a
 patched copy from an older build is removed) with a message, rather than
 patching bytes at an offset that may now be something else.
 """
@@ -41,10 +41,20 @@ REL = "lib64/hw/hwcomposer.waydroid.so"
 OUT = "/var/lib/waydroid/overlay/vendor/" + REL
 DEBUGFS = sys.argv[1]
 
-# vendor build 2026-04-29 (MAINLINE, hwcomposer.waydroid.so 508512 bytes)
-ORIG = "00934e9739ce5d09c650d8bfc03c0788c986c8bbe37652d4d36abb61b368fded"
-PATCHED = "c1efebf68290baf5eb3148879730b8b8fcb4571760586759c1e745780e90c3d4"
-OFF = 0x4ada0  # output_handle_scale: vaddr 0x4bda0; .text vaddr 0x3de20 is file offset 0x3ce20
+# sha256 of the original hwcomposer.waydroid.so -> (file offset of output_handle_scale,
+# sha256 after patching). Same bytes in each build, only the offset moves.
+BUILDS = {
+    # vendor build 2026-04-28 (MAINLINE, 508512 bytes): vaddr 0x4bda0; .text vaddr 0x3de20
+    # is file offset 0x3ce20
+    "00934e9739ce5d09c650d8bfc03c0788c986c8bbe37652d4d36abb61b368fded":
+        (0x4ada0, "c1efebf68290baf5eb3148879730b8b8fcb4571760586759c1e745780e90c3d4"),
+    # vendor build 2026-09-27 (MAINLINE): vaddr 0x4c620; .text vaddr 0x3dfe0 is file offset
+    # 0x3cfe0. The first with "Call hotplug on display resize" (upstream 40c54a5e), so
+    # Android's display follows the window's size; output_handle_scale is still unfixed.
+    "34a0ab934e0fb83ed1f7b290dd52c0a1073e6458c408f1f8463cbfa477005a51":
+        (0x4b620, "aff3687cb8e11773ae425ae02a1f1f8af52d0c40b61a513ba0ad3244143f6b51"),
+}
+PATCHED_ANY = {patched for _, patched in BUILDS.values()}
 BEFORE = bytes.fromhex(
     "f20f2c87d8000000"  # cvttsd2si eax,[rdi+0xd8]   ; (int)d->scale
     "39d0"              # cmp eax,edx
@@ -68,7 +78,7 @@ def sha(b):
 
 def remove_ours(why):
     try:
-        if sha(open(OUT, "rb").read()) == PATCHED:
+        if sha(open(OUT, "rb").read()) in PATCHED_ANY:
             os.unlink(OUT)
             print(f"hwc-scale-fix: removed the patched hwcomposer: {why}")
     except FileNotFoundError:
@@ -84,13 +94,14 @@ with tempfile.TemporaryDirectory() as tmp:
                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     orig = open(dumped, "rb").read() if os.path.exists(dumped) else b""
 
-if sha(orig) != ORIG:
+if sha(orig) not in BUILDS:
     remove_ours("the vendor image is a different build")
     print("hwc-scale-fix: vendor hwcomposer is not the build this patch was made for "
           f"(sha256 {sha(orig)}); NOT patched -- check whether upstream fixed "
           "output_handle_scale, else redo the patch (features/waydroid/hwc-scale-fix.py)")
     sys.exit(0)
 
+OFF, PATCHED = BUILDS[sha(orig)]
 if os.path.exists(OUT) and sha(open(OUT, "rb").read()) == PATCHED:
     sys.exit(0)
 
