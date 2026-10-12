@@ -418,13 +418,12 @@ hl.window_rule({ match = { class = "^(Matplotlib)$" }, float = true })
 hl.window_rule({ match = { class = "^(kakaotalk.exe)$" }, float = true })
 -- Waydroid size lock
 hl.window_rule({ match = { class = "^(Waydroid)$" }, scrolling_width = 1.0 })
--- ...and scale-to-fit. Waydroid's Android display has a fixed size and never
--- follows the window's, so any other size -- a narrower column, a side-dock
--- card, PiP -- would crop it. The `fit` tag makes the patched renderer
--- (Hyprland fork, keystone scale-to-fit, CWindow::fitTransform) draw it scaled down to the window
--- box instead, aspect kept, with input mapped back. Dock and PiP cards are
--- fitted anyway; on stock Hyprland the tag is inert.
-hl.window_rule({ match = { class = "^(Waydroid)$" }, tag = "+fit" })
+-- No `fit` tag (scale-to-fit, Hyprland fork CWindow::fitTransform) any more: since
+-- the 2026-09-27 vendor image (features/waydroid) the hwcomposer hotplugs Android's
+-- display on every configure, so Android follows its window's size like any client.
+-- Fitting on top scaled each stale frame into the new box while Android re-laid out,
+-- two adjustments fighting on every resize. Dock and PiP cards are still fitted (by
+-- their dock/pip tags), as every client is there.
 -- Glassmorphism: translucent KDE apps; backdrop blur applies to
 -- translucent windows automatically (decoration.blur). kdeconnect
 -- covers all its windows (.app, .sms, -indicator, ...).
