@@ -11,6 +11,9 @@ local nix = require("nix.waydroid")
 local closeWindow = HyprCloseWindow
 function HyprCloseWindow(w)
   if w and w.class == "Waydroid" then
+    -- a side-dock card leaves the pile first, or the next dock show brings it back
+    -- with its display off: a black card (features/sidedock, when present)
+    if SideDockRelease then SideDockRelease(w) end
     hl.dispatch(hl.dsp.exec_cmd(nix.hide .. " " .. w.address))
   else
     closeWindow(w)

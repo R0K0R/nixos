@@ -367,8 +367,10 @@ dock_send() {  # give a window the dock shape + tag, then lay it out as the fron
   dock_chrome "$a"
   snap; order_insert "$a" "$fr"; render "$a"
 }
-undock() {  # strip the dock shape/tag and return a window to the tiling area
-  local a="$1" want="${2:-}"   # $2: the card to put in front of the remaining pile
+# Take a window out of the pile where it stands: its dock look and membership go, its
+# workspace and focus stay. undock and release (below) both start here.
+strip_card() {
+  local a="$1"
   # Clear the size LOCK first (so the window can retile freely): zero the min and
   # blow the max wide open -- no_max_size alone left the rule's 640x928 max in
   # force, which is the "no resize / janky" state. Then drop pin/dim/tag.
@@ -377,7 +379,6 @@ undock() {  # strip the dock shape/tag and return a window to the tiling area
   d "hl.dsp.window.set_prop({prop=\"no_max_size\", value=\"true\", window=\"address:$a\"})"
   pin "$a" off
   nofocus "$a" false
-  to_regular "$a"   # off the dock workspace, onto the one you are looking at
   d "hl.dsp.window.set_prop({prop=\"opacity\", value=\"1.0 1.0\", window=\"address:$a\"})"
   # restore the chrome dock_send stripped
   d "hl.dsp.window.set_prop({prop=\"decorate\", value=\"true\", window=\"address:$a\"})"
@@ -399,6 +400,11 @@ undock() {  # strip the dock shape/tag and return a window to the tiling area
   while read -r t; do
     [ -n "$t" ] && d "hl.dsp.window.tag({tag=\"-$t\", window=\"address:$a\"})"
   done < <($J -r --arg a "$a" 'first(.[]|select(.address==$a)).tags[]? | rtrimstr("*") | select(test("^dock(d|scale)[0-9]+$"))' <<<"$CLIENTS")
+}
+undock() {  # strip the dock shape/tag and return a window to the tiling area
+  local a="$1" want="${2:-}"   # $2: the card to put in front of the remaining pile
+  strip_card "$a"
+  to_regular "$a"   # off the dock workspace, onto the one you are looking at
   # Tile it: read LIVE float state (not the pre-undock snapshot) and unfloat if
   # still floating, so it joins the layout like any normal app.
   [ "$($HC clients -j | $J -r --arg a "$a" 'first(.[]|select(.address==$a)).floating // false')" = "true" ] \
@@ -665,6 +671,16 @@ case "${1:-toggle}" in
     [ "$(isfloat "$2")" = "true" ] && d "hl.dsp.window.float({window=\"address:$2\"})"
     snap; mapfile -t ORD < <(order); [ ${#ORD[@]} -eq 0 ] && dockws_hide
     d "hl.dsp.focus({window=\"address:$2\"})" ;;
+  release)  # a pile card ($2) leaves without closing: features/waydroid hides Waydroid on
+             # Mod+Q instead (closing it crashes Android's hwcomposer). Out of the pile where
+             # it stands (the caller moves it), then the survivors re-flow as for a close:
+             # the card behind comes forward. Left tagged, the next show pulled the hidden
+             # window -- its display off, so black -- back into the pile.
+    exists "$2" || exit 0
+    is_pip "$2" && exit 0
+    is_dock "$2" || exit 0
+    snap; strip_card "$2"
+    ;&   # ...and on as orphan
   orphan)  # a dock window ($2) just CLOSED: re-flow the survivors (if the pile is up)
     EXCLUDE="$2"; snap
     mapfile -t ORD < <(order)
