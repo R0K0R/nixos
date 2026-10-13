@@ -10,6 +10,10 @@
   reproduced: features/hyprland already binds all of them, and that file is not
   installed here.
 
+  The chords are DATA-DRIVEN from features/bonfire/keybinds.nix: baked here as the
+  kb() defaults and surfaced as `keybind.<action>` settings by hearth.nix, so they
+  are editable in the hearth TUI and applied live by the watcher in home.nix.
+
   mkAfter for the ordering reason documented at the top of
   features/dms/compositor.nix -- `bonfire` sorts before `hyprland` in the
   alphabetical feature glob, so without it this lands above `local mod`.
@@ -79,73 +83,67 @@ let
       | ${pkgs.jq}/bin/jq -r '.[].pid' | ${pkgs.gnugrep}/bin/grep -vxE '0|-1')
     [ -n "$pids" ] && kill -9 $pids 2>/dev/null || true
   '';
+
+  # --- data-driven shell keybinds (features/bonfire/keybinds.nix) ---
+  kbData = import ./keybinds.nix;
+
+  # The exec command per action, run in the shell's wrapped env (store paths / ~/.local/bin scripts).
+  # Every action in keybinds.nix must have an entry here.
+  kbCmd = {
+    launcher        = ''${rofiToggle} ${rofi}/bin/rofi -show drun'';
+    flint           = ''${rofiToggle} ${bin "flint.sh"}'';
+    emoji           = ''${rofi}/bin/rofi -modi emoji -show emoji'';
+    clipboard       = bin "clipboard_menu.sh";
+    clipboard_wipe  = ''${bin "clipboard_menu.sh"} --wipe'';
+    lock            = bin "lock-warm.sh";
+    panic           = "${panic}";
+    nightlight      = bin "nightlight_toggle.sh";
+    wallpaper       = bin "wallpaper_select.sh";
+    wallpaper_video = bin "wallpaper_video_select.sh";
+    cava            = bin "cava_manager.sh";
+    waybar_cycle    = ''${bin "waybar_manager.sh"} --cycle'';
+    record          = bin "record.sh";
+    screenshot      = bin "screenshot.sh";
+    screenshot_full = ''${bin "screenshot.sh"} --fullscreen'';
+    dockbar         = ''${bin "dockbar_manager.sh"} --toggle'';
+  };
+
+  # Extra hl.bind args (opts) appended verbatim after the dispatcher, per action.
+  kbOpts = {
+    lock = '', { locked = true }''; # survive the lock screen
+  };
+
+  # Baked kb() defaults table (Lua) + the generated, pcall-wrapped hl.bind calls.
+  kbDefaultsLua = lib.concatStringsSep "\n"
+    (lib.mapAttrsToList (a: s: ''        ["${a}"] = "${s.chord}",'') kbData);
+  kbBindsLua = lib.concatStringsSep "\n" (lib.mapAttrsToList
+    (a: _: ''      pcall(function() hl.bind(kb("${a}"), hl.dsp.exec_cmd("${kbCmd.${a}}")${kbOpts.${a} or ""}) end)'')
+    kbData);
 in
 {
   config = lib.mkIf (enabled && compositor == "hyprland") {
     wayland.windowManager.hyprland.extraConfig = lib.mkAfter ''
-      -- Launcher, menus and the notification centre.
+      -- Shell keybinds: chords are DATA-DRIVEN from features/bonfire/keybinds.nix. kb(action) returns
+      -- the chord -- the baked default in __kb below, overridden live by the watcher-written table
+      -- (features/bonfire/home.nix rewrites ~/.local/state/bonfire/keybinds.lua on a hearth `keybind.*`
+      -- change, then runs `hyprctl reload`). Each hl.bind is pcall-wrapped so a bad chord typed in the
+      -- settings UI logs + skips that one bind rather than failing the whole config -> a blank session.
       --
-      -- SPACE, not upstream's R: Hyprland fires EVERY bind registered on a
-      -- combo, and features/hyprland already has mod+R (colresize +conf, the
-      -- niri-style column width cycle) -- upstream's key would resize the
-      -- column AND open the launcher on one press. Same collision class as
-      -- the W / SHIFT+P moves documented below, but these three were only
-      -- caught live: registration order reports nothing.
-      hl.bind("${mod} + space", hl.dsp.exec_cmd("${rofiToggle} ${rofi}/bin/rofi -show drun"))
-      hl.bind("${mod} + slash", hl.dsp.exec_cmd("${rofi}/bin/rofi -modi emoji -show emoji"))
-      hl.bind("${mod} + Tab", hl.dsp.exec_cmd("${rofiToggle} ${bin "flint.sh"}"))
-      ${lib.optionalString (!osConfig.my.flare.enable) ''hl.bind("${mod} + N", hl.dsp.exec_cmd("${notifToggle}"))''}
-      hl.bind("${mod} + V", hl.dsp.exec_cmd("${bin "clipboard_menu.sh"}"))
-      hl.bind("${mod} + SHIFT + V", hl.dsp.exec_cmd("${bin "clipboard_menu.sh"} --wipe"))
+      -- LUA COMMENTS ONLY in here -- this block is inside a Lua string; a Nix /* */ reaches Hyprland
+      -- verbatim and the config dies with "unexpected symbol near '/'" at session start.
+      local __kb = {
+${kbDefaultsLua}
+      }
+      do
+        local ok, t = pcall(dofile, (os.getenv("HOME") or "") .. "/.local/state/bonfire/keybinds.lua")
+        if ok and type(t) == "table" then
+          for k, v in pairs(t) do if type(v) == "string" and v ~= "" then __kb[k] = v end end
+        end
+      end
+      local function kb(a) return __kb[a] or "" end
 
-      -- Session. ESCAPE, not upstream's K (mod+K is focus workspace -1 --
-      -- locking the screen while switching workspaces); SHIFT+L, not
-      -- upstream's L (mod+L is focus right).
-      -- lock-warm.sh primes the hyprlock value cache (music/battery/volume) once before hyprlock
-      -- paints, so the lock screen is fresh on the first frame instead of showing the previous
-      -- lock's stale cache (see features/bonfire home.nix lockWarm). Panic (below) keeps plain
-      -- lock.sh for an instant cover.
-      hl.bind("${mod} + Escape", hl.dsp.exec_cmd("${bin "lock-warm.sh"}"), { locked = true })
-      -- Panic: kill every window + lock, one gesture. Sits next to the lock bind
-      -- on purpose (SUPER+Escape locks, SUPER+SHIFT+Escape nukes + locks).
-      hl.bind("${mod} + SHIFT + Escape", hl.dsp.exec_cmd("${panic}"))
-      hl.bind("${mod} + SHIFT + L", hl.dsp.exec_cmd("${bin "nightlight_toggle.sh"}"))
-
-      -- Appearance: wallpaper, the cava underbar, and the bar layout cycle.
-      hl.bind("${mod} + Y", hl.dsp.exec_cmd("${bin "wallpaper_select.sh"}"))
-      hl.bind("${mod} + SHIFT + Y", hl.dsp.exec_cmd("${bin "wallpaper_video_select.sh"}"))
-      -- Cava's keybind was mod+T, now reassigned to the terminal (launch
-      -- scheme in features/hyprland). Cava stays toggleable from the flint
-      -- (SUPER+TAB -> Theme -> Cava Underbar); moved to mod+SHIFT+C for a key.
-      hl.bind("${mod} + SHIFT + C", hl.dsp.exec_cmd("${bin "cava_manager.sh"}"))
-      hl.bind("${mod} + SHIFT + W", hl.dsp.exec_cmd("${bin "waybar_manager.sh"} --cycle"))
-
-      -- Capture.
-      hl.bind("${mod} + F11", hl.dsp.exec_cmd("${bin "record.sh"}"))
-
-      -- TWO BINDS MOVED OFF UPSTREAM'S DEFAULTS, because features/hyprland
-      -- already owns those keys and a duplicate bind in Hyprland is decided by
-      -- registration order rather than reported:
-      --
-      --   SUPER + W          upstream: dockbar toggle
-      --                      here:     firefox (features/hyprland app spawns)
-      --                      moved to: SUPER + SHIFT + B
-      --
-      --   SUPER + SHIFT + P  upstream: fullscreen screenshot
-      --                      here:     dpms off (features/hyprland)
-      --                      moved to: SUPER + CTRL + P
-      --
-      -- SUPER + P itself is free -- features/hyprland deliberately leaves it
-      -- for the shell layer -- so the plain screenshot keeps its upstream key.
-      --
-      -- LUA COMMENTS, NOT NIX ONES. This block is inside a Lua string; a
-      -- /* */ comment here reaches Hyprland verbatim and the config dies with
-      -- "unexpected symbol near '/'" at session start. Caught by parsing the
-      -- generated file rather than by evaluation, which cannot see inside a
-      -- string literal.
-      hl.bind("${mod} + P", hl.dsp.exec_cmd("${bin "screenshot.sh"}"))
-      hl.bind("${mod} + CTRL + P", hl.dsp.exec_cmd("${bin "screenshot.sh"} --fullscreen"))
-      hl.bind("${mod} + SHIFT + B", hl.dsp.exec_cmd("${bin "dockbar_manager.sh"} --toggle"))
+${kbBindsLua}
+      ${lib.optionalString (!osConfig.my.flare.enable) ''pcall(function() hl.bind("${mod} + N", hl.dsp.exec_cmd("${notifToggle}")) end)''}
 
       -- Glassmorphism for the bar and the launcher, matching what
       -- features/hyprland enables compositor-side. A layer surface has to opt

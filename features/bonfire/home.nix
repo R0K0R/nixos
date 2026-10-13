@@ -90,6 +90,33 @@ let
     };
   };
 
+  # Keybind watcher: the chord settings (keybind.*, from features/bonfire/keybinds.nix + hearth.nix)
+  # are applied live here. settings.json is materialised into a small Lua override table that the
+  # compositor's kb() dofile's (see compositor.nix); on each keybind.* change we rewrite it + reload.
+  # jq runs HERE (shell-side), so the Hyprland Lua never parses JSON. `hearth watch keybind` only fires
+  # on that prefix, so an unrelated setting never triggers a compositor reload. Exits 0 (no restart
+  # loop) when the settings system is absent -- the pipe just hits EOF.
+  hearthPkg = inputs.hearth.packages.${pkgs.system}.default;
+  keybindApply = pkgs.writeShellScript "bonfire-keybind-apply" ''
+    export PATH=${lib.makeBinPath [ hearthPkg pkgs.jq pkgs.coreutils pkgs.hyprland ]}:$PATH
+    export HEARTH_DIR="$HOME/.local/state/hearth"
+    export HYPRLAND_INSTANCE_SIGNATURE="''${HYPRLAND_INSTANCE_SIGNATURE:-$(ls "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/" 2>/dev/null | head -1)}"
+    SET="$HEARTH_DIR/settings.json"
+    OUT="$HOME/.local/state/bonfire/keybinds.lua"
+    gen() {
+      mkdir -p "$(dirname "$OUT")"
+      { printf 'return {\n'
+        [ -r "$SET" ] && jq -r '.keybind // {} | to_entries[] | "  [" + (.key|@json) + "] = " + (.value|@json) + ","' "$SET" 2>/dev/null
+        printf '}\n'
+      } > "$OUT.tmp" 2>/dev/null && mv "$OUT.tmp" "$OUT" || true
+    }
+    gen
+    hearth watch keybind 2>/dev/null | while IFS= read -r _; do
+      gen
+      hyprctl reload >/dev/null 2>&1 || true
+    done
+  '';
+
   # The same emoji-enabled rofi the compositor binds build in compositor.nix
   # (identical override, deduped by the store): home.packages puts it on the
   # profile, and networkmanager-dmenu's config names it absolutely.
@@ -474,6 +501,11 @@ in
       */
       bonfire-theme-init = oneshot "Bonfire Space theme state (first-run seed)"
         "${pkgs.bash}/bin/bash -c '[ -e \"$HOME/.local/state/glow/colors.css\" ] || exec ${bin "gen_style.sh"}'";
+
+      # Applies hearth `keybind.*` chords live (see keybindApply above): materialise the override table
+      # + `hyprctl reload`. Baked with hearth's store path, so it is harmless (exits 0) on a host with
+      # no settings system; the compositor already loads the persisted overrides at startup regardless.
+      bonfire-keybind-apply = service "Bonfire Space keybind watcher (hearth -> hyprctl)" keybindApply;
 
       /*
         STORE PATHS for the daemons, not bare names. A bare name resolves
