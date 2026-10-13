@@ -1,5 +1,5 @@
 {
-  capturedAt = "2026-10-13T07:37:33Z";
+  capturedAt = "2026-10-13T18:06:51Z";
   names = [
     "AMB-plugins"
     "ArchiSteamFarm"
@@ -2594,7 +2594,6 @@
     "cauwugo"
     "cava"
     "cavalcade"
-    "cavalier"
     "cavasik"
     "cavif"
     "cayley"
@@ -4662,7 +4661,6 @@
     "dnslookup"
     "dnsmap"
     "dnsmasq"
-    "dnsmon-go"
     "dnsmonster"
     "dnsname-cni"
     "dnspeep"
@@ -7910,7 +7908,6 @@
     "gogogadget"
     "gogui"
     "gogup"
-    "gohai"
     "gohufont"
     "goimapnotify"
     "goimports-reviser"
@@ -12139,7 +12136,6 @@
     "libuninameslist"
     "libunique3"
     "libunistring"
-    "libunity"
     "libunwind"
     "libupnp"
     "liburcu"
@@ -14737,7 +14733,6 @@
     "nh"
     "nh-unwrapped"
     "nheko"
-    "nhentai"
     "nhost-cli"
     "ni"
     "nibtools"
@@ -17632,7 +17627,6 @@
     "pulse-visualizer"
     "pulseaudio"
     "pulseaudio-ctl"
-    "pulseaudio-dlna"
     "pulseaudio-module-xrdp"
     "pulseaudioFull"
     "pulseeffects-legacy"
@@ -25116,7 +25110,6 @@
     "zsh-nix-shell"
     "zsh-patina"
     "zsh-powerlevel10k"
-    "zsh-powerlevel9k"
     "zsh-prezto"
     "zsh-syntax-highlighting"
     "zsh-system-clipboard"
@@ -25174,8 +25167,8 @@
     "zzuf"
     "zzz"
   ];
-  nixpkgsNarHash = "sha256-Fqj3q7wqIAvOWJqs9BiiGYE6i8oJf4cwZCKfRd1Sa3k=";
-  nixpkgsRev = "cf26ae038f799c10b6ce1b7fce117cc0e5959573";
+  nixpkgsNarHash = "sha256-B/DJET58beKz3fNZgz9F+Ye3EGeiuUORkFQmtdsXw0I=";
+  nixpkgsRev = "00a171f2f72e004a3916df33904932e335dd7355";
   pnames = {
     AMB-plugins = "amb-plugins";
     ArchiSteamFarm = "archisteamfarm";
@@ -26418,7 +26411,6 @@
     jags = "JAGS";
     jalv-qt = "jalv";
     jamesdsp-pulse = "jamesdsp";
-    jan = "Jan";
     jankyborders = "JankyBorders";
     jart-jsoncpp = "json.cpp";
     javaCup = "java-cup";
@@ -28399,7 +28391,6 @@
     zonemaster-cli = "Zonemaster-CLI";
     zoom-us = "zoom";
     zsh-powerlevel10k = "powerlevel10k";
-    zsh-powerlevel9k = "powerlevel9k";
     zsh-wd = "wd";
     zulu = "zulu-ca-jdk";
     zulu11 = "zulu-ca-jdk";

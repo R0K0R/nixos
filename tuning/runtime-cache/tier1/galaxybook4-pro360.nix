@@ -1,8 +1,8 @@
 {
   capturedAt = "2026-10-13T00:19:08Z";
   host = "galaxybook4-pro360";
-  nixpkgsNarHash = "sha256-Fqj3q7wqIAvOWJqs9BiiGYE6i8oJf4cwZCKfRd1Sa3k=";
-  nixpkgsRev = "cf26ae038f799c10b6ce1b7fce117cc0e5959573";
+  nixpkgsNarHash = "sha256-B/DJET58beKz3fNZgz9F+Ye3EGeiuUORkFQmtdsXw0I=";
+  nixpkgsRev = "00a171f2f72e004a3916df33904932e335dd7355";
   runtimeNames = [
     "Algorithm-Diff"
     "Archive-Zip"
