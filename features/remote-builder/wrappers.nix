@@ -133,10 +133,12 @@ let
       # (2026-10-08). The build stays as it was: dispatched from here, with this store
       # supplying the inputs.
       echo ">> evaluating on ${name}" >&2
-      # With no tty on its stderr nix prints only warnings and errors -- no progress bar,
-      # no IFD build logs -- so an interactive run gets one (ssh -t) and the drvPath goes
-      # to a file on the peer instead of stdout, which a pty would mix with the log.
-      eval_cmd="nix eval -L --raw '$src#${attr}.drvPath'"
+      # With no tty on its stderr nix prints only warnings and errors -- no progress bar
+      # -- so an interactive run gets one (ssh -t) and the drvPath goes to a file on the
+      # peer instead of stdout, which a pty would mix with the progress output.
+      # No -L here or on the build below: plain nixos-rebuild shows a progress bar, not
+      # every builder's log; a failed build's log tail is printed either way.
+      eval_cmd="nix eval --raw '$src#${attr}.drvPath'"
       if [ -t 0 ] && [ -t 2 ]; then
         tmp=$(ssh -o BatchMode=yes ${name} mktemp) \
           || fallback "mktemp on ${name} failed" "$@"
@@ -166,7 +168,7 @@ let
       fi
 
       echo ">> building" >&2
-      out=$(nix build -L --no-link --print-out-paths "$drv^out" ${buildArgs}) \
+      out=$(nix build --no-link --print-out-paths "$drv^out" ${buildArgs}) \
         || { echo "${scriptName}: build failed (see above)" >&2; exit 1; }
       out=$(printf '%s\n' "$out" | tail -n1)
       case "$out" in /nix/store/*) ;; *) echo "${scriptName}: no store path from the build: $out" >&2; exit 1 ;; esac
