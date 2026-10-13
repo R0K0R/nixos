@@ -15,7 +15,7 @@
 | dock | sidedock | **pyre** |
 | launcher / menu | hakumenu | **flint** |
 | theme / accent + state | haku_theme | **glow** |
-| the shell (forked hakuspace) | hakuspace | **ring** |
+| the shell (forked hakuspace) | hakuspace | **bonfire** (the repo `sihooleebd/bonfire` = the shell = the desktop) |
 
 Collisions to respect: `bonfire` the *name* must leave the audio engine (→ lyre) before the system can
 take it — that includes the null-sink literally named `bonfire` in lyre's graph and the `bonfire` CLI.
@@ -30,11 +30,16 @@ take it — that includes the null-sink literally named `bonfire` in lyre's grap
    `flare` (incl. hakuspace's waybar callers), the panelbus handler `notif`→`flare`.
 4. **pyre** *(done)* — `features/pyre`, `my.pyre`, the panelbus handler `dock`→`pyre`. (The script is
    still `dock.sh` and the "dock" *concept*/window-tag is unchanged — pyre is the feature/brand name.)
-5. **ring** *(biggest)* — vendor `R0K0R/hakuspace` into `features/ring/` (drop the `feat-hakuspace`
-   input), rename its home-module/package/`programs.*` API, its 39 scripts (`hakumenu`→`flint`,
-   `gen_style`, `dockbar_manager`, `rofi_theme_switcher`, …), and its state paths. **MIGRATE
-   `~/.local/state/haku_theme` → `glow`** (don't just rename the path — the live theme state must carry
-   over, it must never reset). flint + glow land here.
+5. **bonfire (the shell)** *(the biggest)* — fork + rebrand the unmaintained hakuspace shell into
+   `sihooleebd/bonfire` (the repo = the shell = the desktop).
+   - **Stage A** *(done)* — forked `R0K0R/hakuspace` → `sihooleebd/bonfire` (155 files, history kept),
+     repointed `features/hakuspace/flake.nix` at it. Eval is byte-identical (clean de-R0K0R).
+   - **Stage B** *(next, the big one)* — rename internals in the bonfire repo: the home-module/package/
+     `programs.hakuspace`→`bonfire` API, the 39 scripts (`hakumenu`→`flint`, `gen_style`,
+     `dockbar_manager`, `rofi_theme_switcher`, …), config namespaces, and state paths. **MIGRATE
+     `~/.local/state/haku_theme` → `glow`** with a guard so the live theme never resets. Then rename the
+     flake wrapper `features/hakuspace`→`features/bonfire` + `my.hakuspace`→`my.bonfire`. flint + glow
+     land here. Rebuild-test between sub-steps — it's the live shell.
 6. **identity + logo everywhere** — README/MOTD/`tuigreet`/**plymouth**/fastfetch/hyprlock/the panel
    header, all carrying the bonfire logo. Rename `sihooleebd/nixos` doc identity to bonfire.
 

@@ -33,7 +33,10 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     hakuspace = {
-      url = "github:R0K0R/hakuspace/pr/nix-home-module";
+      # Forked from the unmaintained R0K0R/hakuspace into our own sihooleebd/bonfire -- the shell is
+      # being adopted + rebranded to "bonfire" (stage A: de-R0K0R, module API still `hakuspace`;
+      # stage B renames the internals). See REBRAND.md.
+      url = "github:sihooleebd/bonfire";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
