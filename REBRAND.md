@@ -1,8 +1,10 @@
 # Rebrand: Haku/hakuspace → bonfire 🔥
 
-> **Status: in progress.** The desktop is being rebranded to a campfire theme. Every component becomes
-> an element of the fire. `hakuspace` (an unmaintained upstream shell R0K0R nixified) is being **vendored
-> into this flake and renamed** — 100% removal, nothing left pointing at `R0K0R/hakuspace`.
+> **Status: complete** (2026-10-14). The desktop is a campfire theme — every component an element of
+> the fire. The unmaintained `hakuspace` shell was **forked to `github:sihooleebd/bonfire`** and renamed
+> end to end; nothing points at `R0K0R/hakuspace` any more. All six phases below are done. Deploy with a
+> `nixos-rebuild switch` (it rebuilds the shell package, runs the theme-state migration, and recompiles
+> Hyprland for the keystone patch).
 
 ## Name map
 

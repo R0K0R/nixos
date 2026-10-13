@@ -37,7 +37,7 @@ Every setting therefore carries a `scope` that is exactly one of these two.
  settings.signal.json   ({version, changed:[…keys], ts} — the "git diff" of what just changed)
         │  a watch fires
         ▼
- consumers: notifcenter QML · hyprland Lua · dock.sh · waybar · bonfire …
+ consumers: flare QML · hyprland Lua · pyre dock.sh · waybar · lyre …
             each owns key-prefixes, reloads only the parts that changed
 ```
 
@@ -174,7 +174,7 @@ in-process ping to the panel, but nothing depends on it.
 
 ## 6. Per-consumer reload recipes (grounded in the current code)
 
-**notifcenter QML** (`features/notifcenter/shell.qml`) — replace the open-time `colors.css` poll with
+**flare QML** (`features/flare/shell.qml`) — replace the open-time `colors.css` poll with
 a `FileView`/watch on `settings.json`; bind the design tokens + dimensions to it so most changes
 reapply by QML reactivity alone. Prefixes: `panel`, `theme`.
 
@@ -183,22 +183,22 @@ reapply by QML reactivity alone. Prefixes: `panel`, `theme`.
 keys are already documented as live-tunable this way. Keybinds + window-rules need a config reload.
 Prefix: `hyprland`.
 
-**dock** (`features/sidedock/dock.sh`) — already reads its feel constants fresh each invocation; point
+**dock** (`features/pyre/dock.sh`) — already reads its feel constants fresh each invocation; point
 those reads at `settings.json` (`jq`) and re-render on a `dock.*` signal. Prefix: `dock`.
 
 **waybar / rofi / cava** — these consume `@accent_color` from `colors.css` today; keep that bus for
 colour, and have the materialiser *also* regenerate `colors.css` from the `theme.*` keys so the
 upstream consumers need no change. Prefix: `theme`.
 
-**bonfire** — audio already has its own live `state.json` + CLI. The settings system owns *defaults*
-(`audio.*`) and drives them via the `bonfire` CLI; it does not duplicate bonfire's runtime state.
+**lyre** — audio already has its own live `state.json` + CLI. The settings system owns *defaults*
+(`audio.*`) and drives them via the `lyre` CLI; it does not duplicate lyre's runtime state.
 
 ## 7. Declaring settings in Nix (the modular source)
 
 Each feature drops a fragment, auto-discovered like the existing submodule pattern:
 
 ```nix
-# features/notifcenter/hearth.nix   (named hearth.nix, NOT settings.nix — that name is already taken
+# features/flare/hearth.nix   (named hearth.nix, NOT settings.nix — that name is already taken
 #                                    by other features, e.g. features/dms is DMS's own config)
 {
   "panel.geometry.width" = {
@@ -261,7 +261,7 @@ Python + **Textual** (in nixpkgs; same language as bonfire). yazi/ranger-style m
 
 1. **Plumbing first** — the store + materialiser + `settings.signal.json` + the `hearth`
    get/set CLI + one generic watcher helper. No UI yet; prove the loop with two or three keys.
-2. **First real consumer** — move the notifcenter design tokens + geometry behind `panel.*`; wire the
+2. **First real consumer** — move the flare design tokens + geometry behind `panel.*`; wire the
    QML watch. This is the densest, highest-value, already-live-ish surface.
 3. **Compositor feel** — `hyprland.{decoration,blur,keystone,animation,gaps,gesture}.*` via
    `hyprctl eval`. Proven live, big payoff.
