@@ -1,8 +1,8 @@
 {
-  capturedAt = "2026-10-12T13:47:51Z";
+  capturedAt = "2026-10-13T00:19:08Z";
   host = "galaxybook4-pro360";
-  nixpkgsNarHash = "sha256-ecEr5HpY9vP6435MgC3/3/4gduy+gr48ECwxrfC9nGM=";
-  nixpkgsRev = "ccf14c2ece90f8b707821347843d5d774ab61a94";
+  nixpkgsNarHash = "sha256-jxvT74YVCLMYZ1FGVpoQU82PGCSQVhyRIHGxire0mjc=";
+  nixpkgsRev = "2bd2b7560b0654c6b24853a1499861fa78ace3a4";
   runtimeNames = [
     "Algorithm-Diff"
     "Archive-Zip"
@@ -573,6 +573,7 @@
     "gupnp"
     "gupnp-igd"
     "gusb"
+    "gws"
     "gyre-fonts"
     "gzip"
     "haml-mode"
