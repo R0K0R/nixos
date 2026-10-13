@@ -215,7 +215,7 @@ diff -ruN a/src/desktop/state/ViewHitTester.cpp b/src/desktop/state/ViewHitTeste
 +        // The earlier scale-to-fit division (r/scale, scale=box/content=1/0.8=1.25) and the even
 +        // earlier r*m_X11SurfaceScaledBy (*0.8) both pushed the hit into buffer space -- which the
 +        // surface then re-read as logical, landing at 0.8x the cursor (identity at scale 1.0, hence
-+        // "fine on the 1x display, broken on 0.8"). Confirmed in /tmp/haku-hit.log: we sent ret=r*0.8.
++        // "fine on the 1x display, broken on 0.8"). Confirmed in /tmp/bonfire-hit.log: we sent ret=r*0.8.
 +        // (Returns the sentinel too: on a vacated-strip hit ksHitInverse returns x<-1e5, and the caller
 +        // leaves foundSurface null so the empty margin is a clean MISS rather than an offset hit.)
 +        return ksHitInverse(window, pos - window->position(Desktop::View::IGeometric::GEOMETRIC_GOAL));
@@ -275,7 +275,7 @@ diff -ruN a/src/desktop/state/ViewHitTester.cpp b/src/desktop/state/ViewHitTeste
 +        // while a hit un-warped against the latter lands at the wrong surface point -> every tile (Night
 +        // included) reads offset. ksHitInverseBox returns a surface-relative (0..size) coord, so the at()
 +        // call below stays correct. A sentinel (x < -1e5) is a hit in the vacated strip beside it -> miss.
-+        if (ls->m_namespace.starts_with("haku-notifcenter")) {
++        if (ls->m_namespace == "flare") {
 +            lrel = pos - ls->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
 +            lrel = ksHitInverseBox(ls->size(Desktop::View::IGeometric::GEOMETRIC_CURRENT), lrel);
 +            if (lrel.x < -1.0e5)
@@ -1169,10 +1169,10 @@ diff -ruN a/src/render/OpenGL.cpp b/src/render/OpenGL.cpp
 +// dolphin) composing into ONE trapezoid instead of warping each piece alone. For
 +// the main surface T == identity, reducing to base*H. Input mirror: ViewHitTester.
 +// The box the keystone warps into a trapezoid, for the CURRENT render target: a dock-tagged WINDOW,
-+// OR the quickshell notification-centre LAYER (features/notifcenter), so the SUPER+N panel takes the
++// OR the quickshell notification-centre LAYER (features/flare), so the SUPER+N panel takes the
 +// SAME trapezoid shape as a dock card. Fills the LOGICAL position/size of whichever it is; false for
-+// anything else. Layer match is by namespace ("haku-notifcenter" -- the sized control panel, NOT the
-+// transient "haku-notif-popup" toasts); change the prefix here to keystone a different layer.
++// anything else. Layer match is by namespace (exactly "flare" -- the sized control panel, NOT the
++// transient "flare-popup" toasts); change the match here to keystone a different layer.
 +static bool ksTargetBox(const PHLLSREF& currentLS, Vector2D& pos, Vector2D& sz) {
 +    const auto w = g_pHyprRenderer->m_renderData.currentWindow;
 +    if (w && w->m_ruleApplicator && w->m_ruleApplicator->m_tagKeeper.isTagged("dock", false)) {
@@ -1183,7 +1183,7 @@ diff -ruN a/src/render/OpenGL.cpp b/src/render/OpenGL.cpp
 +    // currentLS comes from the STextureRenderData (the renderer's m_renderData has no layer field);
 +    // renderTextureInternal passes data.currentLS down. Shadow pass passes {} -> window-only.
 +    const auto ls = currentLS.lock();
-+    if (ls && ls->m_namespace.starts_with("haku-notifcenter")) {
++    if (ls && ls->m_namespace == "flare") {
 +        pos = ls->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
 +        sz  = ls->size(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
 +        return true;

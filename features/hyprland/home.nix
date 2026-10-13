@@ -200,7 +200,7 @@ let
   # resets the submap + device config, so a lock won't survive one; re-press to re-lock.
   inputLockToggle = pkgs.writeShellScript "hypr-input-lock" ''
     export PATH=${lib.makeBinPath [ osConfig.programs.hyprland.package pkgs.jq pkgs.libnotify pkgs.coreutils ]}:$PATH
-    state="''${XDG_RUNTIME_DIR:-/tmp}/haku-inputlock"
+    state="''${XDG_RUNTIME_DIR:-/tmp}/bonfire-inputlock"
     pads=$(hyprctl devices -j | jq -r '.mice[]?.name | select(test("touchpad";"i"))')
     setpads() { for d in $pads; do hyprctl eval "hl.device({ name = \"$d\", enabled = $1 })" >/dev/null 2>&1; done; }
     if [ -e "$state" ]; then
@@ -536,7 +536,7 @@ in
             passes = 3;
             vibrancy = 0.17;
             # false, not true. The rofi launcher is now a fullscreen translucent
-            # layer (features/hakuspace) that fades in/out with the "layers"
+            # layer (features/bonfire) that fades in/out with the "layers"
             # animation. ignore_opacity=true kept its blur at FULL strength through
             # the fade -- so on close the box vanished but the blurred backdrop
             # lingered a beat before snapping off. false makes the blur track the
@@ -1120,7 +1120,7 @@ in
       -- too (the hyprlock music widget reflects the new state on its next poll).
       -- XF86 keys for keyboards that emit them; SUPER+[ / ] as the reliable lock-screen
       -- prev/next fallback. NO SUPER+P fallback here: it COLLIDED with the screenshot bind
-      -- in features/hakuspace/compositor.nix (Hyprland fires EVERY bind on a combo, so one
+      -- in features/bonfire/compositor.nix (Hyprland fires EVERY bind on a combo, so one
       -- press screenshotted AND toggled playback) -- play/pause stays on XF86AudioPlay /
       -- the Fn media key. NOT SUPER+space either: that is the app-menu launcher in the
       -- unlocked compositor, and a locked = true bind fires unlocked too, so it collides.
@@ -1187,7 +1187,7 @@ in
 
       -- Mod+R (was: scrolling layout's colresize +conf) is GONE, not just
       -- inert: the scrolling layout is off on this machine, and the freed
-      -- key avoids the drun-launcher collision hakuspace had to dodge.
+      -- key avoids the drun-launcher collision bonfire had to dodge.
       -- In its place, the default Lua config's mouse pair that this file
       -- never carried over: Mod + left-drag moves a window anywhere
       -- (floats it out of the tiling if dragged free), Mod + right-drag
@@ -1396,7 +1396,7 @@ in
       hl.bind("ALT + Print", hl.dsp.exec_cmd("hyprshot -m window -m active --clipboard-only --silent"))
       -- Mod+Shift+S: region screenshot that SAVES a file and copies it -- the
       -- muscle-memory shortcut, discoverable without a Print key (awkward on
-      -- this laptop). Uses hakuspace's screenshot.sh (grim+slurp) rather than
+      -- this laptop). Uses bonfire's screenshot.sh (grim+slurp) rather than
       -- raw hyprshot so it writes to SCREENSHOT_DIR from main_setting.sh
       -- (~/Pictures/Screenshots) -- the single source of truth, matching where
       -- recordings go via SCREENREC_SAVE_DIR -- and notifies with the path.

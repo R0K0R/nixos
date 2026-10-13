@@ -1,12 +1,12 @@
 { config, lib, ... }:
 
 let
-  cfg = config.my.hakuspace;
+  cfg = config.my.bonfire;
 in
 {
-  options.my.hakuspace = {
+  options.my.bonfire = {
     enable = lib.mkEnableOption ''
-      Haku Space: a Waybar/Rofi/SwayNC desktop with wallpaper automation,
+      Bonfire Space: a Waybar/Rofi/SwayNC desktop with wallpaper automation,
       accent-colour theming and a dockbar. The alternative to my.dms.enable --
       the two are mutually exclusive, see the `shell` role in features/_meta
     '';
@@ -15,7 +15,7 @@ in
       type = lib.types.listOf lib.types.str;
       default = [ "waybar" "rofi" "swaync" "cava" "fastfetch" "gtk.css" "xdg-desktop-portal" ];
       description = ''
-        Which of hakuspace's ~/.config entries to manage.
+        Which of bonfire's ~/.config entries to manage.
 
         NARROWED FROM UPSTREAM'S FULL SET on purpose. It also ships fish,
         kitty, starship.toml and hypr configs, and every one of those is
@@ -25,7 +25,7 @@ in
         resolved by picking a winner, so the shell takes only what nothing
         else claims.
 
-        `hypr` is the sharpest of those: hakuspace ships a COMPLETE Hyprland
+        `hypr` is the sharpest of those: bonfire ships a COMPLETE Hyprland
         config, and features/hyprland owns that file. Its keybinds are
         contributed through ./compositor.nix instead, which is the same seam
         features/dms uses.
@@ -34,10 +34,10 @@ in
   };
 
   # Accounts this feature applies to; defaults to the primary user.
-  options.my.hakuspace.users = import ../../lib/user-scope.nix { inherit lib config; };
+  options.my.bonfire.users = import ../../lib/user-scope.nix { inherit lib config; };
 
   config = {
-    my.internal.features.hakuspace = {
+    my.internal.features.bonfire = {
       # Reads my.desktop.compositor to decide which binds to contribute; with
       # no compositor selected there is nothing to attach to.
       requires = [ "compositor" ];

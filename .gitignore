@@ -20,3 +20,4 @@ claude-desktop-blackening-findings.md
 # rebuild, which falls through to Tier 3 with no error. Ignoring them required
 # `git add -f` on every host after every refresh; one forgotten flag silently
 # degraded the classifier. Tracking them costs diff noise and nothing else.
+__pycache__/

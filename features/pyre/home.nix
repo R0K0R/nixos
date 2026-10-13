@@ -114,7 +114,7 @@ let
 in
 lib.mkIf (osConfig.my.pyre.enable && inScope && osConfig.my.desktop.compositor == "hyprland") {
   # Expose the dock on PATH as `pyre` so OTHER features can drive it without a store-path
-  # cross-reference -- features/hakuspace's SUPER+N parks the dock (`pyre hide`) for the
+  # cross-reference -- features/bonfire's SUPER+N parks the dock (`pyre hide`) for the
   # mutually-exclusive notification centre. The dock's own binds still use ${dock} directly; this is
   # just the cross-feature entry point.
   home.packages = [ (pkgs.writeShellScriptBin "pyre" ''exec ${dock} "$@"'') ];

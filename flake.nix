@@ -37,8 +37,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    feat-hakuspace = {
-      url = "path:./features/hakuspace";
+    feat-bonfire = {
+      url = "path:./features/bonfire";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

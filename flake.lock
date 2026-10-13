@@ -28,6 +28,27 @@
         "type": "github"
       }
     },
+    "bonfire": {
+      "inputs": {
+        "nixpkgs": [
+          "feat-bonfire",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791925008,
+        "narHash": "sha256-4zuBVZ6WYQptisSHww8cfZeZxrYWmf7GwDHd1s7Mnqg=",
+        "owner": "sihooleebd",
+        "repo": "bonfire",
+        "rev": "138b9b2934cc02c99a7ffb3de800f64126257aa2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sihooleebd",
+        "repo": "bonfire",
+        "type": "github"
+      }
+    },
     "claude-code-bin": {
       "flake": false,
       "locked": {
@@ -273,6 +294,23 @@
       },
       "parent": []
     },
+    "feat-bonfire": {
+      "inputs": {
+        "bonfire": "bonfire",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "path": "./features/bonfire",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/bonfire",
+        "type": "path"
+      },
+      "parent": []
+    },
     "feat-claude-code": {
       "inputs": {
         "claude-code-bin": "claude-code-bin"
@@ -349,23 +387,6 @@
       },
       "original": {
         "path": "./features/emacs",
-        "type": "path"
-      },
-      "parent": []
-    },
-    "feat-hakuspace": {
-      "inputs": {
-        "hakuspace": "hakuspace",
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "path": "./features/hakuspace",
-        "type": "path"
-      },
-      "original": {
-        "path": "./features/hakuspace",
         "type": "path"
       },
       "parent": []
@@ -447,27 +468,6 @@
       "original": {
         "owner": "numtide",
         "repo": "flake-utils",
-        "type": "github"
-      }
-    },
-    "hakuspace": {
-      "inputs": {
-        "nixpkgs": [
-          "feat-hakuspace",
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1788290651,
-        "narHash": "sha256-6nwGQKpacM3L2QPFIaLOO04iGVTUsBYm6spsxE9IgVg=",
-        "owner": "sihooleebd",
-        "repo": "bonfire",
-        "rev": "719c43c265ea422da2bfb0cb497985b6b67a9f07",
-        "type": "github"
-      },
-      "original": {
-        "owner": "sihooleebd",
-        "repo": "bonfire",
         "type": "github"
       }
     },
@@ -795,12 +795,12 @@
     "root": {
       "inputs": {
         "feat-agenix": "feat-agenix",
+        "feat-bonfire": "feat-bonfire",
         "feat-claude-code": "feat-claude-code",
         "feat-claude-desktop": "feat-claude-desktop",
         "feat-dms": "feat-dms",
         "feat-easyeffects": "feat-easyeffects",
         "feat-emacs": "feat-emacs",
-        "feat-hakuspace": "feat-hakuspace",
         "feat-hop": "feat-hop",
         "feat-niri": "feat-niri",
         "feat-samsung-galaxybook": "feat-samsung-galaxybook",

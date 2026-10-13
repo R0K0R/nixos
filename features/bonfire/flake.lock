@@ -1,17 +1,17 @@
 {
   "nodes": {
-    "hakuspace": {
+    "bonfire": {
       "inputs": {
         "nixpkgs": [
           "nixpkgs"
         ]
       },
       "locked": {
-        "lastModified": 1788290651,
-        "narHash": "sha256-6nwGQKpacM3L2QPFIaLOO04iGVTUsBYm6spsxE9IgVg=",
+        "lastModified": 1791925008,
+        "narHash": "sha256-4zuBVZ6WYQptisSHww8cfZeZxrYWmf7GwDHd1s7Mnqg=",
         "owner": "sihooleebd",
         "repo": "bonfire",
-        "rev": "719c43c265ea422da2bfb0cb497985b6b67a9f07",
+        "rev": "138b9b2934cc02c99a7ffb3de800f64126257aa2",
         "type": "github"
       },
       "original": {
@@ -38,7 +38,7 @@
     },
     "root": {
       "inputs": {
-        "hakuspace": "hakuspace",
+        "bonfire": "bonfire",
         "nixpkgs": "nixpkgs"
       }
     }

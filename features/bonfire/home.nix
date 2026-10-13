@@ -1,8 +1,8 @@
 { config, lib, pkgs, osConfig, inputs, ... }:
 
 let
-  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "hakuspace"; };
-  cfg = osConfig.my.hakuspace;
+  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "bonfire"; };
+  cfg = osConfig.my.bonfire;
   enabled = cfg.enable && inScope;
 
   bin = name: "${config.home.homeDirectory}/.local/bin/${name}";
@@ -18,7 +18,7 @@ let
     `tail -F --retry` waits for the log to appear as the session comes up, and a
     short poll finds the newest instance dir.
   */
-  hyprlandLogKeeper = pkgs.writeShellScript "hakuspace-hyprland-log-keep" ''
+  hyprlandLogKeeper = pkgs.writeShellScript "bonfire-hyprland-log-keep" ''
     export PATH=${lib.makeBinPath [ pkgs.coreutils ]}:$PATH
     state="$HOME/.local/state/hyprland"
     mkdir -p "$state"
@@ -77,7 +77,7 @@ let
   };
 
   /*
-    Order a drawing unit after the theme seed (hakuspace-theme-init below).
+    Order a drawing unit after the theme seed (bonfire-theme-init below).
     recursiveUpdate REPLACES lists rather than merging them, so After is
     rebuilt by hand from the unit's own value. Wants, not Requires: if the
     seed fails the component should still try, fail visibly, and be
@@ -85,8 +85,8 @@ let
   */
   themed = unit: lib.recursiveUpdate unit {
     Unit = {
-      Wants = [ "hakuspace-theme-init.service" ];
-      After = unit.Unit.After ++ [ "hakuspace-theme-init.service" ];
+      Wants = [ "bonfire-theme-init.service" ];
+      After = unit.Unit.After ++ [ "bonfire-theme-init.service" ];
     };
   };
 
@@ -107,7 +107,7 @@ let
   # watcher below), so hyprlock loads the file INSTANTLY at lock time -- no per-lock
   # conversion, no window of a bright/unlocked screen while it works.
   hyprlockBg = "${config.home.homeDirectory}/.cache/hyprlock-bg.jpg";
-  hyprlockBgGen = pkgs.writeShellScript "hakuspace-hyprlock-bg-gen" ''
+  hyprlockBgGen = pkgs.writeShellScript "bonfire-hyprlock-bg-gen" ''
     export PATH=${lib.makeBinPath [ pkgs.imagemagick pkgs.coreutils pkgs.gnugrep ]}:$PATH
     cache="$HOME/.cache/awww/${pkgs.awww.version}/eDP-1"
     [ -s "$cache" ] || cache=$(ls "$HOME/.cache/awww/${pkgs.awww.version}/"* 2>/dev/null | head -1)
@@ -134,20 +134,20 @@ let
 in
 {
   imports = [
-    inputs.feat-hakuspace.homeModule
+    inputs.feat-bonfire.homeModule
     ./compositor.nix
   ];
 
   config = lib.mkIf enabled {
-    programs.hakuspace = {
+    programs.bonfire = {
       enable = true;
       inherit (cfg) configNames;
 
       /*
         Built from HOST pkgs, overriding the flake module's default.
 
-        The homeModule defaults `package` to self.packages.<system>.hakuspace,
-        which is callPackage'd from the hakuspace flake's OWN nixpkgs input --
+        The homeModule defaults `package` to self.packages.<system>.bonfire,
+        which is callPackage'd from the bonfire flake's OWN nixpkgs input --
         after the follows chain, the tuned fork's plain legacyPackages. That is
         the wrong package set on every host, in opposite directions:
 
@@ -175,7 +175,7 @@ in
         declares for standalone use.
       */
       package =
-        (pkgs.callPackage "${inputs.feat-hakuspace.inputs.hakuspace}/nix/package.nix" {
+        (pkgs.callPackage "${inputs.feat-bonfire.inputs.bonfire}/nix/package.nix" {
           /*
             The menus' file manager. Upstream's scripts hardcode `thunar`, and
             callPackage would happily satisfy that with the real Thunar -- a
@@ -205,8 +205,8 @@ in
                         the dead video on top of the restored image.
           */
           mpvpaper = pkgs.writeShellScriptBin "mpvpaper" ''
-            mkdir -p "$HOME/.local/state/haku_theme"
-            printf '%s\n' "$@" > "$HOME/.local/state/haku_theme/video_wallpaper"
+            mkdir -p "$HOME/.local/state/glow"
+            printf '%s\n' "$@" > "$HOME/.local/state/glow/video_wallpaper"
             exec ${pkgs.mpvpaper}/bin/mpvpaper "$@"
           '';
           awww = pkgs.runCommand "awww-video-state-shim" { } ''
@@ -215,7 +215,7 @@ in
             cat > $out/bin/awww <<EOF
             #!${pkgs.runtimeShell}
             if [ "\$1" = img ]; then
-              rm -f "\$HOME/.local/state/haku_theme/video_wallpaper"
+              rm -f "\$HOME/.local/state/glow/video_wallpaper"
             fi
             exec ${pkgs.awww}/bin/awww "\$@"
             EOF
@@ -261,14 +261,14 @@ in
                 done
 
                 # exit.sh: log out to the greeter, not just kill the shell.
-                # The script is spawned by the bar (hakuspace-bar.service), so
+                # The script is spawned by the bar (bonfire-bar.service), so
                 # its `systemctl --user stop graphical-session.target` tore down
                 # its OWN cgroup -- killing exit.sh before the compositor-quit
                 # line after it. Result: shell dead, Hyprland alive, no way back
                 # to the greeter. Drop that stop (quitting the compositor closes
                 # every client and ends the greetd session -> greeter), and use
                 # the canonical `hyprctl dispatch exit` over the eval form.
-                substituteInPlace $out/share/hakuspace/scripts/exit.sh \
+                substituteInPlace $out/share/bonfire/scripts/exit.sh \
                   --replace-fail 'systemctl --user stop graphical-session.target 2>/dev/null' 'true  # nix: removed -- this stop killed exit.sh (in the bar cgroup) before the compositor exit' \
                   --replace-fail "hyprctl eval 'hl.dispatch(hl.dsp.exit())'" 'hyprctl dispatch exit'
 
@@ -279,7 +279,7 @@ in
                 # JSON-surgical so only ext/workspaces changes, not the niri /
                 # hyprland / mango definitions that share "format": "{icon}".
                 ${pkgs.python3}/bin/python3 -c 'import json,sys; p=sys.argv[1]; c=json.load(open(p)); c["ext/workspaces"]["format"]="{name}"; json.dump(c,open(p,"w"),ensure_ascii=False,indent=4)' \
-                  $out/share/hakuspace/config/waybar/module/workspace_module
+                  $out/share/bonfire/config/waybar/module/workspace_module
 
                 # Notification bell: upstream wires it to swaync-client, but this host replaced swaync
                 # with the quickshell notif centre (features/flare) -- swaync-client is GONE, so
@@ -287,7 +287,7 @@ in
                 # IPC toggle (same thing SUPER+N runs) and drop the swaync count subscription -> a plain
                 # bell that actually opens the centre. (A live count would need a flare IPC; later.)
                 ${pkgs.python3}/bin/python3 -c 'import json,sys; p=sys.argv[1]; c=json.load(open(p)); c["custom/notification"]={"tooltip":False,"format":"󰂚","on-click":"quickshell -c flare ipc call panel toggle","on-click-right":"quickshell -c flare ipc call panel toggle","escape":True}; json.dump(c,open(p,"w"),ensure_ascii=False,indent=4)' \
-                  $out/share/hakuspace/config/waybar/module/notification_module
+                  $out/share/bonfire/config/waybar/module/notification_module
 
                 # Launch the pygobject layers (cava underbar, desktop icons) via
                 # their OWN wrapper, not `python3 <wrapper>`. Upstream runs
@@ -296,9 +296,9 @@ in
                 # `python3` on it dies with a SyntaxError on line 2 and the layer
                 # never starts -- the toggles silently did nothing. Running the
                 # wrapper directly execs the real script with the typelibs set.
-                substituteInPlace $out/share/hakuspace/scripts/cava_manager.sh \
+                substituteInPlace $out/share/bonfire/scripts/cava_manager.sh \
                   --replace-fail 'nohup python3 "$SCRIPT_PATH" "$@"' 'nohup "$SCRIPT_PATH" "$@"'
-                substituteInPlace $out/share/hakuspace/scripts/desktop_icons_manager.sh \
+                substituteInPlace $out/share/bonfire/scripts/desktop_icons_manager.sh \
                   --replace-fail 'python3 "$DESKTOP_MANAGER_BIN" &' '"$DESKTOP_MANAGER_BIN" &'
 
                 # The manager kills/detects the daemon by its LAUNCH path,
@@ -311,11 +311,11 @@ in
                 # "not running" even when it was (toggle-ON / --startup spawned
                 # duplicates). Match the basename, which IS in the real cmdline
                 # and does not collide with desktop_icons_manager.sh.
-                substituteInPlace $out/share/hakuspace/scripts/desktop_icons_manager.sh \
+                substituteInPlace $out/share/bonfire/scripts/desktop_icons_manager.sh \
                   --replace-fail '-f "$DESKTOP_MANAGER_BIN"' '-f "desktop_icons.py"'
 
                 # Replace the experimental, buggy upstream desktop_icons.py
-                # WHOLESALE with our reimplementation (features/hakuspace/
+                # WHOLESALE with our reimplementation (features/bonfire/
                 # desktop-icons.py). Upstream showed a generic document glyph for
                 # every file, never launched .desktop files, and kept a tiny
                 # window that expanded to fullscreen only during a drag -- each
@@ -325,8 +325,8 @@ in
                 # The ~/.local/bin/desktop_icons.py wrapper still supplies
                 # GI_TYPELIB_PATH and execs this same path, so only the body
                 # changes.
-                cp ${./desktop-icons.py} $out/share/hakuspace/scripts/desktop_icons.py
-                chmod +x $out/share/hakuspace/scripts/desktop_icons.py
+                cp ${./desktop-icons.py} $out/share/bonfire/scripts/desktop_icons.py
+                chmod +x $out/share/bonfire/scripts/desktop_icons.py
 
                 # Route the FILE PICKER to the KDE portal (Dolphin-style, dark)
                 # in the config that ACTUALLY wins. The shell ships its own
@@ -344,9 +344,9 @@ in
                     default = hyprland;gtk;
                     org.freedesktop.impl.portal.FileChooser=kde
                   ''
-                } $out/share/hakuspace/config/xdg-desktop-portal/hyprland-portals.conf
+                } $out/share/bonfire/config/xdg-desktop-portal/hyprland-portals.conf
 
-                # fastfetch: NixOS banner greeting instead of the boxed Haku
+                # fastfetch: NixOS banner greeting instead of the boxed Bonfire
                 # Space panel -- the medium builtin NixOS2 logo on top, an identity
                 # line beneath (❄ user@host · kernel · uptime). LEFT-ALIGNED here
                 # (padding 0, bare ❄ key); fastfetch has no horizontal centering,
@@ -374,7 +374,7 @@ in
                         ]
                     }
                   ''
-                } $out/share/hakuspace/config/fastfetch/config.jsonc
+                } $out/share/bonfire/config/fastfetch/config.jsonc
 
                 # Cava underbar color follows the theme accent, not a hardcoded
                 # black. Two problems: the config's `foreground = black`, and its
@@ -383,7 +383,7 @@ in
                 # the if-missing guard is dropped, writing it crashes on the
                 # read-only FS). Redirect the default to a WRITABLE path in the
                 # theme-state dir, drop the guard, and set foreground = the live
-                # @accent_color from haku_theme/colors.css -- regenerated every
+                # @accent_color from glow/colors.css -- regenerated every
                 # start, so it tracks the theme.
                 ${pkgs.python3}/bin/python3 ${
                   pkgs.writeText "cava-accent.py" ''
@@ -391,7 +391,7 @@ in
                     p = sys.argv[1]
                     s = open(p).read()
                     s = s.replace("default='~/.config/cava/cava-layer'",
-                                  "default='~/.local/state/haku_theme/cava-layer'")
+                                  "default='~/.local/state/glow/cava-layer'")
                     s = s.replace("foreground = black", "foreground = '{fg}'")
                     s = s.replace("    if os.path.exists(config_path):\n        return\n", "")
                     s = s.replace("        f.write(DEFAULT_CONFIG_TEMPLATE)",
@@ -399,7 +399,7 @@ in
                     helper = ("def _cava_accent():\n"
                               "    import re\n"
                               "    try:\n"
-                              "        t = open(os.path.expanduser('~/.local/state/haku_theme/colors.css')).read()\n"
+                              "        t = open(os.path.expanduser('~/.local/state/glow/colors.css')).read()\n"
                               "        m = re.search(r'accent_color +(#[0-9a-fA-F]{6})', t)\n"
                               "        return m.group(1) if m else '#ffffff'\n"
                               "    except Exception:\n"
@@ -407,14 +407,14 @@ in
                     s = s.replace("def ensure_config_exists(config_path):", helper + "def ensure_config_exists(config_path):", 1)
                     open(p, "w").write(s)
                   ''
-                } $out/share/hakuspace/scripts/cava_layer.py
+                } $out/share/bonfire/scripts/cava_layer.py
               '';
           });
 
       /*
         NULL, deliberately: this is what keeps the two halves separable.
 
-        hakuspace ships a COMPLETE Hyprland config -- monitors, input, layout,
+        bonfire ships a COMPLETE Hyprland config -- monitors, input, layout,
         animations, rules, autostart, keybinds. Installing it would put a
         second full config at ~/.config/hypr, which features/hyprland already
         owns, and undo the separation between compositor and shell. Only the
@@ -460,7 +460,7 @@ in
     */
     systemd.user.services = {
       /*
-        Seed ~/.local/state/haku_theme before anything draws.
+        Seed ~/.local/state/glow before anything draws.
 
         Every visual component IMPORTS that directory -- waybar's style.css
         and swaync's both @import colors.css, every rofi layout imports
@@ -472,19 +472,19 @@ in
         the theme state is the user's own (their accent, their fonts); a
         rebuild must never reset it.
       */
-      hakuspace-theme-init = oneshot "Haku Space theme state (first-run seed)"
-        "${pkgs.bash}/bin/bash -c '[ -e \"$HOME/.local/state/haku_theme/colors.css\" ] || exec ${bin "gen_style.sh"}'";
+      bonfire-theme-init = oneshot "Bonfire Space theme state (first-run seed)"
+        "${pkgs.bash}/bin/bash -c '[ -e \"$HOME/.local/state/glow/colors.css\" ] || exec ${bin "gen_style.sh"}'";
 
       /*
         STORE PATHS for the daemons, not bare names. A bare name resolves
         only if something ELSE happens to put the binary on the user
-        manager's PATH -- the hakuspace package wraps these onto its
+        manager's PATH -- the bonfire package wraps these onto its
         SCRIPTS' PATH, which units never see. On a host where no other
         feature installs swaync/hypridle/awww (this one), all three units
         died at EXEC. Same idiom as the clipboard watchers below, which
         always did it right.
       */
-      hakuspace-wallpaper = lib.recursiveUpdate (service "Haku Space wallpaper daemon" "${pkgs.awww}/bin/awww-daemon") {
+      bonfire-wallpaper = lib.recursiveUpdate (service "Bonfire Space wallpaper daemon" "${pkgs.awww}/bin/awww-daemon") {
         /*
           Restore the previous wallpaper after the daemon is up. The daemon
           caches what it displays (~/.cache/awww/<version>/<output>) but does
@@ -506,12 +506,12 @@ in
           restarts, the same lifecycle the image gets. The real mpvpaper,
           not the shim: replaying must not re-record.
         */
-        Service.ExecStartPost = pkgs.writeShellScript "hakuspace-wallpaper-restore" ''
+        Service.ExecStartPost = pkgs.writeShellScript "bonfire-wallpaper-restore" ''
           for i in $(seq 20); do
             ${pkgs.awww}/bin/awww restore 2>/dev/null && break
             sleep 0.5
           done
-          state="$HOME/.local/state/haku_theme/video_wallpaper"
+          state="$HOME/.local/state/glow/video_wallpaper"
           if [ -s "$state" ]; then
             readarray -t args < "$state"
             (${pkgs.mpvpaper}/bin/mpvpaper "''${args[@]}" >/dev/null 2>&1 &)
@@ -528,9 +528,9 @@ in
       # no-op (unit already "active") -- so a wallpaper change wouldn't refresh the lock
       # bg. Plain re-runnable oneshot, no Install (only the .path below starts it; startup
       # generation is the wallpaper-restore ExecStartPost just above).
-      hakuspace-hyprlock-bg = {
+      bonfire-hyprlock-bg = {
         Unit = {
-          Description = "Haku Space hyprlock background (mirror current wallpaper)";
+          Description = "Bonfire Space hyprlock background (mirror current wallpaper)";
           PartOf = [ "graphical-session.target" ];
         };
         Service = {
@@ -541,17 +541,17 @@ in
       # swaync is REPLACED by the quickshell notif centre (features/flare) when that's on --
       # two daemons can't both own org.freedesktop.Notifications. Gated so my.flare.enable=false
       # brings swaync straight back (the fallback if the quickshell centre misbehaves).
-      hakuspace-notifications = lib.mkIf (!osConfig.my.flare.enable) (themed (
-        service "Haku Space notification centre" "${pkgs.swaynotificationcenter}/bin/swaync"
+      bonfire-notifications = lib.mkIf (!osConfig.my.flare.enable) (themed (
+        service "Bonfire Space notification centre" "${pkgs.swaynotificationcenter}/bin/swaync"
       ));
-      hakuspace-idle = service "Haku Space idle daemon" "${pkgs.hypridle}/bin/hypridle";
+      bonfire-idle = service "Bonfire Space idle daemon" "${pkgs.hypridle}/bin/hypridle";
       # Gamma + kbd-backlight RESET on every session start -- the safety net for the gamma
-      # idle dim (features/hakuspace dim path). The user has no gamma control, so if a crash
+      # idle dim (features/bonfire dim path). The user has no gamma control, so if a crash
       # or freeze ever left a hyprsunset daemon alive (holding the dim ramp) or the keyboard
       # backlight dimmed, there would be no way to recover. Resetting at login guarantees a
       # clean slate: kill any stray hyprsunset (its ramp reverts to full) + kbd backlight up.
       # Needs no compositor (pkill + sysfs), so it runs regardless of startup ordering.
-      hakuspace-gamma-reset = oneshot "Haku Space gamma reset" (pkgs.writeShellScript "hakuspace-gamma-reset-startup" ''
+      bonfire-gamma-reset = oneshot "Bonfire Space gamma reset" (pkgs.writeShellScript "bonfire-gamma-reset-startup" ''
         ${pkgs.procps}/bin/pkill -x hyprsunset 2>/dev/null
         for l in /sys/class/leds/*kbd_backlight; do
           [ -e "$l" ] && ${pkgs.brightnessctl}/bin/brightnessctl -d "''${l##*/}" set 100% >/dev/null 2>&1
@@ -562,18 +562,18 @@ in
       # instantly + together on an AOD wake, and spawn no playerctl/wpctl on hyprlock's
       # own path (less password stutter). The loop self-gates on `pgrep hyprlock`, so it's
       # idle (a 20s check) whenever the screen isn't locked. Exec'd by installed path.
-      hakuspace-hyprlock-cache = service "Haku Space hyprlock value cache" (bin "hyprlock-cache-loop");
+      bonfire-hyprlock-cache = service "Bonfire Space hyprlock value cache" (bin "hyprlock-cache-loop");
 
       # Two watchers, not one: cliphist stores text and images through separate
       # wl-paste subscriptions and a single --watch handles one MIME class.
-      hakuspace-clipboard-text = service "Haku Space clipboard history (text)"
+      bonfire-clipboard-text = service "Bonfire Space clipboard history (text)"
         "${pkgs.wl-clipboard}/bin/wl-paste --type text --watch ${pkgs.cliphist}/bin/cliphist store";
-      hakuspace-clipboard-image = service "Haku Space clipboard history (images)"
+      bonfire-clipboard-image = service "Bonfire Space clipboard history (images)"
         "${pkgs.wl-clipboard}/bin/wl-paste --type image --watch ${pkgs.cliphist}/bin/cliphist store";
 
       # Mirror Hyprland's (tmpfs, reboot-wiped) log to disk, keeping the previous
       # session's copy so a freeze-forced hard power-off leaves a trace to read.
-      hakuspace-hyprland-log = service "Haku Space Hyprland log keeper" hyprlandLogKeeper;
+      bonfire-hyprland-log = service "Bonfire Space Hyprland log keeper" hyprlandLogKeeper;
 
       /*
         waybar_manager.sh, not waybar, and oneshot rather than a supervised
@@ -587,16 +587,16 @@ in
       # mode, right-click network config, per-module scroll, tray, etc.). The statushub is an
       # experimental left text HUD running ALONGSIDE it, NOT a replacement, so waybar is not gated.
       # (Re-add `lib.mkIf (!osConfig.my.statushub.enable)` only once the HUD reaches real parity.)
-      hakuspace-bar = themed (oneshot "Haku Space bar" (bin "waybar_manager.sh"));
-      hakuspace-dockbar = themed (oneshot "Haku Space dockbar" "${bin "dockbar_manager.sh"} --startup");
+      bonfire-bar = themed (oneshot "Bonfire Space bar" (bin "waybar_manager.sh"));
+      bonfire-dockbar = themed (oneshot "Bonfire Space dockbar" "${bin "dockbar_manager.sh"} --startup");
     };
 
     # Watch the awww wallpaper cache and refresh the hyprlock background on change, so
     # the lock screen's wallpaper stays current without any per-lock work. awww rewrites
     # this per-output cache file whenever the wallpaper changes; PathChanged (fires on
-    # close-after-write) starts hakuspace-hyprlock-bg.service. The version segment comes
+    # close-after-write) starts bonfire-hyprlock-bg.service. The version segment comes
     # from pkgs.awww.version so it tracks a flake bump; the output is this host's panel.
-    systemd.user.paths.hakuspace-hyprlock-bg = {
+    systemd.user.paths.bonfire-hyprlock-bg = {
       Unit = {
         Description = "Watch the wallpaper cache and refresh the hyprlock background";
         PartOf = [ "graphical-session.target" ];
@@ -604,12 +604,12 @@ in
       Install.WantedBy = [ "graphical-session.target" ];
       Path = {
         PathChanged = "${config.home.homeDirectory}/.cache/awww/${pkgs.awww.version}/eDP-1";
-        Unit = "hakuspace-hyprlock-bg.service";
+        Unit = "bonfire-hyprlock-bg.service";
       };
     };
 
     /*
-      MUTABLE COPIES for the places hakuspace's own scripts EDIT IN PLACE,
+      MUTABLE COPIES for the places bonfire's own scripts EDIT IN PLACE,
       overriding the homeModule's store symlinks for exactly those entries:
 
         dockbar_manager.sh --exclusive/--icon-size  sed -i  waybar/dockbar/config
@@ -624,7 +624,7 @@ in
       then vanishes.
 
       So both entries are unlinked and seeded ONCE as writable copies --
-      the same contract as ~/hakuspace-control: an existing real file is
+      the same contract as ~/bonfire-control: an existing real file is
       the user's and is never touched again. (waybar/config + style.css
       need nothing here: the tree ships no top-level defaults, so they were
       never home-manager entries -- waybar_manager.sh creates and re-points
@@ -634,7 +634,7 @@ in
     */
     xdg.configFile =
       let
-        share = "${config.programs.hakuspace.package}/share/hakuspace/config";
+        share = "${config.programs.bonfire.package}/share/bonfire/config";
 
         /*
           Custom modules injected into EVERY layout, JSON-aware (all seven
@@ -660,7 +660,7 @@ in
           default AND moving every already-playing stream onto it -- otherwise
           audio started before the switch stays on the old device. pavucontrol
           (the full mixer) moves to middle-click; it also stays in the
-          hakumenu's Audio Control entry. pactl talks to pipewire-pulse.
+          flint's Audio Control entry. pactl talks to pipewire-pulse.
         */
         audioSinkMenu = pkgs.writeShellScript "waybar-audio-sink" ''
           PACTL=${pkgs.pulseaudio}/bin/pactl
@@ -686,7 +686,7 @@ in
           # "SinkDesc<TAB>sink<TAB>" (empty port).
           sel=$( { printf '🎚  Device levels / balance…\t__gain__\t\n'; "$PACTL" list sinks | "$AWK" '
             function flush() {
-                if (name != "" && had_port == 0 && name !~ /easyeffects/ && name !~ /haku_combined/)
+                if (name != "" && had_port == 0 && name !~ /easyeffects/ && name !~ /bonfire_combined/)
                     printf "%s\t%s\t\n", desc, name
             }
             /^Sink #/         { flush(); name=""; desc=""; inports=0; had_port=0 }
@@ -727,7 +727,7 @@ in
           # Tear down any previous combined sink first so this selection replaces it cleanly -- whether
           # going back to a single device or re-combining a different set. module-combine-sink is a
           # runtime pulse module (evaporates on logout), so nothing needs to persist.
-          "$PACTL" list short modules | "$AWK" '/module-combine-sink/ && /haku_combined/ {print $1}' \
+          "$PACTL" list short modules | "$AWK" '/module-combine-sink/ && /bonfire_combined/ {print $1}' \
             | while read -r m; do "$PACTL" unload-module "$m" 2>/dev/null || true; done
 
           set -- $sinks
@@ -739,8 +739,8 @@ in
             # combine attach to all. (verified: with all slaves woken, all get a combine output stream.)
             for s in "$@"; do "$PACTL" suspend-sink "$s" 0 2>/dev/null || true; done
             slaves=$(IFS=,; echo "$*")
-            "$PACTL" load-module module-combine-sink sink_name=haku_combined slaves="$slaves" >/dev/null 2>&1
-            target=haku_combined
+            "$PACTL" load-module module-combine-sink sink_name=bonfire_combined slaves="$slaves" >/dev/null 2>&1
+            target=bonfire_combined
           else
             target="$1"
           fi
@@ -765,7 +765,7 @@ in
           fi
         '';
         # Per-output gain mixer -- volume module MIDDLE-click. In a multi-output setup each device sits
-        # at its own hardware level, so this balances them. If a combined sink (haku_combined*) is active
+        # at its own hardware level, so this balances them. If a combined sink (bonfire_combined*) is active
         # it mixes that combine's SLAVES; otherwise it mixes every real hardware sink. A pavucontrol row
         # opens the full GUI mixer. Single-select rofi that loops (tweak several in a row); Esc finishes.
         audioGainMenu = pkgs.writeShellScript "waybar-audio-gain" ''
@@ -791,7 +791,7 @@ in
           if [ -n "$raw" ]; then
             outs=$(printf '%s' "$raw" | "$TR" ',' ' ')
           else
-            outs=$("$PACTL" list short sinks | "$AWK" '$2 !~ /easyeffects/ && $2 !~ /haku_combined/ {print $2}')
+            outs=$("$PACTL" list short sinks | "$AWK" '$2 !~ /easyeffects/ && $2 !~ /bonfire_combined/ {print $2}')
           fi
           [ -z "$outs" ] && exit 0
 
@@ -863,7 +863,7 @@ in
 
         # Workspace button TEXT colour for the per-monitor/chess-notation scheme (features/hyprland,
         # features/pyre): hardwired black on every button state, independent of the
-        # haku_theme accent. Appended to style.css so it wins the cascade -- no upstream
+        # glow accent. Appended to style.css so it wins the cascade -- no upstream
         # anchor to drift, unlike substituteInPlace. (ext/workspaces renders as
         # #workspaces button in every layout.)
         addWsColors = ''
@@ -886,7 +886,7 @@ in
         # already show the date inline and have no custom/settings drawer).
         patchEE =
           mode:
-          pkgs.runCommand "hakuspace-waybar-${mode}-ee" { } ''
+          pkgs.runCommand "bonfire-waybar-${mode}-ee" { } ''
             cp -r ${share}/waybar/${mode} $out
             chmod -R u+w $out
             ${addModules}
@@ -896,7 +896,7 @@ in
 
         patchMode =
           mode:
-          pkgs.runCommand "hakuspace-waybar-${mode}-patched" { } ''
+          pkgs.runCommand "bonfire-waybar-${mode}-patched" { } ''
             cp -r ${share}/waybar/${mode} $out
             chmod -R u+w $out
 
@@ -965,7 +965,7 @@ in
           diff to offer upstream is exactly the appendix.
         */
         "swaync".source = lib.mkForce (
-          pkgs.runCommand "hakuspace-swaync-gtk4-fixed" { } ''
+          pkgs.runCommand "bonfire-swaync-gtk4-fixed" { } ''
             cp -r ${share}/swaync $out
             chmod -R u+w $out
             ${lib.optionalString osConfig.my.hyprland.keystone.enable ''
@@ -986,7 +986,7 @@ in
             ''}
             cat >> $out/style.css <<'EOF'
 
-            /* Appended by features/hakuspace (nix): GTK4 selector fix for the
+            /* Appended by features/bonfire (nix): GTK4 selector fix for the
                menubar menu buttons -- see the note in home.nix. */
             .widget-menubar > .menu-button-bar > .widget-menubar-container button {
                 min-width: 100px;
@@ -1009,9 +1009,26 @@ in
         );
       };
 
-    home.activation.hakuspaceMutableSeeds =
+    # Rebrand migration (haku* -> bonfire). Carry the user's LIVE state across the hakuspace->bonfire
+    # rename so a rebuild never resets it: the theme/accent/wallpaper (~/.local/state/haku_theme -> glow,
+    # else the theme-init service's gen_style.sh would regenerate a DEFAULT theme on first boot) and the
+    # control-dir customizations (~/hakuspace-control -> ~/bonfire-control). Guarded to fire only when the
+    # OLD path exists and the NEW one does not, so it never clobbers an already-populated target; after the
+    # move the old path is gone, making it a one-shot in practice. entryBefore the seeds (and, being an
+    # activation, it always precedes the next graphical-session theme-init service).
+    home.activation.bonfireRebrandMigration =
+      lib.hm.dag.entryBefore [ "bonfireMutableSeeds" ] ''
+        if [ -d "$HOME/.local/state/haku_theme" ] && [ ! -e "$HOME/.local/state/glow" ]; then
+          run mv "$HOME/.local/state/haku_theme" "$HOME/.local/state/glow"
+        fi
+        if [ -d "$HOME/hakuspace-control" ] && [ ! -e "$HOME/bonfire-control" ]; then
+          run mv "$HOME/hakuspace-control" "$HOME/bonfire-control"
+        fi
+      '';
+
+    home.activation.bonfireMutableSeeds =
       let
-        share = "${config.programs.hakuspace.package}/share/hakuspace/config";
+        share = "${config.programs.bonfire.package}/share/bonfire/config";
       in
       lib.hm.dag.entryAfter [ "linkGeneration" ] ''
         if [ -L "$HOME/.config/waybar/dockbar" ] || [ ! -e "$HOME/.config/waybar/dockbar" ]; then
@@ -1025,7 +1042,7 @@ in
           run mkdir -p "$HOME/.config/rofi"
           run install -m644 ${share}/rofi/config.rasi "$HOME/.config/rofi/config.rasi"
         fi
-        # Fullscreen frosted + DIMMED backdrop for BOTH the launcher and hakumenu
+        # Fullscreen frosted + DIMMED backdrop for BOTH the launcher and flint
         # (both read this config.rasi). The shipped layout themes make `window` a small
         # opaque box, so Hyprland's blur has nothing to show through. Override window to
         # fullscreen (the visible box moves to the centered `mainbox`), so the rofi
@@ -1050,19 +1067,19 @@ in
             tr -d '\0' < "$HOME/.config/rofi/config.rasi" > "$HOME/.config/rofi/config.rasi.heal" \
               && run mv -f "$HOME/.config/rofi/config.rasi.heal" "$HOME/.config/rofi/config.rasi"
           fi
-          # BACKGROUND REMOVED (user request): just STRIP any previous haku-fullscreen-blur block
+          # BACKGROUND REMOVED (user request): just STRIP any previous bonfire-fullscreen-blur block
           # and re-append NOTHING, so rofi falls back to the theme's normal compact opaque window.
           # The old block made `window` fullscreen with a dimmed translucent-black backdrop so the
           # whole-desktop blur layer could show -- but that fullscreen layer was the source of the
           # open "blink" (it slid up from the bottom edge) AND the shadow mess. A compact menu has
           # neither. The sed below still runs on every activation so an already-written config.rasi
           # self-heals back to no-backdrop.
-          run sed -i '/haku-fullscreen-blur/,$d' "$HOME/.config/rofi/config.rasi"
+          run sed -i '/bonfire-fullscreen-blur/,$d' "$HOME/.config/rofi/config.rasi"
         fi
       '';
 
     /*
-      What the hakumenu spawns but nothing installs. Upstream's install.sh
+      What the flint spawns but nothing installs. Upstream's install.sh
       puts these on the system with pacman; the Setting/General tabs then
       shell out to them by name, and on this host half the entries were
       dead air.
@@ -1179,7 +1196,7 @@ in
     */
     home.file =
       let
-        pkgHypr = "${config.programs.hakuspace.package}/share/hakuspace/config/hypr";
+        pkgHypr = "${config.programs.bonfire.package}/share/bonfire/config/hypr";
 
         # hyprlock without the two greeting labels: "Hi there, $USER" (top)
         # and "Have a nice day!" (bottom); the clock and input field stay.
@@ -1187,10 +1204,10 @@ in
         # Done at EVAL time (builtins.toFile), NOT via a runCommand: a runCommand
         # is a derivation that would build on the remote builder, and this is
         # the one transformation that must not depend on it. Reads the config
-        # from the hakuspace flake INPUT's source (a fetched path, no build,
+        # from the bonfire flake INPUT's source (a fetched path, no build,
         # byte-identical to what the package installs), drops each label block
         # by line, and writes the result straight to the store.
-        hyprlockSrcDir = "${inputs.feat-hakuspace.inputs.hakuspace}/src/common/config/hypr";
+        hyprlockSrcDir = "${inputs.feat-bonfire.inputs.bonfire}/src/common/config/hypr";
         stripLockLabels =
           text:
           let
@@ -1226,10 +1243,10 @@ in
         # hyprlock's "Sample Text" placeholder (general { text_trim = true }); the braille
         # blank is non-empty, non-whitespace, and draws nothing.
         aodGuard = ''
-          flag="''${XDG_RUNTIME_DIR:-/tmp}/haku-aod"
+          flag="''${XDG_RUNTIME_DIR:-/tmp}/bonfire-aod"
           [ -e "$flag" ] && { printf '⠀'; exit 0; }
         '';
-        # The info labels read a CACHE (hakuspace-hyprlock-cache keeps ~/.cache/hyprlock/*
+        # The info labels read a CACHE (bonfire-hyprlock-cache keeps ~/.cache/hyprlock/*
         # warm while hyprlock runs, see the service below) instead of each SPAWNING
         # playerctl/wpctl on every poll. Two wins: (1) on AOD WAKE the labels cat an
         # already-warm cache, so music/battery/weather reappear INSTANTLY and TOGETHER
@@ -1321,7 +1338,7 @@ in
 
         # Cache updater: write each RAW producer's output to ~/.cache/hyprlock/<field>,
         # ATOMICALLY (tmp + mv) so a reader (lockRead) never cats a half-written file.
-        hyprlockCacheUpdate = pkgs.writeShellScript "hakuspace-hyprlock-cache-update" ''
+        hyprlockCacheUpdate = pkgs.writeShellScript "bonfire-hyprlock-cache-update" ''
           export PATH=${lib.makeBinPath [ pkgs.coreutils ]}:$PATH
           d="$HOME/.cache/hyprlock"
           mkdir -p "$d"
@@ -1333,7 +1350,7 @@ in
           w weather  ${lockWeather}
         '';
         # The loop that keeps the cache warm -- installed to ~/.local/bin (below) and run by
-        # the hakuspace-hyprlock-cache service (systemd.user.services). While hyprlock is up,
+        # the bonfire-hyprlock-cache service (systemd.user.services). While hyprlock is up,
         # refresh every ~0.75s (the lit backlight already dwarfs this cost during AOD, so
         # keeping the cache fresh for an INSTANT wake is effectively free); while unlocked,
         # idle-POLL every 2s -- this branch does NOT spawn playerctl/wpctl (only a cheap pgrep),
@@ -1343,7 +1360,7 @@ in
         # fresh on the first frame; this 2s is the safety net. Installed-and-exec'd by path
         # rather than referenced from the service directly, because the service lives in the
         # outer `let` and these in home.file's.
-        hyprlockCacheLoop = pkgs.writeShellScript "hakuspace-hyprlock-cache-loop" ''
+        hyprlockCacheLoop = pkgs.writeShellScript "bonfire-hyprlock-cache-loop" ''
           export PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.procps ]}:$PATH
           while true; do
             if pgrep -x hyprlock >/dev/null 2>&1; then
@@ -1362,7 +1379,7 @@ in
         # hyprlock reads it. Costs ~200ms (a few playerctl/wpctl calls) -- fine for a manual or
         # idle lock. The panic gesture deliberately keeps the un-warmed lock.sh for an INSTANT
         # cover (it locks THEN kills windows); the 2s loop above catches that one.
-        lockWarm = pkgs.writeShellScript "hakuspace-lock-warm" ''
+        lockWarm = pkgs.writeShellScript "bonfire-lock-warm" ''
           ${hyprlockCacheUpdate}
           exec ${bin "lock.sh"} "$@"
         '';
@@ -1492,7 +1509,7 @@ in
         # verified), so gammaReset simply kills it to undim. Neutral temp 6500K; gammaLevel% =
         # the dim depth (hyprsunset gamma is a brightness scale, 100 = normal). Tune here.
         gammaLevel = 40;
-        gammaDim = pkgs.writeShellScript "hakuspace-gamma-dim" ''
+        gammaDim = pkgs.writeShellScript "bonfire-gamma-dim" ''
           export PATH=${lib.makeBinPath [ pkgs.hyprsunset pkgs.procps pkgs.brightnessctl pkgs.coreutils pkgs.util-linux ]}:$PATH
           pkill -x hyprsunset 2>/dev/null
           setsid -f hyprsunset -t 6500 -g ${toString gammaLevel} >/dev/null 2>&1
@@ -1502,7 +1519,7 @@ in
           [ -n "$kbd" ] && brightnessctl -d "$kbd" set 1 >/dev/null 2>&1
           exit 0
         '';
-        gammaReset = pkgs.writeShellScript "hakuspace-gamma-reset" ''
+        gammaReset = pkgs.writeShellScript "bonfire-gamma-reset" ''
           export PATH=${lib.makeBinPath [ pkgs.procps pkgs.brightnessctl pkgs.coreutils ]}:$PATH
           pkill -x hyprsunset 2>/dev/null   # gamma client exits -> compositor reverts to full
           kbd=""; for l in /sys/class/leds/*kbd_backlight; do [ -e "$l" ] && kbd=''${l##*/} && break; done
@@ -1519,14 +1536,14 @@ in
         # playing YouTube still dimmed), so after the AOD rework the nosleep toggle silently stopped
         # blocking dim/lock. playerctl is reliable (also catches the muted video the audio check
         # missed); nosleep is the SAME state file the toggle writes
-        # (~/.local/state/haku_theme/idle_inhibit = 1), so the toggle now genuinely holds dim + lock
+        # (~/.local/state/glow/idle_inhibit = 1), so the toggle now genuinely holds dim + lock
         # (and AOD with them -- AOD is gated on `pidof hyprlock`, which blocking the lock prevents).
         # Video vs audio isn't cleanly separable, so music also holds the screen -- accepted; lock
         # manually when needed.
-        mediaIdleCond = pkgs.writeShellScript "hakuspace-media-idle-cond" ''
+        mediaIdleCond = pkgs.writeShellScript "bonfire-media-idle-cond" ''
           export PATH=${lib.makeBinPath [ pkgs.playerctl pkgs.gnugrep pkgs.coreutils ]}:$PATH
           playerctl -a status 2>/dev/null | grep -q '^Playing$' && exit 1
-          [ "$(cat "$HOME/.local/state/haku_theme/idle_inhibit" 2>/dev/null)" = 1 ] && exit 1
+          [ "$(cat "$HOME/.local/state/glow/idle_inhibit" 2>/dev/null)" = 1 ] && exit 1
           exit 0
         '';
 
@@ -1539,7 +1556,7 @@ in
 
           The listener is gated on `pidof hyprlock` with a SHORT (30s) timeout, so it
           is really "30s of idle AFTER the screen is LOCKED" -- which makes it a
-          MANUAL-LOCK TIMER too: hit SUPER+Escape (features/hakuspace/compositor.nix)
+          MANUAL-LOCK TIMER too: hit SUPER+Escape (features/bonfire/compositor.nix)
           and 30s later it dims + minimises, instead of sitting bright until the full
           idle sequence would have reached it. For the AUTO path the 150s lock trips
           the same gate, so AOD follows the auto-lock within condition_retry (10s).
@@ -1556,14 +1573,14 @@ in
           idempotent (kills+relaunches the single hyprsunset daemon), so "unlocked dim already
           ran" and "manual lock dims fresh" both land in the same dimmed state.
         */
-        aodEnter = pkgs.writeShellScript "hakuspace-aod-enter" ''
-          flag="''${XDG_RUNTIME_DIR:-/tmp}/haku-aod"
+        aodEnter = pkgs.writeShellScript "bonfire-aod-enter" ''
+          flag="''${XDG_RUNTIME_DIR:-/tmp}/bonfire-aod"
           : > "$flag"
           ${gammaDim}
         '';
-        aodExit = pkgs.writeShellScript "hakuspace-aod-exit" ''
+        aodExit = pkgs.writeShellScript "bonfire-aod-exit" ''
           export PATH=${lib.makeBinPath [ pkgs.coreutils ]}:$PATH
-          flag="''${XDG_RUNTIME_DIR:-/tmp}/haku-aod"
+          flag="''${XDG_RUNTIME_DIR:-/tmp}/bonfire-aod"
           rm -f "$flag"
           "$HOME/.local/bin/dpms_handler.sh" on
           # Undim: gammaReset kills the hyprsunset daemon so the compositor reverts the gamma
@@ -1592,20 +1609,20 @@ in
             - plugged in  -> never idle-suspend (the leave-it-to-build case).
             - nosleep on  -> never (the toggle now genuinely works, no version
                              check to trip over). Same state file the toggle
-                             writes: ~/.local/state/haku_theme/idle_inhibit.
+                             writes: ~/.local/state/glow/idle_inhibit.
 
           Everything else on battery still suspends, but at a saner 15 min
           (below), not 5.
         */
-        suspendGate = pkgs.writeShellScript "hakuspace-idle-suspend-gate" ''
+        suspendGate = pkgs.writeShellScript "bonfire-idle-suspend-gate" ''
           for f in /sys/class/power_supply/A*/online; do
             [ -r "$f" ] && [ "$(cat "$f")" = 1 ] && exit 1
           done
-          [ "$(cat "$HOME/.local/state/haku_theme/idle_inhibit" 2>/dev/null)" = 1 ] && exit 1
+          [ "$(cat "$HOME/.local/state/glow/idle_inhibit" 2>/dev/null)" = 1 ] && exit 1
           exit 0
         '';
 
-        hypridleFixed = pkgs.runCommand "hakuspace-hypridle-fixed" { } ''
+        hypridleFixed = pkgs.runCommand "bonfire-hypridle-fixed" { } ''
           cp ${pkgHypr}/hypridle.conf $out
           chmod u+w $out
 
@@ -1627,7 +1644,7 @@ in
           # (1c) Idle / auto-lock (loginctl lock-session -> logind Lock -> this lock_cmd) goes
           # through lock-warm.sh so the lock screen's music/battery/volume are refreshed ONCE
           # before hyprlock paints -- not the stale cache from the previous lock. SUPER+Escape
-          # does the same (features/hakuspace compositor.nix); the panic gesture keeps plain
+          # does the same (features/bonfire compositor.nix); the panic gesture keeps plain
           # lock.sh for an instant cover.
           substituteInPlace $out \
             --replace-fail 'lock_cmd = pidof hyprlock || ~/.local/bin/lock.sh' \
@@ -1689,7 +1706,7 @@ in
         ".config/hypr/hyprlock.conf".source = hyprlockNoText "hyprlock.conf" hyprlockExtras;
         ".config/hypr/hyprlock_tiny.conf".source = hyprlockNoText "hyprlock_tiny.conf" "";
         # The lock-screen value cache loop (see hyprlockCacheLoop). Installed to a stable
-        # path so the hakuspace-hyprlock-cache service can exec it by `bin "..."` from the
+        # path so the bonfire-hyprlock-cache service can exec it by `bin "..."` from the
         # outer `let` (it can't see this inner `let`'s store paths).
         ".local/bin/hyprlock-cache-loop".source = hyprlockCacheLoop;
         # lock-warm.sh: primes the hyprlock value cache once, then execs lock.sh (see lockWarm).

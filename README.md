@@ -4,7 +4,7 @@ Three machines, one flake.
 
 | host | role |
 |---|---|
-| `dell-latitude` | Dell Latitude — the daily-driver **Haku** Hyprland desktop (the quickshell notif-centre + 3D trapezoid dock, the **bonfire** audio engine, the **hearth** settings store). Untuned: plain upstream nixpkgs, closure from cache. |
+| `dell-latitude` | Dell Latitude — the daily-driver **Bonfire** Hyprland desktop (the quickshell notif-centre + 3D trapezoid dock, the **bonfire** audio engine, the **hearth** settings store). Untuned: plain upstream nixpkgs, closure from cache. |
 | `galaxybook4-pro360` | Samsung Galaxy Book4 Pro 360 laptop. Meteor Lake, Hyprland desktop. |
 | `victus-15` | HP Victus 15. Ryzen znver3, headless, doubles as a remote builder. |
 
@@ -116,15 +116,15 @@ Options only for what actually varies. Most features have nothing but `enable`.
 3. Register it in `flake.nix`
 4. **Run `runtime-cache-refresh` before the first real build** — see below
 
-## The Haku desktop
+## The Bonfire desktop
 
 `dell-latitude` is the bespoke Hyprland desktop. The pieces, each a feature:
 
 - **`hyprland`** — the compositor. A source patch (`features/hyprland/trapezoid.patch`, gated by
   `my.hyprland.keystone.enable`) adds a per-window perspective **keystone** so dock-tagged windows
   render as 3D trapezoids.
-- **`hakuspace`** — the shell: waybar, rofi, the theme/wallpaper/cava machinery. A live accent flows
-  from `~/.local/state/haku_theme/colors.css` into every consumer.
+- **`bonfire`** — the shell: waybar, rofi, the theme/wallpaper/cava machinery. A live accent flows
+  from `~/.local/state/glow/colors.css` into every consumer.
 - **`notifcenter`** — a quickshell notification centre (replaces swaync, `SUPER+N`): weather, clock, a
   control grid, Wi-Fi/Bluetooth managers, and the Sound mixer.
 - **`sidedock`** — the right-edge cascade dock (the keystone trapezoids), mutually exclusive with the

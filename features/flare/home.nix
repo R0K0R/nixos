@@ -17,7 +17,7 @@ let
   '';
 
   # Weather for the panel. Reuses the system `linecast weather` tool (in the user profile, resolved off
-  # the inherited PATH) and the SAME compact format + cache file the lock screen uses (features/hakuspace
+  # the inherited PATH) and the SAME compact format + cache file the lock screen uses (features/bonfire
   # lockWeatherFetch) -- so they stay consistent and share one 30-min fetch instead of hammering it.
   weatherCmd = pkgs.writeShellScript "flare-weather" ''
     export PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.findutils ]}:$PATH
@@ -52,7 +52,7 @@ lib.mkIf (osConfig.my.flare.enable && inScope && osConfig.my.desktop.compositor 
   # daemon, so it coexists with swaync; when it grows a NotificationServer, swaync gets disabled.
   systemd.user.services.flare = {
     Unit = {
-      Description = "Haku notification centre (quickshell)";
+      Description = "Bonfire notification centre (quickshell)";
       PartOf = [ "graphical-session.target" ];
       After = [ "graphical-session.target" ];
       # quickshell reads shell.qml once at startup, and only the UNIT changing makes home-manager
@@ -72,12 +72,12 @@ lib.mkIf (osConfig.my.flare.enable && inScope && osConfig.my.desktop.compositor 
       #    survive quickshell's process-group teardown -- see the run() comment in shell.qml.
       #  - panelbus: the panel broadcasts `panelbus open flare` on open (mutual exclusion with the dock).
       #  - libnotify (notify-send) + pipewire (pw-play): the timer/pomodoro end-alert is a toast PLUS a
-      #    short chime (HAKU_ALERT_SOUND), and must fire even when the panel is closed (the countdown
+      #    short chime (BONFIRE_ALERT_SOUND), and must fire even when the panel is closed (the countdown
       #    keeps running regardless).
       ExecStart = pkgs.writeShellScript "flare-start" ''
         export PATH=${lib.makeBinPath [ pkgs.hyprsunset pkgs.util-linux pkgs.libnotify pkgs.pipewire pkgs.grim pkgs.slurp pkgs.wl-clipboard pkgs.hyprpicker pkgs.wf-recorder pkgs.procps osConfig.my.panelbus.package ]}''${PATH:+:$PATH}
-        export HAKU_ALERT_SOUND=${pkgs.sound-theme-freedesktop}/share/sounds/freedesktop/stereo/complete.oga
-        export HAKU_WEATHER_CMD=${weatherCmd}
+        export BONFIRE_ALERT_SOUND=${pkgs.sound-theme-freedesktop}/share/sounds/freedesktop/stereo/complete.oga
+        export BONFIRE_WEATHER_CMD=${weatherCmd}
         # Crisper text at the 0.8 fractional monitor scale: force NATIVE glyph rendering instead of
         # QtQuick's default distance-field atlas, which samples one cached glyph texture and goes soft
         # at non-integer scale (native rasterizes per pixel-size -> sharp). Reversible -- drop this to
@@ -91,12 +91,12 @@ lib.mkIf (osConfig.my.flare.enable && inScope && osConfig.my.desktop.compositor 
     };
   };
 
-  # SUPER+N opens the notif centre (hakuspace's swaync bind is gated off when this feature is on).
+  # SUPER+N opens the notif centre (bonfire's swaync bind is gated off when this feature is on).
   # extraConfig is types.lines -> concatenated into the one generated hyprland.lua.
   wayland.windowManager.hyprland.extraConfig = lib.mkAfter ''
     hl.bind("${mod} + N", hl.dsp.exec_cmd("${notifToggle}"))
     -- Frosted glass for the notif centre AND its toast popups (the keystone warps the panel's blur
-    -- pass along with it). Neither namespace is covered by hakuspace's swaync layer_rule, so declare
+    -- pass along with it). Neither namespace is covered by bonfire's swaync layer_rule, so declare
     -- them here. The panel bg is semi-transparent (bgPanel) so this blur reads as frost.
     hl.layer_rule({ match = { namespace = "^(flare|flare-popup)$" }, blur = true, ignore_alpha = 0.05 })
   '';

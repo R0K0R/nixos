@@ -17,7 +17,7 @@ let
   merged = lib.foldl' (acc: p: acc // (loadFragment p)) { } fragmentPaths;
 
   schema = { settings = merged; };
-  schemaFile = pkgs.writeText "haku-settings-schema.json" (builtins.toJSON schema);
+  schemaFile = pkgs.writeText "bonfire-settings-schema.json" (builtins.toJSON schema);
   stateDir = "${config.home.homeDirectory}/.local/state/hearth";
 in
 {

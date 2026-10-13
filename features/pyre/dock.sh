@@ -30,7 +30,7 @@ geom() {
   # x/y are already logical. max_by picks the rightmost monitor; nothing is hardcoded to 1920.
   read -r W H X0 Y0 < <($HC monitors -j | $J -r 'max_by(.x + (.width/(.scale//1)))|"\(.width/(.scale//1)|round) \(.height/(.scale//1)|round) \(.x) \(.y)"')
   [ -n "${W:-}" ] && [ "$W" -gt 0 ] 2>/dev/null || { W=1920; H=1080; X0=0; Y0=0; }   # fallback
-  # Waybar footprint, classified by ORIENTATION (hakuspace ships horizontal AND vertical layouts).
+  # Waybar footprint, classified by ORIENTATION (bonfire ships horizontal AND vertical layouts).
   # A horizontal bar (wide + short) offsets the dock vertically; a VERTICAL bar (tall + narrow) must
   # NOT be read as a top offset -- its .h is the WHOLE display height, which drove DOCK_H negative and
   # broke the dock entirely. A vertical bar on the RIGHT instead insets the pile horizontally; one on

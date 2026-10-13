@@ -333,7 +333,7 @@
     */
     packages.extra.user = with pkgs; [
       kdePackages.okular
-      btop # hakuspace's theme pipeline already writes ~/.config/btop themes
+      btop # bonfire's theme pipeline already writes ~/.config/btop themes
       # gimp REMOVED 2026-10-10 -> replaced by PhotoCraft (flatpak ai.storyteller.photocraft, installed
       # --user from the unofficial `artcraft` (FlatPark) remote; see the craft-suite memory). `gimp` to revert.
       qalculate-qt # calculator (Qt build -- themes via qt6ct like the KDE apps)
@@ -459,7 +459,7 @@
       wdisplays
       wlr-randr
 
-      cava # standalone terminal audio visualizer (hakuspace bundles its own
+      cava # standalone terminal audio visualizer (bonfire bundles its own
       # wrapped copy for the bar underbar; this puts `cava` on PATH too)
     ];
 
@@ -492,7 +492,7 @@
     };
 
     /*
-      Shell is Haku Space, not DMS -- mutually exclusive `provides = ["shell"]`
+      Shell is Bonfire Space, not DMS -- mutually exclusive `provides = ["shell"]`
       claimants (features/_meta), so dms.enable must be false or the role
       assertion fires. The greeter switch is off too: with the shell gone,
       dank-greeter was the last DMS piece running, and the login screen is now
@@ -508,11 +508,11 @@
 
     tuigreet.enable = true;
 
-    hakuspace.enable = true;
+    bonfire.enable = true;
     # Drop "fastfetch" from the managed configs: the greeting is now features/fastfetch
-    # (programs.fastfetch, with the bonfire logo), which owns ~/.config/fastfetch -- letting hakuspace
+    # (programs.fastfetch, with the bonfire logo), which owns ~/.config/fastfetch -- letting bonfire
     # also symlink a fastfetch config there would collide. (Default minus "fastfetch".)
-    hakuspace.configNames = [ "waybar" "rofi" "swaync" "cava" "gtk.css" "xdg-desktop-portal" ];
+    bonfire.configNames = [ "waybar" "rofi" "swaync" "cava" "gtk.css" "xdg-desktop-portal" ];
     # Right-edge cascade dock (SUPER+D shifts the pile, SUPER+SHIFT+D parks it):
     # sonora + KakaoTalk auto-route in; SUPER+SHIFT+T opens a docked
     # terminal; push any other window in with SUPER+ALT+D. See features/pyre.

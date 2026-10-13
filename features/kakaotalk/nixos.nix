@@ -7,7 +7,7 @@ let
   # apply cleanly to 11.0). With the `FileDialogPortal`="always" registry key set in the
   # launcher's reg block below, GetOpenFileName / GetSaveFileName / IFileDialog /
   # SHBrowseForFolder ask org.freedesktop.portal.FileChooser instead of Wine drawing its own
-  # dialog -> the session's FileChooser backend (kde -- features/session-services + hakuspace)
+  # dialog -> the session's FileChooser backend (kde -- features/session-services + bonfire)
   # shows the native KDE/Dolphin-style picker. Covers ANY wine process (the user's `wine` is
   # this one). Builds from SOURCE (~1h; offload to a remote builder -- the cached binary can't
   # carry a patch). portal_dbus.c dlopens libdbus by bare SONAME, which has no global path on

@@ -1,4 +1,4 @@
-# Haku unified settings — design
+# Bonfire unified settings — design
 
 > **Status: design, not yet implemented.** This is the agreed blueprint for a single settings
 > system that replaces the scattered hardcoded values, inline `set` configs, and the upstream rofi
@@ -29,7 +29,7 @@ Every setting therefore carries a `scope` that is exactly one of these two.
         │
         ▼
  ┌─────────────┐   overrides.json  (only what YOU changed — survives rebuilds, flat dotted keys)
- │  haku-settings (TUI / CLI) │  the ONLY writer
+ │  bonfire-settings (TUI / CLI) │  the ONLY writer
  └─────────────┘
         │  validate → materialise → signal
         ▼
@@ -41,18 +41,18 @@ Every setting therefore carries a `scope` that is exactly one of these two.
             each owns key-prefixes, reloads only the parts that changed
 ```
 
-Files live under **`$XDG_STATE_HOME/haku/`** (i.e. `~/.local/state/haku/`), the generalisation of
-today's `~/.local/state/haku_theme/`:
+Files live under **`$XDG_STATE_HOME/bonfire/`** (i.e. `~/.local/state/bonfire/`), the generalisation of
+today's `~/.local/state/glow/`:
 
 | file | writer | consumers | notes |
 |---|---|---|---|
 | `schema.json` | Nix (generated) | the TUI + materialiser | metadata registry **incl. each key's default** (§3). Read-only. |
-| `overrides.json` | `haku-settings` | the materialiser | **only user-changed keys**, flat. Never clobbered. |
-| `settings.json` | `haku-settings` | **everyone** | effective, nested, `jq`-friendly (§4). |
-| `settings.signal.json` | `haku-settings` | everyone (watch) | the change diff (§5). |
+| `overrides.json` | `bonfire-settings` | the materialiser | **only user-changed keys**, flat. Never clobbered. |
+| `settings.json` | `bonfire-settings` | **everyone** | effective, nested, `jq`-friendly (§4). |
+| `settings.signal.json` | `bonfire-settings` | everyone (watch) | the change diff (§5). |
 
 > Implemented by the standalone **`hearth`** engine (`~/Documents/projects/hearth`,
-> `github:sihooleebd/hearth`) — `haku-settings` is hearth with the Haku schema + TUI on top.
+> `github:sihooleebd/hearth`) — `bonfire-settings` is hearth with the Bonfire schema + TUI on top.
 
 **Why flat schema but nested store:** a flat registry (`"a.b.c": {…}`) makes each setting an
 independent record — trivial to add, delete, or merge from fragments. A nested store reads cleanly,
@@ -218,7 +218,7 @@ one record in the owning feature; deleting = remove it. `rm -r features/x` takes
 (Adding a *setting* is a rebuild — you're editing the flake anyway; **changing a value** is always
 live. That is the correct line.)
 
-## 8. The TUI (`haku-settings`)
+## 8. The TUI (`bonfire-settings`)
 
 Python + **Textual** (in nixpkgs; same language as bonfire). yazi/ranger-style miller columns:
 
@@ -237,16 +237,16 @@ Python + **Textual** (in nixpkgs; same language as bonfire). yazi/ranger-style m
   "pending rebuild" list instead of applying live.
 - editing writes `overrides.json` via the writer, which materialises + signals; the TUI shows the
   live value echo back.
-- also exposes a non-interactive CLI: `haku-settings get <key>` / `set <key> <value>` / `reset <key>`
+- also exposes a non-interactive CLI: `bonfire-settings get <key>` / `set <key> <value>` / `reset <key>`
   — so keybinds and scripts can poke settings too.
 
 ## 9. Known hard cases (resolve during implementation)
 
-1. **Upstream shell scripts that `sed -i` their own configs** (the wrapped `hakuspace` package —
+1. **Upstream shell scripts that `sed -i` their own configs** (the wrapped `bonfire` package —
    theme/wallpaper/dockbar/cava). They mutate `config.rasi`, `dockbar/config`, `colors.css`
    themselves. Options: (a) let them keep owning *their* files and have the materialiser treat
    `colors.css` as a generated *output* of `theme.*`; or (b) intercept the few menu entries we care
-   about and route them through `haku-settings`. Likely a mix — don't fight the upstream for things
+   about and route them through `bonfire-settings`. Likely a mix — don't fight the upstream for things
    it already does well (theme switching), do co-opt the "terrible" bits.
 2. **Values that are both runtime and buildtime.** e.g. `border_size` also feeds the touch-gesture
    strip formula at build; `modKey` is interpolated into the generated Lua. Rule: if a Nix-side
@@ -258,7 +258,7 @@ Python + **Textual** (in nixpkgs; same language as bonfire). yazi/ranger-style m
 
 ## 10. Migration plan
 
-1. **Plumbing first** — the store + materialiser + `settings.signal.json` + the `haku-settings`
+1. **Plumbing first** — the store + materialiser + `settings.signal.json` + the `bonfire-settings`
    get/set CLI + one generic watcher helper. No UI yet; prove the loop with two or three keys.
 2. **First real consumer** — move the notifcenter design tokens + geometry behind `panel.*`; wire the
    QML watch. This is the densest, highest-value, already-live-ish surface.

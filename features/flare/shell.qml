@@ -1,9 +1,9 @@
 //@ pragma UseQApplication
-// Haku notification centre (quickshell) -- replaces swaync. A SIZED layer (namespace
+// Bonfire notification centre (quickshell) -- replaces swaync. A SIZED layer (namespace
 // "flare") that the compositor keystone warps into a dock-card trapezoid.
 //
-// DESIGN: matches the shell's monochrome vibe (features/hakuspace). Pure white-on-near-black;
-// the accent is read live from ~/.local/state/haku_theme/colors.css (the same token the whole
+// DESIGN: matches the shell's monochrome vibe (features/bonfire). Pure white-on-near-black;
+// the accent is read live from ~/.local/state/glow/colors.css (the same token the whole
 // shell uses -- @accent_color, currently #ffffff). ACTIVE controls INVERT (accent bg, black text),
 // exactly like the waybar workspace chips. Font: DepartureMono Nerd Font, like the rest of the shell.
 //
@@ -180,20 +180,20 @@ ShellRoot {
     Timer { id: bfResync; interval: 450; onTriggered: root.bfRefresh() }
 
     // ----- state refresh (script-driven toggles + the live theme accent) -----
-    Process { id: pAccent; command: ["sh","-c","grep -oE '#[0-9a-fA-F]{6}' $HOME/.local/state/haku_theme/colors.css 2>/dev/null | head -1"]; running: true; stdout: StdioCollector { onStreamFinished: { var c = text.trim(); if (c.length === 7) root.accent = c; } } }
+    Process { id: pAccent; command: ["sh","-c","grep -oE '#[0-9a-fA-F]{6}' $HOME/.local/state/glow/colors.css 2>/dev/null | head -1"]; running: true; stdout: StdioCollector { onStreamFinished: { var c = text.trim(); if (c.length === 7) root.accent = c; } } }
     Process { id: pWifi;  command: ["sh","-c","nmcli -t radio wifi 2>/dev/null"]; stdout: StdioCollector { onStreamFinished: root.wifiOn = text.trim() === "enabled" } }
     Process { id: pNight; command: ["sh","-c","pgrep -x hyprsunset >/dev/null || pgrep -x gammastep >/dev/null"]; onExited: (code) => root.nightOn = (code === 0) }
-    Process { id: pSleep; command: ["sh","-c","[ \"$(cat $HOME/.local/state/haku_theme/idle_inhibit 2>/dev/null)\" = 1 ]"]; onExited: (code) => root.nosleepOn = (code === 0) }
+    Process { id: pSleep; command: ["sh","-c","[ \"$(cat $HOME/.local/state/glow/idle_inhibit 2>/dev/null)\" = 1 ]"]; onExited: (code) => root.nosleepOn = (code === 0) }
     Process { id: pProf;  command: ["sh","-c","powerprofilesctl get 2>/dev/null"]; stdout: StdioCollector { onStreamFinished: root.powerProfile = text.trim() || "balanced" } }
     Process { id: pRec;   command: ["sh","-c","pgrep -x wf-recorder >/dev/null"]; onExited: (code) => root.recOn = (code === 0) }
     function refresh() { pAccent.running = true; pWifi.running = true; pNight.running = true; pSleep.running = true; pProf.running = true; pRec.running = true; }
 
-    // ----- weather (runs HAKU_WEATHER_CMD -> linecast --json; see features/flare/home.nix) -----
+    // ----- weather (runs BONFIRE_WEATHER_CMD -> linecast --json; see features/flare/home.nix) -----
     property var wx: null
     function wxDay(d) { return Qt.formatDate(new Date(d), "ddd"); }
     Process {
         id: pWeather
-        command: ["sh","-c","$HAKU_WEATHER_CMD 2>/dev/null"]
+        command: ["sh","-c","$BONFIRE_WEATHER_CMD 2>/dev/null"]
         stdout: StdioCollector { onStreamFinished: { try { var o = JSON.parse(text); if (o && o.current) root.wx = o; } catch (e) {} } }
     }
     Timer { running: true; interval: Math.max(1, root.hsGet("panel.weather.interval_min", 20)) * 60000; repeat: true; triggeredOnStart: true; onTriggered: pWeather.running = true }  // live via hearth
@@ -321,10 +321,10 @@ ShellRoot {
         return h > 0 ? (h + ":" + mm + ":" + xx) : (mm + ":" + xx);
     }
     // toast + a short chime. Both run even when the panel is closed (notify-send + pw-play are on the
-    // service PATH; HAKU_ALERT_SOUND is set in features/flare/home.nix). 2>/dev/null so a missing
+    // service PATH; BONFIRE_ALERT_SOUND is set in features/flare/home.nix). 2>/dev/null so a missing
     // audio sink never swallows the toast. (title/body are literals here, so plain quoting is safe.)
     function timerAlert(title, body) {
-        root.run("notify-send -a 'Haku Timer' '" + title + "' '" + body + "' ; pw-play \"$HAKU_ALERT_SOUND\" 2>/dev/null");
+        root.run("notify-send -a 'Bonfire Timer' '" + title + "' '" + body + "' ; pw-play \"$BONFIRE_ALERT_SOUND\" 2>/dev/null");
     }
     // composer state (the card at the bottom builds a new timer from these; MM:SS for a plain timer,
     // work/rest minutes for a pomodoro)
@@ -698,7 +698,7 @@ ShellRoot {
                                onClicked: { btMenu.open = !btMenu.open; if (btMenu.open) { wifiMenu.open = false; powerMenu.open = false; soundMenu.open = false; } } }
                         Tile { Layout.fillWidth: true; Layout.preferredHeight: root.gridTileH; icon: root.dnd ? "󰂛" : "󰂚"; label: "DND"; active: root.dnd; onClicked: root.dnd = !root.dnd }
                         Tile { Layout.fillWidth: true; Layout.preferredHeight: root.gridTileH; icon: "󰒲"; label: "No Sleep"; active: root.nosleepOn
-                               onClicked: root.run("f=$HOME/.local/state/haku_theme/idle_inhibit; mkdir -p \"$(dirname $f)\"; [ \"$(cat $f 2>/dev/null)\" = 1 ] && echo 0 > $f || echo 1 > $f") }
+                               onClicked: root.run("f=$HOME/.local/state/glow/idle_inhibit; mkdir -p \"$(dirname $f)\"; [ \"$(cat $f 2>/dev/null)\" = 1 ] && echo 0 > $f || echo 1 > $f") }
                         Tile { Layout.fillWidth: true; Layout.preferredHeight: root.gridTileH; icon: "󰛨"; label: "Night"; active: root.nightOn; onClicked: root.run("$HOME/.local/bin/nightlight_toggle.sh") }
                         Tile { Layout.fillWidth: true; Layout.preferredHeight: root.gridTileH   // battery mode -- cycles Eco -> Balanced -> Perf
                                icon: root.powerProfile === "power-saver" ? "󰌪" : (root.powerProfile === "balanced" ? "󰂏" : "󱐋")

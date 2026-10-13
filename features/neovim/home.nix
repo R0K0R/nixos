@@ -30,7 +30,7 @@ lib.mkIf enabled {
   ];
 
   /*
-    SEEDED, not linked -- the same contract as hakuspace's control dir, for
+    SEEDED, not linked -- the same contract as bonfire's control dir, for
     the same reason: this is the user's editor config. NvChad's own docs say
     "clone and make it yours"; every keymap the user adds lands in these
     files, and lazy.nvim writes lazy-lock.json next to them. Existing files

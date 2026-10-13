@@ -34,12 +34,15 @@ take it — that includes the null-sink literally named `bonfire` in lyre's grap
    `sihooleebd/bonfire` (the repo = the shell = the desktop).
    - **Stage A** *(done)* — forked `R0K0R/hakuspace` → `sihooleebd/bonfire` (155 files, history kept),
      repointed `features/hakuspace/flake.nix` at it. Eval is byte-identical (clean de-R0K0R).
-   - **Stage B** *(next, the big one)* — rename internals in the bonfire repo: the home-module/package/
-     `programs.hakuspace`→`bonfire` API, the 39 scripts (`hakumenu`→`flint`, `gen_style`,
-     `dockbar_manager`, `rofi_theme_switcher`, …), config namespaces, and state paths. **MIGRATE
-     `~/.local/state/haku_theme` → `glow`** with a guard so the live theme never resets. Then rename the
-     flake wrapper `features/hakuspace`→`features/bonfire` + `my.hakuspace`→`my.bonfire`. flint + glow
-     land here. Rebuild-test between sub-steps — it's the live shell.
+   - **Stage B** *(done)* — renamed internals in the bonfire repo (`programs.hakuspace`→`bonfire`,
+     `hakumenu`→`flint`, `HAKU_*`→`BONFIRE_*`, `haku_theme`→`glow`, `hakuspace-control`→`bonfire-control`;
+     95 files, 0 non-attribution `haku` left, original author credited). Flake side:
+     `features/hakuspace`→`features/bonfire`, `my.hakuspace`→`my.bonfire`, `feat-hakuspace`→`feat-bonfire`,
+     the `$out/share/hakuspace`→`bonfire` package paths, the panel's `haku_theme` reads + `HAKU_*` env
+     vars, and the keystone patch's layer match (→ exact `"flare"`, which the flare rename had left
+     mismatched). A guarded `bonfireRebrandMigration` activation carries the live theme
+     (`haku_theme`→`glow`) + control dir (`~/hakuspace-control`→`~/bonfire-control`) across, so a rebuild
+     never resets them. Docs (README/SETTINGS identity) land in phase 6.
 6. **identity + logo everywhere** — README/MOTD/`tuigreet`/**plymouth**/fastfetch/hyprlock/the panel
    header, all carrying the bonfire logo. Rename `sihooleebd/nixos` doc identity to bonfire.
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Desktop icons for a wlroots/Hyprland session, reimplemented.
 #
-# The upstream hakuspace desktop_icons.py was experimental and buggy: every
+# The upstream bonfire desktop_icons.py was experimental and buggy: every
 # file showed a generic document glyph (it never read a .desktop's Icon= or a
 # file's mime type), .desktop launchers did not open (xdg-open opened them as
 # text), the window resized during drags so icons/labels wobbled (the "jelly"),
@@ -35,7 +35,7 @@ PAD_Y = 12
 TOP_INSET = 64
 LABEL_H = 34
 
-LAYOUT_FILE = Path.home() / ".local/state/haku_theme/desktop-icons-layout.json"
+LAYOUT_FILE = Path.home() / ".local/state/glow/desktop-icons-layout.json"
 
 # text/uri-list is the standard file drag payload understood by Dolphin,
 # Nautilus, browsers, etc. info=0 is our own tag; we only use one target.
