@@ -229,7 +229,7 @@
     latex.enable = true;
     media.enable = true;
     desktop-apps.enable = true;
-    notifcenter.enable = true; # quickshell keystone notif panel (WIP, stage 1 PoC alongside swaync)
+    flare.enable = true; # quickshell keystone notif panel (WIP, stage 1 PoC alongside swaync)
     panelbus.enable = true;    # broadcast-on-open mutual exclusion for dock / notif
     diagnostics.enable = true;
     qt-dev.enable = true;
@@ -515,8 +515,8 @@
     hakuspace.configNames = [ "waybar" "rofi" "swaync" "cava" "gtk.css" "xdg-desktop-portal" ];
     # Right-edge cascade dock (SUPER+D shifts the pile, SUPER+SHIFT+D parks it):
     # sonora + KakaoTalk auto-route in; SUPER+SHIFT+T opens a docked
-    # terminal; push any other window in with SUPER+ALT+D. See features/sidedock.
-    sidedock = {
+    # terminal; push any other window in with SUPER+ALT+D. See features/pyre.
+    pyre = {
       enable = true;
       # Bare regex bodies (each wrapped ^(...)$). Dots are left unescaped: a
       # backslash here would reach the generated Lua as an invalid string escape
@@ -526,7 +526,7 @@
       # in favour of this route. The tray pill is class explorer.exe, NOT matched
       # here, so it stays with xembedsniproxy (see kakaotalk-wine-setup). NB the route
       # rule deliberately does NOT suppress activate -- that blocked KakaoTalk from
-      # restoring its window from the tray (see the note in features/sidedock/home.nix).
+      # restoring its window from the tray (see the note in features/pyre/home.nix).
       apps = [ "sonora" "kakaotalk.exe" ];
     };
     # EXPERIMENTAL: perspective-trapezoid render for dock windows (patches the
@@ -540,9 +540,9 @@
     };
   };
 
-  # Sonora (music player) is installed above; the side dock (my.sidedock) fully
+  # Sonora (music player) is installed above; the side dock (my.pyre) fully
   # owns its window behaviour -- float, size-lock, cascade position, opacity and
-  # z-order are all set by features/sidedock's rule + script -- so there is no
+  # z-order are all set by features/pyre's rule + script -- so there is no
   # host-level window rule for it here.
 
   networking.hostName = "dell-latitude";

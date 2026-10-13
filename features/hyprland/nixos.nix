@@ -61,7 +61,7 @@
 
     keystone.enable = lib.mkEnableOption ''
       EXPERIMENTAL per-window perspective-trapezoid rendering for dock-tagged
-      windows (my.sidedock). Patches the compositor (features/hyprland/trapezoid.patch):
+      windows (my.pyre). Patches the compositor (features/hyprland/trapezoid.patch):
       the tex vertex shaders honour a projective w, and renderTextureInternal
       post-multiplies a yaw homography into the projection for windows tagged
       "dock". Every other window renders exactly as before. Rebuilds Hyprland from

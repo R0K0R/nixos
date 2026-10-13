@@ -1,6 +1,6 @@
 //@ pragma UseQApplication
 // Haku notification centre (quickshell) -- replaces swaync. A SIZED layer (namespace
-// "haku-notifcenter") that the compositor keystone warps into a dock-card trapezoid.
+// "flare") that the compositor keystone warps into a dock-card trapezoid.
 //
 // DESIGN: matches the shell's monochrome vibe (features/hakuspace). Pure white-on-near-black;
 // the accent is read live from ~/.local/state/haku_theme/colors.css (the same token the whole
@@ -10,7 +10,7 @@
 // Widgets: wifi · BT · DND · nosleep · nightmode · battery-mode(eco/bal/perf) · power · volume ·
 // brightness · music · notifications.
 //
-// IPC:  quickshell -c haku-notif ipc call panel toggle|show|hide
+// IPC:  quickshell -c flare ipc call panel toggle|show|hide
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -35,7 +35,7 @@ ShellRoot {
 
     // Mutual exclusion via the panelbus (features/panelbus): opening THIS centre broadcasts, which
     // closes the dock + any pins. Only on open (closing shouldn't reopen anything). run() detaches it.
-    onPanelOpenChanged: { if (panelOpen) { run("panelbus open notif"); pWeather.running = true; } else if (btMenu.adapter) btMenu.adapter.discovering = false; }
+    onPanelOpenChanged: { if (panelOpen) { run("panelbus open flare"); pWeather.running = true; } else if (btMenu.adapter) btMenu.adapter.discovering = false; }
 
     // --- design tokens (monochrome, live accent; some live from hearth -- see hsGet below) ---
     property string ff: root.hsGet("panel.font.family", "DepartureMono Nerd Font")
@@ -188,7 +188,7 @@ ShellRoot {
     Process { id: pRec;   command: ["sh","-c","pgrep -x wf-recorder >/dev/null"]; onExited: (code) => root.recOn = (code === 0) }
     function refresh() { pAccent.running = true; pWifi.running = true; pNight.running = true; pSleep.running = true; pProf.running = true; pRec.running = true; }
 
-    // ----- weather (runs HAKU_WEATHER_CMD -> linecast --json; see features/notifcenter/home.nix) -----
+    // ----- weather (runs HAKU_WEATHER_CMD -> linecast --json; see features/flare/home.nix) -----
     property var wx: null
     function wxDay(d) { return Qt.formatDate(new Date(d), "ddd"); }
     Process {
@@ -321,7 +321,7 @@ ShellRoot {
         return h > 0 ? (h + ":" + mm + ":" + xx) : (mm + ":" + xx);
     }
     // toast + a short chime. Both run even when the panel is closed (notify-send + pw-play are on the
-    // service PATH; HAKU_ALERT_SOUND is set in features/notifcenter/home.nix). 2>/dev/null so a missing
+    // service PATH; HAKU_ALERT_SOUND is set in features/flare/home.nix). 2>/dev/null so a missing
     // audio sink never swallows the toast. (title/body are literals here, so plain quoting is safe.)
     function timerAlert(title, body) {
         root.run("notify-send -a 'Haku Timer' '" + title + "' '" + body + "' ; pw-play \"$HAKU_ALERT_SOUND\" 2>/dev/null");
@@ -556,7 +556,7 @@ ShellRoot {
         property var list: []
         function add(n) { list = list.concat([n]); popTimer.restart(); }
         visible: list.length > 0
-        WlrLayershell.namespace: "haku-notif-popup"
+        WlrLayershell.namespace: "flare-popup"
         WlrLayershell.layer: WlrLayer.Overlay
         anchors { top: true; right: true }
         margins { top: 12; right: 12 }
@@ -588,19 +588,19 @@ ShellRoot {
     PanelWindow {
         id: panel
         visible: root.panelOpen
-        // Renamed OFF "haku-notifcenter" so the compositor keystone (features/hyprland/trapezoid.patch,
+        // Renamed OFF "flare" so the compositor keystone (features/hyprland/trapezoid.patch,
         // which matches that prefix) NO LONGER warps this layer: the LAYER keystone mis-renders at a
         // fractional monitor scale (0.8 here), compressing the panel into the right ~45% with a dead
         // transparent left gutter (the "vertical bar"). Flat, full-width panel instead. To bring the
         // trapezoid back, fix the layer path's scale handling in the patch, then restore this name.
-        WlrLayershell.namespace: "haku-notifcenter"
+        WlrLayershell.namespace: "flare"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
         // Anchor top + right + BOTTOM so the panel fills the FULL dock region vertically on ANY
         // monitor. It used to anchor only top/right with a hardcoded implicitHeight: 1198 -- which
         // matched only this screen's dock region and capped (or overflowed) on any other size. With
         // top+bottom anchored the height is now the monitor's: top 48 sits below the waybar's 56px
-        // exclusive zone (56+48 = 104 = the sidedock card's DOCK_Y), bottom 48 mirrors it, and the
+        // exclusive zone (56+48 = 104 = the pyre card's DOCK_Y), bottom 48 mirrors it, and the
         // span between them tracks the screen -- so it always matches the dock region.
         anchors { top: true; right: true; bottom: true }
         margins { top: 48; right: 40; bottom: 48 }

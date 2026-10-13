@@ -66,7 +66,7 @@
     # build against its own pin so the author's binary cache applies, rather
     # than forcing it onto this flake's nixpkgs.
     # Benjamin's bugfixed fork (same app: binary + app-id stay "sonora", so the dock route and the
-    # my.sidedock app-class references are unchanged -- only the source moves).
+    # my.pyre app-class references are unchanged -- only the source moves).
     sonora.url = "github:sihooleebd/sononora/feat/niche-fixes-and-features";
 
     # late.sh CLI (mpiorowski/late-sh) -- the `late` companion CLI, consumed from the project's own
@@ -83,7 +83,7 @@
 
     # hearth -- generic schema-driven settings store + change-diff signal (the engine behind the
     # unified settings system; see SETTINGS.md). features/settings generates its schema from
-    # per-feature settings.nix fragments. Source dev'd in ~/Documents/projects/hearth. No
+    # per-feature hearth.nix fragments. Source dev'd in ~/Documents/projects/hearth. No
     # nixpkgs.follows (same cache rationale as the above).
     hearth.url = "github:sihooleebd/hearth";
 

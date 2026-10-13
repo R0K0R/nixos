@@ -282,11 +282,11 @@ in
                   $out/share/hakuspace/config/waybar/module/workspace_module
 
                 # Notification bell: upstream wires it to swaync-client, but this host replaced swaync
-                # with the quickshell notif centre (features/notifcenter) -- swaync-client is GONE, so
-                # exec-if failed (no count) and the click was a no-op. Point the click at the haku-notif
+                # with the quickshell notif centre (features/flare) -- swaync-client is GONE, so
+                # exec-if failed (no count) and the click was a no-op. Point the click at the flare
                 # IPC toggle (same thing SUPER+N runs) and drop the swaync count subscription -> a plain
-                # bell that actually opens the centre. (A live count would need a haku-notif IPC; later.)
-                ${pkgs.python3}/bin/python3 -c 'import json,sys; p=sys.argv[1]; c=json.load(open(p)); c["custom/notification"]={"tooltip":False,"format":"󰂚","on-click":"quickshell -c haku-notif ipc call panel toggle","on-click-right":"quickshell -c haku-notif ipc call panel toggle","escape":True}; json.dump(c,open(p,"w"),ensure_ascii=False,indent=4)' \
+                # bell that actually opens the centre. (A live count would need a flare IPC; later.)
+                ${pkgs.python3}/bin/python3 -c 'import json,sys; p=sys.argv[1]; c=json.load(open(p)); c["custom/notification"]={"tooltip":False,"format":"󰂚","on-click":"quickshell -c flare ipc call panel toggle","on-click-right":"quickshell -c flare ipc call panel toggle","escape":True}; json.dump(c,open(p,"w"),ensure_ascii=False,indent=4)' \
                   $out/share/hakuspace/config/waybar/module/notification_module
 
                 # Launch the pygobject layers (cava underbar, desktop icons) via
@@ -538,10 +538,10 @@ in
           ExecStart = "${hyprlockBgGen}";
         };
       };
-      # swaync is REPLACED by the quickshell notif centre (features/notifcenter) when that's on --
-      # two daemons can't both own org.freedesktop.Notifications. Gated so my.notifcenter.enable=false
+      # swaync is REPLACED by the quickshell notif centre (features/flare) when that's on --
+      # two daemons can't both own org.freedesktop.Notifications. Gated so my.flare.enable=false
       # brings swaync straight back (the fallback if the quickshell centre misbehaves).
-      hakuspace-notifications = lib.mkIf (!osConfig.my.notifcenter.enable) (themed (
+      hakuspace-notifications = lib.mkIf (!osConfig.my.flare.enable) (themed (
         service "Haku Space notification centre" "${pkgs.swaynotificationcenter}/bin/swaync"
       ));
       hakuspace-idle = service "Haku Space idle daemon" "${pkgs.hypridle}/bin/hypridle";
@@ -833,7 +833,7 @@ in
           # (The Wi-Fi/Bluetooth modules that used to live here are gone -- the
           # native nm-applet and blueman-applet tray icons cover those now.)
           if isinstance(c.get("pulseaudio"), dict):
-              c["pulseaudio"]["on-click-right"] = "quickshell -c haku-notif ipc call panel toggle"
+              c["pulseaudio"]["on-click-right"] = "quickshell -c flare ipc call panel toggle"
               c["pulseaudio"]["on-click-middle"] = pavu
           # Recording button: reflect the actual state. The PERSISTENT recorder
           # button (island/top/... -- the one with no "exec", always shown)
@@ -862,7 +862,7 @@ in
         '';
 
         # Workspace button TEXT colour for the per-monitor/chess-notation scheme (features/hyprland,
-        # features/sidedock): hardwired black on every button state, independent of the
+        # features/pyre): hardwired black on every button state, independent of the
         # haku_theme accent. Appended to style.css so it wins the cascade -- no upstream
         # anchor to drift, unlike substituteInPlace. (ext/workspaces renders as
         # #workspaces button in every layout.)
@@ -969,11 +969,11 @@ in
             cp -r ${share}/swaync $out
             chmod -R u+w $out
             ${lib.optionalString osConfig.my.hyprland.keystone.enable ''
-              # Dock-SHAPE the control centre: size/place it to a sidedock card's footprint so the
+              # Dock-SHAPE the control centre: size/place it to a pyre card's footprint so the
               # compositor keystone (extended to the "swaync-control-center" LAYER in
               # features/hyprland/trapezoid.patch) warps it into the SAME trapezoid, and it occupies
               # the dock's slot -- the two are toggled mutually exclusive (SUPER+N parks the dock;
-              # showing the dock closes this). Values match features/sidedock's live geom on the dell
+              # showing the dock closes this). Values match features/pyre's live geom on the dell
               # (2400x1350 logical: DW 800, right HGAP 40, top barH+VGAP 104, bottom VGAP 48,
               # DOCK_H 1198); gated on keystone.enable so only the dell (where the dock lives) gets
               # them. A very different monitor would want these redone (they're static, unlike the

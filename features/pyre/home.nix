@@ -1,16 +1,16 @@
 { config, lib, pkgs, osConfig, ... }:
 
 let
-  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "sidedock"; };
-  cfg = osConfig.my.sidedock;
+  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "pyre"; };
+  cfg = osConfig.my.pyre;
   mod = osConfig.my.hyprland.modKey;
 
   # dock.sh is a plain file (no Nix-escaping headaches); this thin wrapper just puts
   # hyprctl + jq on its PATH. hyprctl comes from the RUNNING compositor's own
   # package so the IPC protocol always matches.
-  dock = pkgs.writeShellScript "sidedock" ''
+  dock = pkgs.writeShellScript "pyre" ''
     export PATH=${lib.makeBinPath [ osConfig.programs.hyprland.package pkgs.jq pkgs.coreutils pkgs.swaynotificationcenter pkgs.quickshell osConfig.my.panelbus.package ]}''${PATH:+:$PATH}
-    exec ${pkgs.writeShellScript "sidedock-impl" (builtins.readFile ./dock.sh)} "$@"
+    exec ${pkgs.writeShellScript "pyre-impl" (builtins.readFile ./dock.sh)} "$@"
   '';
 
   # Re-apply the CURRENT wallpaper to ALL outputs when the monitor layout changes -- awww does
@@ -19,7 +19,7 @@ let
   # = the path in awww's per-output cache (binary; the path is the last non-control-char run,
   # same extraction as hyprlock-bg). Instant transition so re-painting the already-correct
   # monitor is invisible. No-op if the cache holds a color/video (no path) or awww is down.
-  wallpaperRefresh = pkgs.writeShellScript "sidedock-wallpaper-refresh" ''
+  wallpaperRefresh = pkgs.writeShellScript "pyre-wallpaper-refresh" ''
     export PATH=${lib.makeBinPath [ pkgs.awww pkgs.gnugrep pkgs.coreutils ]}:$PATH
     d="$HOME/.cache/awww/${pkgs.awww.version}"
     cur=$(grep -aoE '/[^[:cntrl:]]+' "$d/eDP-1" 2>/dev/null | tail -1)
@@ -68,7 +68,7 @@ let
   # The dock's own throwaway terminal: SUPER+SHIFT+T spawns a kitty under this
   # class, which the auto-route rule below catches so it opens straight into the
   # pile (SUPER+T stays the normal, main-area terminal -- see features/hyprland).
-  dockTermClass = "sidedock-term";
+  dockTermClass = "pyre-term";
 
   # One auto-route rule per docked app: open FLOATING, PINNED (shown on every workspace so
   # the dock follows the live workspace), WITHOUT grabbing focus, at a monitor-RELATIVE
@@ -112,24 +112,24 @@ let
   # handler to recognise a just-opened dock window by class (the rule no longer tags).
   dockClassSet = "{ " + lib.concatMapStringsSep ", " (c: ''["${c}"] = true'') (cfg.apps ++ [ dockTermClass ]) + " }";
 in
-lib.mkIf (osConfig.my.sidedock.enable && inScope && osConfig.my.desktop.compositor == "hyprland") {
-  # Expose the dock on PATH as `sidedock` so OTHER features can drive it without a store-path
-  # cross-reference -- features/hakuspace's SUPER+N parks the dock (`sidedock hide`) for the
+lib.mkIf (osConfig.my.pyre.enable && inScope && osConfig.my.desktop.compositor == "hyprland") {
+  # Expose the dock on PATH as `pyre` so OTHER features can drive it without a store-path
+  # cross-reference -- features/hakuspace's SUPER+N parks the dock (`pyre hide`) for the
   # mutually-exclusive notification centre. The dock's own binds still use ${dock} directly; this is
   # just the cross-feature entry point.
-  home.packages = [ (pkgs.writeShellScriptBin "sidedock" ''exec ${dock} "$@"'') ];
+  home.packages = [ (pkgs.writeShellScriptBin "pyre" ''exec ${dock} "$@"'') ];
 
   # panelbus close handler (features/panelbus): how the dock gets closed when another special window
   # opens. Absolute ${dock} so it runs regardless of the firing context's PATH; `hide` parks the pile.
   # (PiPs deliberately do NOT participate -- a keystone PiP can coexist with the dock/notif.)
-  xdg.configFile."panelbus/handlers/dock".text = "${dock} hide";
+  xdg.configFile."panelbus/handlers/pyre".text = "${dock} hide";
 
   wayland.windowManager.hyprland.extraConfig = lib.mkAfter ''
       -- Side dock: light apps live on a right-edge panel as a CASCADE STACK.
       -- SUPER+D toggles the pile (show <-> park; parking remembers the front so
       -- the next show restores it). Focused on the dock, SUPER+left/right shift the
       -- pile; SUPER+SHIFT+D toggles the focused window in/out of the dock. Auto-
-      -- routed apps (my.sidedock.apps) open at the front of the pile (rule below).
+      -- routed apps (my.pyre.apps) open at the front of the pile (rule below).
       -- dock.sh places every window BY ADDRESS (never by focusing), so main-area
       -- windows are never disturbed; it only focuses the front, for typing.
       -- Geometry is computed live in dock.sh; the rule literals below must stay in

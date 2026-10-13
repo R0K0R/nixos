@@ -18,7 +18,7 @@
 set -uo pipefail
 export HYPRLAND_INSTANCE_SIGNATURE="${HYPRLAND_INSTANCE_SIGNATURE:-$(ls "${XDG_RUNTIME_DIR:-/run/user/1000}/hypr/" 2>/dev/null | head -1)}"
 HC=hyprctl; J=jq
-STATE="${XDG_RUNTIME_DIR:-/run/user/1000}/sidedock.front"   # remembers the front across hide
+STATE="${XDG_RUNTIME_DIR:-/run/user/1000}/pyre.front"   # remembers the front across hide
 
 geom() {
   # The dock lives on the RIGHTMOST edge of the WHOLE desktop -- the monitor whose logical
@@ -72,7 +72,7 @@ snap() { CLIENTS=$($HC clients -j); }
 EXCLUDE=""
 # Dock-tagged windows: a rule tag renders as 'dock*', a dispatcher tag as 'dock';
 # rtrimstr collapses both. Sorted by address for a stable cycle order.
-# A "dock card" for the CASCADE = tagged dock but NOT pip. A PiP (my.sidedock keystone PiP)
+# A "dock card" for the CASCADE = tagged dock but NOT pip. A PiP (my.pyre keystone PiP)
 # is tagged dock too (so it gets the keystone look/shadow/input for free) but pip excludes it
 # from the pile, so it floats standalone wherever pip_make parked it.
 order()    { $J -r --arg ex "$EXCLUDE" '[.[]|select((.tags|any(rtrimstr("*")=="dock")) and (.tags|any(rtrimstr("*")=="pip")|not) and .address != $ex)|.address]|sort|.[]' <<<"$CLIENTS"; }
@@ -199,7 +199,7 @@ park_all() {
 # Show the pile at the remembered front (falling back to the first window).
 show_pile() {
   local -a o; mapfile -t o < <(order); [ ${#o[@]} -eq 0 ] && return 1
-  panelbus open dock 2>/dev/null || true   # dock is becoming visible -> close the other special panels
+  panelbus open pyre 2>/dev/null || true   # dock is becoming visible -> close the other special panels
   local want=""; [ -f "$STATE" ] && want="$(cat "$STATE" 2>/dev/null)"
   { [ -z "$want" ] || ! exists "$want"; } && want="${o[0]}"
   render "$want" 1
@@ -209,7 +209,7 @@ is_dock() { $J -e --arg a "$1" 'any(.[]; .address==$a and (.tags|any(rtrimstr("*
 is_pip()  { $J -e --arg a "$1" 'any(.[]; .address==$a and (.tags|any(rtrimstr("*")=="pip")))'  <<<"$CLIENTS" >/dev/null 2>&1; }
 dock_send() {  # give a window the dock shape + tag, then lay it out as the front
   local a="$1"
-  panelbus open dock 2>/dev/null || true   # docking shows the pile -> close the other special panels
+  panelbus open pyre 2>/dev/null || true   # docking shows the pile -> close the other special panels
   ensure_float "$a"
   d "hl.dsp.window.tag({tag=\"+dock\", window=\"address:$a\"})"
   # (size + lock is applied by render(), from the live geometry -- not here.)
@@ -238,7 +238,7 @@ undock() {  # strip the dock shape/tag and return a window to the tiling area
   d "hl.dsp.window.set_prop({prop=\"decorate\", value=\"true\", window=\"address:$a\"})"
   d "hl.dsp.window.set_prop({prop=\"no_blur\", value=\"false\", window=\"address:$a\"})"
   d "hl.dsp.window.set_prop({prop=\"no_shadow\", value=\"false\", window=\"address:$a\"})"
-  # Restore corner ROUNDING. The dock route-rule (sidedock/home.nix) pins rounding=0 so the
+  # Restore corner ROUNDING. The dock route-rule (pyre/home.nix) pins rounding=0 so the
   # keystone SHADER owns the corners while docked; that per-window override survives undock,
   # leaving the window square in the tiling area. Re-apply the live GLOBAL rounding so it
   # rounds like every other window (read it, don't hardcode, so it tracks decoration:rounding).
@@ -311,7 +311,7 @@ dock_from_pip() {  # SUPER+SHIFT+D on a PiP: fold it into the cascade pile inste
   # still pip-tagged + mini-sized -- the limbo this whole change removes.
   local a="$1"
   d "hl.dsp.window.tag({tag=\"-pip\", window=\"address:$a\"})"
-  panelbus open dock 2>/dev/null || true   # folding into the dock makes it visible -> close the notif centre
+  panelbus open pyre 2>/dev/null || true   # folding into the dock makes it visible -> close the notif centre
   d "hl.dsp.window.set_prop({prop=\"min_size\", value=\"0 0\", window=\"address:$a\"})"
   d "hl.dsp.window.set_prop({prop=\"max_size\", value=\"99999 99999\", window=\"address:$a\"})"
   snap; render "$a"
@@ -386,7 +386,7 @@ case "${1:-toggle}" in
     a="$(active)"; [ -z "$a" ] && exit 0
     if is_pip "$a"; then unpip "$a"; else pip_make "$a"; fi ;;
   adopt)   # a dock-class window ($2) just OPENED. The Lua handler recognises it by
-           # CLASS (the auto-route rule no longer tags -- see sidedock/home.nix), so
+           # CLASS (the auto-route rule no longer tags -- see pyre/home.nix), so
            # give it the DYNAMIC dock tag here: a rule tag renders as "dock*" and
            # CANNOT be removed by the tag dispatcher, so undock could never release a
            # route-tagged window (it stayed docked + keystoned with its border back).
@@ -415,7 +415,7 @@ case "${1:-toggle}" in
     else
       park_all
     fi ;;
-  rehome)  # a workspace became active (hl.on workspace.active, features/sidedock). The pile is
+  rehome)  # a workspace became active (hl.on workspace.active, features/pyre). The pile is
            # PINNED, and Hyprland's pin follows the active workspace across ALL monitors -- so
            # switching a workspace on ANOTHER screen drags the dock off its home monitor ("flies
            # across screens"). If the pile is up and has drifted onto the wrong monitor, re-home it

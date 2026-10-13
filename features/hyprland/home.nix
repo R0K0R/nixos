@@ -308,7 +308,7 @@ let
   # set via wayland survives a reload. Run from the monitor hook. eDP-1 (primary) + DP-1 (Wacom) are
   # config-managed (my.desktop.primaryOutputScale); HEADLESS-* are throwaway test outputs. Key + 2dp
   # rounding MUST match the reader. (Lives here with its reader -- monitor-scale capture is a Hyprland
-  # concern, not sidedock's.)
+  # concern, not pyre's.)
   scalePersist = pkgs.writeShellScript "hypr-scale-capture" ''
     export PATH=${lib.makeBinPath [ osConfig.programs.hyprland.package pkgs.jq pkgs.coreutils pkgs.gawk ]}:$PATH
     state="$HOME/.config/hypr/monitor-scales"
@@ -554,7 +554,7 @@ in
             contrast = 1.0;
           };
         } // lib.optionalAttrs osConfig.my.hyprland.keystone.enable {
-          # 3D dock: windows tagged "dock" (my.sidedock) render as a perspective
+          # 3D dock: windows tagged "dock" (my.pyre) render as a perspective
           # trapezoid -- the patched compositor (my.hyprland.keystone) reads these
           # per-window. inset = left-edge horizontal pull-in, shrink = left-edge
           # vertical shorten (both fractions; 0 = flat). Emitted ONLY when the patch
@@ -654,9 +654,9 @@ in
       # Finger counts swapped from upstream's (workspace on 3, move on 4) --
       # the same preference the pre-readopt commit 990f0f5 carried.
       gesture = [
-        # 4-finger drag = the built-in MOVE gesture. On a side-dock pile card (my.sidedock) the
+        # 4-finger drag = the built-in MOVE gesture. On a side-dock pile card (my.pyre) the
         # PATCHED CMoveTrackpadGesture (features/hyprland/trapezoid.patch) slides THAT card live
-        # under the finger and on release runs gestures:dock_swipe_exec (set in features/sidedock ->
+        # under the finger and on release runs gestures:dock_swipe_exec (set in features/pyre ->
         # dock.sh gesture-move) to cycle or spring back; elsewhere it moves the focused window. This
         # REPLACED the old Lua-function 4-finger gesture (one-shot on release) with continuous.
         {
@@ -671,9 +671,9 @@ in
           direction = "vertical";
           action = "workspace";
         }
-        # 3-finger HORIZONTAL show/hide of the side-dock pile (my.sidedock), now CONTINUOUS: the
+        # 3-finger HORIZONTAL show/hide of the side-dock pile (my.pyre), now CONTINUOUS: the
         # PATCHED CDockPileTrackpadGesture (features/hyprland/trapezoid.patch) slides the WHOLE pile
-        # live under the fingers and on release runs gestures:dock_pile_exec (set in features/sidedock
+        # live under the fingers and on release runs gestures:dock_pile_exec (set in features/pyre
         # -> dock.sh gesture-pile) to settle shown/hidden or spring back. swipe LEFT reveals, RIGHT
         # hides. This REPLACED the old one-shot Lua-FUNCTION gesture (which only decided the verb on
         # release); a plain string action can express it now that the compositor owns the live slide.
@@ -785,7 +785,7 @@ in
       -- a custom ease-out is not available -- "linear" is the no-overshoot one.
       hl.animation({ leaf = "global", enabled = true, speed = 4, bezier = "linear" })
       hl.animation({ leaf = "windows", enabled = true, speed = 3, bezier = "linear" })
-      -- Window MOVES: the side-dock slide (my.sidedock) is the main thing that moves, and
+      -- Window MOVES: the side-dock slide (my.pyre) is the main thing that moves, and
       -- Benjamin wants the park/show glide to have bounce/"feel". That bounce is now PER-CARD
       -- and DAMPED along the pile (R0K0R's model, ported from keystone/05-dock-bounce-curves):
       -- trapezoid.patch's updateDockMoveAnimation gives each dock card its OWN move curve that
@@ -845,7 +845,7 @@ in
       -- saved scales HERE, in-exec: an hl.monitor call makes that output "ruled", so it survives
       -- the reload DETERMINISTICALLY (no stamp, no timing race -- hl.get_monitors() lets us do it
       -- in pure Lua). Source of truth is a plain, hand/GUI-editable config file, one "<key><TAB>
-      -- <scale>" line per monitor, written by the capture hook in features/sidedock. Key is stable
+      -- <scale>" line per monitor, written by the capture hook in features/pyre. Key is stable
       -- across sessions: "opendisplay" (its output NAME is random each run), else "d:<description>"
       -- for real monitors, else "n:<name>". eDP-1 + DP-1 stay config-managed above
       -- (my.desktop.primaryOutputScale); HEADLESS-* (throwaway test outputs) are ignored.
@@ -989,7 +989,7 @@ in
       -- the Wine/KakaoTalk file selector opens the same size as the native file manager it mirrors.
       hl.window_rule({ match = { class = "^(org\\.freedesktop\\.impl\\.portal\\.desktop\\.kde)$" }, float = true, size = "1200 800" })
       -- Wine's explorer.exe windows. NONE are user-facing here: a folder window (KakaoTalk's "open
-      -- folder") is redirected to Dolphin + closed by folderToDolphin (features/sidedock), and the
+      -- folder") is redirected to Dolphin + closed by folderToDolphin (features/pyre), and the
       -- `explorer.exe /desktop` SHELL stub shows up as a stray tiny 160x20 window top-left. So float
       -- them (no tiling reshuffle) AND park them off-screen at (-9999,-9999) with no focus steal --
       -- this SUPPRESSES the stray /desktop stub (and the transient folder window just flashes there
@@ -1063,7 +1063,7 @@ in
       hl.window_rule({ match = { class = "^(wdisplays)$" }, float = true, center = true })
       hl.window_rule({ match = { class = "^(qt6ct)$" }, float = true, center = true })
       -- KakaoTalk (Wine, class = exe basename) is now auto-routed into the side dock
-      -- (my.sidedock.apps "kakaotalk.exe" in hosts/dell-latitude) -- that route rule
+      -- (my.pyre.apps "kakaotalk.exe" in hosts/dell-latitude) -- that route rule
       -- floats + sizes + pins it AND suppresses its self-raise, so no float rule here.
       -- xembedsniproxy's XEmbed host container is a 32x32 X11 window it reparents
       -- Wine's tray icon into. KDE keeps it off-screen; Hyprland maps it as a tiny
@@ -1134,7 +1134,7 @@ in
       -- Window management
       hl.bind(mod .. " + Q", hl.dsp.window.close())
       -- SUPER+F (fullscreen) and SUPER+SHIFT+F (float-toggle, below) must NOT fire
-      -- on side-dock windows (my.sidedock, tagged "dock"): fullscreening or
+      -- on side-dock windows (my.pyre, tagged "dock"): fullscreening or
       -- unfloating a docked card breaks the cascade. Gate both on the active
       -- window's tag; defensive pcall falls through to the normal action.
       local function ksActiveIsDock()
@@ -1172,7 +1172,7 @@ in
       -- (mod+D was a column-width cycle via `layoutmsg colresize`, but the active
       -- layout no longer accepts that message -- it just errored "unknown dwindle
       -- layoutmsg: colresize". Removed; mod+D now toggles the side dock, see
-      -- features/sidedock.)
+      -- features/pyre.)
       hl.bind(mod .. " + ALT + space", hl.dsp.window.float())
       -- Same float toggle on Mod+Shift+F (pairs with Mod+F = fullscreen), but
       -- likewise skipped on dock windows (see ksActiveIsDock above).
@@ -1193,7 +1193,7 @@ in
       -- (floats it out of the tiling if dragged free), Mod + right-drag
       -- resizes. { mouse = true } is what makes a bind track the pointer.
       --
-      -- Side-dock windows (my.sidedock, tagged "dock") are pinned in place:
+      -- Side-dock windows (my.pyre, tagged "dock") are pinned in place:
       -- dragging one out would defeat the panel, so the left-drag is wrapped
       -- to skip when the pointer is over ANY dock window (front included).
       -- Right-drag needs no guard -- those windows are size-locked (min==max),
@@ -1330,7 +1330,7 @@ in
       --
       -- Each screen owns a decade of workspaces, pinned so switching never slips. Decades follow
       -- SCREEN ORDER left-to-right -- nothing hardcoded: leftmost screen = ws 1-10 (named A1..A10),
-      -- next = 11-20 (B1..), etc. (dynamic pin block below + its features/sidedock twin for hotplug;
+      -- next = 11-20 (B1..), etc. (dynamic pin block below + its features/pyre twin for hotplug;
       -- the chess names drive the waybar display).
       --
       --   SUPER+<n>       -> workspace <n> on the CURRENT screen (never slips). ONE monitor: instant.
@@ -1365,7 +1365,7 @@ in
       -- Per-monitor workspaces: pin each decade to a screen (left-to-right), chess-name them, and
       -- evacuate orphaned windows -- see wsManageLua in the let above. Apply at every config
       -- load/reload HERE, and re-run on every live monitor change (hotplug/disconnect) via the hook
-      -- below, which also captures runtime scales. (Formerly split/duplicated into features/sidedock;
+      -- below, which also captures runtime scales. (Formerly split/duplicated into features/pyre;
       -- hl.on stacks + reload clears handlers, so this is the single owner now.)
       ${wsManageLua}
       hl.on("monitor.layout_changed", function()

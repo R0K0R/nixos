@@ -1,10 +1,10 @@
 { config, lib, ... }:
 
 let
-  cfg = config.my.sidedock;
+  cfg = config.my.pyre;
 in
 {
-  options.my.sidedock = {
+  options.my.pyre = {
     enable = lib.mkEnableOption
       "right-edge slide-out dock -- light apps park off-screen and cycle in one at a time (Hyprland only)";
     # Accounts this feature applies to; defaults to the primary user.
@@ -24,5 +24,5 @@ in
   };
 
   # No system-level config: the dock is entirely home-manager -- a script plus
-  # Hyprland window-rules and binds contributed from features/sidedock/home.nix.
+  # Hyprland window-rules and binds contributed from features/pyre/home.nix.
 }

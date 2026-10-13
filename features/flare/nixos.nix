@@ -1,6 +1,6 @@
 { lib, config, ... }:
 {
-  options.my.notifcenter = {
+  options.my.flare = {
     enable = lib.mkEnableOption ''
       Quickshell notification centre: a SIZED keystone-able panel (the compositor keystone warps it
       into a dock-card trapezoid, via the "swaync-control-center" layer namespace) carrying wifi/BT/

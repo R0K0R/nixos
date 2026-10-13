@@ -26,9 +26,10 @@ take it — that includes the null-sink literally named `bonfire` in lyre's grap
 2. **lyre** *(done)* — audio engine renamed everywhere: the repo (`sihooleebd/lyre`), its package +
    sink constant + CLI + socket (`~/.config/lyre`, `lyre.sock`, `LYRE_*`), the flake input,
    `features/lyre`, `my.lyre`, and every `lyre …` call + the `.lyre` status key in the panel.
-3. **flare** — `features/notifcenter`→`features/flare`, `my.notifcenter`→`my.flare`, the quickshell
-   config + service `haku-notif`→`flare`, the panelbus handler name.
-4. **pyre** — `features/sidedock`→`features/pyre`, `my.sidedock`→`my.pyre`, `dock.sh`.
+3. **flare** *(done)* — `features/flare`, `my.flare`, the quickshell config + service `haku-notif`→
+   `flare` (incl. hakuspace's waybar callers), the panelbus handler `notif`→`flare`.
+4. **pyre** *(done)* — `features/pyre`, `my.pyre`, the panelbus handler `dock`→`pyre`. (The script is
+   still `dock.sh` and the "dock" *concept*/window-tag is unchanged — pyre is the feature/brand name.)
 5. **ring** *(biggest)* — vendor `R0K0R/hakuspace` into `features/ring/` (drop the `feat-hakuspace`
    input), rename its home-module/package/`programs.*` API, its 39 scripts (`hakumenu`→`flint`,
    `gen_style`, `dockbar_manager`, `rofi_theme_switcher`, …), and its state paths. **MIGRATE
