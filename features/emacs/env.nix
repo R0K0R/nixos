@@ -14,14 +14,28 @@ let
     instead, with Intel SDE emulating the host CPU:
 
       build   every recipe that runs a program the build compiled goes
-              through `sde64 -<cpu>`: temacs (dumps), bootstrap-emacs and
-              emacs (byte/native compiles, via -sde wrapper scripts the
-              Makefiles' EMACS settings point at), make-docfile,
-              make-fingerprint and etags. SDE follows forks and execs, so
-              what those start is emulated too. make itself cannot run under
-              SDE: it keeps SIGCHLD blocked outside pselect, and Pin aborts
-              ("received asynchronous signal 17 ... blocked by the
-              application").
+              through `sde64 -<cpu>`: temacs (dumps), make-docfile,
+              make-fingerprint, etags, and bootstrap-emacs/emacs for what is
+              not compiling Lisp (autoloads, unidata, leim, manuals). SDE
+              follows forks and execs, so what those start is emulated too.
+              make itself cannot run under SDE: it keeps SIGCHLD blocked
+              outside pselect, and Pin aborts ("received asynchronous signal
+              17 ... blocked by the application").
+
+      compile byte- and native-compiling the Lisp -- nearly all of the build
+              under NATIVE_FULL_AOT -- does not need to RUN host code, only to
+              emit it, so it runs natively on a generic build of the same
+              Emacs with the same features (`compiler` below). The Makefiles'
+              EMACS points at -sde wrappers that send any batch-*-compile
+              there. A .eln only has to carry the tuned build's comp-abi-hash
+              (checked when it loads) and sit in its comp-native-version-dir;
+              both are plain variables, set from the tuned binary's own values
+              (probed once, under SDE). The hash also covers
+              system-configuration-options, which differ only by --prefix, so
+              the parts that matter are compared instead: the primitives'
+              signatures and the .eln naming must match, or the build fails.
+              libgccjit gets -march/-mtune for the host. nixpkgs' postInstall
+              (site-start, trampolines) compiles the same way.
 
       run     bin/emacs becomes a launcher that execs the real binary under
               SDE when /proc/cpuinfo lacks one of the host's extensions, and
@@ -92,13 +106,45 @@ let
   };
 
   withSde =
-    e:
+    e: compiler:
     let
-      target =
-        sdeTargets.${hostPlatform.gcc.arch or ""}
-          or (throw "features/emacs: no SDE target for gcc.arch ${hostPlatform.gcc.arch or "(unset)"}");
+      arch = hostPlatform.gcc.arch;
+      target = sdeTargets.${arch} or (throw "features/emacs: no SDE target for gcc.arch ${arch}");
       sde = "${pkgs.buildPackages.callPackage ./intel-sde.nix { }}/bin/sde64 -${target.cpu} --";
       bash = "${pkgs.buildPackages.bashNonInteractive}/bin/bash";
+
+      # TUNED_TOP: the tuned build's source tree. TUNED_ELN_ROOT: the
+      # native-lisp directory the .eln files go to (default: the tree's).
+      compileForHost = pkgs.buildPackages.writeScript "emacs-compile-for-host" ''
+        #!${bash}
+        set -e
+        abi=$TUNED_TOP/src/.tuned-abi
+        if [[ ! -s $abi ]]; then
+          probe='(princ (format "%s\n%s\n%s\n%s\n" comp-abi-hash comp-native-version-dir
+            (md5 (concat emacs-version system-configuration
+                         (mapconcat (function comp--subr-signature) comp-subr-list "")))
+            (comp-el-to-eln-rel-filename "'"$TUNED_TOP"'/lisp/subr.el")))'
+          tuned=$(${sde} "$TUNED_TOP/src/bootstrap-emacs" -batch --eval "$probe")
+          generic=$(${compiler}/bin/emacs -batch --eval "$probe")
+          if [[ $(tail -n 2 <<<"$tuned") != "$(tail -n 2 <<<"$generic")" ]]; then
+            echo "emacs-compile-for-host: ${compiler} cannot compile for this build" >&2
+            echo "  (primitive signatures md5, .eln name of subr.el) differ:" >&2
+            echo "  tuned:   $(tail -n 2 <<<"$tuned" | tr '\n' ' ')" >&2
+            echo "  generic: $(tail -n 2 <<<"$generic" | tr '\n' ' ')" >&2
+            exit 1
+          fi
+          head -n 2 <<<"$tuned" > "$abi.$$"
+          mv "$abi.$$" "$abi"
+        fi
+        { read -r hash; read -r vdir; } < "$abi"
+        first=$1
+        shift
+        exec ${compiler}/bin/emacs "$first" --eval "(setq comp-abi-hash \"$hash\"
+          comp-native-version-dir \"$vdir\"
+          native-comp-compiler-options '(\"-march=${arch}\" \"-mtune=${arch}\")
+          native-comp-eln-load-path (append (butlast native-comp-eln-load-path)
+                                            (list \"''${TUNED_ELN_ROOT:-$TUNED_TOP/native-lisp/}\")))" "$@"
+      '';
     in
     e.overrideAttrs (old: {
       # After nixpkgs' postPatch, which has made RUN_TEMACS `env -i ./temacs`.
@@ -108,6 +154,10 @@ let
         for exe in emacs bootstrap-emacs; do
           cat > src/$exe-sde <<EOF
         #!${bash}
+        case " \$* " in
+          *batch-byte+native-compile*|*batch-native-compile*|*batch-byte-compile*)
+            TUNED_TOP=\$(cd "\$(dirname "\$0")/.." && pwd) exec ${compileForHost} "\$@" ;;
+        esac
         exec ${sde} "\''${0%-sde}" "\$@"
         EOF
           chmod +x src/$exe-sde
@@ -136,17 +186,30 @@ let
       '';
 
       /*
-        Before nixpkgs' own postInstall, which runs $out/bin/emacs.
-
         The real binary goes to libexec, not lib: emacs finds the dumped
         native-lisp at ../lib/emacs/<version>/native-lisp from its own
         directory, and under SDE that directory is the real binary's.
         bin/emacs is a symlink to emacs-<version>, the file replaced here.
+
+        nixpkgs' postInstall runs $out/bin/emacs only to compile (site-start,
+        trampolines), so until it is done that name is compileForHost aimed at
+        $out's native-lisp. The launcher replaces it afterwards, and the last
+        step loads a non-preloaded library's .eln in the tuned binary: a .eln
+        it refuses (ABI hash, name) fails the build here, not at first use.
       */
       postInstall = ''
         launcher=$out/bin/$(readlink $out/bin/emacs)
         real=$out/libexec/$(basename $launcher)
         mv $launcher $real
+        versionDir=$(ls $out/share/emacs | grep -v site-lisp | head -n 1)
+        cat > $launcher <<EOF
+        #!${bash}
+        TUNED_TOP=$PWD TUNED_ELN_ROOT=$out/lib/emacs/$versionDir/native-lisp/ exec ${compileForHost} "\$@"
+        EOF
+        chmod +x $launcher
+      ''
+      + old.postInstall
+      + ''
         cat > $launcher <<EOF
         #!${bash}
         if [[ -z \''${EMACS_UNDER_SDE-} ]]; then
@@ -163,15 +226,28 @@ let
         exec -a "\$0" $real "\$@"
         EOF
         chmod +x $launcher
-      ''
-      + old.postInstall;
+
+        $out/bin/emacs -batch --eval "(progn (require 'calc)
+          (unless (native-comp-function-p (symbol-function 'calc))
+            (error \"calc did not load from its .eln\")))"
+      '';
 
       meta = old.meta // {
         broken = false;
       };
     });
 
-  forHost = e: if buildPlatform.canExecute hostPlatform then e else withSde e;
+  # The package by name, so the generic compiler can be the same package with
+  # the same flags from buildPackages.
+  forHost =
+    name: args:
+    let
+      e = pkgs.${name}.override args;
+    in
+    if buildPlatform.canExecute hostPlatform then
+      e
+    else
+      withSde e (pkgs.buildPackages.${name}.override args);
 
   /*
     Unstable `emacs-pgtk` + xwidgets, against whatever WebKit nixpkgs ships.
@@ -184,14 +260,12 @@ let
     drew the last page over the first, neither of which reproduces on a
     current WebKit.
   */
-  emacsPgtkBase = forHost (
-    pkgs.emacs-pgtk.override {
-      withNativeCompilation = true;
-      withTreeSitter = true;
-      withSystemd = true;
-      withXwidgets = true;
-    }
-  );
+  emacsPgtkBase = forHost "emacs-pgtk" {
+    withNativeCompilation = true;
+    withTreeSitter = true;
+    withSystemd = true;
+    withXwidgets = true;
+  };
 
   # nix-doom-emacs-unstraightened builds every Doom package (vterm included)
   # via `emacsPackagesFor emacsRolling`, matched to this exact Emacs build.
@@ -206,12 +280,10 @@ let
     terminal, and TREESIT_GRAMMAR_DIR (doom-config.nix) feeds the same
     Nix-provided grammars either way.
   */
-  emacsNox = forHost (
-    pkgs.emacs-nox.override {
-      withNativeCompilation = true;
-      withTreeSitter = true;
-    }
-  );
+  emacsNox = forHost "emacs-nox" {
+    withNativeCompilation = true;
+    withTreeSitter = true;
+  };
 in
 {
   inherit
