@@ -1,10 +1,17 @@
-# NixOS configuration
+# bonfire 🔥
+
+Benjamin's NixOS configuration. The daily driver (`dell-latitude`) runs **bonfire**: a campfire-themed
+Hyprland desktop where every component is an element of the fire — the
+[`lyre`](https://github.com/sihooleebd/lyre) audio engine, the
+[`hearth`](https://github.com/sihooleebd/hearth) settings store, the `flare` notifications, the `pyre`
+dock, the `flint` launcher and the `glow` theme, all on the `bonfire` shell
+([sihooleebd/bonfire](https://github.com/sihooleebd/bonfire)).
 
 Three machines, one flake.
 
 | host | role |
 |---|---|
-| `dell-latitude` | Dell Latitude — the daily-driver **Bonfire** Hyprland desktop (the quickshell notif-centre + 3D trapezoid dock, the **bonfire** audio engine, the **hearth** settings store). Untuned: plain upstream nixpkgs, closure from cache. |
+| `dell-latitude` | Dell Latitude — the daily-driver **bonfire** Hyprland desktop (the `flare` notif-centre + 3D trapezoid `pyre` dock, the `lyre` audio engine, the `hearth` settings store). Untuned: plain upstream nixpkgs, closure from cache. |
 | `galaxybook4-pro360` | Samsung Galaxy Book4 Pro 360 laptop. Meteor Lake, Hyprland desktop. |
 | `victus-15` | HP Victus 15. Ryzen znver3, headless, doubles as a remote builder. |
 
@@ -123,14 +130,16 @@ Options only for what actually varies. Most features have nothing but `enable`.
 - **`hyprland`** — the compositor. A source patch (`features/hyprland/trapezoid.patch`, gated by
   `my.hyprland.keystone.enable`) adds a per-window perspective **keystone** so dock-tagged windows
   render as 3D trapezoids.
-- **`bonfire`** — the shell: waybar, rofi, the theme/wallpaper/cava machinery. A live accent flows
-  from `~/.local/state/glow/colors.css` into every consumer.
-- **`notifcenter`** — a quickshell notification centre (replaces swaync, `SUPER+N`): weather, clock, a
+- **`bonfire`** — the shell: waybar, rofi, the theme/wallpaper/cava machinery — our fork + rebrand of
+  the unmaintained hakuspace ([sihooleebd/bonfire](https://github.com/sihooleebd/bonfire), see
+  [REBRAND.md](REBRAND.md)). A live accent flows from `~/.local/state/glow/colors.css` into every
+  consumer; `flint` is its launcher, `glow` its theme state.
+- **`flare`** — a quickshell notification centre (replaces swaync, `SUPER+N`): weather, clock, a
   control grid, Wi-Fi/Bluetooth managers, and the Sound mixer.
-- **`sidedock`** — the right-edge cascade dock (the keystone trapezoids), mutually exclusive with the
-  notif-centre via **`panelbus`**.
-- **`bonfire`** — a headless two-stage per-app / per-output EQ + routing engine for PipeWire
-  (replaces EasyEffects); the notif-centre Sound menu is its UI. External input, like sonora.
+- **`pyre`** — the right-edge cascade dock (the keystone trapezoids), mutually exclusive with `flare`
+  via **`panelbus`**.
+- **`lyre`** — a headless two-stage per-app / per-output EQ + routing engine for PipeWire (replaces
+  EasyEffects); `flare`'s Sound menu is its UI and `lyre status` its terminal screen. External input.
 - **`hearth` + `settings`** — the unified settings system: `features/settings` generates a schema from
   every feature's `hearth.nix` fragment; the [`hearth`](https://github.com/sihooleebd/hearth) engine
   materialises one JSON store every component reads live, with a per-key change signal. Full design in

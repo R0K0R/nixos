@@ -29,7 +29,7 @@ Every setting therefore carries a `scope` that is exactly one of these two.
         │
         ▼
  ┌─────────────┐   overrides.json  (only what YOU changed — survives rebuilds, flat dotted keys)
- │  bonfire-settings (TUI / CLI) │  the ONLY writer
+ │  hearth (TUI / CLI) │  the ONLY writer
  └─────────────┘
         │  validate → materialise → signal
         ▼
@@ -47,12 +47,13 @@ today's `~/.local/state/glow/`:
 | file | writer | consumers | notes |
 |---|---|---|---|
 | `schema.json` | Nix (generated) | the TUI + materialiser | metadata registry **incl. each key's default** (§3). Read-only. |
-| `overrides.json` | `bonfire-settings` | the materialiser | **only user-changed keys**, flat. Never clobbered. |
-| `settings.json` | `bonfire-settings` | **everyone** | effective, nested, `jq`-friendly (§4). |
-| `settings.signal.json` | `bonfire-settings` | everyone (watch) | the change diff (§5). |
+| `overrides.json` | `hearth` | the materialiser | **only user-changed keys**, flat. Never clobbered. |
+| `settings.json` | `hearth` | **everyone** | effective, nested, `jq`-friendly (§4). |
+| `settings.signal.json` | `hearth` | everyone (watch) | the change diff (§5). |
 
 > Implemented by the standalone **`hearth`** engine (`~/Documents/projects/hearth`,
-> `github:sihooleebd/hearth`) — `bonfire-settings` is hearth with the Bonfire schema + TUI on top.
+> `github:sihooleebd/hearth`) — the generic store + change-signal, driven by the bonfire schema
+> (assembled from each feature's `hearth.nix`) with the `hearth tui` on top.
 
 **Why flat schema but nested store:** a flat registry (`"a.b.c": {…}`) makes each setting an
 independent record — trivial to add, delete, or merge from fragments. A nested store reads cleanly,
@@ -218,7 +219,7 @@ one record in the owning feature; deleting = remove it. `rm -r features/x` takes
 (Adding a *setting* is a rebuild — you're editing the flake anyway; **changing a value** is always
 live. That is the correct line.)
 
-## 8. The TUI (`bonfire-settings`)
+## 8. The TUI (`hearth`)
 
 Python + **Textual** (in nixpkgs; same language as bonfire). yazi/ranger-style miller columns:
 
@@ -237,7 +238,7 @@ Python + **Textual** (in nixpkgs; same language as bonfire). yazi/ranger-style m
   "pending rebuild" list instead of applying live.
 - editing writes `overrides.json` via the writer, which materialises + signals; the TUI shows the
   live value echo back.
-- also exposes a non-interactive CLI: `bonfire-settings get <key>` / `set <key> <value>` / `reset <key>`
+- also exposes a non-interactive CLI: `hearth get <key>` / `set <key> <value>` / `reset <key>`
   — so keybinds and scripts can poke settings too.
 
 ## 9. Known hard cases (resolve during implementation)
@@ -246,7 +247,7 @@ Python + **Textual** (in nixpkgs; same language as bonfire). yazi/ranger-style m
    theme/wallpaper/dockbar/cava). They mutate `config.rasi`, `dockbar/config`, `colors.css`
    themselves. Options: (a) let them keep owning *their* files and have the materialiser treat
    `colors.css` as a generated *output* of `theme.*`; or (b) intercept the few menu entries we care
-   about and route them through `bonfire-settings`. Likely a mix — don't fight the upstream for things
+   about and route them through `hearth`. Likely a mix — don't fight the upstream for things
    it already does well (theme switching), do co-opt the "terrible" bits.
 2. **Values that are both runtime and buildtime.** e.g. `border_size` also feeds the touch-gesture
    strip formula at build; `modKey` is interpolated into the generated Lua. Rule: if a Nix-side
@@ -258,7 +259,7 @@ Python + **Textual** (in nixpkgs; same language as bonfire). yazi/ranger-style m
 
 ## 10. Migration plan
 
-1. **Plumbing first** — the store + materialiser + `settings.signal.json` + the `bonfire-settings`
+1. **Plumbing first** — the store + materialiser + `settings.signal.json` + the `hearth`
    get/set CLI + one generic watcher helper. No UI yet; prove the loop with two or three keys.
 2. **First real consumer** — move the notifcenter design tokens + geometry behind `panel.*`; wire the
    QML watch. This is the densest, highest-value, already-live-ish surface.

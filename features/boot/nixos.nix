@@ -2,6 +2,22 @@
 
 let
   cfg = config.my.boot;
+
+  # bonfire boot splash: the braille campfire mark (../../logo.txt) rendered to a fire-gradient PNG,
+  # wrapped in a minimal Plymouth *script* theme. It ships script.so so the script module reaches the
+  # initrd too -- the NixOS plymouth module copies plugins from the theme package (themesEnv), not from
+  # pkgs.plymouth. ImageDir uses this store path; the module rewrites it to the initrd path on its own.
+  bonfirePlymouth = pkgs.runCommand "bonfire-plymouth"
+    { nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pillow ])) ]; }
+    ''
+      d="$out/share/plymouth/themes/bonfire"
+      mkdir -p "$d" "$out/lib/plymouth"
+      cp ${pkgs.plymouth}/lib/plymouth/script.so "$out/lib/plymouth/"
+      python3 ${./plymouth-logo.py} ${../../logo.txt} \
+        ${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSansMono.ttf "$d/logo.png"
+      cp ${./bonfire.script} "$d/bonfire.script"
+      substitute ${./bonfire.plymouth.in} "$d/bonfire.plymouth" --replace @themedir@ "$d"
+    '';
 in
 {
   options.my.boot = {
@@ -48,19 +64,19 @@ in
     boot.consoleLogLevel = 3;
 
     /*
-      Plymouth boot splash: a NixOS-branded splash covering the kernel/systemd/
+      Plymouth boot splash: the bonfire campfire mark covering the kernel/systemd/
       udev scroll from early boot until the greeter, so boot is a clean logo,
-      not a wall of text. nixos-bgrt draws the firmware boot logo ringed by a
-      NixOS-snowflake throbber. Paired with consoleLogLevel = 3 above (kernel
-      chatter already suppressed, greeter kept clean), initrd.verbose = false,
-      and quieted udev, so nothing prints over the splash. No "quiet" param --
-      it would raise the console loglevel back to 4 and undo the greeter fix;
-      loglevel=3 is already stricter.
+      not a wall of text -- the same braille mark as fastfetch / the lyre + hearth
+      screens, breathing like embers (see bonfirePlymouth above). Paired with
+      consoleLogLevel = 3 above (kernel chatter already suppressed, greeter kept
+      clean), initrd.verbose = false, and quieted udev, so nothing prints over the
+      splash. No "quiet" param -- it would raise the console loglevel back to 4 and
+      undo the greeter fix; loglevel=3 is already stricter.
     */
     boot.plymouth = {
       enable = true;
-      theme = "nixos-bgrt";
-      themePackages = [ pkgs.nixos-bgrt-plymouth ];
+      theme = "bonfire";
+      themePackages = [ bonfirePlymouth ];
     };
     boot.initrd.verbose = false;
     boot.kernelParams = [

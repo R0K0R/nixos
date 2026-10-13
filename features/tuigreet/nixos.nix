@@ -81,6 +81,10 @@ in
         services.greetd.settings.default_session.command = lib.concatStringsSep " " [
           "${pkgs.tuigreet}/bin/tuigreet"
           "--time"
+          # bonfire identity on the login screen. Single-token (greetd splits the command on spaces) and
+          # plain ASCII (the greeter runs on a console VT whose font would render an emoji as tofu).
+          "--greeting"
+          "~bonfire~"
           # Prefill the last user, and reopen each user's last-used session --
           # so the daily path is: type password, Enter.
           "--remember"

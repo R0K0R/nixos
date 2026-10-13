@@ -43,8 +43,14 @@ take it — that includes the null-sink literally named `bonfire` in lyre's grap
      mismatched). A guarded `bonfireRebrandMigration` activation carries the live theme
      (`haku_theme`→`glow`) + control dir (`~/hakuspace-control`→`~/bonfire-control`) across, so a rebuild
      never resets them. Docs (README/SETTINGS identity) land in phase 6.
-6. **identity + logo everywhere** — README/MOTD/`tuigreet`/**plymouth**/fastfetch/hyprlock/the panel
-   header, all carrying the bonfire logo. Rename `sihooleebd/nixos` doc identity to bonfire.
+6. **identity + logo everywhere** *(done)* — README retitled `bonfire` + the component list refreshed
+   (flare/pyre/lyre/flint/glow, no more stale "bonfire audio engine"); flake `description`; `tuigreet`
+   `--greeting`; fastfetch already carries the fire logo; **plymouth** is now a custom `bonfire` script
+   theme (the braille mark rendered to a fire-gradient PNG via `features/boot/plymouth-logo.py`, a
+   breathing-ember pulse, ships `script.so` for the initrd — dell-latitude has no LUKS so there's no
+   password dialog to honour). SETTINGS.md writer name corrected to `hearth`.
+   - *Deferred (minor polish):* a `hearth` MOTD (the fish greeting already runs fastfetch on every
+     terminal), a hyprlock identity label, and a bonfire marker in the flare panel header.
 
 ## Handoff
 

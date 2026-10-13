@@ -1,5 +1,5 @@
 {
-  description = "NixOS configuration (multi-host)";
+  description = "bonfire -- Benjamin's multi-host NixOS flake + campfire Hyprland desktop";
 
   inputs = {
     # Pinned in flake.lock. Use nixos-YY.MM when that branch exists, or keep unstable.
