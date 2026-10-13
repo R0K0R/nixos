@@ -31,9 +31,13 @@ let
               (checked when it loads) and sit in its comp-native-version-dir;
               both are plain variables, set from the tuned binary's own values
               (probed once, under SDE). The hash also covers
-              system-configuration-options, which differ only by --prefix, so
+              system-configuration (the tuned build, configured as a cross
+              build, says x86_64-unknown-linux-gnu, the generic one
+              x86_64-pc-linux-gnu) and system-configuration-options (they
+              differ by --prefix and the cross build's --build/--host), so
               the parts that matter are compared instead: the primitives'
-              signatures and the .eln naming must match, or the build fails.
+              signatures in order, the configured features and the .eln
+              naming must match, or the build fails.
               libgccjit gets -march/-mtune for the host. nixpkgs' postInstall
               (site-start, trampolines) compiles the same way.
 
@@ -121,14 +125,14 @@ let
         abi=$TUNED_TOP/src/.tuned-abi
         if [[ ! -s $abi ]]; then
           probe='(princ (format "%s\n%s\n%s\n%s\n" comp-abi-hash comp-native-version-dir
-            (md5 (concat emacs-version system-configuration
+            (md5 (concat emacs-version system-configuration-features
                          (mapconcat (function comp--subr-signature) comp-subr-list "")))
             (comp-el-to-eln-rel-filename "'"$TUNED_TOP"'/lisp/subr.el")))'
           tuned=$(${sde} "$TUNED_TOP/src/bootstrap-emacs" -batch --eval "$probe")
           generic=$(${compiler}/bin/emacs -batch --eval "$probe")
           if [[ $(tail -n 2 <<<"$tuned") != "$(tail -n 2 <<<"$generic")" ]]; then
             echo "emacs-compile-for-host: ${compiler} cannot compile for this build" >&2
-            echo "  (primitive signatures md5, .eln name of subr.el) differ:" >&2
+            echo "  (md5 of version, features and primitive signatures; .eln name of subr.el) differ:" >&2
             echo "  tuned:   $(tail -n 2 <<<"$tuned" | tr '\n' ' ')" >&2
             echo "  generic: $(tail -n 2 <<<"$generic" | tr '\n' ' ')" >&2
             exit 1
