@@ -143,8 +143,16 @@ let
         { read -r hash; read -r vdir; } < "$abi"
         first=$1
         shift
+        # The final native-compile step runs in a child emacs (comp.el,
+        # call-process with -no-comp-spawn), which inherits the eln load path
+        # and compiler options but not the hash or version dir; without the
+        # env modifier form it stamped the generic hash into a .eln filed under
+        # the tuned version dir, and the tuned emacs refused to load it
+        # (native-lisp-file-inconsistent).
+        abiform="(setq comp-abi-hash \"$hash\" comp-native-version-dir \"$vdir\")"
         exec ${compiler}/bin/emacs "$first" --eval "(setq comp-abi-hash \"$hash\"
           comp-native-version-dir \"$vdir\"
+          native-comp-async-env-modifier-form '$abiform
           native-comp-compiler-options '(\"-march=${arch}\" \"-mtune=${arch}\")
           native-comp-eln-load-path (append (butlast native-comp-eln-load-path)
                                             (list \"''${TUNED_ELN_ROOT:-$TUNED_TOP/native-lisp/}\")))" "$@"
