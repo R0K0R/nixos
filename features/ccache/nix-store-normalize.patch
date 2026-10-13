@@ -1,6 +1,6 @@
---- a/src/ccache/ccache.cpp	2026-09-09 01:19:51.566422435 +0900
-+++ b/src/ccache/ccache.cpp	2026-09-09 01:20:40.044301134 +0900
-@@ -519,6 +519,70 @@
+--- a/src/ccache/ccache.cpp
++++ b/src/ccache/ccache.cpp
+@@ -521,6 +521,70 @@
    return strncmp(str, prefix.data(), prefix.length()) == 0;
  }
  
@@ -68,20 +68,20 @@
 +  return result;
 +}
 +
- // This function reads and hashes a file. While doing this, it also does these
- // things:
- //
-@@ -664,7 +728,12 @@
-       }
+ static bool
+ is_on_preprocessor_directive_line(std::string_view data, size_t pos)
+ {
+@@ -675,7 +739,12 @@
+       inc_path_str.clear(); // inc_path is used from now on
  
-       if (inc_fs_path != ctx.apparent_cwd || ctx.config.hash_dir()) {
--        hash.hash(inc_fs_path);
+       if (inc_path != ctx.apparent_cwd || ctx.config.hash_dir()) {
+-        hash.hash(inc_path);
 +        if (nix_store_normalize_enabled()
 +            && !ctx.args_info.generating_debuginfo) {
-+          hash.hash(nix_store_normalize(util::pstr(inc_fs_path).str()));
++          hash.hash(nix_store_normalize(util::pstr(inc_path).str()));
 +        } else {
-+          hash.hash(inc_fs_path);
++          hash.hash(inc_path);
 +        }
        }
  
-       TRY(remember_include_file(ctx, inc_fs_path, hash, system, nullptr));
+       TRY(remember_include_file(ctx, inc_path, hash, system, nullptr));
