@@ -165,6 +165,18 @@ pin()  { d "hl.dsp.window.pin({action=\"$2\", window=\"address:$1\"})"; }
 # it (which would jump it to the front out of turn). Only the front is focusable.
 nofocus() { d "hl.dsp.window.set_prop({prop=\"no_focus\", value=\"$2\", window=\"address:$1\"})"; }
 ensure_float() { [ "$(isfloat "$1")" = "false" ] && d "hl.dsp.window.float({window=\"address:$1\"})"; }
+# A card cannot be maximized or fullscreen: in either state the window ignores the
+# size and position render() gives it. Apps restore those states themselves at open --
+# kitty >= 0.49 reopens maximized when the last window closed was (remember_window_size),
+# which left new terminal cards full width instead of docked.
+unfull() {
+  local fs; fs=$($J -r --arg a "$1" 'first(.[]|select(.address==$a)).fullscreen // 0' <<<"$CLIENTS")
+  case "$fs" in
+    1) d "hl.dsp.window.fullscreen({mode=\"maximized\", action=\"unset\", window=\"address:$1\"})" ;;
+    2) d "hl.dsp.window.fullscreen({mode=\"fullscreen\", action=\"unset\", window=\"address:$1\"})" ;;
+    *) return 1 ;;
+  esac
+}
 
 # The pile lives on its own SPECIAL workspace, `dock`, not on a regular one. Pinned-and-
 # parked on a regular workspace, every card still belonged to it, so DMS's workspace strip
@@ -354,6 +366,7 @@ dock_send() {  # give a window the dock shape + tag, then lay it out as the fron
     d "hl.dsp.window.float({window=\"address:$a\"})"
     snap
   fi
+  unfull "$a" && snap
   ensure_float "$a"
   d "hl.dsp.window.tag({tag=\"+dock\", window=\"address:$a\"})"
   # (size + lock is applied by render(), from the live geometry -- not here.)
@@ -656,6 +669,7 @@ case "${1:-toggle}" in
     fr="$(joinfront "$2")"
     d "hl.dsp.window.tag({tag=\"+dock\", window=\"address:$2\"})"
     snap
+    unfull "$2" && snap
     order_insert "$2" "$fr"
     render "$2" ;;
   stray)   # a window ($2) opened ON the dock workspace without joining the pile (a dialog,
