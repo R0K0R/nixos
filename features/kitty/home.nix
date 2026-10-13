@@ -92,6 +92,13 @@ lib.mkIf (osConfig.my.kitty.enable && inScope) {
       # Prefer niri’s SSD / no extra client titlebar when supported.
       hide_window_decorations = true;
 
+      # The compositor decides window size. With this on (kitty's default), kitty
+      # saves the last closed window's size and state to ~/.cache/kitty/main.json
+      # and reapplies it to every new window; once a maximized window was the last
+      # to close, each kitty opened maximized -- a full-width column -- and the
+      # side dock's terminal card with it (seen after kitty 0.48 -> 0.49).
+      remember_window_size = false;
+
       mouse_hide_wait = "1.5";
       focus_follows_mouse = "yes";
     };
