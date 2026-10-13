@@ -490,6 +490,24 @@
         "type": "github"
       }
     },
+    "hearth": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_2"
+      },
+      "locked": {
+        "lastModified": 1791914718,
+        "narHash": "sha256-8kqb89b3OKrLUSKWW/2temYg1T6kgBpUisatKQMSGDo=",
+        "owner": "sihooleebd",
+        "repo": "hearth",
+        "rev": "e9e193ca68ea294aa1b9623762f9c7d530f362dd",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sihooleebd",
+        "repo": "hearth",
+        "type": "github"
+      }
+    },
     "home-manager": {
       "inputs": {
         "nixpkgs": [
@@ -530,7 +548,7 @@
     "late-sh": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs_2",
+        "nixpkgs": "nixpkgs_3",
         "rust-overlay": "rust-overlay"
       },
       "locked": {
@@ -696,6 +714,22 @@
     },
     "nixpkgs_2": {
       "locked": {
+        "lastModified": 1791734076,
+        "narHash": "sha256-i5qk1kLiit98rRbh1AXmWBNT9QXC/y4l5Wk/u5EdpDQ=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "7fd4004d0511991fff3a0524856a9be09e28c5f0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_3": {
+      "locked": {
         "lastModified": 1789370336,
         "narHash": "sha256-6RSEDHIWQtesQKWSu5qRai8L2h4KgCgMEfJHstW99G4=",
         "owner": "NixOS",
@@ -710,7 +744,7 @@
         "type": "github"
       }
     },
-    "nixpkgs_3": {
+    "nixpkgs_4": {
       "locked": {
         "lastModified": 1788178606,
         "narHash": "sha256-J7KXtwDdkt+S/mLWJWqXnyeD8RBJR4n9lKXGfrscQDA=",
@@ -726,7 +760,7 @@
         "type": "github"
       }
     },
-    "nixpkgs_4": {
+    "nixpkgs_5": {
       "locked": {
         "lastModified": 1790822859,
         "narHash": "sha256-69xHQhAeMAD2wDXO7T2pcOZIF9Sga2W+JkmY2a11Ops=",
@@ -772,9 +806,10 @@
         "feat-hop": "feat-hop",
         "feat-niri": "feat-niri",
         "feat-samsung-galaxybook": "feat-samsung-galaxybook",
+        "hearth": "hearth",
         "home-manager": "home-manager",
         "late-sh": "late-sh",
-        "nixpkgs": "nixpkgs_3",
+        "nixpkgs": "nixpkgs_4",
         "nixpkgs-upstream": "nixpkgs-upstream",
         "sonora": "sonora"
       }
@@ -840,7 +875,7 @@
     },
     "sonora": {
       "inputs": {
-        "nixpkgs": "nixpkgs_4",
+        "nixpkgs": "nixpkgs_5",
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {

@@ -37,16 +37,36 @@ ShellRoot {
     // closes the dock + any pins. Only on open (closing shouldn't reopen anything). run() detaches it.
     onPanelOpenChanged: { if (panelOpen) { run("panelbus open notif"); pWeather.running = true; } else if (btMenu.adapter) btMenu.adapter.discovering = false; }
 
-    // --- design tokens (monochrome, live accent) ---
-    readonly property string ff: "DepartureMono Nerd Font"
+    // --- design tokens (monochrome, live accent; some live from hearth -- see hsGet below) ---
+    property string ff: root.hsGet("panel.font.family", "DepartureMono Nerd Font")
     property string accent: "#ffffff"              // read from the theme below
     readonly property string fg: accent
     readonly property string dim: "#80ffffff"      // 50% accent
     readonly property string bgPanel: "#e6000000"  // ~90% black: the compositor blur layer-rule frosts
                                                     // the desktop behind it (0.9 was too opaque to show)
-    readonly property string bgTile: "#16ffffff"   // inactive tile: faint white wash
-    readonly property string bgTileHi: "#24ffffff" // hover
+    property string bgTile: root.hsGet("panel.colors.tile", "#16ffffff")         // inactive tile (live)
+    property string bgTileHi: root.hsGet("panel.colors.tile_hover", "#24ffffff") // hover (live)
     readonly property string invFg: "#000000"   // text/icon ON an active (accent) tile
+
+    // ----- hearth live settings (features/settings generates the schema; hearth materialises
+    // ~/.local/state/hearth/settings.json + signals changes). Read the whole store into `hs` and
+    // re-read on any `panel.*` change, so tweaks apply live (e.g. `hearth set panel.width 900`). -----
+    property var hs: ({})
+    function hsGet(path, fallback) {
+        var o = root.hs, parts = path.split(".");
+        for (var i = 0; i < parts.length; i++) { if (o === null || o === undefined) return fallback; o = o[parts[i]]; }
+        return (o === undefined || o === null) ? fallback : o;
+    }
+    // Read settings.json directly + watch it -- no `hearth` binary needed for reads, and a change to
+    // any value reloads it, so bindings through hsGet() re-evaluate live.
+    FileView {
+        id: hsFile
+        path: (Quickshell.env("HOME") || "/home/benjamin") + "/.local/state/hearth/settings.json"
+        preload: true
+        watchChanges: true
+        onLoaded: { try { var o = JSON.parse(text()); if (o && o.panel !== undefined) root.hs = o; } catch (e) {} }
+        onFileChanged: reload()
+    }
 
     // ----- notification DAEMON -----
     NotificationServer {
@@ -176,7 +196,7 @@ ShellRoot {
         command: ["sh","-c","$HAKU_WEATHER_CMD 2>/dev/null"]
         stdout: StdioCollector { onStreamFinished: { try { var o = JSON.parse(text); if (o && o.current) root.wx = o; } catch (e) {} } }
     }
-    Timer { running: true; interval: 1200000; repeat: true; triggeredOnStart: true; onTriggered: pWeather.running = true }  // every 20 min
+    Timer { running: true; interval: Math.max(1, root.hsGet("panel.weather.interval_min", 20)) * 60000; repeat: true; triggeredOnStart: true; onTriggered: pWeather.running = true }  // live via hearth
 
     // ----- live clock (top-right); ticks only while the panel is open -----
     property var clockNow: new Date()
@@ -585,7 +605,7 @@ ShellRoot {
         anchors { top: true; right: true; bottom: true }
         margins { top: 48; right: 40; bottom: 48 }
         exclusiveZone: 0
-        implicitWidth: 800
+        implicitWidth: root.hsGet("panel.width", 800)     // live via hearth (hearth set panel.width …)
         color: "transparent"
 
         Rectangle {

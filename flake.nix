@@ -81,6 +81,12 @@
     # as sonora/late-sh above) so it substitutes from cache.
     bonfire.url = "github:sihooleebd/bonfire";
 
+    # hearth -- generic schema-driven settings store + change-diff signal (the engine behind the
+    # unified settings system; see SETTINGS.md). features/settings generates its schema from
+    # per-feature settings.nix fragments. Source dev'd in ~/Documents/projects/hearth. No
+    # nixpkgs.follows (same cache rationale as the above).
+    hearth.url = "github:sihooleebd/hearth";
+
   };
 
   outputs =

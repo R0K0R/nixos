@@ -237,6 +237,7 @@
     hop.enable = true;
 
     bonfire.enable = true;   # headless PipeWire per-app/per-output EQ + routing engine (features/bonfire)
+    settings.enable = true;  # unified hearth settings store + generated schema (features/settings, SETTINGS.md)
 
     claude-code = {
       enable = true;
