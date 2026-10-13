@@ -236,7 +236,7 @@
 
     hop.enable = true;
 
-    bonfire.enable = true;   # headless PipeWire per-app/per-output EQ + routing engine (features/bonfire)
+    lyre.enable = true;      # headless PipeWire per-app/per-output EQ + routing engine (features/lyre)
     settings.enable = true;  # unified hearth settings store + generated schema (features/settings, SETTINGS.md)
     fastfetch.enable = true; # system info with the bonfire logo (features/fastfetch; see REBRAND.md)
 
@@ -470,7 +470,7 @@
       profile = "performance";
     };
     flatpak.enable = true;
-    # (No easyeffects here any more -- audio EQ + routing is my.bonfire, enabled
+    # (No easyeffects here any more -- audio EQ + routing is my.lyre, enabled
     # above: one headless PipeWire graph doing per-app and per-output EQ, driven
     # from the notif-centre Sound menu. It replaced EasyEffects and the Timbre GUI.)
 

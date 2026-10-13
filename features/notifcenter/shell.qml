@@ -92,18 +92,18 @@ ShellRoot {
         return s.length ? s.charAt(0).toUpperCase() + s.slice(1) : (n.name || "?");
     }
 
-    // ----- bonfire engine state (headless per-app/per-output EQ + routing; driven over the `bonfire` CLI) -----
+    // ----- lyre engine state (headless per-app/per-output EQ + routing; driven over the `lyre` CLI) -----
     // bfStatus holds live values (active outputs + per-target EQ gains); bfAppList/bfDevList are the
     // Repeater models, updated ONLY when the app/device SET changes, so delegates (and an open Advanced
     // EQ) don't churn on every 2s status poll.
-    property var bfStatus: ({ bonfire: false, outputs: [], devices: [], apps: [], out_eq: ({}), app_eq: ({}) })
+    property var bfStatus: ({ lyre: false, outputs: [], devices: [], apps: [], out_eq: ({}), app_eq: ({}) })
     property var bfAppList: []
     property var bfDevList: []
     property string _bfAppsKey: ""
     property string _bfDevKey: ""
     Process {
-        id: pBonfire
-        command: ["sh","-c","bonfire status 2>/dev/null"]
+        id: pLyre
+        command: ["sh","-c","lyre status 2>/dev/null"]
         stdout: StdioCollector { onStreamFinished: {
             try {
                 var o = JSON.parse(text);
@@ -116,7 +116,7 @@ ShellRoot {
             } catch (e) {}
         } }
     }
-    function bfRefresh() { pBonfire.running = true; }
+    function bfRefresh() { pLyre.running = true; }
     readonly property var bfBandLabels: ["31","62","125","250","500","1k","2k","4k","8k","16k"]
     readonly property var bfPresets: [
         { name: "Flat",   g: [0,0,0,0,0,0,0,0,0,0] },
@@ -130,8 +130,8 @@ ShellRoot {
         var g = (m && m[target]) ? m[target] : null;
         return g ? g.slice() : [0,0,0,0,0,0,0,0,0,0];
     }
-    // bonfire's app key for a Pipewire node -- MUST mirror clean_app_name() in bonfire/main.py so the
-    // `eq app <key>` target matches the stream bonfire moves through the per-app chain.
+    // lyre's app key for a Pipewire node -- MUST mirror clean_app_name() in lyre/main.py so the
+    // `eq app <key>` target matches the stream lyre moves through the per-app chain.
     function bfAppKey(n) {
         if (!n) return "Audio";
         var pl = n.properties || {};
@@ -150,27 +150,27 @@ ShellRoot {
             if (root.bfAppKey(root.audioApps[i]) === appName) return root.audioApps[i];
         return null;
     }
-    // toggle a device in bonfire's active output set (multi-device fan-out), then re-sync
+    // toggle a device in lyre's active output set (multi-device fan-out), then re-sync
     function bfToggleOutput(dev) {
         var cur = (root.bfStatus.outputs || []).slice();
         var i = cur.indexOf(dev);
         if (i >= 0) cur.splice(i, 1); else cur.push(dev);
         if (cur.length === 0) cur = [dev];                 // never leave zero outputs
-        root.run("bonfire outputs " + cur.map(function (d) { return root.shq(d); }).join(" "));
+        root.run("lyre outputs " + cur.map(function (d) { return root.shq(d); }).join(" "));
         bfResync.restart();
     }
     // output selection: plain click switches to ONE device; Ctrl/Shift-click toggles it in the set (combine)
-    function bfSetOutput(dev) { root.run("bonfire outputs " + root.shq(dev)); bfResync.restart(); }
+    function bfSetOutput(dev) { root.run("lyre outputs " + root.shq(dev)); bfResync.restart(); }
     // the Pipewire sink node for a device name, for per-output (hardware) volume
     function pwSinkForDev(name) {
         for (var i = 0; i < root.audioSinks.length; i++)
             if (root.audioSinks[i] && root.audioSinks[i].name === name) return root.audioSinks[i];
         return null;
     }
-    // per-app output routing: "" = follow the bonfire merge (system); else override to one device
+    // per-app output routing: "" = follow the lyre merge (system); else override to one device
     function bfRouteOf(app) { var r = root.bfStatus.app_route || ({}); return r[app] || ""; }
     function bfSetRoute(app, dev) {
-        root.run("bonfire route " + root.shq(app) + " " + (dev ? root.shq(dev) : "system"));
+        root.run("lyre route " + root.shq(app) + " " + (dev ? root.shq(dev) : "system"));
         bfResync.restart();
     }
     function bfDevShort(d) {                                // "USB Audio Device Analog Stereo" -> "USB"
@@ -453,7 +453,7 @@ ShellRoot {
     }
 
     // Presets-first EQ: preset chips + an "Advanced" reveal of 10 vertical bands. Drives
-    // `bonfire eq <scope> <target> ...`; scope = "out" (per output device) | "app" (per app).
+    // `lyre eq <scope> <target> ...`; scope = "out" (per output device) | "app" (per app).
     component EqControl: ColumnLayout {
         id: eqc
         property string scope: "out"
@@ -461,11 +461,11 @@ ShellRoot {
         property var gains: root.bfGains(eqc.scope, eqc.target)   // initial from status; frozen once the user edits
         property bool adv: false
         spacing: 4
-        function sendAll() { root.run("bonfire eq " + eqc.scope + " " + root.shq(eqc.target) + " all " + eqc.gains.join(" ")); }
+        function sendAll() { root.run("lyre eq " + eqc.scope + " " + root.shq(eqc.target) + " all " + eqc.gains.join(" ")); }
         function applyPreset(g) { eqc.gains = g.slice(); eqc.sendAll(); }
         function setBand(i, v) {
             var a = eqc.gains.slice(); a[i] = v; eqc.gains = a;
-            root.run("bonfire eq " + eqc.scope + " " + root.shq(eqc.target) + " " + i + " " + v);
+            root.run("lyre eq " + eqc.scope + " " + root.shq(eqc.target) + " " + i + " " + v);
         }
         function matchesPreset(g) {
             for (var i = 0; i < 10; i++) if (Math.abs((eqc.gains[i] || 0) - (g[i] || 0)) > 0.6) return false;
@@ -952,17 +952,17 @@ ShellRoot {
                     onIconClicked: { if (Pipewire.defaultAudioSink && Pipewire.defaultAudioSink.audio) Pipewire.defaultAudioSink.audio.muted = !Pipewire.defaultAudioSink.audio.muted; }
                 }
 
-                // ---- Sound: expanded mixer -- bonfire outputs + per-output EQ + per-app volume/EQ + input ----
+                // ---- Sound: expanded mixer -- lyre outputs + per-output EQ + per-app volume/EQ + input ----
                 ColumnLayout {
                     id: soundMenu; property bool open: false
                     visible: open; Layout.fillWidth: true; spacing: 8
                     onOpenChanged: if (open) root.bfRefresh()
                     Timer { running: soundMenu.open; interval: 2000; repeat: true; triggeredOnStart: true; onTriggered: root.bfRefresh() }
 
-                    Text { visible: !root.bfStatus.bonfire && root.bfDevList.length === 0
+                    Text { visible: !root.bfStatus.lyre && root.bfDevList.length === 0
                            text: "Sound engine starting…"; font.family: root.ff; font.pixelSize: 11; color: root.dim }
 
-                    // ---- output devices: bonfire fans out to one OR several at once; each active one gets its own EQ ----
+                    // ---- output devices: lyre fans out to one OR several at once; each active one gets its own EQ ----
                     Text { visible: root.bfDevList.length > 0; text: "Output  ·  click = switch, ⇧ = combine"; font.family: root.ff; font.pixelSize: 11; color: root.dim }
                     Repeater {
                         model: root.bfDevList
@@ -999,13 +999,13 @@ ShellRoot {
                         }
                     }
 
-                    // ---- apps: volume via Pipewire, EQ via bonfire (keyed by bonfire's app name) ----
+                    // ---- apps: volume via Pipewire, EQ via lyre (keyed by lyre's app name) ----
                     Text { visible: root.bfAppList.length > 0; Layout.topMargin: 2; text: "Apps"; font.family: root.ff; font.pixelSize: 11; color: root.dim }
                     Repeater {
                         model: root.bfAppList
                         delegate: ColumnLayout {
                             id: arow
-                            required property var modelData       // bonfire app key (clean name)
+                            required property var modelData       // lyre app key (clean name)
                             property var node: root.pwNodeForApp(modelData)
                             Layout.fillWidth: true; spacing: 2
                             Text { text: arow.modelData; font.family: root.ff; font.pixelSize: 11; color: root.fg; elide: Text.ElideRight; Layout.fillWidth: true }
@@ -1045,7 +1045,7 @@ ShellRoot {
                             EqControl { Layout.fillWidth: true; Layout.leftMargin: 6; scope: "app"; target: arow.modelData }
                         }
                     }
-                    Text { visible: root.bfAppList.length === 0 && root.bfStatus.bonfire; text: "Nothing playing"; font.family: root.ff; font.pixelSize: 11; color: root.dim }
+                    Text { visible: root.bfAppList.length === 0 && root.bfStatus.lyre; text: "Nothing playing"; font.family: root.ff; font.pixelSize: 11; color: root.dim }
 
                     // ---- input ----
                     Text { Layout.topMargin: 2; text: "Input"; font.family: root.ff; font.pixelSize: 11; color: root.dim }

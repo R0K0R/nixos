@@ -23,9 +23,9 @@ take it — that includes the null-sink literally named `bonfire` in lyre's grap
 ## Phases (ordered by ripple; eval + commit per phase)
 
 1. **logo groundwork** *(done)* — track `logo.txt` at the flake root; `features/fastfetch` shows it.
-2. **lyre** — rename the audio engine everywhere: the repo (`sihooleebd/bonfire`→`lyre`), its package +
-   sink constant + CLI + socket, the flake input, `features/bonfire`→`features/lyre`, `my.bonfire`→
-   `my.lyre`, and every `bonfire …` call in the panel. Frees the name `bonfire`.
+2. **lyre** *(done)* — audio engine renamed everywhere: the repo (`sihooleebd/lyre`), its package +
+   sink constant + CLI + socket (`~/.config/lyre`, `lyre.sock`, `LYRE_*`), the flake input,
+   `features/lyre`, `my.lyre`, and every `lyre …` call + the `.lyre` status key in the panel.
 3. **flare** — `features/notifcenter`→`features/flare`, `my.notifcenter`→`my.flare`, the quickshell
    config + service `haku-notif`→`flare`, the panelbus handler name.
 4. **pyre** — `features/sidedock`→`features/pyre`, `my.sidedock`→`my.pyre`, `dock.sh`.
