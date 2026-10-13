@@ -13,8 +13,7 @@ let
       d="$out/share/plymouth/themes/bonfire"
       mkdir -p "$d" "$out/lib/plymouth"
       cp ${pkgs.plymouth}/lib/plymouth/script.so "$out/lib/plymouth/"
-      python3 ${./plymouth-logo.py} ${../../logo.txt} \
-        ${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSansMono.ttf "$d/logo.png"
+      python3 ${./plymouth-logo.py} ${../../logo.txt} "$d/logo.png"
       cp ${./bonfire.script} "$d/bonfire.script"
       substitute ${./bonfire.plymouth.in} "$d/bonfire.plymouth" --replace @themedir@ "$d"
     '';

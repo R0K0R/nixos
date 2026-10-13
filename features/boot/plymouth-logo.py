@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
 """Render the braille bonfire mark (logo.txt) to a fire-gradient PNG for the Plymouth boot splash.
-Same gradient stops as features/fastfetch/fire.py, so the boot logo matches the terminal one.
-Usage: plymouth-logo.py <logo.txt> <font.ttf> <out.png>"""
+
+Decodes each braille cell back into its 2x4 dot grid and draws the dots directly as filled circles --
+NO font rendering, so there is no font-with-braille dependency and no .notdef "tofu" risk (DejaVu/
+unifont both lack real U+2800 glyphs; the terminal only shows braille via fontconfig fallback, which
+PIL has no equivalent of). Same fire gradient as features/fastfetch/fire.py so the splash matches the
+terminal mark. Usage: plymouth-logo.py <logo.txt> <out.png>"""
 import sys
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
-logo_path, font_path, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
+logo_path, out_path = sys.argv[1], sys.argv[2]
 lines = open(logo_path, encoding="utf-8").read().rstrip("\n").split("\n")
+rows = len(lines)
+cols = max(len(line) for line in lines)
 
-SIZE = 44
-font = ImageFont.truetype(font_path, SIZE)
-cw = font.getlength("⣿")                 # monospace cell advance (full braille cell)
-asc, desc = font.getmetrics()
-lh = asc + desc
-pad = 4
-W = int(cw * max(len(line) for line in lines)) + pad * 2
-H = lh * len(lines) + pad * 2
+DOT = 11          # px grid pitch per dot
+R = 4.3           # dot radius
+PAD = 10
+GW, GH = cols * 2, rows * 4          # dot-grid dimensions (44 x 48 for the standard mark)
+W = GW * DOT + PAD * 2
+H = GH * DOT + PAD * 2
+
+# braille bit -> (dx, dy) within the 2x4 cell (inverse of the packing in the logo generator)
+BITS = {0x01: (0, 0), 0x02: (0, 1), 0x04: (0, 2), 0x40: (0, 3),
+        0x08: (1, 0), 0x10: (1, 1), 0x20: (1, 2), 0x80: (1, 3)}
 
 STOPS = [(0.0, (255, 224, 120)), (0.45, (255, 140, 40)), (0.75, (240, 70, 24)), (1.0, (170, 28, 12))]
 
@@ -32,8 +40,16 @@ def grad(t):
 
 img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
 draw = ImageDraw.Draw(img)
-n = len(lines)
-for i, line in enumerate(lines):
-    t = i / (n - 1) if n > 1 else 0.0
-    draw.text((pad, pad + i * lh), line, font=font, fill=grad(t) + (255,))
+for r, line in enumerate(lines):
+    for c, ch in enumerate(line):
+        v = ord(ch) - 0x2800
+        if v < 0 or v > 0xFF:
+            continue
+        for bit, (dx, dy) in BITS.items():
+            if v & bit:
+                gx, gy = c * 2 + dx, r * 4 + dy
+                cx = PAD + gx * DOT + DOT / 2
+                cy = PAD + gy * DOT + DOT / 2
+                col = grad(gy / (GH - 1)) + (255,)
+                draw.ellipse([cx - R, cy - R, cx + R, cy + R], fill=col)
 img.save(out_path)
