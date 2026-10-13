@@ -8,15 +8,8 @@ let
 
 in
 lib.mkIf (osConfig.my.fish.enable && inScope) {
-  # The fish greeting runs xfetch (below). xfetch ships NO NixOS logo, so it falls back to a
-  # placeholder "fake public key" ascii -- point it at the real NixOS snowflake instead. Only the
-  # logo is overridden; modules/layout stay xfetch's defaults. The art is vendored in
-  # features/xfetch/nixos-logo.txt (from `xfetch --gen-config --logo nixos`) and referenced by its
-  # STORE path -- no per-run network fetch, no hardcoded home path. Harmless if xfetch isn't installed
-  # (the greeting's `command -q xfetch` guard skips it).
-  xdg.configFile."xfetch/config.jsonc".text = builtins.toJSON {
-    ascii = "${../xfetch/nixos-logo.txt}";
-  };
+  # The fish greeting runs fastfetch (features/fastfetch, with the bonfire logo). Its config is owned by
+  # that feature via programs.fastfetch -- nothing to configure here.
 
   /*
     zoxide and fzf earn their keep only through the shell hooks, so they are
@@ -49,14 +42,13 @@ lib.mkIf (osConfig.my.fish.enable && inScope) {
     functions.starship_transient_prompt_func.body = "starship module character";
 
     /*
-      xfetch as the greeting, replacing fish's default text. A function,
-      not `set fish_greeting`: defining the function overrides the
-      variable-printing default outright. `command -q` guards hosts that do
-      not install xfetch (the headless builder), where the greeting
+      fastfetch (with the bonfire logo) as the greeting, replacing fish's default text. A function,
+      not `set fish_greeting`: defining the function overrides the variable-printing default outright.
+      `command -q` guards hosts that do not install fastfetch (the headless builder), where the greeting
       quietly stays empty.
     */
     functions.fish_greeting.body = ''
-      command -q xfetch; and xfetch
+      command -q fastfetch; and fastfetch
     '';
 
     interactiveShellInit = ''

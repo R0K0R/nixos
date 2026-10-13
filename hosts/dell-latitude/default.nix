@@ -238,6 +238,7 @@
 
     bonfire.enable = true;   # headless PipeWire per-app/per-output EQ + routing engine (features/bonfire)
     settings.enable = true;  # unified hearth settings store + generated schema (features/settings, SETTINGS.md)
+    fastfetch.enable = true; # system info with the bonfire logo (features/fastfetch; see REBRAND.md)
 
     claude-code = {
       enable = true;
@@ -331,8 +332,6 @@
       my.packages.extra's own docs on why lookup.nix cannot read a mkIf here.
     */
     packages.extra.user = with pkgs; [
-      # xfetch (the fish greeting, replacing fastfetch) -- packaged in-flake because no nix-ld here.
-      (callPackage ../../features/xfetch/package.nix { })
       kdePackages.okular
       btop # hakuspace's theme pipeline already writes ~/.config/btop themes
       # gimp REMOVED 2026-10-10 -> replaced by PhotoCraft (flatpak ai.storyteller.photocraft, installed
@@ -510,6 +509,10 @@
     tuigreet.enable = true;
 
     hakuspace.enable = true;
+    # Drop "fastfetch" from the managed configs: the greeting is now features/fastfetch
+    # (programs.fastfetch, with the bonfire logo), which owns ~/.config/fastfetch -- letting hakuspace
+    # also symlink a fastfetch config there would collide. (Default minus "fastfetch".)
+    hakuspace.configNames = [ "waybar" "rofi" "swaync" "cava" "gtk.css" "xdg-desktop-portal" ];
     # Right-edge cascade dock (SUPER+D shifts the pile, SUPER+SHIFT+D parks it):
     # sonora + KakaoTalk auto-route in; SUPER+SHIFT+T opens a docked
     # terminal; push any other window in with SUPER+ALT+D. See features/sidedock.
