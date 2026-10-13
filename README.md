@@ -1,13 +1,14 @@
 # NixOS configuration
 
-Two machines, one flake.
+Three machines, one flake.
 
 | host | role |
 |---|---|
+| `dell-latitude` | Dell Latitude — the daily-driver **Haku** Hyprland desktop (the quickshell notif-centre + 3D trapezoid dock, the **bonfire** audio engine, the **hearth** settings store). Untuned: plain upstream nixpkgs, closure from cache. |
 | `galaxybook4-pro360` | Samsung Galaxy Book4 Pro 360 laptop. Meteor Lake, Hyprland desktop. |
 | `victus-15` | HP Victus 15. Ryzen znver3, headless, doubles as a remote builder. |
 
-Both run an intra-ISA pseudo-cross build against a [nixpkgs fork](https://github.com/R0K0R/nixpkgs/tree/combined-fundamental) — see [The tuning backend](#the-tuning-backend).
+`galaxybook4-pro360` and `victus-15` run an intra-ISA pseudo-cross build against a [nixpkgs fork](https://github.com/R0K0R/nixpkgs/tree/combined-fundamental) — see [The tuning backend](#the-tuning-backend). `dell-latitude` sets `my.tuning.enable = false`, so it takes plain upstream nixpkgs and substitutes its whole closure from cache.nixos.org.
 
 ## Philosophy
 
@@ -114,6 +115,26 @@ Options only for what actually varies. Most features have nothing but `enable`.
 2. `nixos-generate-config` for `hardware-configuration.nix`
 3. Register it in `flake.nix`
 4. **Run `runtime-cache-refresh` before the first real build** — see below
+
+## The Haku desktop
+
+`dell-latitude` is the bespoke Hyprland desktop. The pieces, each a feature:
+
+- **`hyprland`** — the compositor. A source patch (`features/hyprland/trapezoid.patch`, gated by
+  `my.hyprland.keystone.enable`) adds a per-window perspective **keystone** so dock-tagged windows
+  render as 3D trapezoids.
+- **`hakuspace`** — the shell: waybar, rofi, the theme/wallpaper/cava machinery. A live accent flows
+  from `~/.local/state/haku_theme/colors.css` into every consumer.
+- **`notifcenter`** — a quickshell notification centre (replaces swaync, `SUPER+N`): weather, clock, a
+  control grid, Wi-Fi/Bluetooth managers, and the Sound mixer.
+- **`sidedock`** — the right-edge cascade dock (the keystone trapezoids), mutually exclusive with the
+  notif-centre via **`panelbus`**.
+- **`bonfire`** — a headless two-stage per-app / per-output EQ + routing engine for PipeWire
+  (replaces EasyEffects); the notif-centre Sound menu is its UI. External input, like sonora.
+- **`hearth` + `settings`** — the unified settings system: `features/settings` generates a schema from
+  every feature's `hearth.nix` fragment; the [`hearth`](https://github.com/sihooleebd/hearth) engine
+  materialises one JSON store every component reads live, with a per-key change signal. Full design in
+  **[SETTINGS.md](SETTINGS.md)**.
 
 ## The tuning backend
 
