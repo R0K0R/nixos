@@ -476,11 +476,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1791922898,
-        "narHash": "sha256-HqSRD8mVVhjbb5FDBjcK24JI+lgBHY4J3C8gDDbGFyo=",
+        "lastModified": 1791927540,
+        "narHash": "sha256-AcskGA41pG3aUPFBIAOLRPpkATC20KdoKaJ3AVHTAEk=",
         "owner": "sihooleebd",
         "repo": "hearth",
-        "rev": "e5a2feb0844467bdd57c083d3817a13b0a14a872",
+        "rev": "23daee284cf95f81e4e9b538c2937d98845eca6d",
         "type": "github"
       },
       "original": {
@@ -551,11 +551,11 @@
         "nixpkgs": "nixpkgs_3"
       },
       "locked": {
-        "lastModified": 1791923094,
-        "narHash": "sha256-KZkkMuYbYcPYJHtQVy2r7vIayL2B61PXVEH0DNGNbVE=",
+        "lastModified": 1791927538,
+        "narHash": "sha256-pfu27cH0LU41VVA8pmscqFwlVA9lIQDPYQduZ9t43iA=",
         "owner": "sihooleebd",
         "repo": "lyre",
-        "rev": "848e8bf768604ebc914d37ee83b73b357bceeca8",
+        "rev": "c1df318ef52f6e79377f3310a336c97efc1491ae",
         "type": "github"
       },
       "original": {

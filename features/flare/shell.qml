@@ -103,7 +103,7 @@ ShellRoot {
     property string _bfDevKey: ""
     Process {
         id: pLyre
-        command: ["sh","-c","lyre status 2>/dev/null"]
+        command: ["sh","-c","lyre report 2>/dev/null"]
         stdout: StdioCollector { onStreamFinished: {
             try {
                 var o = JSON.parse(text);
