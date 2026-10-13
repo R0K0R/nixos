@@ -429,4 +429,9 @@ case "${1:-toggle}" in
     curmon=$($J -r --arg a "$cur" 'first(.[]|select(.address==$a)).monitor' <<<"$CLIENTS")
     [ "$curmon" = "$homeid" ] && exit 0   # already home -> leave it (pin kept it correct)
     render "$cur" 0 1 ;;                   # re-home to the rightmost monitor, no focus steal
+  # NB: there is NO `floatcenter` verb. Dock-aware spawn placement is done IN THE COMPOSITOR by DOCK_MID
+  # (trapezoid.patch, DefaultFloatingAlgorithm::newTarget) -- flicker-free + no startup cost. The old
+  # async `floatcenter` window.open hook that called this verb was ROOT-CAUSED as the gen-271 startup
+  # FREEZE (a dock.sh + 3 hyprctl queries per floating window during the startup flood). Removed on
+  # purpose; the compositor owns placement now. See [[dock-keystone-patch]].
 esac

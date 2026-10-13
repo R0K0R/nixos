@@ -101,7 +101,11 @@ in
       -- Session. ESCAPE, not upstream's K (mod+K is focus workspace -1 --
       -- locking the screen while switching workspaces); SHIFT+L, not
       -- upstream's L (mod+L is focus right).
-      hl.bind("${mod} + Escape", hl.dsp.exec_cmd("${bin "lock.sh"}"), { locked = true })
+      -- lock-warm.sh primes the hyprlock value cache (music/battery/volume) once before hyprlock
+      -- paints, so the lock screen is fresh on the first frame instead of showing the previous
+      -- lock's stale cache (see features/hakuspace home.nix lockWarm). Panic (below) keeps plain
+      -- lock.sh for an instant cover.
+      hl.bind("${mod} + Escape", hl.dsp.exec_cmd("${bin "lock-warm.sh"}"), { locked = true })
       -- Panic: kill every window + lock, one gesture. Sits next to the lock bind
       -- on purpose (SUPER+Escape locks, SUPER+SHIFT+Escape nukes + locks).
       hl.bind("${mod} + SHIFT + Escape", hl.dsp.exec_cmd("${panic}"))

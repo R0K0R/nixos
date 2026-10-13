@@ -75,6 +75,12 @@
     # + binary cache, same as sonora above.
     late-sh.url = "github:mpiorowski/late-sh";
 
+    # bonfire -- my headless per-app/per-output EQ + routing engine for PipeWire (replaces
+    # EasyEffects AND Timbre; the notif-centre Sound menu is its only UI, driving it over a
+    # CLI). Source dev'd in ~/Documents/projects/bonfire. No nixpkgs.follows (same rationale
+    # as sonora/late-sh above) so it substitutes from cache.
+    bonfire.url = "github:sihooleebd/bonfire";
+
   };
 
   outputs =

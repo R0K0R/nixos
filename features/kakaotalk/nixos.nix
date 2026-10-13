@@ -13,7 +13,34 @@ let
   # carry a patch). portal_dbus.c dlopens libdbus by bare SONAME, which has no global path on
   # NixOS, so bake the store path (the pattern nixpkgs uses for wine's other dlopen'd libs);
   # the launcher also exports LD_LIBRARY_PATH as a belt-and-suspenders.
-  winePortal = pkgs.wine.overrideAttrs (old: {
+  # waylandSupport = false: build Wine with NO winewayland.drv. Wine 11 otherwise brings up a Wayland
+  # IME connection (fcitx's wayland_v2 frontend) whenever WAYLAND_DISPLAY is set -- even under the X11
+  # graphics driver -- and that context never gets focus, so Korean input splits between the dead
+  # Wayland path and the live X11/XIM path = the flaky-toggle / dead-input bug. Neither Graphics=x11
+  # nor unsetting WAYLAND_DISPLAY in the launcher survives (KakaoTalk re-injects WAYLAND_DISPLAY on its
+  # own self-relaunch, verified via fcitx5-diagnose). Removing the Wayland driver at BUILD time is the
+  # only robust fix: KakaoTalk is XWayland (X11) anyway, so XIM is the correct + now the only IME path.
+  winePortal = (pkgs.wine.override {
+    waylandSupport = false;   # IME fix -- see the comment above (no winewayland.drv -> XIM only)
+    # KakaoTalk is a 2D messaging app under XWayland; it never uses the features below, so drop
+    # them for a leaner closure + faster rebuilds (notably removes samba, sane-backends,
+    # vulkan-loader, and gtk+3). Verified each is a valid wine override flag.
+    cupsSupport = false;      # printing
+    gtkSupport = false;       # Wine's own GTK dialogs -- replaced by the xdg portal file picker
+    krb5Support = false;      # Kerberos
+    gphoto2Support = false;   # PTP / DSLR camera import
+    pcapSupport = false;      # packet capture
+    cursesSupport = false;    # console UI
+    openclSupport = false;    # GPU compute
+    netapiSupport = false;    # SMB / samba
+    saneSupport = false;      # document scanners
+    sdlSupport = false;       # gamepads
+    odbcSupport = false;      # ODBC databases
+    vulkanSupport = false;    # no 3D; Direct3D falls back to the kept OpenGL backend
+    # KEPT because KakaoTalk uses them: gstreamer/ffmpeg/v4l/va (voice + video messages & calls),
+    # opengl + cairo (rendering), tls + fontconfig/freetype (HTTPS + Korean fonts), alsa +
+    # pulseaudio (audio), smartcard (Korean public-cert readers), dbus (portal), mingw (PE compat).
+  }).overrideAttrs (old: {
     patches = (old.patches or [ ]) ++ [ ./portal-filedialog.patch ];
     buildInputs = (old.buildInputs or [ ]) ++ [ pkgs.dbus ];
     postPatch = (old.postPatch or "") + ''
@@ -49,6 +76,12 @@ let
     # portal file dialogs: comdlg32's portal_dbus dlopens libdbus at runtime -- make it findable
     # (the store path is also baked into the build; this covers any edge the baking misses).
     export LD_LIBRARY_PATH=${pkgs.dbus.lib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+
+    # Drop the Wayland env so Wine 11 runs purely X11/XWayland -- otherwise it ALSO starts its
+    # Wayland driver and routes IME to fcitx's wayland_v2 frontend (never focused) alongside the real
+    # X11/XIM window, splitting Korean input (flaky lang toggle / dead input). The window already
+    # renders via XWayland (DISPLAY), so nothing visual changes. Pairs with Graphics=x11 in the reg.
+    unset WAYLAND_DISPLAY
 
     mkdir -p "$HOME/Documents/KakaoTalk"
 
@@ -95,7 +128,7 @@ let
     # preedit back to fcitx, which composes + renders Korean correctly.
     # Marker-guarded (once per prefix); bump the marker to re-import on prefixes
     # created before a given key existed.
-    if [ ! -f "$WINEPREFIX/.kakao-reg-v4" ]; then
+    if [ ! -f "$WINEPREFIX/.kakao-reg-v5" ]; then
       reg="$WINEPREFIX/.kakao-reg.reg"
       cat > "$reg" <<'FONTREG'
 REGEDIT4
@@ -103,6 +136,15 @@ REGEDIT4
 [HKEY_CURRENT_USER\Software\Wine\X11 Driver]
 "InputStyle"="root"
 "FileDialogPortal"="always"
+
+; Force the X11 (XWayland) graphics driver ONLY. Wine 11 ships winewayland.drv and, when
+; WAYLAND_DISPLAY is set, ALSO brings up a Wayland connection -- which routed KakaoTalk's IME to
+; fcitx's wayland_v2 frontend (an input context that never gets focus), WHILE the actual window is
+; X11/XWayland. Korean input got split between that dead Wayland path and the live X11/XIM path =
+; the flaky toggle / dead input. Pinning Graphics=x11 keeps IME on the single XIM path that matches
+; the window. (The launcher also drops WAYLAND_DISPLAY as a second line of defence.)
+[HKEY_CURRENT_USER\Software\Wine\Drivers]
+"Graphics"="x11"
 
 ; Native integration: hand URLs / mailto / folders / documents to the native Linux apps instead
 ; of Wine's built-ins. winebrowser resolves each through xdg-open (on PATH via xdg-utils), which
@@ -163,7 +205,7 @@ REGEDIT4
 FONTREG
       wine regedit /S "$reg" >/dev/null 2>&1 || true
       wineserver -w || true
-      touch "$WINEPREFIX/.kakao-reg-v4"
+      touch "$WINEPREFIX/.kakao-reg-v5"
     fi
 
     [ -n "$exe" ] && exec wine "$exe"

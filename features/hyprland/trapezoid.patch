@@ -557,6 +557,73 @@ diff -ruN a/src/desktop/view/Window.hpp b/src/desktop/view/Window.hpp
          std::optional<Vector2D>           minSize();
          std::optional<Vector2D>           maxSize();
          // Returns the highest level target of a window
+diff -ruN a/src/layout/algorithm/floating/default/DefaultFloatingAlgorithm.cpp b/src/layout/algorithm/floating/default/DefaultFloatingAlgorithm.cpp
+--- a/src/layout/algorithm/floating/default/DefaultFloatingAlgorithm.cpp	2026-10-06 22:37:18.724301041 +0900
++++ b/src/layout/algorithm/floating/default/DefaultFloatingAlgorithm.cpp	2026-10-09 20:42:17.145383623 +0900
+@@ -23,6 +23,37 @@
+ 
+     CBox       windowGeometry;
+ 
++    // DOCK-AWARE CENTRE (my.sidedock): a new floating window is normally centred at WORK_AREA.middle().
++    // When the side-dock is OPEN on this window's monitor, centre it in the screen area LEFT OF THE DOCK
++    // (screen minus dock) instead, so it doesn't spawn under the right-edge pile; when the dock is closed
++    // it falls back to the normal centre (dead centre). The dock's OWN windows are positioned by their
++    // route rule (a `move` -> static_.position, which sets posOverridden below), so they never reach the
++    // auto-centre paths and are unaffected -- they keep landing in the dock slot. DOCK_MID replaces
++    // WORK_AREA.middle() only in the auto-centre placements further down.
++    Vector2D   DOCK_MID = WORK_AREA.middle();
++    {
++        const auto MON = m_parent->space()->workspace()->m_monitor;
++        if (MON) {
++            const double RIGHT    = MON->logicalBox().pos().x + MON->logicalBox().size().x;
++            double       dockLeft = RIGHT;
++            bool         dockOpen = false;
++            for (auto const& w : Desktop::windowState()->windows()) {
++                if (!w || !w->m_isMapped || w->m_monitor != MON)
++                    continue;
++                if (!(w->m_ruleApplicator && w->m_ruleApplicator->m_tagKeeper.isTagged("dock", false)))
++                    continue;
++                const double X = w->position(Desktop::View::IGeometric::GEOMETRIC_GOAL).x; // m_realPosition is protected; use the public accessor
++                if (X < RIGHT - 50.0) { // on-screen; a PARKED card sits at the monitor's right edge
++                    dockOpen = true;
++                    if (X < dockLeft)
++                        dockLeft = X;
++                }
++            }
++            if (dockOpen)
++                DOCK_MID = Vector2D{(WORK_AREA.pos().x + dockLeft) / 2.0, WORK_AREA.middle().y};
++        }
++    }
++
+     if (!DESIRED_GEOM) {
+         switch (DESIRED_GEOM.error()) {
+             case GEOMETRY_INVALID_DESIRED: {
+@@ -77,7 +108,7 @@
+         }
+ 
+         if (WINDOW->m_ruleApplicator->static_.center.value_or(false)) {
+-            const auto POS   = WORK_AREA.middle() - windowGeometry.size() / 2.f;
++            const auto POS   = DOCK_MID - windowGeometry.size() / 2.f;
+             windowGeometry.x = POS.x;
+             windowGeometry.y = POS.y;
+             posOverridden    = true;
+@@ -88,14 +119,14 @@
+     }
+ 
+     if (!posOverridden && (!DESIRED_GEOM || !DESIRED_GEOM->pos))
+-        windowGeometry = CBox{WORK_AREA.middle() - windowGeometry.size() / 2.F, windowGeometry.size()};
++        windowGeometry = CBox{DOCK_MID - windowGeometry.size() / 2.F, windowGeometry.size()};
+ 
+     if (posOverridden                                                                           // pos is overridden by a rule
+         || (DESIRED_GEOM && DESIRED_GEOM->pos && target->window() && target->window()->m_isX11) // X11 window with a geom
+         || WORK_AREA.containsPoint(windowGeometry.middle()))                                    // geometry within work area
+         target->setPositionGlobal(windowGeometry);
+     else {
+-        const auto POS   = WORK_AREA.middle() - windowGeometry.size() / 2.f;
++        const auto POS   = DOCK_MID - windowGeometry.size() / 2.f;
+         windowGeometry.x = POS.x;
+         windowGeometry.y = POS.y;
+ 
 diff -ruN a/src/managers/input/InputManager.cpp b/src/managers/input/InputManager.cpp
 --- a/src/managers/input/InputManager.cpp	2026-10-06 22:37:18.730264417 +0900
 +++ b/src/managers/input/InputManager.cpp	2026-10-06 22:37:27.242144017 +0900

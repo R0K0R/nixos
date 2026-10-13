@@ -91,6 +91,22 @@
   # hardware, not of any feature.
   boot.kernelPackages = pkgs.linuxPackages_7_2;
 
+  # Brother DCP-T536DW (USB). See brother-dcpt536dw.nix + the brother-dcpt536dw-nixos memory.
+  #  - PRINT: no nixpkgs package exists for this model and it's a plain USB printer (interface
+  #    07/02, NOT IPP-over-USB 07/01/04 -- so no driverless/ipp-usb), so its own colour driver is
+  #    packaged from the vendor RPM and handed to CUPS. Its PPD then appears as "Brother DCP-T536DW
+  #    ... for CUPS" in the printer GUI -- that's the entry that was missing (NixOS drivers come from
+  #    the config, not the GUI's picker). CUPS + avahi themselves come from features/session-services.
+  #  - SCAN: the scanner sits on a vendor-specific USB interface (class ff, not eSCL), so it needs
+  #    Brother's proprietary SANE backend brscan5 (in nixpkgs) -- what the brscan5/brscan-skey/udev
+  #    RPMs would have provided. hardware.sane wires the backend + udev rules + the scanner group.
+  services.printing.drivers = [ (pkgs.callPackage ./brother-dcpt536dw.nix { }) ];
+  hardware.sane = {
+    enable = true;
+    extraBackends = [ pkgs.brscan5 ];
+  };
+  users.users.benjamin.extraGroups = [ "scanner" "lp" ];
+
   my = {
     /*
       This machine builds nothing.
@@ -134,6 +150,29 @@
     keyd = {
       enable = true;
       layout = "capsHangul";
+      # The dorm's Topre REALFORCE 108 US had its onboard layout changed (a friend's setup), so it
+      # SENDS swapped scancodes at the hardware level. DERIVED from observed behavior: with
+      # `capslock=hangeul` the PHYSICAL Ctrl key produced Hangul and the PHYSICAL Caps key produced
+      # Ctrl -- which means physical Ctrl emits `capslock` and physical Caps emits `leftcontrol` (and
+      # physical Alt/Win are swapped too). We compensate in keyd so the physical keys do the NORMAL
+      # thing on this board: physical Ctrl -> Ctrl, physical Caps -> Korean/English toggle, Alt<->Win
+      # correct.
+      #   - capslock    = leftcontrol : physical CTRL key (sends `capslock`)    -> Ctrl.
+      #   - leftcontrol = hangeul     : physical CAPS key (sends `leftcontrol`) -> the Hangul toggle.
+      #   - the alt/meta lines double-swap the firmware's Alt/Win swap back to correct.
+      # keyd grabs all three Topre interfaces under the SINGLE id 0853:0147 (confirmed in
+      # `journalctl -u keyd` -- NOT 001f:0b26, which is a "Generic AB13X USB Audio" device). keyd's
+      # control key is `leftcontrol`, NOT `leftctrl` (the latter is silently rejected). NB this assumes
+      # the CURRENT firmware swap -- if the board is ever reset to stock, delete this whole block (the
+      # laptop's global capsHangul would then apply normally).
+      perDevice."0853:0147" = {
+        capslock = "leftcontrol"; # physical CTRL key (sends capslock) -> Ctrl
+        leftcontrol = "hangeul";  # physical CAPS key (sends leftcontrol) -> Korean/English toggle
+        leftalt = "leftmeta";
+        leftmeta = "leftalt";
+        rightalt = "rightmeta";
+        rightmeta = "rightalt";
+      };
     };
     pipewire.enable = true;
     libinput.enable = true;
@@ -196,6 +235,8 @@
     qt-dev.enable = true;
 
     hop.enable = true;
+
+    bonfire.enable = true;   # headless PipeWire per-app/per-output EQ + routing engine (features/bonfire)
 
     claude-code = {
       enable = true;
@@ -293,7 +334,8 @@
       (callPackage ../../features/xfetch/package.nix { })
       kdePackages.okular
       btop # hakuspace's theme pipeline already writes ~/.config/btop themes
-      gimp
+      # gimp REMOVED 2026-10-10 -> replaced by PhotoCraft (flatpak ai.storyteller.photocraft, installed
+      # --user from the unofficial `artcraft` (FlatPark) remote; see the craft-suite memory). `gimp` to revert.
       qalculate-qt # calculator (Qt build -- themes via qt6ct like the KDE apps)
       lunar-client # Minecraft client/launcher
       # discord lives in features/desktop-apps, wrapped there with
@@ -428,15 +470,9 @@
       profile = "performance";
     };
     flatpak.enable = true;
-    easyeffects = {
-      enable = true;
-      # Effects applied from login, window hidden -- the feature's own
-      # graphical-session service, not an exec-once. (Was briefly disabled while
-      # this SSD ran on the AMD Victus, where EasyEffects' virtual-sink default
-      # let audio bypass mute; back on the Latitude, where its presets fit the
-      # speakers, it's re-enabled.)
-      startUp = true;
-    };
+    # (No easyeffects here any more -- audio EQ + routing is my.bonfire, enabled
+    # above: one headless PipeWire graph doing per-app and per-output EQ, driven
+    # from the notif-centre Sound menu. It replaced EasyEffects and the Timbre GUI.)
 
     boot.enable = true;
 
@@ -474,7 +510,7 @@
 
     hakuspace.enable = true;
     # Right-edge cascade dock (SUPER+D shifts the pile, SUPER+SHIFT+D parks it):
-    # sonora, easyeffects + KakaoTalk auto-route in; SUPER+SHIFT+T opens a docked
+    # sonora + KakaoTalk auto-route in; SUPER+SHIFT+T opens a docked
     # terminal; push any other window in with SUPER+ALT+D. See features/sidedock.
     sidedock = {
       enable = true;
@@ -487,7 +523,7 @@
       # here, so it stays with xembedsniproxy (see kakaotalk-wine-setup). NB the route
       # rule deliberately does NOT suppress activate -- that blocked KakaoTalk from
       # restoring its window from the tray (see the note in features/sidedock/home.nix).
-      apps = [ "sonora" "com.github.wwmm.easyeffects" "kakaotalk.exe" ];
+      apps = [ "sonora" "kakaotalk.exe" ];
     };
     # EXPERIMENTAL: perspective-trapezoid render for dock windows (patches the
     # compositor). Enabled to BUILD the patched binary for nested testing; do NOT

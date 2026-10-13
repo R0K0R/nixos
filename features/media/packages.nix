@@ -12,16 +12,9 @@
     playerctl
     blender
     moonlight-qt
-
-    # kdenlive needs rnnoise-plugin's LADSPA path wired in explicitly; the
-    # plugin is built without LV2 (see tuning/overlays/pseudo-cross.nix, which
-    # disables the LV2 helper because it is a HOST-compiled binary the BUILD
-    # machine cannot run).
-    (kdePackages.kdenlive.overrideAttrs (prev: {
-      nativeBuildInputs = (prev.nativeBuildInputs or [ ]) ++ [ makeBinaryWrapper ];
-      postInstall = (prev.postInstall or "") + ''
-        wrapProgram $out/bin/kdenlive --prefix LADSPA_PATH : ${rnnoise-plugin}/lib/ladspa
-      '';
-    }))
+    # kdenlive REMOVED 2026-10-10 -> replaced by FilmCraft (flatpak ai.storyteller.filmcraft,
+    # installed --user from the unofficial `artcraft` (FlatPark) remote; see the craft-suite memory).
+    # To revert: restore the kdenlive overrideAttrs block from git -- it wired rnnoise-plugin's LADSPA
+    # path in (plugin built without LV2 per tuning/overlays/pseudo-cross.nix) + makeBinaryWrapper.
   ];
 }

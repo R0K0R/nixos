@@ -28,6 +28,24 @@
         "type": "github"
       }
     },
+    "bonfire": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "lastModified": 1791912651,
+        "narHash": "sha256-4J+/CpKcdsIWKmXTDvpgQ49AlcNIRLiCL4LAH27Nx/o=",
+        "owner": "sihooleebd",
+        "repo": "bonfire",
+        "rev": "4694453b3e547775ae588f754eaeafa387c1f694",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sihooleebd",
+        "repo": "bonfire",
+        "type": "github"
+      }
+    },
     "claude-code-bin": {
       "flake": false,
       "locked": {
@@ -512,7 +530,7 @@
     "late-sh": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs",
+        "nixpkgs": "nixpkgs_2",
         "rust-overlay": "rust-overlay"
       },
       "locked": {
@@ -614,16 +632,16 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1789370336,
-        "narHash": "sha256-6RSEDHIWQtesQKWSu5qRai8L2h4KgCgMEfJHstW99G4=",
+        "lastModified": 1791594108,
+        "narHash": "sha256-XK4KceonkwD8LuMAt/vNrz982mXJM5jeHAxMwsUXXAQ=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "c7def046b9a883d46974757852106483d741586f",
+        "rev": "6510408d147d8c5e6d76043e899e9251756f6a75",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "nixpkgs-unstable",
+        "ref": "nixos-unstable",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -678,6 +696,22 @@
     },
     "nixpkgs_2": {
       "locked": {
+        "lastModified": 1789370336,
+        "narHash": "sha256-6RSEDHIWQtesQKWSu5qRai8L2h4KgCgMEfJHstW99G4=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "c7def046b9a883d46974757852106483d741586f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_3": {
+      "locked": {
         "lastModified": 1788178606,
         "narHash": "sha256-J7KXtwDdkt+S/mLWJWqXnyeD8RBJR4n9lKXGfrscQDA=",
         "owner": "R0K0R",
@@ -692,7 +726,7 @@
         "type": "github"
       }
     },
-    "nixpkgs_3": {
+    "nixpkgs_4": {
       "locked": {
         "lastModified": 1790822859,
         "narHash": "sha256-69xHQhAeMAD2wDXO7T2pcOZIF9Sga2W+JkmY2a11Ops=",
@@ -727,6 +761,7 @@
     },
     "root": {
       "inputs": {
+        "bonfire": "bonfire",
         "feat-agenix": "feat-agenix",
         "feat-claude-code": "feat-claude-code",
         "feat-claude-desktop": "feat-claude-desktop",
@@ -739,7 +774,7 @@
         "feat-samsung-galaxybook": "feat-samsung-galaxybook",
         "home-manager": "home-manager",
         "late-sh": "late-sh",
-        "nixpkgs": "nixpkgs_2",
+        "nixpkgs": "nixpkgs_3",
         "nixpkgs-upstream": "nixpkgs-upstream",
         "sonora": "sonora"
       }
@@ -805,7 +840,7 @@
     },
     "sonora": {
       "inputs": {
-        "nixpkgs": "nixpkgs_3",
+        "nixpkgs": "nixpkgs_4",
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {

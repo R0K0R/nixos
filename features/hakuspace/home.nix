@@ -684,9 +684,9 @@ in
           # easyeffects virtual sink so it never appears.
           # Line = "PortDesc (SinkDesc)<TAB>sink<TAB>port", or for the fallback
           # "SinkDesc<TAB>sink<TAB>" (empty port).
-          sel=$("$PACTL" list sinks | "$AWK" '
+          sel=$( { printf '🎚  Device levels / balance…\t__gain__\t\n'; "$PACTL" list sinks | "$AWK" '
             function flush() {
-                if (name != "" && had_port == 0 && name !~ /easyeffects/)
+                if (name != "" && had_port == 0 && name !~ /easyeffects/ && name !~ /haku_combined/)
                     printf "%s\t%s\t\n", desc, name
             }
             /^Sink #/         { flush(); name=""; desc=""; inports=0; had_port=0 }
@@ -704,16 +704,46 @@ in
                 }
             }
             END { flush() }
-          ' | ${rofiEmoji}/bin/rofi -dmenu -i -p "Output device" -display-columns 1)
+          ' ; } | ${rofiEmoji}/bin/rofi -dmenu -i -multi-select -ballot-selected-str "● " -ballot-unselected-str "○ " -p "Output — Shift+Enter = combine · pick 🎚 for levels" -display-columns 1)
           [ -z "$sel" ] && exit 0
-          target=$(printf '%s' "$sel" | ${pkgs.coreutils}/bin/cut -f2)
-          port=$(printf '%s'  "$sel" | ${pkgs.coreutils}/bin/cut -f3)
 
-          # Point that sink at the chosen port (speaker<->jack switch on a ported
-          # sink; safe with EasyEffects -- EE keeps outputting to this sink, now
-          # via the new port). Portless UCM/Bluetooth entries carry no port, so
-          # skip this and let the default-switch below do the routing.
-          [ -n "$port" ] && "$PACTL" set-sink-port "$target" "$port"
+          # "Device levels / balance" entry chosen -> hand off to the per-output gain mixer. This is how
+          # you reach the mixer WITHOUT a middle-click (awkward on a trackpad). If it was marked alongside
+          # devices, the mixer still wins.
+          case "$sel" in *__gain__*) exec ${audioGainMenu} ;; esac
+
+          # MULTIPLE devices at once: rofi -multi-select returns one line per chosen entry (mark the
+          # extra ones with Shift+Enter). For each, set its PORT (speaker<->jack on a ported sink), then
+          # collect the UNIQUE target sinks. One sink -> switch to it as before; several -> build a
+          # combined sink that fans the audio out to all of them simultaneously.
+          sinks=""
+          while IFS=$'\t' read -r desc sink port; do
+            [ -z "$sink" ] && continue
+            [ -n "$port" ] && "$PACTL" set-sink-port "$sink" "$port" 2>/dev/null || true
+            case " $sinks " in *" $sink "*) : ;; *) sinks="''${sinks:+$sinks }$sink" ;; esac
+          done < <(printf '%s\n' "$sel")
+          [ -z "$sinks" ] && exit 0
+
+          # Tear down any previous combined sink first so this selection replaces it cleanly -- whether
+          # going back to a single device or re-combining a different set. module-combine-sink is a
+          # runtime pulse module (evaporates on logout), so nothing needs to persist.
+          "$PACTL" list short modules | "$AWK" '/module-combine-sink/ && /haku_combined/ {print $1}' \
+            | while read -r m; do "$PACTL" unload-module "$m" 2>/dev/null || true; done
+
+          set -- $sinks
+          if [ "$#" -gt 1 ]; then
+            # Fan out to every selected device via one combined sink. CRITICAL: wake each slave FIRST.
+            # PipeWire's module-combine-sink only wires up slaves that are awake at creation time and
+            # SILENTLY DROPS any that are SUSPENDED (idle) -- so a combine built while a USB device was
+            # idle would create no stream to it and never play there. Unsuspending them first makes the
+            # combine attach to all. (verified: with all slaves woken, all get a combine output stream.)
+            for s in "$@"; do "$PACTL" suspend-sink "$s" 0 2>/dev/null || true; done
+            slaves=$(IFS=,; echo "$*")
+            "$PACTL" load-module module-combine-sink sink_name=haku_combined slaves="$slaves" >/dev/null 2>&1
+            target=haku_combined
+          else
+            target="$1"
+          fi
 
           def=$("$PACTL" get-default-sink)
           ee=$("$PACTL" list short sinks | "$AWK" '$2=="easyeffects_sink"{print $1}')
@@ -734,16 +764,76 @@ in
             done
           fi
         '';
+        # Per-output gain mixer -- volume module MIDDLE-click. In a multi-output setup each device sits
+        # at its own hardware level, so this balances them. If a combined sink (haku_combined*) is active
+        # it mixes that combine's SLAVES; otherwise it mixes every real hardware sink. A pavucontrol row
+        # opens the full GUI mixer. Single-select rofi that loops (tweak several in a row); Esc finishes.
+        audioGainMenu = pkgs.writeShellScript "waybar-audio-gain" ''
+          PACTL=${pkgs.pulseaudio}/bin/pactl
+          AWK=${pkgs.gawk}/bin/awk
+          ROFI=${rofiEmoji}/bin/rofi
+          CUT=${pkgs.coreutils}/bin/cut
+          TR=${pkgs.coreutils}/bin/tr
+          GREP=${pkgs.gnugrep}/bin/grep
+          SED=${pkgs.gnused}/bin/sed
+          PAVU=${pkgs.pavucontrol}/bin/pavucontrol
+
+          descof() {
+            "$PACTL" list sinks | "$AWK" -v n="$1" '
+              /^\tName: /{cur=$2}
+              /^\tDescription: /{d=$0; sub(/^\tDescription: /,"",d); if(cur==n) print d}
+            '
+          }
+
+          # Outputs to mix: slaves of an active combine, else all real hardware sinks.
+          raw=$("$PACTL" list modules | "$GREP" -A3 'Name: module-combine-sink' \
+                 | "$GREP" -m1 'Argument:' | "$SED" -n 's/.*slaves=\([^ ]*\).*/\1/p')
+          if [ -n "$raw" ]; then
+            outs=$(printf '%s' "$raw" | "$TR" ',' ' ')
+          else
+            outs=$("$PACTL" list short sinks | "$AWK" '$2 !~ /easyeffects/ && $2 !~ /haku_combined/ {print $2}')
+          fi
+          [ -z "$outs" ] && exit 0
+
+          while :; do
+            menu=$(for s in $outs; do
+              v=$("$PACTL" get-sink-volume "$s" 2>/dev/null | "$AWK" 'match($0,/[0-9]+%/){print substr($0,RSTART,RLENGTH-1); exit}')
+              [ -z "$v" ] && v=0
+              m=$("$PACTL" get-sink-mute "$s" 2>/dev/null | "$AWK" '{print $2}')
+              bar=$("$AWK" -v x="$v" 'BEGIN{f=int(x/10); if(f>10)f=10; s=""; for(i=0;i<f;i++)s=s"█"; for(i=f;i<10;i++)s=s"░"; print s}')
+              d=$(descof "$s"); [ -z "$d" ] && d="$s"
+              if [ "$m" = yes ]; then tag="🔇"; else tag="$v%"; fi
+              printf '%s  %s %s\t%s\n' "$d" "$bar" "$tag" "$s"
+            done)
+            sel=$(printf '%s\n🎛  Full mixer (pavucontrol)\t__pavu__\n' "$menu" \
+                   | "$ROFI" -dmenu -i -p "Per-output levels (Esc to finish)" -display-columns 1)
+            [ -z "$sel" ] && break
+            tgt=$(printf '%s' "$sel" | "$CUT" -f2)
+            if [ "$tgt" = __pavu__ ]; then
+              ${pkgs.util-linux}/bin/setsid "$PAVU" >/dev/null 2>&1 &
+              break
+            fi
+            lvl=$(printf '100\n90\n80\n70\n60\n50\n40\n30\n20\n10\n0\nMute\nUnmute\n' \
+                   | "$ROFI" -dmenu -i -p "Level: $(descof "$tgt")")
+            [ -z "$lvl" ] && continue
+            case "$lvl" in
+              Mute)   "$PACTL" set-sink-mute "$tgt" 1 ;;
+              Unmute) "$PACTL" set-sink-mute "$tgt" 0 ;;
+              *)      "$PACTL" set-sink-mute "$tgt" 0; "$PACTL" set-sink-volume "$tgt" "$lvl%" ;;
+            esac
+          done
+        '';
         modulesPatch = pkgs.writeText "waybar-custom-modules.py" ''
           import json, sys, shlex
           path, sink_menu, pavu = sys.argv[1:4]
           c = json.load(open(path))
-          # Output-device switch on the volume module: right-click picks a sink,
-          # middle-click opens the full mixer. Left-click (mute) is left as-is.
+          # Volume module: right-click opens the notif-centre (its Sound menu is the full mixer
+          # + per-app/per-output EQ; the bonfire daemon is the headless engine behind it).
+          # Middle-click opens pavucontrol; left-click (mute) is left as-is.
           # (The Wi-Fi/Bluetooth modules that used to live here are gone -- the
           # native nm-applet and blueman-applet tray icons cover those now.)
           if isinstance(c.get("pulseaudio"), dict):
-              c["pulseaudio"]["on-click-right"] = sink_menu
+              c["pulseaudio"]["on-click-right"] = "quickshell -c haku-notif ipc call panel toggle"
               c["pulseaudio"]["on-click-middle"] = pavu
           # Recording button: reflect the actual state. The PERSISTENT recorder
           # button (island/top/... -- the one with no "exec", always shown)
@@ -1246,9 +1336,13 @@ in
         # the hakuspace-hyprlock-cache service (systemd.user.services). While hyprlock is up,
         # refresh every ~0.75s (the lit backlight already dwarfs this cost during AOD, so
         # keeping the cache fresh for an INSTANT wake is effectively free); while unlocked,
-        # idle-check every 20s so playerctl/wpctl aren't spawned on the live desktop for
-        # nothing. Installed-and-exec'd by path rather than referenced from the service
-        # directly, because the service lives in the outer `let` and these in home.file's.
+        # idle-POLL every 2s -- this branch does NOT spawn playerctl/wpctl (only a cheap pgrep),
+        # so a tight poll just means lock is DETECTED fast and the first in-lock refresh lands
+        # within ~2s even for a lock path that didn't pre-warm (the panic gesture). The normal
+        # SUPER+Escape / idle locks pre-warm synchronously via lockWarm (below), so THEY are
+        # fresh on the first frame; this 2s is the safety net. Installed-and-exec'd by path
+        # rather than referenced from the service directly, because the service lives in the
+        # outer `let` and these in home.file's.
         hyprlockCacheLoop = pkgs.writeShellScript "hakuspace-hyprlock-cache-loop" ''
           export PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.procps ]}:$PATH
           while true; do
@@ -1256,9 +1350,21 @@ in
               ${hyprlockCacheUpdate}
               sleep 0.75
             else
-              sleep 20
+              sleep 2
             fi
           done
+        '';
+        # Prime the hyprlock value cache ONCE, synchronously, BEFORE hyprlock paints, then hand
+        # off to the real lock.sh. Without this the lock screen's FIRST frame shows whatever song/
+        # battery/volume was cached during the PREVIOUS lock (the loop above only refreshes while
+        # hyprlock is already running), so e.g. the music sat stale until the loop's next tick.
+        # Running the one-shot updater here means ~/.cache/hyprlock/* is current the instant
+        # hyprlock reads it. Costs ~200ms (a few playerctl/wpctl calls) -- fine for a manual or
+        # idle lock. The panic gesture deliberately keeps the un-warmed lock.sh for an INSTANT
+        # cover (it locks THEN kills windows); the 2s loop above catches that one.
+        lockWarm = pkgs.writeShellScript "hakuspace-lock-warm" ''
+          ${hyprlockCacheUpdate}
+          exec ${bin "lock.sh"} "$@"
         '';
 
         # Right-hand column: battery on top, then the music cluster (song, the
@@ -1518,6 +1624,14 @@ in
           substituteInPlace $out \
             --replace-fail 'on-timeout = loginctl lock-session' \
               'on-timeout = ${gammaReset}; loginctl lock-session'
+          # (1c) Idle / auto-lock (loginctl lock-session -> logind Lock -> this lock_cmd) goes
+          # through lock-warm.sh so the lock screen's music/battery/volume are refreshed ONCE
+          # before hyprlock paints -- not the stale cache from the previous lock. SUPER+Escape
+          # does the same (features/hakuspace compositor.nix); the panic gesture keeps plain
+          # lock.sh for an instant cover.
+          substituteInPlace $out \
+            --replace-fail 'lock_cmd = pidof hyprlock || ~/.local/bin/lock.sh' \
+              'lock_cmd = pidof hyprlock || ~/.local/bin/lock-warm.sh'
 
           # (2) save around the suspend the lid triggers, restore on wake.
           substituteInPlace $out \
@@ -1578,6 +1692,10 @@ in
         # path so the hakuspace-hyprlock-cache service can exec it by `bin "..."` from the
         # outer `let` (it can't see this inner `let`'s store paths).
         ".local/bin/hyprlock-cache-loop".source = hyprlockCacheLoop;
+        # lock-warm.sh: primes the hyprlock value cache once, then execs lock.sh (see lockWarm).
+        # The SUPER+Escape bind + hypridle's lock_cmd point here so the lock screen opens with
+        # CURRENT music/battery/volume instead of the previous lock's stale cache.
+        ".local/bin/lock-warm.sh".source = lockWarm;
       };
   };
 }

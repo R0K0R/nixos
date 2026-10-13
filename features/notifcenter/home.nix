@@ -75,9 +75,14 @@ lib.mkIf (osConfig.my.notifcenter.enable && inScope && osConfig.my.desktop.compo
       #    short chime (HAKU_ALERT_SOUND), and must fire even when the panel is closed (the countdown
       #    keeps running regardless).
       ExecStart = pkgs.writeShellScript "haku-notif-start" ''
-        export PATH=${lib.makeBinPath [ pkgs.hyprsunset pkgs.util-linux pkgs.libnotify pkgs.pipewire osConfig.my.panelbus.package ]}''${PATH:+:$PATH}
+        export PATH=${lib.makeBinPath [ pkgs.hyprsunset pkgs.util-linux pkgs.libnotify pkgs.pipewire pkgs.grim pkgs.slurp pkgs.wl-clipboard pkgs.hyprpicker pkgs.wf-recorder pkgs.procps osConfig.my.panelbus.package ]}''${PATH:+:$PATH}
         export HAKU_ALERT_SOUND=${pkgs.sound-theme-freedesktop}/share/sounds/freedesktop/stereo/complete.oga
         export HAKU_WEATHER_CMD=${weatherCmd}
+        # Crisper text at the 0.8 fractional monitor scale: force NATIVE glyph rendering instead of
+        # QtQuick's default distance-field atlas, which samples one cached glyph texture and goes soft
+        # at non-integer scale (native rasterizes per pixel-size -> sharp). Reversible -- drop this to
+        # compare against the old distance-field look.
+        export QML_DISABLE_DISTANCEFIELD=1
         exec ${pkgs.quickshell}/bin/quickshell -c haku-notif
       '';
       Restart = "on-failure";

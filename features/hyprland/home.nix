@@ -877,6 +877,46 @@ in
         end
       end
 
+      -- CLAMSHELL: power the internal panel off when the lid CLOSES while docked, back on when it
+      -- OPENS. logind (HandleLidSwitchDocked=ignore) keeps the session alive on a docked lid-close but
+      -- never powers an individual panel -- that is the compositor's job, and with no rule the internal
+      -- display kept rendering behind the shut lid. The otherMon() guard means a lid-close with NO
+      -- external display does NOTHING here (logind suspends that case anyway), so the only screen is
+      -- never blanked. switch:on = lid CLOSED, switch:off = lid OPEN (KeybindManager fires both). A lid
+      -- already closed at compositor start never fired the close event, so the /proc check re-applies
+      -- it once at load (and on every reload -- idempotent). hl.get_monitors/hl.monitor/io.open are the
+      -- same calls the scale-persist block above uses at load, so this is on a proven path.
+      do
+        local internal = "${osConfig.my.desktop.primaryOutput}"
+        local function otherMon()
+          local ok, res = pcall(function()
+            for _, m in ipairs(hl.get_monitors()) do if m.name ~= internal then return true end end
+            return false
+          end)
+          return ok and res
+        end
+        hl.bind("switch:on:Lid Switch",  function() if otherMon() then hl.monitor({ output = internal, disabled = true }) end end)
+        hl.bind("switch:off:Lid Switch", function() hl.monitor({ output = internal, disabled = false }) end)
+        pcall(function()
+          local fh = io.open("/proc/acpi/button/lid/LID0/state", "r")
+          if not fh then return end
+          local st = fh:read("*a"); fh:close()
+          if st and st:find("closed") and otherMon() then hl.monitor({ output = internal, disabled = true }) end
+        end)
+      end
+
+      -- Pre-build the KDE service cache (ksycoca) at login, in the BACKGROUND, so Dolphin and other
+      -- KF6 apps open fast instead of rebuilding it synchronously on first launch. Every nixos-rebuild
+      -- shifts XDG_DATA_DIRS, which changes the ksycoca hash, so the first KDE app after a rebuild
+      -- otherwise stalls for seconds running a full kbuildsycoca6 (symptom: ~/.cache fills with dozens
+      -- of stale ksycoca6_* caches, one per hash). An hl.on STACKS with the home-manager-generated
+      -- hyprland.start, and runs in the COMPOSITOR env -- the same XDG_DATA_DIRS Dolphin gets from rofi
+      -- -- so the cache it warms is the exact hash Dolphin looks up. exec_cmd is fire-and-forget, so it
+      -- never blocks startup. See the dolphin-slow-ksycoca memory.
+      hl.on("hyprland.start", function()
+        hl.exec_cmd("${pkgs.kdePackages.kservice}/bin/kbuildsycoca6")
+      end)
+
       -- Confine the pen to the Wacom (DP-1) at the COMPOSITOR level. On a
       -- multi-monitor Wayland desktop, letting OTD target a specific monitor via
       -- its own Display area fights Hyprland (OTD's coords land outside the range
@@ -945,12 +985,17 @@ in
       -- (FileDialogPortal=always, features/kakaotalk) and GTK/Firefox all open to pick/save files. Its
       -- Wayland app-id (.class) is "org.freedesktop.impl.portal.desktop.kde" (NOT "xdg-desktop-portal-kde"
       -- -- that's only the window TITLE; verified live via hyprctl clients, where it showed floating:0).
-      hl.window_rule({ match = { class = "^(org\\.freedesktop\\.impl\\.portal\\.desktop\\.kde)$" }, float = true })
-      -- Wine's explorer.exe folder window (from KakaoTalk's "open folder") is redirected to Dolphin and
-      -- closed immediately (folderToDolphin, features/sidedock) -- float it so that brief moment doesn't
-      -- reshuffle the tiling layout. Only ever matches a real folder window; the systray goes through
-      -- xembedsniproxy and the Wine desktop shell isn't a normal window, so neither is affected.
-      hl.window_rule({ match = { class = "^(explorer\\.exe)$" }, float = true })
+      -- ...at Dolphin's DEFAULT size (measured live: a freshly-opened floating Dolphin is 1200x800), so
+      -- the Wine/KakaoTalk file selector opens the same size as the native file manager it mirrors.
+      hl.window_rule({ match = { class = "^(org\\.freedesktop\\.impl\\.portal\\.desktop\\.kde)$" }, float = true, size = "1200 800" })
+      -- Wine's explorer.exe windows. NONE are user-facing here: a folder window (KakaoTalk's "open
+      -- folder") is redirected to Dolphin + closed by folderToDolphin (features/sidedock), and the
+      -- `explorer.exe /desktop` SHELL stub shows up as a stray tiny 160x20 window top-left. So float
+      -- them (no tiling reshuffle) AND park them off-screen at (-9999,-9999) with no focus steal --
+      -- this SUPPRESSES the stray /desktop stub (and the transient folder window just flashes there
+      -- for the instant before it's closed). The window still EXISTS (not killed), so Wine's shell and
+      -- the xembedsniproxy-proxied tray keep working; it's just never visible. See [[kakaotalk-wine-setup]].
+      hl.window_rule({ match = { class = "^(explorer\\.exe)$" }, float = true, move = "-9999 -9999", no_initial_focus = true })
       -- Waydroid size lock
       hl.window_rule({ match = { class = "^(Waydroid)$" }, scrolling_width = 1.0 })
       -- Glassmorphism: translucent KDE apps; backdrop blur applies to
@@ -1009,7 +1054,7 @@ in
       -- rule -- both verified accepted by this build's Lua binding.
       -- size, or dolphin floats at the fullscreen size it requests (it saves no
       -- geometry under Wayland). 1200x800 centred = a normal file-manager window.
-      hl.window_rule({ match = { class = "^(org\\.kde\\.dolphin)$" }, float = true, center = true, size = "1200 800" })
+      hl.window_rule({ match = { class = "^(org\\.kde\\.dolphin)$" }, float = true, center = true, size = "1200 800", opacity = "0.65 0.65" })
       hl.window_rule({ match = { class = "^(.*pavucontrol.*)$" }, float = true, center = true })
       hl.window_rule({ match = { class = "^(blueman-manager)$" }, float = true, center = true })
       hl.window_rule({ match = { class = "^(nm-connection-editor)$" }, float = true, center = true })
@@ -1294,15 +1339,25 @@ in
       --   SHIFT/CTRL+<n>  -> same, but MOVE the active window to the chosen target.
       -- Single monitor stays pure Lua (instant, decade 0); multi-monitor hands off to the wsPick
       -- rofi script. (This replaced an earlier hold-a-letter gesture -- too fiddly.)
+      -- Current screen's decade base (0 = A, 10 = B, ...), read from its ACTIVE workspace rather
+      -- than assuming decade 0. A single screen can carry a non-A decade (e.g. in clamshell the sole
+      -- monitor is pinned to B), and keying A<n> there would jump to an empty foreign decade.
+      local function curBase()
+        local m = hl.get_active_monitor()
+        local aw = m and m.active_workspace
+        local id = (aw and aw.id) or 1
+        if id < 1 then id = 1 end
+        return math.floor((id - 1) / 10) * 10
+      end
       local function wsGo(slot)
         return function()
-          if #hl.get_monitors() <= 1 then hl.dispatch(hl.dsp.focus({ workspace = slot }))
+          if #hl.get_monitors() <= 1 then hl.dispatch(hl.dsp.focus({ workspace = curBase() + slot }))
           else hl.dispatch(hl.dsp.exec_cmd("${wsPick} " .. tostring(slot))) end
         end
       end
       local function wsMove(slot)
         return function()
-          if #hl.get_monitors() <= 1 then hl.dispatch(hl.dsp.window.move({ workspace = slot, follow = true }))
+          if #hl.get_monitors() <= 1 then hl.dispatch(hl.dsp.window.move({ workspace = curBase() + slot, follow = true }))
           else hl.dispatch(hl.dsp.exec_cmd("${wsPick} " .. tostring(slot) .. " move")) end
         end
       end

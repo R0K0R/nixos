@@ -229,6 +229,17 @@ lib.mkIf (osConfig.my.sidedock.enable && inScope && osConfig.my.desktop.composit
         -- (dolphin), see folderToDolphin in the let. Fires for every explorer.exe window; the script
         -- itself filters out the /desktop shell + the tray (anything with no folder path in its cmdline).
         hl.on("window.open", function(w) if w and w.class == "explorer.exe" then hl.dispatch(hl.dsp.exec_cmd("${folderToDolphin} " .. w.address)) end end)
+        -- Dock-aware spawn placement for floating windows (centre in the strip LEFT of the dock when the
+        -- dock is shown, else dead-centre) is done IN THE COMPOSITOR by DOCK_MID (trapezoid.patch,
+        -- DefaultFloatingAlgorithm::newTarget) -- placed right on the first frame, so it is flicker-free
+        -- AND has no startup cost. There is deliberately NO window.open hook for this anymore.
+        -- WHY (root-caused 2026-10-10, see [[dock-keystone-patch]]): an async `${dock} floatcenter`
+        -- exec_cmd hook here was what FROZE the compositor ~1s into session startup on gen 271 -- it fired
+        -- a dock.sh (3 hyprctl queries) for EVERY floating window during the startup flood. gen 269
+        -- (DOCK_MID in-compositor, NO hook) is the confirmed-working state (this is it). DOCK_MID is
+        -- dormant at startup (no dock card is tagged yet -> it falls back to WORK_AREA.middle), so it
+        -- cannot cause the startup freeze -- unlike the hook. Do NOT reintroduce a window.open placement
+        -- hook (async OR sync); the compositor owns this.
         -- KEEP THE DOCK ON ITS HOME MONITOR across workspace switches. The pile is pinned, and
         -- Hyprland's pin follows the active workspace on EVERY monitor -- so switching a workspace on
         -- another screen drags the dock across ("flies across screens"). On each workspace change,

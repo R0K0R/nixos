@@ -40,15 +40,44 @@ in
           "capsHangul" - Caps emits Hangul (plain, instant remap), nothing else.
       '';
     };
+
+    perDevice = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.attrsOf lib.types.str);
+      default = { };
+      example = lib.literalExpression ''{ "001f:0b26" = { leftalt = "leftmeta"; leftmeta = "leftalt"; }; }'';
+      description = ''
+        Per-keyboard `main`-section remaps, keyed by the device's `vendor:product` id (find it in the
+        `keyd` journal's DEVICE lines or `sudo keyd list-keyboards` -- NOT /proc, whose name<->id
+        pairing can mislead). Each listed id is EXCLUDED from the default `*` config and instead gets
+        the chosen `layout` MERGED WITH these remaps (a key here overrides the same key in `layout`),
+        so one external board can tweak a few keys while still inheriting the rest of the layout --
+        e.g. keep capslock=hangeul and only swap Alt<->Win. Values are keyd key names; note it is
+        `leftcontrol`, NOT `leftctrl` (keyd silently rejects the latter as "not a valid key").
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
     services.keyd = {
       enable = true;
-      keyboards.default = {
-        ids = [ "*" ];
-        settings.main = layouts.${cfg.layout};
-      };
+      keyboards =
+        {
+          # Everything EXCEPT the per-device boards below. keyd's `[ids]` takes `*` plus `-<id>`
+          # exclusions, so excluding here is order-independent (no reliance on config filename sort).
+          default = {
+            ids = [ "*" ] ++ map (id: "-${id}") (lib.attrNames cfg.perDevice);
+            settings.main = layouts.${cfg.layout};
+          };
+        }
+        # One keyd config per per-device board (its own [ids] + [main]). Name is derived from the id
+        # (":" -> "_") only to form a valid attr/filename; keyd matches on the `ids` value, not the name.
+        // lib.mapAttrs'
+          (id: remaps: lib.nameValuePair "dev-${lib.replaceStrings [ ":" ] [ "_" ] id}" {
+            ids = [ id ];
+            # Inherit the chosen layout, then overlay this device's remaps (device keys win).
+            settings.main = layouts.${cfg.layout} // remaps;
+          })
+          cfg.perDevice;
     };
   };
 }
