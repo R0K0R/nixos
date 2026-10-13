@@ -851,7 +851,6 @@
     "nix-fetchers-tests-run"
     "nix-flake-tests-run"
     "nix-functional-tests"
-    "nix-perl"
     "libsysprof-capture"
     "gnum4"
     "libsystemtap"
@@ -1209,6 +1208,7 @@
     "aws-crt-cpp"
     "nix-util"
     "toml11"
+    "libcpuid"
     "nix-fetchers"
     "boehm-gc"
     "certifi"
@@ -1249,7 +1249,6 @@
     "aws-c-s3"
     "aws-checksums"
     "s2n-tls"
-    "libcpuid"
     "doctest"
     "pycares"
     "tcl-package-hook"
@@ -1264,10 +1263,10 @@
     "pycparser"
     "die-hook"
   ];
-  capturedAt = "2026-10-13T00:18:43Z";
+  capturedAt = "2026-10-13T08:14:35Z";
   host = "galaxybook4-pro360";
-  nixpkgsNarHash = "sha256-jxvT74YVCLMYZ1FGVpoQU82PGCSQVhyRIHGxire0mjc=";
-  nixpkgsRev = "2bd2b7560b0654c6b24853a1499861fa78ace3a4";
+  nixpkgsNarHash = "sha256-Fqj3q7wqIAvOWJqs9BiiGYE6i8oJf4cwZCKfRd1Sa3k=";
+  nixpkgsRev = "cf26ae038f799c10b6ce1b7fce117cc0e5959573";
   runtimeNames = [
     "cache-refresh"
     "cache-refresh-local"
@@ -2103,7 +2102,6 @@
     "nix-fetchers-tests-run"
     "nix-flake-tests-run"
     "nix-functional-tests"
-    "nix-perl"
     "libsysprof-capture"
     "gnum4"
     "libsystemtap"
@@ -2465,6 +2463,7 @@
     "aws-crt-cpp"
     "nix-util"
     "toml11"
+    "libcpuid"
     "nix-fetchers"
     "boehm-gc"
     "certifi"
@@ -2505,7 +2504,6 @@
     "aws-c-s3"
     "aws-checksums"
     "s2n-tls"
-    "libcpuid"
     "doctest"
     "pycares"
     "tcl-package-hook"
