@@ -41,8 +41,8 @@ ShellRoot {
     property string ff: root.hsGet("panel.font.family", "DepartureMono Nerd Font")
     property string accent: "#ffffff"              // read from the theme below
     readonly property string fg: accent
-    readonly property string dim: "#80ffffff"      // 50% accent
-    readonly property string bgPanel: "#e6000000"  // ~90% black: the compositor blur layer-rule frosts
+    property string dim: root.hsGet("panel.colors.dim", "#80ffffff")              // secondary text (live)
+    property string bgPanel: root.hsGet("panel.colors.background", "#e6000000")    // ~90% black (live): blur rule frosts
                                                     // the desktop behind it (0.9 was too opaque to show)
     property string bgTile: root.hsGet("panel.colors.tile", "#16ffffff")         // inactive tile (live)
     property string bgTileHi: root.hsGet("panel.colors.tile_hover", "#24ffffff") // hover (live)
@@ -395,7 +395,7 @@ ShellRoot {
         signal clicked()
         implicitWidth: 100
         implicitHeight: 62
-        radius: 14
+        radius: root.hsGet("panel.radius.tile", 14)
         color: active ? root.accent : (ma.containsMouse ? root.bgTileHi : root.bgTile)
         Behavior on color { ColorAnimation { duration: 120 } }
         Column {
@@ -571,7 +571,7 @@ ShellRoot {
                 model: popups.list
                 delegate: Rectangle {
                     required property var modelData
-                    width: popCol.width; radius: 16; color: root.bgPanel
+                    width: popCol.width; radius: root.hsGet("panel.radius.notification", 16); color: root.bgPanel
                     implicitHeight: pc.implicitHeight + 24
                     Column {
                         id: pc; x: 16; y: 12; width: parent.width - 32; spacing: 3
@@ -610,7 +610,7 @@ ShellRoot {
 
         Rectangle {
             anchors.fill: parent
-            radius: 20
+            radius: root.hsGet("panel.radius.card", 20)
             color: root.bgPanel
 
             ColumnLayout {
@@ -676,8 +676,8 @@ ShellRoot {
                                 id: clockCol
                                 anchors.centerIn: parent
                                 spacing: -2
-                                Text { Layout.alignment: Qt.AlignHCenter; horizontalAlignment: Text.AlignHCenter; text: Qt.formatDateTime(root.clockNow, "HH:mm"); font.family: root.ff; font.pixelSize: 58; color: root.fg }
-                                Text { Layout.alignment: Qt.AlignHCenter; horizontalAlignment: Text.AlignHCenter; text: Qt.formatDate(root.clockNow, "dddd, MMMM d"); font.family: root.ff; font.pixelSize: 12; color: root.dim }
+                                Text { Layout.alignment: Qt.AlignHCenter; horizontalAlignment: Text.AlignHCenter; text: Qt.formatDateTime(root.clockNow, root.hsGet("panel.clock.time_format", "HH:mm")); font.family: root.ff; font.pixelSize: root.hsGet("panel.clock.size", 58); color: root.fg }
+                                Text { Layout.alignment: Qt.AlignHCenter; horizontalAlignment: Text.AlignHCenter; text: Qt.formatDate(root.clockNow, root.hsGet("panel.clock.date_format", "dddd, MMMM d")); font.family: root.ff; font.pixelSize: 12; color: root.dim }
                             }
                             Rectangle {   // power: bare icon, no background so it blends in (faint wash on hover only)
                                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter

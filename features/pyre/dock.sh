@@ -20,6 +20,11 @@ export HYPRLAND_INSTANCE_SIGNATURE="${HYPRLAND_INSTANCE_SIGNATURE:-$(ls "${XDG_R
 HC=hyprctl; J=jq
 STATE="${XDG_RUNTIME_DIR:-/run/user/1000}/pyre.front"   # remembers the front across hide
 
+# live dock.* settings from hearth (features/pyre/hearth.nix); read fresh each invocation, each
+# falling back to its screen-scaled default (size/inset knobs use 0 = "auto" for exactly that).
+SET="$HOME/.local/state/hearth/settings.json"
+hs() { "$J" -r "$1 // empty" "$SET" 2>/dev/null; }
+
 geom() {
   # The dock lives on the RIGHTMOST edge of the WHOLE desktop -- the monitor whose logical
   # right edge (x + width/scale) is furthest right -- so with multiple displays it's one fixed
@@ -46,17 +51,21 @@ geom() {
   # panel width scales with the viewport (~1/3 of the logical width -> 640 on a 1920 view,
   # 800 on a 2400 view), clamped so cards stay usable on very small / very large screens.
   DW=$((W/3)); [ "$DW" -lt 420 ] && DW=420; [ "$DW" -gt 900 ] && DW=900
+  _dw=$(hs '.dock.width'); [ -n "$_dw" ] && [ "$_dw" -gt 0 ] 2>/dev/null && DW=$_dw   # hearth override (0=auto)
   # Margins + cascade steps also scale with the viewport (were fixed 14/48/18/14 on a 1920
   # view). HGAP=0 -> the front card sits FLUSH to the right screen edge (no gap/trim).
   HGAP=$((W/60))                     # RIGHT INSET: how far the pile sits IN from the right
                                      # edge (~40 logical on a 2400 view ~= 0.5cm physical).
                                      # Divisor DOWN = more inset (W/30 ~1cm), UP = less.
+  _hg=$(hs '.dock.gap.right'); [ -n "$_hg" ] && [ "$_hg" -gt 0 ] 2>/dev/null && HGAP=$_hg      # hearth override
   VGAP=$((H/28))                     # top/bottom margin (~48 on a 1350-tall view)
+  _vg=$(hs '.dock.gap.vertical'); [ -n "$_vg" ] && [ "$_vg" -gt 0 ] 2>/dev/null && VGAP=$_vg   # hearth override
   # CASCADE DEPTH ("floating stack, receding"): back cards SHRINK by SHRINK% per depth and
   # their CENTER stays on the front card's midline (NO diagonal-down) -- they only drift a
   # little LEFT by DLEFT, so the pile reads as cards going back into the distance.
   DLEFT=$((DW/30))                   # per-depth LEFT drift of the card center (slight)
-  SHRINK=9; MAXD=3                   # per-depth size shrink (%); deepest visible depth
+  SHRINK=$(hs '.dock.cascade.shrink'); [ -z "$SHRINK" ] && SHRINK=9   # per-depth size shrink (%) [hearth]
+  MAXD=$(hs '.dock.cascade.depth');    [ -z "$MAXD" ]   && MAXD=3     # deepest visible depth [hearth]
   STAGGER=0.035                      # seconds between cards on show/park -> a bit of "feel"
   DOCK_Y=$((Y0 + barTop + VGAP))
   DOCK_H=$((H - barTop - barBottom - 2*VGAP))
