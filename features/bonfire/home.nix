@@ -160,7 +160,7 @@ let
   # never-customised one is unchanged). Runs at session start + on each bonfire.* change; scripts
   # re-source it each run, so most changes apply on next use.
   controlSync = pkgs.writeShellScript "bonfire-control-sync" ''
-    export PATH=${lib.makeBinPath [ hearthPkg pkgs.jq pkgs.coreutils ]}:$PATH
+    export PATH=${lib.makeBinPath [ hearthPkg pkgs.jq pkgs.coreutils pkgs.gnugrep ]}:$PATH
     export HEARTH_DIR="$HOME/.local/state/hearth"
     SET="$HEARTH_DIR/settings.json"
     OUT="$HOME/bonfire-control/main_setting.sh"
@@ -191,8 +191,25 @@ let
         printf 'EXIT_APP_LIST_USER=(%s)\n'           "$(jq -r '(.bonfire.exit.app_list // []) | map(@sh) | join(" ")' "$SET" 2>/dev/null)"
       } > "$OUT.tmp" 2>/dev/null && mv "$OUT.tmp" "$OUT" || true
     }
+    # flint toggles folded into hearth (stage B): bring the runtime state to match the bonfire.* bool by
+    # firing the shell's own --toggle when they differ (idempotent; re-running is a no-op when matched).
+    # On CHANGE only -- not at session start -- so a possibly-stale default can't force state at login.
+    apply_toggles() {
+      BIN="$HOME/.local/bin"; GL="$HOME/.local/state/glow"
+      b() { [ "$(jq -r "$1 // false" "$SET" 2>/dev/null)" = true ] && echo 1 || echo 0; }
+      f() { [ -s "$1" ] && cat "$1" 2>/dev/null || echo 0; }
+      tg() { w="$1"; h="$2"; shift 2; [ "$w" != "$h" ] && ( "$@" >/dev/null 2>&1 & ) ; return 0; }
+      tg "$(b '.bonfire.dockbar.autohide')" "$(f "$GL/dockbar_autohide_state")" "$BIN/dockbar_manager.sh" --auto-hide
+      tg "$(b '.bonfire.dockbar.visible')"  "$(f "$GL/dockbar_manual_state")"   "$BIN/dockbar_manager.sh" --toggle
+      tg "$(b '.bonfire.desktop_icons')"    "$(f "$GL/desktop_icons_state")"    "$BIN/desktop_icons_manager.sh" --toggle
+      tg "$(b '.bonfire.auto_wallpaper')"   "$(f /tmp/random_wallpaper_status)" "$BIN/random_wallpaper.sh" --toggle
+      tg "$(b '.bonfire.cava')"             "$([ -f /tmp/cava-layer.pid ] && echo 1 || echo 0)" "$BIN/cava_manager.sh"
+      exh=$(grep -oE '"exclusive"[[:space:]]*:[[:space:]]*(true|false)' "$HOME/.config/waybar/dockbar/config" 2>/dev/null | grep -oE 'true|false' | head -1)
+      [ "$exh" = true ] && exh=1 || exh=0
+      tg "$(b '.bonfire.dockbar.exclusive')" "$exh" "$BIN/dockbar_manager.sh" --exclusive
+    }
     gen
-    hearth watch bonfire 2>/dev/null | while IFS= read -r _; do gen; done
+    hearth watch bonfire 2>/dev/null | while IFS= read -r _; do gen; apply_toggles; done
   '';
 
   # The same emoji-enabled rofi the compositor binds build in compositor.nix

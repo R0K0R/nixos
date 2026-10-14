@@ -38,6 +38,15 @@ let
     "bonfire.exit.ram_threshold_mb"          = r "int"  300 "Exit RAM warning (MB)" "exit.sh warns if RAM use exceeds this on quit." "advanced" { constraints = { min = 0; max = 64000; unit = "MB"; }; };
     "bonfire.exit.app_list"                  = r "list" [ ] "Exit kill list" "Extra apps to gracefully close then force-kill when leaving the session." "advanced" { };
     "bonfire.waybar.user_modes"              = r "list" [ ] "Custom waybar modes" "Names of custom waybar layouts in ~/bonfire-control/waybar/<name>/." "advanced" { };
+
+    # flint (rofi-menu) toggles, folded in (config-merger stage B). Applied by bonfire-control-sync on
+    # change (toggle-to-match the runtime state); flint's quick-toggles still work transiently.
+    "bonfire.dockbar.autohide"    = r "bool" false "Dockbar auto-hide" "Waybar dockbar hides until hovered." "common" { };
+    "bonfire.dockbar.exclusive"   = r "bool" false "Dockbar exclusive zone" "Dockbar reserves screen space (windows don't overlap it)." "advanced" { };
+    "bonfire.dockbar.visible"     = r "bool" true  "Dockbar visible" "Show the waybar dockbar." "common" { };
+    "bonfire.desktop_icons"       = r "bool" false "Desktop icons" "Show icons on the desktop." "common" { };
+    "bonfire.cava"                = r "bool" false "Cava underbar" "Audio-visualiser underbar." "common" { };
+    "bonfire.auto_wallpaper"      = r "bool" false "Auto random wallpaper" "Rotate the wallpaper on the interval above." "common" { };
   };
 in
 keybinds // control
