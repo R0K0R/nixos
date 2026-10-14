@@ -476,11 +476,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1791977771,
-        "narHash": "sha256-Sqai2wsZuLE9a+pHHpuw8R6JnT/qtWlcGINiaUpmczk=",
+        "lastModified": 1791978579,
+        "narHash": "sha256-/3nP8ZnLVgL3Rt2akHb7xIGsypSycO7+8HCtnp6AjtA=",
         "owner": "sihooleebd",
         "repo": "hearth",
-        "rev": "9e85710115a7cb09a8e02fa71dce3526e76fc825",
+        "rev": "5fedfac8ea1181edbeea1d2b9f289b9c9cbb9b9b",
         "type": "github"
       },
       "original": {
