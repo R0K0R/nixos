@@ -239,7 +239,8 @@ in
         sends KEYCODE_SLEEP, `echo on` KEYCODE_WAKEUP. systemd holds the FIFO and
         starts the service when something is written (a group, not polkit, decides
         who may). Super+Q on the Waydroid window writes `off` and hides the window;
-        the `waydroid` wrapper writes `on` when you launch it again. Group
+        the `waydroid` wrapper writes `on` when you launch it again. `anim-off` /
+        `anim-on` set Android's animator duration scale to 0 / 1. Group
         membership takes effect from the next login.
       */
       users.groups.waydroid = { };
@@ -277,6 +278,10 @@ in
               # swallow the next queued command).
               off) waydroid shell -- input keyevent KEYCODE_SLEEP </dev/null ;;
               on)  waydroid shell -- input keyevent KEYCODE_WAKEUP </dev/null ;;
+              # Android's animations, for app windows that are open but hidden
+              # (features/waydroid/hyprland.lua): sleeping the display would close them.
+              anim-off) waydroid shell -- settings put global animator_duration_scale 0 </dev/null ;;
+              anim-on)  waydroid shell -- settings put global animator_duration_scale 1 </dev/null ;;
             esac
             chmod 0620 /run/waydroid-display
           done

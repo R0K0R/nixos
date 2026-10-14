@@ -28,6 +28,9 @@ let
       | ${lib.getExe pkgs.jq} -e 'any(.[]; .class | startswith("waydroid."))' >/dev/null && exit 0
     [ -w /run/waydroid-display ] && echo off > /run/waydroid-display
   '';
+  anim = pkgs.writeShellScript "waydroid-anim" ''
+    [ -w /run/waydroid-display ] && echo "anim-$1" > /run/waydroid-display
+  '';
 in
 lib.mkIf (osConfig.my.waydroid.enable && inScope && osConfig.my.desktop.compositor == "hyprland")
   (import ../../lib/hypr-lua.nix { inherit lib; } {
@@ -36,5 +39,6 @@ lib.mkIf (osConfig.my.waydroid.enable && inScope && osConfig.my.desktop.composit
     values = {
       mod = osConfig.my.hyprland.modKey;
       hide = "${hide}";
+      anim = "${anim}";
     };
   })
