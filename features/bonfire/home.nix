@@ -117,6 +117,30 @@ let
     done
   '';
 
+  # Hyprland "feel" settings (hyprland.* -> features/hyprland/hearth.nix): rounding, gaps, border, blur,
+  # animations. Applied LIVE with `hyprctl keyword` (no reload needed), at session start and on each
+  # hyprland.* change. Lives here (not features/hyprland) because this file already has hearth on PATH.
+  hyprlandFeelApply = pkgs.writeShellScript "bonfire-hyprland-feel" ''
+    export PATH=${lib.makeBinPath [ hearthPkg pkgs.jq pkgs.coreutils pkgs.hyprland ]}:$PATH
+    export HEARTH_DIR="$HOME/.local/state/hearth"
+    export HYPRLAND_INSTANCE_SIGNATURE="''${HYPRLAND_INSTANCE_SIGNATURE:-$(ls "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/" 2>/dev/null | head -1)}"
+    SET="$HEARTH_DIR/settings.json"
+    set_kw() { v=$(jq -r "$2 // empty" "$SET" 2>/dev/null); [ -n "$v" ] && hyprctl keyword "$1" "$v" >/dev/null 2>&1 || true; }
+    apply() {
+      [ -r "$SET" ] || return 0
+      set_kw decoration:rounding      '.hyprland.rounding'
+      set_kw general:gaps_in          '.hyprland.gaps_in'
+      set_kw general:gaps_out         '.hyprland.gaps_out'
+      set_kw general:border_size      '.hyprland.border_size'
+      set_kw decoration:blur:enabled  '.hyprland.blur.enabled'
+      set_kw decoration:blur:size     '.hyprland.blur.size'
+      set_kw decoration:blur:passes   '.hyprland.blur.passes'
+      set_kw animations:enabled       '.hyprland.animations.enabled'
+    }
+    apply
+    hearth watch hyprland 2>/dev/null | while IFS= read -r _; do apply; done
+  '';
+
   # The same emoji-enabled rofi the compositor binds build in compositor.nix
   # (identical override, deduped by the store): home.packages puts it on the
   # profile, and networkmanager-dmenu's config names it absolutely.
@@ -506,6 +530,9 @@ in
       # + `hyprctl reload`. Baked with hearth's store path, so it is harmless (exits 0) on a host with
       # no settings system; the compositor already loads the persisted overrides at startup regardless.
       bonfire-keybind-apply = service "Bonfire Space keybind watcher (hearth -> hyprctl)" keybindApply;
+
+      # Applies the hyprland.* feel settings live (see hyprlandFeelApply above).
+      bonfire-hyprland-feel = service "Bonfire Space compositor-feel watcher (hearth -> hyprctl)" hyprlandFeelApply;
 
       /*
         STORE PATHS for the daemons, not bare names. A bare name resolves
