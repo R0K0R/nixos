@@ -199,6 +199,14 @@
   waveProgressEnabled = true;
   scrollTitleEnabled = true;
   mediaAdaptiveWidthEnabled = true;
+  /*
+    Bluetooth headsets' own players, which bluez's mpris-proxy (features/discovery)
+    always republishes as MPRIS players -- no option turns that off. The Bose one
+    claims "Playing" forever with no metadata, so DMS picked it over the real
+    player: no title, a pause button while paused, controls that went nowhere.
+    Case-insensitive substrings of the player identity (the device name).
+  */
+  mediaExcludePlayers = [ "Bose QC Headphones" "Buds" "JBL Go" "Denon AVR" ];
   audioVisualizerEnabled = true;
   audioScrollMode = "volume";
   audioWheelScrollAmount = 5;
