@@ -1,0 +1,46 @@
+{
+  "nodes": {
+    "hyprland-keystone": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791978740,
+        "narHash": "sha256-gpjUEyJBYjv40WddehGQ3CaXa0NZ5IYYq0iKqU/ukis=",
+        "owner": "R0K0R",
+        "repo": "Hyprland",
+        "rev": "9448a8950569881188844e43923da354e7e0fe3a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "ref": "keystone",
+        "repo": "Hyprland",
+        "type": "github"
+      }
+    },
+    "hyprland-nixos": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791978740,
+        "narHash": "sha256-0yv3dE5OoP8bnLGaSUkniKLFH4ie7F307oJNnIOWbds=",
+        "owner": "R0K0R",
+        "repo": "Hyprland",
+        "rev": "23e6c87b80ad03a54799dd315e39e57a2dafb11d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "ref": "nixos",
+        "repo": "Hyprland",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "hyprland-keystone": "hyprland-keystone",
+        "hyprland-nixos": "hyprland-nixos"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
