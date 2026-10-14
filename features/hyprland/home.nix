@@ -173,9 +173,9 @@ let
       ''} "$@"
   '';
 
-  # NOTE: the old page-relative `wsSlot` shell helper was replaced by the per-monitor workspace
-  # scheme in the keybinds below -- SUPER+<n> switches on the CURRENT screen (instant on one
-  # monitor), and with multiple monitors the wsPick rofi picker (defined below) asks which screen.
+  # NOTE: the old page-relative `wsSlot` shell helper (and later the `wsPick` rofi "which screen?"
+  # picker) were replaced by SYNCED SPACES in the keybinds below -- SUPER+<n> snaps every screen to
+  # its slot <n> at once (macOS-style), computed live from monitor order, no picker.
 
   # opendisplay-gui is BOTH the control window AND the background daemon that serves the iPad (it
   # holds a live OpenDisplay-* virtual monitor), so a naive relaunch from the menu/rofi would pile
@@ -216,42 +216,6 @@ let
     fi
   '';
 
-  # rofi "which screen?" picker for SUPER+<n> when MORE THAN ONE monitor is connected (the single-
-  # monitor case is handled inline in Lua -- instant, no menu). Lists screens left-to-right (A, B,
-  # C... matching the workspace decades + the chess bar labels), with the current screen
-  # pre-selected so Enter = stay here; picking another jumps to workspace <slot> on it. With "move"
-  # it sends the active window there instead. $1 = slot (1-10), $2 = "move" (optional). Dispatch via
-  # `hyprctl eval` (the verified-working form on this fork).
-  wsPick = pkgs.writeShellScript "hypr-ws-pick" ''
-    export PATH=${lib.makeBinPath [ osConfig.programs.hyprland.package pkgs.jq pkgs.rofi pkgs.gawk pkgs.coreutils pkgs.gnugrep ]}:$PATH
-    slot="$1"; mode="$2"
-    mons=$(hyprctl monitors -j 2>/dev/null) || exit 0
-    # index<TAB>name<TAB>desc<TAB>focused, sorted left-to-right (same sort as the pin block)
-    sorted=$(printf '%s' "$mons" | jq -r 'sort_by(.x, .y, .name) | to_entries[] | [(.key|tostring), .value.name, (.value.description // ""), (.value.focused|tostring)] | @tsv')
-    curIdx=$(printf '%s' "$sorted" | awk -F'\t' '$4=="true"{print $1; exit}'); [ -n "$curIdx" ] || curIdx=0
-
-    go() {
-      target=$(( $1 * 10 + slot ))
-      if [ "$mode" = move ]; then
-        hyprctl eval "hl.dispatch(hl.dsp.window.move({ workspace = $target, follow = true }))" >/dev/null 2>&1
-      else
-        hyprctl eval "hl.dispatch(hl.dsp.focus({ workspace = $target }))" >/dev/null 2>&1
-      fi
-    }
-
-    count=$(printf '%s' "$sorted" | grep -c .)
-    [ "$count" -le 1 ] && { go "$curIdx"; exit 0; }
-
-    verb="go to"; [ "$mode" = move ] && verb="move window to"
-    menu=$(printf '%s' "$sorted" | awk -F'\t' '
-      { letter=sprintf("%c", 65+$1); label=($3==""?$2:$3);
-        printf "%s  ·  %s%s\n", letter, label, ($4=="true"?"   ← current":"") }')
-    sel=$(printf '%s' "$menu" | rofi -dmenu -i -p "WS $slot · $verb" -selected-row "$curIdx") || exit 0
-    [ -n "$sel" ] || exit 0
-    letter=$(printf '%s' "$sel" | cut -c1)
-    idx=$(awk -v l="$letter" 'BEGIN{ printf "%d", index("ABCDEFGHIJKLMNOPQRSTUVWXYZ", l) - 1 }')
-    [ "$idx" -ge 0 ] 2>/dev/null && go "$idx"
-  '';
 
   # Per-monitor workspace management, the SINGLE source shared by the load-time apply AND the
   # monitor.layout_changed hook (both below) so they cannot drift. Inline Lua -- runs synchronously
@@ -1345,39 +1309,59 @@ in
         hl.bind(mod .. " + SHIFT + K", hl.dsp.exec_cmd("${inputLockToggle}"), { submap_universal = true })
       end)
 
-      -- Workspaces: PER-MONITOR, with a rofi "which screen?" picker for cross-screen jumps.
+      -- Workspaces: SYNCED SPACES -- SUPER+<n> snaps every screen to its slot <n> at once.
       --
       -- Each screen owns a decade of workspaces, pinned so switching never slips. Decades follow
       -- SCREEN ORDER left-to-right -- nothing hardcoded: leftmost screen = ws 1-10 (named A1..A10),
       -- next = 11-20 (B1..), etc. (dynamic pin block below + its features/pyre twin for hotplug;
       -- the chess names drive the waybar display).
       --
-      --   SUPER+<n>       -> workspace <n> on the CURRENT screen (never slips). ONE monitor: instant.
-      --                      MULTIPLE monitors: a rofi "which screen?" menu, current pre-selected
-      --                      (Enter = stay here; pick another screen to jump to its ws <n>).
-      --   SHIFT/CTRL+<n>  -> same, but MOVE the active window to the chosen target.
-      -- Single monitor stays pure Lua (instant, decade 0); multi-monitor hands off to the wsPick
-      -- rofi script. (This replaced an earlier hold-a-letter gesture -- too fiddly.)
+      --   SUPER+<n>       -> "scene <n>": snap EVERY screen to its slot <n> at once (macOS Spaces with
+      --                      "Displays have separate Spaces" OFF). No picker; computed live.
+      --   SHIFT/CTRL+<n>  -> send the active window to the focused screen's slot <n>, then snap all.
       -- Current screen's decade base (0 = A, 10 = B, ...), read from its ACTIVE workspace rather
       -- than assuming decade 0. A single screen can carry a non-A decade (e.g. in clamshell the sole
       -- monitor is pinned to B), and keying A<n> there would jump to an empty foreign decade.
-      local function curBase()
-        local m = hl.get_active_monitor()
-        local aw = m and m.active_workspace
-        local id = (aw and aw.id) or 1
-        if id < 1 then id = 1 end
-        return math.floor((id - 1) / 10) * 10
+      -- SYNCED SPACES. Each screen owns a decade (A=0, B=10, ... pinned by wsManageLua), so "scene <n>"
+      -- is slot <n> on EVERY screen at once. Computed live from monitor order each press -- no rofi
+      -- picker, no per-key pinned state, nothing a reload can desync (that was the old duct tape).
+      local function wsSortedMons()
+        local mons = hl.get_monitors()
+        table.sort(mons, function(a, b)
+          local ax, bx = a.x or 0, b.x or 0
+          if ax ~= bx then return ax < bx end
+          local ay, by = a.y or 0, b.y or 0
+          if ay ~= by then return ay < by end
+          return tostring(a.name) < tostring(b.name)
+        end)
+        return mons
       end
+      local function wsFocusedIdx(mons)
+        local am = hl.get_active_monitor()
+        local amn = am and tostring(am.name)
+        for i, m in ipairs(mons) do if tostring(m.name) == amn then return i end end
+        return 1
+      end
+      -- SUPER+<n>: snap every screen to its slot <n>. Each decade is pinned to its screen, so focusing
+      -- (i-1)*10+n switches screen i without moving the workspace. Focus lands on whatever we switch
+      -- last, so switch the non-focused screens first and the originally-focused screen LAST.
       local function wsGo(slot)
         return function()
-          if #hl.get_monitors() <= 1 then hl.dispatch(hl.dsp.focus({ workspace = curBase() + slot }))
-          else hl.dispatch(hl.dsp.exec_cmd("${wsPick} " .. tostring(slot))) end
+          local mons = wsSortedMons()
+          local fi = wsFocusedIdx(mons)
+          for i = 1, #mons do
+            if i ~= fi then hl.dispatch(hl.dsp.focus({ workspace = (i - 1) * 10 + slot })) end
+          end
+          hl.dispatch(hl.dsp.focus({ workspace = (fi - 1) * 10 + slot }))
         end
       end
+      -- SHIFT/CTRL+<n>: send the active window to the focused screen's slot <n>, then snap all (follow).
       local function wsMove(slot)
         return function()
-          if #hl.get_monitors() <= 1 then hl.dispatch(hl.dsp.window.move({ workspace = curBase() + slot, follow = true }))
-          else hl.dispatch(hl.dsp.exec_cmd("${wsPick} " .. tostring(slot) .. " move")) end
+          local mons = wsSortedMons()
+          local fi = wsFocusedIdx(mons)
+          hl.dispatch(hl.dsp.window.move({ workspace = (fi - 1) * 10 + slot, follow = false }))
+          wsGo(slot)()
         end
       end
 
