@@ -90,12 +90,15 @@ let
     };
   };
 
-  # Keybind watcher: the chord settings (keybind.*, from features/bonfire/keybinds.nix + hearth.nix)
-  # are applied live here. settings.json is materialised into a small Lua override table that the
-  # compositor's kb() dofile's (see compositor.nix); on each keybind.* change we rewrite it + reload.
-  # jq runs HERE (shell-side), so the Hyprland Lua never parses JSON. `hearth watch keybind` only fires
-  # on that prefix, so an unrelated setting never triggers a compositor reload. Exits 0 (no restart
-  # loop) when the settings system is absent -- the pipe just hits EOF.
+  # Keybind watcher: materialise the chord settings (keybind.*, from the keybinds.nix of bonfire +
+  # hyprland) into a small Lua override table that the config dofile's at startup (kb()/hkb(), see
+  # compositor.nix + hyprland/home.nix). jq runs HERE (shell-side) so the Hyprland Lua never parses JSON.
+  #
+  # DELIBERATELY NO `hyprctl reload`: a reload re-sources the whole config and re-derives every monitor,
+  # which transiently breaks the per-monitor workspace + scale setup (see [[dock-keystone-patch]] /
+  # monitor-scale notes). So keybind edits take effect on the NEXT Hyprland start, not instantly. The
+  # watcher just keeps the table current during the session, so that next start picks the edit up.
+  # `hearth watch keybind` only fires on that prefix; exits 0 (no restart loop) when settings is absent.
   hearthPkg = inputs.hearth.packages.${pkgs.system}.default;
   keybindApply = pkgs.writeShellScript "bonfire-keybind-apply" ''
     export PATH=${lib.makeBinPath [ hearthPkg pkgs.jq pkgs.coreutils pkgs.hyprland ]}:$PATH
@@ -112,8 +115,7 @@ let
     }
     gen
     hearth watch keybind 2>/dev/null | while IFS= read -r _; do
-      gen
-      hyprctl reload >/dev/null 2>&1 || true
+      gen   # refresh the table only -- NO reload (it would re-derive monitors); applies next Hypr start
     done
   '';
 

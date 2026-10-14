@@ -58,7 +58,7 @@ let
     type = "string";
     default = spec.chord;
     label = spec.label;
-    help = "Keybind for \"${spec.label}\". Chord format: \"SUPER + SHIFT + K\". Applied live via hyprctl reload; blank = unbound.";
+    help = "Keybind for \"${spec.label}\". Chord format: \"SUPER + SHIFT + K\". Takes effect on the next Hyprland start (relogin); blank keeps the default.";
     tier = spec.tier or "advanced";
     scope = "runtime";
     reload = "keybind";
