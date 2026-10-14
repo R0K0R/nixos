@@ -111,7 +111,7 @@ let
     gen() {
       mkdir -p "$(dirname "$OUT")"
       { printf 'return {\n'
-        [ -r "$SET" ] && jq -r '.keybind // {} | to_entries[] | "  [" + (.key|@json) + "] = " + (.value|@json) + ","' "$SET" 2>/dev/null
+        [ -r "$SET" ] && jq -r '.keybind // {} | . as $kb | paths(scalars) as $p | "  [" + ($p|join(".")|@json) + "] = " + ($kb|getpath($p)|@json) + ","' "$SET" 2>/dev/null
         printf '}\n'
       } > "$OUT.tmp" 2>/dev/null && mv "$OUT.tmp" "$OUT" || true
     }

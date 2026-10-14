@@ -707,6 +707,18 @@ in
       -- setting cleared to "" in the TUI disables that action (vs TUI "reset", which restores default).
       function hkb(a, d) local v = __hkb[a]; if type(v) == "string" then return v end return d end
       function bindkb(c, ...) if type(c) == "string" and c ~= "" then pcall(hl.bind, c, ...) end end
+      -- hkbm: like hkb but for MODIFIERS -- blank falls back to the default (a blank modifier would make
+      -- an invalid chord), so the family-modifier knobs below can never unbind a whole nav scheme.
+      function hkbm(a, d) local v = __hkb[a]; if type(v) == "string" and v ~= "" then return v end return d end
+      -- Family modifiers (keybind.nav.* / keybind.workspace.*): one knob shifts a whole directional
+      -- scheme; the direction keys stay fixed. Read once; the directional + workspace binds below use them.
+      local focusMod    = hkbm("nav.focus_mod",          mod)
+      local moveMod     = hkbm("nav.move_mod",           mod .. " + CTRL")
+      local monFocusMod = hkbm("nav.monitor_focus_mod",  mod .. " + SHIFT")
+      local monMoveMod  = hkbm("nav.monitor_move_mod",   mod .. " + SHIFT + CTRL")
+      local resizeMod   = hkbm("nav.resize_mod",         mod)
+      local wsSwitchMod = hkbm("workspace.switch_mod",   mod)
+      local wsMoveMod   = hkbm("workspace.move_mod",     mod .. " + CTRL")
 
       -- Cursor, set here because no shell reliably sets it for Hyprland: DMS's
       -- cursorSettings plumbing is niri-only (cursorSettings.niri.hideWhenTyping),
@@ -1083,7 +1095,7 @@ in
       -- On-screen keyboard: toggle the wvkbd overlay (handy with the Wacom pen).
       bindkb(hkb("osk", mod .. " + O"), hl.dsp.exec_cmd("${wvkbdToggle}"))
       -- Compositor-level IME toggle, same logic as niri.nix's Hangul bind.
-      hl.bind("Hangul", hl.dsp.exec_cmd("${hangulToggle}"))
+      bindkb(hkb("ime_toggle", "Hangul"), hl.dsp.exec_cmd("${hangulToggle}"))
 
       -- Laptop Fn media keys. The keys emit XF86 keysyms; nothing was bound to
       -- them, so they did nothing. Global (no mod), locked = true so they work
@@ -1093,11 +1105,11 @@ in
       -- hl.bind silently ignores, so the keys quietly stopped ramping and only
       -- stepped once per press. wpctl (wireplumber) for audio, brightnessctl for
       -- backlight; volume capped at 100% (-l 1.0).
-      hl.bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"), { locked = true })
-      hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%-"), { locked = true, repeating = true })
-      hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+"), { locked = true, repeating = true })
-      hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl set 5%-"), { locked = true, repeating = true })
-      hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("brightnessctl set 5%+"), { locked = true, repeating = true })
+      bindkb(hkb("vol_mute", "XF86AudioMute"), hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"), { locked = true })
+      bindkb(hkb("vol_down", "XF86AudioLowerVolume"), hl.dsp.exec_cmd("wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%-"), { locked = true, repeating = true })
+      bindkb(hkb("vol_up", "XF86AudioRaiseVolume"), hl.dsp.exec_cmd("wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+"), { locked = true, repeating = true })
+      bindkb(hkb("brightness_down", "XF86MonBrightnessDown"), hl.dsp.exec_cmd("brightnessctl set 5%-"), { locked = true, repeating = true })
+      bindkb(hkb("brightness_up", "XF86MonBrightnessUp"), hl.dsp.exec_cmd("brightnessctl set 5%+"), { locked = true, repeating = true })
 
       -- Media transport, locked = true so it drives playback FROM THE LOCK SCREEN
       -- too (the hyprlock music widget reflects the new state on its next poll).
@@ -1108,11 +1120,11 @@ in
       -- the Fn media key. NOT SUPER+space either: that is the app-menu launcher in the
       -- unlocked compositor, and a locked = true bind fires unlocked too, so it collides.
       -- playerctl resolves on the compositor's PATH, same as wpctl.
-      hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
-      hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"), { locked = true })
-      hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"), { locked = true })
-      hl.bind(mod .. " + bracketright", hl.dsp.exec_cmd("playerctl next"), { locked = true })
-      hl.bind(mod .. " + bracketleft", hl.dsp.exec_cmd("playerctl previous"), { locked = true })
+      bindkb(hkb("media_play", "XF86AudioPlay"), hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
+      bindkb(hkb("media_next", "XF86AudioNext"), hl.dsp.exec_cmd("playerctl next"), { locked = true })
+      bindkb(hkb("media_prev", "XF86AudioPrev"), hl.dsp.exec_cmd("playerctl previous"), { locked = true })
+      bindkb(hkb("media_next_alt", mod .. " + bracketright"), hl.dsp.exec_cmd("playerctl next"), { locked = true })
+      bindkb(hkb("media_prev_alt", mod .. " + bracketleft"), hl.dsp.exec_cmd("playerctl previous"), { locked = true })
 
       -- Window management
       bindkb(hkb("close_window", mod .. " + Q"), hl.dsp.window.close())
@@ -1214,10 +1226,10 @@ in
       -- Focus movement (h/j/k/l + arrows). hl.dsp.focus is the single
       -- dispatcher covering movefocus/focusmonitor/focus-workspace by
       -- which field its table has -- direction here.
-      hl.bind(mod .. " + left", hl.dsp.focus({ direction = "left" }))
-      hl.bind(mod .. " + down", hl.dsp.focus({ direction = "down" }))
-      hl.bind(mod .. " + up", hl.dsp.focus({ direction = "up" }))
-      hl.bind(mod .. " + right", hl.dsp.focus({ direction = "right" }))
+      bindkb(focusMod .. " + left", hl.dsp.focus({ direction = "left" }))
+      bindkb(focusMod .. " + down", hl.dsp.focus({ direction = "down" }))
+      bindkb(focusMod .. " + up", hl.dsp.focus({ direction = "up" }))
+      bindkb(focusMod .. " + right", hl.dsp.focus({ direction = "right" }))
       -- H/L go through the scrolling layout's OWN focus navigation, not
       -- movefocus. movefocus is geometry-based and the
       -- movefocus_cycles_fullscreen fallback is explicitly bypassed for
@@ -1236,7 +1248,7 @@ in
       -- now mod+Right only; focus-left keeps mod+H. Asymmetric on purpose --
       -- the office launcher was wanted on L.
       hl.bind(mod .. " + H", hl.dsp.layout("focus l"))
-      hl.bind(mod .. " + L", hl.dsp.exec_cmd("libreoffice"))
+      bindkb(hkb("office", mod .. " + L"), hl.dsp.exec_cmd("libreoffice"))
       -- Workspace cycle among EXISTING workspaces ("e±1"), same string
       -- syntax as the legacy `workspace, e-1` dispatcher -- hl.dsp.focus's
       -- workspace-selector overload hands it to the identical parser.
@@ -1258,14 +1270,14 @@ in
       hl.bind(mod .. " + CTRL + I", hl.dsp.window.move({ workspace = "+1", follow = true }))
 
       -- Move window (direction)
-      hl.bind(mod .. " + CTRL + left", hl.dsp.window.move({ direction = "left" }))
-      hl.bind(mod .. " + CTRL + down", hl.dsp.window.move({ direction = "down" }))
-      hl.bind(mod .. " + CTRL + up", hl.dsp.window.move({ direction = "up" }))
-      hl.bind(mod .. " + CTRL + right", hl.dsp.window.move({ direction = "right" }))
-      hl.bind(mod .. " + CTRL + H", hl.dsp.window.move({ direction = "left" }))
-      hl.bind(mod .. " + CTRL + J", hl.dsp.window.move({ direction = "down" }))
-      hl.bind(mod .. " + CTRL + K", hl.dsp.window.move({ direction = "up" }))
-      hl.bind(mod .. " + CTRL + L", hl.dsp.window.move({ direction = "right" }))
+      bindkb(moveMod .. " + left", hl.dsp.window.move({ direction = "left" }))
+      bindkb(moveMod .. " + down", hl.dsp.window.move({ direction = "down" }))
+      bindkb(moveMod .. " + up", hl.dsp.window.move({ direction = "up" }))
+      bindkb(moveMod .. " + right", hl.dsp.window.move({ direction = "right" }))
+      bindkb(moveMod .. " + H", hl.dsp.window.move({ direction = "left" }))
+      bindkb(moveMod .. " + J", hl.dsp.window.move({ direction = "down" }))
+      bindkb(moveMod .. " + K", hl.dsp.window.move({ direction = "up" }))
+      bindkb(moveMod .. " + L", hl.dsp.window.move({ direction = "right" }))
       hl.bind(mod .. " + CTRL + Page_Down", hl.dsp.window.move({ workspace = "-1", follow = true }))
       hl.bind(mod .. " + CTRL + Page_Up", hl.dsp.window.move({ workspace = "+1", follow = true }))
 
@@ -1275,26 +1287,26 @@ in
       -- form only takes pixel x/y (verified against source -- no percentage
       -- support), so this is now a fixed 160px/90px step regardless of the
       -- window's current size.
-      hl.bind(mod .. " + minus", hl.dsp.window.resize({ x = -160, y = 0, relative = true }))
-      hl.bind(mod .. " + equal", hl.dsp.window.resize({ x = 160, y = 0, relative = true }))
-      hl.bind(mod .. " + SHIFT + minus", hl.dsp.window.resize({ x = 0, y = -90, relative = true }))
-      hl.bind(mod .. " + SHIFT + equal", hl.dsp.window.resize({ x = 0, y = 90, relative = true }))
+      bindkb(resizeMod .. " + minus", hl.dsp.window.resize({ x = -160, y = 0, relative = true }))
+      bindkb(resizeMod .. " + equal", hl.dsp.window.resize({ x = 160, y = 0, relative = true }))
+      bindkb(resizeMod .. " + SHIFT + minus", hl.dsp.window.resize({ x = 0, y = -90, relative = true }))
+      bindkb(resizeMod .. " + SHIFT + equal", hl.dsp.window.resize({ x = 0, y = 90, relative = true }))
 
       -- Monitor focus
-      hl.bind(mod .. " + SHIFT + left", hl.dsp.focus({ monitor = "l" }))
-      hl.bind(mod .. " + SHIFT + down", hl.dsp.focus({ monitor = "d" }))
-      hl.bind(mod .. " + SHIFT + up", hl.dsp.focus({ monitor = "u" }))
-      hl.bind(mod .. " + SHIFT + right", hl.dsp.focus({ monitor = "r" }))
+      bindkb(monFocusMod .. " + left", hl.dsp.focus({ monitor = "l" }))
+      bindkb(monFocusMod .. " + down", hl.dsp.focus({ monitor = "d" }))
+      bindkb(monFocusMod .. " + up", hl.dsp.focus({ monitor = "u" }))
+      bindkb(monFocusMod .. " + right", hl.dsp.focus({ monitor = "r" }))
 
       -- Move window to monitor (niri's Mod+Shift+Ctrl+...)
-      hl.bind(mod .. " + SHIFT + CTRL + left", hl.dsp.window.move({ monitor = "l" }))
-      hl.bind(mod .. " + SHIFT + CTRL + down", hl.dsp.window.move({ monitor = "d" }))
-      hl.bind(mod .. " + SHIFT + CTRL + up", hl.dsp.window.move({ monitor = "u" }))
-      hl.bind(mod .. " + SHIFT + CTRL + right", hl.dsp.window.move({ monitor = "r" }))
-      hl.bind(mod .. " + SHIFT + CTRL + H", hl.dsp.window.move({ monitor = "l" }))
-      hl.bind(mod .. " + SHIFT + CTRL + J", hl.dsp.window.move({ monitor = "d" }))
-      hl.bind(mod .. " + SHIFT + CTRL + K", hl.dsp.window.move({ monitor = "u" }))
-      hl.bind(mod .. " + SHIFT + CTRL + L", hl.dsp.window.move({ monitor = "r" }))
+      bindkb(monMoveMod .. " + left", hl.dsp.window.move({ monitor = "l" }))
+      bindkb(monMoveMod .. " + down", hl.dsp.window.move({ monitor = "d" }))
+      bindkb(monMoveMod .. " + up", hl.dsp.window.move({ monitor = "u" }))
+      bindkb(monMoveMod .. " + right", hl.dsp.window.move({ monitor = "r" }))
+      bindkb(monMoveMod .. " + H", hl.dsp.window.move({ monitor = "l" }))
+      bindkb(monMoveMod .. " + J", hl.dsp.window.move({ monitor = "d" }))
+      bindkb(monMoveMod .. " + K", hl.dsp.window.move({ monitor = "u" }))
+      bindkb(monMoveMod .. " + L", hl.dsp.window.move({ monitor = "r" }))
 
       -- Input lock (SUPER+SHIFT+K): ignore the laptop keyboard + touchpad for writing / resting on
       -- the deck while on the move. The "inputlock" submap's catchall swallows EVERY key; this toggle
@@ -1379,32 +1391,32 @@ in
       -- SHIFT and CTRL are both move-to-workspace (CTRL mirrors the CTRL+U/I pair above; SHIFT is
       -- the stock-Hyprland muscle memory). 0 is the tenth slot, keeping the digit row contiguous.
       for i = 1, 9 do
-        hl.bind(mod .. " + " .. tostring(i), wsGo(i))
-        hl.bind(mod .. " + CTRL + " .. tostring(i), wsMove(i))
-        hl.bind(mod .. " + SHIFT + " .. tostring(i), wsMove(i))
+        bindkb(wsSwitchMod .. " + " .. tostring(i), wsGo(i))
+        bindkb(wsMoveMod .. " + " .. tostring(i), wsMove(i))
+        bindkb(mod .. " + SHIFT + " .. tostring(i), wsMove(i))
       end
-      hl.bind(mod .. " + 0", wsGo(10))
-      hl.bind(mod .. " + CTRL + 0", wsMove(10))
-      hl.bind(mod .. " + SHIFT + 0", wsMove(10))
+      bindkb(wsSwitchMod .. " + 0", wsGo(10))
+      bindkb(wsMoveMod .. " + 0", wsMove(10))
+      bindkb(mod .. " + SHIFT + 0", wsMove(10))
 
       -- SUPER+SHIFT+E was hl.dsp.exit() -- a one-keystroke LOG OUT sitting right next to
       -- SUPER+E (overview). Way too easy to hit by accident ("panic button"). Rebound to
       -- emacs (which lost its key when SUPER+E became the overview). To quit the session
       -- use the greeter / `loginctl terminate-session`, not a stray keybind.
-      hl.bind(mod .. " + SHIFT + E", hl.dsp.exec_cmd("emacsclient -c"))
+      bindkb(hkb("emacs", mod .. " + SHIFT + E"), hl.dsp.exec_cmd("emacsclient -c"))
       -- --clipboard-only skips writing a file at all (hyprshot otherwise saves
       -- AND copies); --silent matches grimblast's old no-notification default.
-      hl.bind("Print", hl.dsp.exec_cmd("hyprshot -m region --clipboard-only --silent"))
-      hl.bind("CTRL + Print", hl.dsp.exec_cmd("hyprshot -m output --clipboard-only --silent"))
-      hl.bind("ALT + Print", hl.dsp.exec_cmd("hyprshot -m window -m active --clipboard-only --silent"))
+      bindkb(hkb("shot_region", "Print"), hl.dsp.exec_cmd("hyprshot -m region --clipboard-only --silent"))
+      bindkb(hkb("shot_output", "CTRL + Print"), hl.dsp.exec_cmd("hyprshot -m output --clipboard-only --silent"))
+      bindkb(hkb("shot_window", "ALT + Print"), hl.dsp.exec_cmd("hyprshot -m window -m active --clipboard-only --silent"))
       -- Mod+Shift+S: region screenshot that SAVES a file and copies it -- the
       -- muscle-memory shortcut, discoverable without a Print key (awkward on
       -- this laptop). Uses bonfire's screenshot.sh (grim+slurp) rather than
       -- raw hyprshot so it writes to SCREENSHOT_DIR from main_setting.sh
       -- (~/Pictures/Screenshots) -- the single source of truth, matching where
       -- recordings go via SCREENREC_SAVE_DIR -- and notifies with the path.
-      hl.bind(mod .. " + SHIFT + S", hl.dsp.exec_cmd("$HOME/.local/bin/screenshot.sh"))
-      hl.bind(mod .. " + SHIFT + P", hl.dsp.dpms({ action = "off" }))
+      bindkb(hkb("shot_save", mod .. " + SHIFT + S"), hl.dsp.exec_cmd("$HOME/.local/bin/screenshot.sh"))
+      bindkb(hkb("display_off", mod .. " + SHIFT + P"), hl.dsp.dpms({ action = "off" }))
 
     '';
   };

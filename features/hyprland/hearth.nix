@@ -63,5 +63,22 @@ let
     scope = "runtime";
     reload = "keybind";
   }) kb;
+
+  # Family modifiers: one knob shifts a whole directional-nav scheme at once (the direction keys --
+  # arrows / HJKL / -,= -- stay fixed). Blank falls back to the default. e.g. set move_mod to
+  # "SUPER + ALT" to move the whole "move window" family off SUPER+CTRL.
+  modRec = default: label: help: {
+    inherit default label help;
+    type = "string"; tier = "advanced"; scope = "runtime"; reload = "keybind";
+  };
+  navmods = {
+    "keybind.nav.focus_mod"         = modRec "SUPER"              "Focus modifier"            "Directional window focus (arrows).";
+    "keybind.nav.move_mod"          = modRec "SUPER + CTRL"       "Move modifier"             "Directional window move (arrows + HJKL).";
+    "keybind.nav.monitor_focus_mod" = modRec "SUPER + SHIFT"      "Focus-monitor modifier"    "Focus the screen in a direction (arrows).";
+    "keybind.nav.monitor_move_mod"  = modRec "SUPER + SHIFT + CTRL" "Move-to-monitor modifier" "Move the window to the screen in a direction (arrows + HJKL).";
+    "keybind.nav.resize_mod"        = modRec "SUPER"              "Resize modifier"           "Window resize (-, = ; SHIFT for vertical).";
+    "keybind.workspace.switch_mod"  = modRec "SUPER"              "Workspace switch modifier" "SUPER+<n> scene switch (all screens).";
+    "keybind.workspace.move_mod"    = modRec "SUPER + CTRL"       "Workspace move modifier"   "Send the active window to scene <n>.";
+  };
 in
-feel // keybinds
+feel // keybinds // navmods

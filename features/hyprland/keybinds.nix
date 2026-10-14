@@ -19,4 +19,24 @@
   float        = { chord = "SUPER + ALT + space"; label = "Toggle floating";      tier = "advanced"; };
   float_alt    = { chord = "SUPER + SHIFT + F";   label = "Toggle floating (alt)"; tier = "advanced"; };
   pin          = { chord = "SUPER + ALT + P";     label = "Pin window";           tier = "advanced"; };
+
+  # --- bucket 1: the remaining discrete binds (apps, screenshots, dpms, media/brightness/playback) ---
+  office          = { chord = "SUPER + L";              label = "Office suite";            tier = "advanced"; };
+  emacs           = { chord = "SUPER + SHIFT + E";      label = "Emacs";                   tier = "advanced"; };
+  ime_toggle      = { chord = "Hangul";                 label = "Input method toggle";     tier = "advanced"; };
+  display_off     = { chord = "SUPER + SHIFT + P";      label = "Display off (DPMS)";      tier = "advanced"; };
+  shot_region     = { chord = "Print";                  label = "Screenshot region (clip)"; tier = "advanced"; };
+  shot_output     = { chord = "CTRL + Print";           label = "Screenshot screen (clip)"; tier = "advanced"; };
+  shot_window     = { chord = "ALT + Print";            label = "Screenshot window (clip)"; tier = "advanced"; };
+  shot_save       = { chord = "SUPER + SHIFT + S";      label = "Screenshot (save)";       tier = "advanced"; };
+  vol_mute        = { chord = "XF86AudioMute";          label = "Volume mute";             tier = "advanced"; };
+  vol_down        = { chord = "XF86AudioLowerVolume";   label = "Volume down";             tier = "advanced"; };
+  vol_up          = { chord = "XF86AudioRaiseVolume";   label = "Volume up";               tier = "advanced"; };
+  brightness_down = { chord = "XF86MonBrightnessDown";  label = "Brightness down";         tier = "advanced"; };
+  brightness_up   = { chord = "XF86MonBrightnessUp";    label = "Brightness up";           tier = "advanced"; };
+  media_play      = { chord = "XF86AudioPlay";          label = "Play / pause";            tier = "advanced"; };
+  media_next      = { chord = "XF86AudioNext";          label = "Media next";              tier = "advanced"; };
+  media_prev      = { chord = "XF86AudioPrev";          label = "Media previous";          tier = "advanced"; };
+  media_next_alt  = { chord = "SUPER + bracketright";   label = "Media next (alt)";        tier = "advanced"; };
+  media_prev_alt  = { chord = "SUPER + bracketleft";    label = "Media previous (alt)";    tier = "advanced"; };
 }
