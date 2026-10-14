@@ -94,10 +94,11 @@ let
   # hyprland) into a small Lua override table that the config dofile's at startup (kb()/hkb(), see
   # compositor.nix + hyprland/home.nix). jq runs HERE (shell-side) so the Hyprland Lua never parses JSON.
   #
-  # DELIBERATELY NO `hyprctl reload`: a reload re-sources the whole config and re-derives every monitor,
-  # which transiently breaks the per-monitor workspace + scale setup (see [[dock-keystone-patch]] /
-  # monitor-scale notes). So keybind edits take effect on the NEXT Hyprland start, not instantly. The
-  # watcher just keeps the table current during the session, so that next start picks the edit up.
+  # NO `hyprctl reload` (it re-sources the whole config and re-derives every monitor -- that was the
+  # transient per-monitor/scale breakage; see [[dock-keystone-patch]] / monitor-scale notes). Instead,
+  # on each change we LIVE-UNBIND the OLD chord of the changed keys with `hyprctl keyword unbind` (safe:
+  # no reload, no monitor touch) -- so a cleared or rechorded key stops firing immediately; the full
+  # (re)bind to a NEW chord lands on the next Hyprland start (the config dofile's the refreshed table).
   # `hearth watch keybind` only fires on that prefix; exits 0 (no restart loop) when settings is absent.
   hearthPkg = inputs.hearth.packages.${pkgs.system}.default;
   keybindApply = pkgs.writeShellScript "bonfire-keybind-apply" ''
@@ -106,6 +107,7 @@ let
     export HYPRLAND_INSTANCE_SIGNATURE="''${HYPRLAND_INSTANCE_SIGNATURE:-$(ls "''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/" 2>/dev/null | head -1)}"
     SET="$HEARTH_DIR/settings.json"
     OUT="$HOME/.local/state/bonfire/keybinds.lua"
+    PREV="$HOME/.local/state/bonfire/keybinds.prev.json"
     gen() {
       mkdir -p "$(dirname "$OUT")"
       { printf 'return {\n'
@@ -113,9 +115,18 @@ let
         printf '}\n'
       } > "$OUT.tmp" 2>/dev/null && mv "$OUT.tmp" "$OUT" || true
     }
+    snap() { [ -r "$SET" ] && jq -c '.keybind // {}' "$SET" 2>/dev/null || printf '{}'; }
+    # fork chord "SUPER + SHIFT + F" -> hyprland unbind format "SUPER SHIFT, F"
+    hc() { awk -F' [+] ' '{ k=$NF; m=""; for (i=1;i<NF;i++) m=m (i>1?" ":"") $i; print (NF>1 ? m ", " k : ", " k) }'; }
     gen
-    hearth watch keybind 2>/dev/null | while IFS= read -r _; do
-      gen   # refresh the table only -- NO reload (it would re-derive monitors); applies next Hypr start
+    snap > "$PREV" 2>/dev/null || true
+    hearth watch keybind 2>/dev/null | while IFS= read -r keys; do
+      for key in $keys; do                       # live-unbind each changed key's OLD chord
+        ov=$(jq -r --arg a "''${key#keybind.}" '.[$a] // ""' "$PREV" 2>/dev/null)
+        [ -n "$ov" ] && hyprctl keyword unbind "$(printf '%s' "$ov" | hc)" >/dev/null 2>&1 || true
+      done
+      gen
+      snap > "$PREV" 2>/dev/null || true
     done
   '';
 

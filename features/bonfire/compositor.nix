@@ -117,7 +117,7 @@ let
   kbDefaultsLua = lib.concatStringsSep "\n"
     (lib.mapAttrsToList (a: s: ''        ["${a}"] = "${s.chord}",'') kbData);
   kbBindsLua = lib.concatStringsSep "\n" (lib.mapAttrsToList
-    (a: _: ''      pcall(function() hl.bind(kb("${a}"), hl.dsp.exec_cmd("${kbCmd.${a}}")${kbOpts.${a} or ""}) end)'')
+    (a: _: ''      bindkb(kb("${a}"), hl.dsp.exec_cmd("${kbCmd.${a}}")${kbOpts.${a} or ""})'')
     kbData);
 in
 {
@@ -137,7 +137,7 @@ ${kbDefaultsLua}
       do
         local ok, t = pcall(dofile, (os.getenv("HOME") or "") .. "/.local/state/bonfire/keybinds.lua")
         if ok and type(t) == "table" then
-          for k, v in pairs(t) do if type(v) == "string" and v ~= "" then __kb[k] = v end end
+          for k, v in pairs(t) do if type(v) == "string" then __kb[k] = v end end
         end
       end
       local function kb(a) return __kb[a] or "" end

@@ -735,10 +735,14 @@ in
       do
         local ok, t = pcall(dofile, (os.getenv("HOME") or "") .. "/.local/state/bonfire/keybinds.lua")
         if ok and type(t) == "table" then
-          for k, v in pairs(t) do if type(v) == "string" and v ~= "" then __hkb[k] = v end end
+          for k, v in pairs(t) do if type(v) == "string" then __hkb[k] = v end end
         end
       end
-      function hkb(a, d) local v = __hkb[a]; if type(v) == "string" and v ~= "" then return v end return d end
+      -- hkb(action, default): the override-table chord (INCLUDING "" = unbind) if present, else the
+      -- inline default (used only when the override table is absent). bindkb skips a blank chord, so a
+      -- setting cleared to "" in the TUI disables that action (vs TUI "reset", which restores default).
+      function hkb(a, d) local v = __hkb[a]; if type(v) == "string" then return v end return d end
+      function bindkb(c, ...) if type(c) == "string" and c ~= "" then pcall(hl.bind, c, ...) end end
 
       -- Cursor, set here because no shell reliably sets it for Hyprland: DMS's
       -- cursorSettings plumbing is niri-only (cursorSettings.niri.hideWhenTyping),
@@ -1103,17 +1107,17 @@ in
       -- whichever feature implements that shell, not bound here.
       -- Launch scheme: W browser, T terminal, B file browser, L office
       -- (mod+L was focus-right -- see the note there; use mod+Right instead).
-      pcall(function() hl.bind(hkb("terminal", mod .. " + Return"), hl.dsp.exec_cmd("kitty")) end)
-      pcall(function() hl.bind(hkb("terminal_alt", mod .. " + T"), hl.dsp.exec_cmd("kitty")) end)
-      pcall(function() hl.bind(hkb("browser", mod .. " + W"), hl.dsp.exec_cmd("firefox")) end)
-      pcall(function() hl.bind(hkb("files", mod .. " + B"), hl.dsp.exec_cmd("dolphin")) end)
+      bindkb(hkb("terminal", mod .. " + Return"), hl.dsp.exec_cmd("kitty"))
+      bindkb(hkb("terminal_alt", mod .. " + T"), hl.dsp.exec_cmd("kitty"))
+      bindkb(hkb("browser", mod .. " + W"), hl.dsp.exec_cmd("firefox"))
+      bindkb(hkb("files", mod .. " + B"), hl.dsp.exec_cmd("dolphin"))
       -- SUPER+E toggles the mission-control OVERVIEW (expo). 5-finger trackpad gestures
       -- don't fire on this Dell touchpad, so a keybind drives it instead; hl.dsp.overview
       -- is a native dispatcher added by trapezoid.patch (-> CHyprRenderer::ksOverviewToggle).
       -- (Was emacsclient -c; emacs is still on SUPER+SHIFT+E's neighbours if wanted back.)
-      pcall(function() hl.bind(hkb("overview", mod .. " + E"), hl.dsp.overview()) end)
+      bindkb(hkb("overview", mod .. " + E"), hl.dsp.overview())
       -- On-screen keyboard: toggle the wvkbd overlay (handy with the Wacom pen).
-      pcall(function() hl.bind(hkb("osk", mod .. " + O"), hl.dsp.exec_cmd("${wvkbdToggle}")) end)
+      bindkb(hkb("osk", mod .. " + O"), hl.dsp.exec_cmd("${wvkbdToggle}"))
       -- Compositor-level IME toggle, same logic as niri.nix's Hangul bind.
       hl.bind("Hangul", hl.dsp.exec_cmd("${hangulToggle}"))
 
@@ -1147,7 +1151,7 @@ in
       hl.bind(mod .. " + bracketleft", hl.dsp.exec_cmd("playerctl previous"), { locked = true })
 
       -- Window management
-      pcall(function() hl.bind(hkb("close_window", mod .. " + Q"), hl.dsp.window.close()) end)
+      bindkb(hkb("close_window", mod .. " + Q"), hl.dsp.window.close())
       -- SUPER+F (fullscreen) and SUPER+SHIFT+F (float-toggle, below) must NOT fire
       -- on side-dock windows (my.pyre, tagged "dock"): fullscreening or
       -- unfloating a docked card breaks the cascade. Gate both on the active
@@ -1164,7 +1168,7 @@ in
       end
       local ksFullscreen = hl.dsp.window.fullscreen({ mode = "fullscreen" })
       local ksFloat      = hl.dsp.window.float()
-      pcall(function() hl.bind(hkb("fullscreen", mod .. " + F"), function() if not ksActiveIsDock() then hl.dispatch(ksFullscreen) end end) end)
+      bindkb(hkb("fullscreen", mod .. " + F"), function() if not ksActiveIsDock() then hl.dispatch(ksFullscreen) end end)
       -- niri's maximize-column, now a real TOGGLE on Mod+D (end-4's key for
       -- it; Mod+D is free now that its earlier weirdness is understood --
       -- it was never a DMS collision, just Hyprland's MAXIMIZED state
@@ -1188,14 +1192,14 @@ in
       -- layout no longer accepts that message -- it just errored "unknown dwindle
       -- layoutmsg: colresize". Removed; mod+D now toggles the side dock, see
       -- features/pyre.)
-      pcall(function() hl.bind(hkb("float", mod .. " + ALT + space"), hl.dsp.window.float()) end)
+      bindkb(hkb("float", mod .. " + ALT + space"), hl.dsp.window.float())
       -- Same float toggle on Mod+Shift+F (pairs with Mod+F = fullscreen), but
       -- likewise skipped on dock windows (see ksActiveIsDock above).
-      pcall(function() hl.bind(hkb("float_alt", mod .. " + SHIFT + F"), function() if not ksActiveIsDock() then hl.dispatch(ksFloat) end end) end)
+      bindkb(hkb("float_alt", mod .. " + SHIFT + F"), function() if not ksActiveIsDock() then hl.dispatch(ksFloat) end end)
       -- end-4's Mod+P is "pin". Mod+P is left free here for a shell to claim
       -- (DMS binds its notepad there), so pin goes on Mod+Alt+P rather than
       -- taking a key the shell layer is expected to want.
-      pcall(function() hl.bind(hkb("pin", mod .. " + ALT + P"), hl.dsp.window.pin()) end)
+      bindkb(hkb("pin", mod .. " + ALT + P"), hl.dsp.window.pin())
       -- niri's Mod+Shift+V (switch focus between floating/tiling) has no
       -- direct hyprland dispatcher; `togglegroup` is a different concept
       -- (window grouping), so it's dropped rather than mis-mapped.
