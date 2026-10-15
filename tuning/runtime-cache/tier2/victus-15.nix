@@ -378,7 +378,7 @@
     "eigen"
     "openblas"
     "cuda_cudart"
-    "cuda_cccl"
+    "cccl"
     "libnpp"
     "nvidia-optical-flow-sdk"
     "libcublas"
@@ -574,6 +574,7 @@
     "libavc1394"
     "libiec61883"
     "x86_64-unknown-linux-gnu-gcc"
+    "cuda_crt"
     "numactl"
     "libvmaf"
     "graphite2"
@@ -630,10 +631,10 @@
     "pycairo"
     "gobject-introspection-wrapped"
   ];
-  capturedAt = "2026-10-13T00:18:57Z";
+  capturedAt = "2026-10-13T18:07:29Z";
   host = "victus-15";
-  nixpkgsNarHash = "sha256-jxvT74YVCLMYZ1FGVpoQU82PGCSQVhyRIHGxire0mjc=";
-  nixpkgsRev = "2bd2b7560b0654c6b24853a1499861fa78ace3a4";
+  nixpkgsNarHash = "sha256-B/DJET58beKz3fNZgz9F+Ye3EGeiuUORkFQmtdsXw0I=";
+  nixpkgsRev = "00a171f2f72e004a3916df33904932e335dd7355";
   runtimeNames = [
     "vim"
     "git"
@@ -996,7 +997,7 @@
     "eigen"
     "openblas"
     "cuda_cudart"
-    "cuda_cccl"
+    "cccl"
     "libnpp"
     "nvidia-optical-flow-sdk"
     "libcublas"
@@ -1192,6 +1193,7 @@
     "libavc1394"
     "libiec61883"
     "x86_64-unknown-linux-gnu-gcc"
+    "cuda_crt"
     "numactl"
     "libvmaf"
     "graphite2"
