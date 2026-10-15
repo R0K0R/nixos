@@ -126,5 +126,46 @@ in
       emacs-pgtk-x86_64-unknown-linux-gnu-with-packages.broken = "warn";
       emacs-pgtk-x86_64-unknown-linux-gnu-with-doom.broken = "warn";
     };
+
+    /*
+      Elisp package builds compile with the generic Emacs on the tuned ABI
+      instead of running the tuned one, which is under SDE on victus/yulee
+      (forPackageBuilds in env.nix). Only the builders get it: the scope's
+      `emacs`, and so emacsWithPackages, stays the tuned build.
+
+      An overlay rather than Unstraightened's emacsPackageOverrides: that
+      option is lazyAttrsOf package, so it cannot hold builders. It reaches
+      Unstraightened through emacs-overlay's emacsPackagesFor, which starts
+      from this pkgs' one -- but ends in `esuper.override { melpaPackages ...
+      }`, nixpkgs' makeOverridable re-running the scope's base function, which
+      drops every overrideScope layer below it. (That, not the package sets
+      alone, is why the typst fix in home.nix had to move.) So the layer
+      carries its own `override`, which calls the base's and puts the builders
+      back.
+    */
+    nixpkgs.overlays = [
+      (_final: prev: {
+        emacsPackagesFor =
+          emacs:
+          (prev.emacsPackagesFor emacs).overrideScope (
+            _eself: esuper:
+            let
+              withBuilders =
+                attrs:
+                let
+                  emacs = attrs.emacs.forPackageBuilds;
+                in
+                attrs
+                // {
+                  trivialBuild = attrs.trivialBuild.override { inherit emacs; };
+                  elpaBuild = attrs.elpaBuild.override { inherit emacs; };
+                  melpaBuild = attrs.melpaBuild.override { inherit emacs; };
+                  override = args: withBuilders (attrs.override args);
+                };
+            in
+            lib.optionalAttrs (esuper.emacs ? forPackageBuilds) (withBuilders esuper)
+          );
+      })
+    ];
   };
 }

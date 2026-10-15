@@ -157,8 +157,59 @@ let
           native-comp-eln-load-path (append (butlast native-comp-eln-load-path)
                                             (list \"''${TUNED_ELN_ROOT:-$TUNED_TOP/native-lisp/}\")))" "$@"
       '';
+      /*
+        What elisp package builds call `emacs` (passthru.forPackageBuilds,
+        swapped into trivialBuild/elpaBuild/melpaBuild by features/emacs/
+        home.nix). Every emacs a package build starts is a batch run that
+        compiles or installs Lisp, so all of it goes to compileForHost: the
+        generic compiler, natively, with the tuned ABI. Through the launcher
+        it ran under SDE on victus/yulee, ~1.3G and several times slower per
+        process; 42 of them at once OOMed victus (2026-10-16). Build-time
+        only: emacsWithPackages and the runtime keep the real tuned Emacs.
+        The ABI is probed once here -- the tuned side through its launcher,
+        so under SDE only where the CPU needs it -- and compared like
+        compileForHost does, so a mismatch fails this, not every package.
+      */
+      forPackageBuilds =
+        tuned:
+        pkgs.buildPackages.runCommand "${tuned.name}-for-package-builds"
+          {
+            passthru = {
+              inherit (tuned) version withNativeCompilation;
+              withTreeSitter = tuned.withTreeSitter or false;
+            };
+            inherit (tuned) meta;
+          }
+          ''
+            versionDir=$(ls ${tuned}/share/emacs | grep -v site-lisp | head -n 1)
+            echo '(provide (quote probe))' > probe.el
+            probe='(princ (format "%s\n%s\n%s\n%s\n" comp-abi-hash comp-native-version-dir
+              (md5 (concat emacs-version system-configuration-features
+                           (mapconcat (function comp--subr-signature) comp-subr-list "")))
+              (comp-el-to-eln-rel-filename "'"$PWD"'/probe.el")))'
+            tuned=$(HOME=$TMPDIR ${tuned}/bin/emacs -batch --eval "$probe")
+            generic=$(HOME=$TMPDIR ${compiler}/bin/emacs -batch --eval "$probe")
+            if [[ $(tail -n 2 <<<"$tuned") != "$(tail -n 2 <<<"$generic")" ]]; then
+              echo "forPackageBuilds: ${compiler} cannot compile for ${tuned}:" >&2
+              echo "  tuned:   $(tail -n 2 <<<"$tuned" | tr '\n' ' ')" >&2
+              echo "  generic: $(tail -n 2 <<<"$generic" | tr '\n' ' ')" >&2
+              exit 1
+            fi
+            mkdir -p $out/bin $out/nix-support $out/abi/src
+            head -n 2 <<<"$tuned" > $out/abi/src/.tuned-abi
+            cp ${tuned}/nix-support/setup-hook $out/nix-support/setup-hook
+            cat > $out/bin/emacs <<EOF
+            #!${bash}
+            TUNED_TOP=$out/abi TUNED_ELN_ROOT=${tuned}/lib/emacs/$versionDir/native-lisp/ exec ${compileForHost} "\$@"
+            EOF
+            chmod +x $out/bin/emacs
+          '';
     in
-    e.overrideAttrs (old: {
+    e.overrideAttrs (finalAttrs: old: {
+      passthru = (old.passthru or { }) // {
+        forPackageBuilds = forPackageBuilds finalAttrs.finalPackage;
+      };
+
       # After nixpkgs' postPatch, which has made RUN_TEMACS `env -i ./temacs`.
       # --replace-fail, so an Emacs release that moves one of these fails the
       # build instead of silently running that program natively.
