@@ -182,6 +182,57 @@
                 inputs.nixpkgs-upstream.legacyPackages.x86_64-linux.nixos-rebuild; }
           ];
         };
+
+      /*
+        What a user's standalone home repo gets from this flake, per host.
+
+          pkgs       the host's own package set (tuned, IntraISACross) --
+                     config's pkgs, so a home built against it reuses the
+                     system's store paths instead of rebuilding them.
+          osConfig   the host's NixOS config. TRANSITIONAL: the feature home
+                     halves still read osConfig.my.* to decide what to do,
+                     and this shim lets them run unchanged outside NixOS.
+                     The intent is for `facts` to replace it.
+          modules    the collected feature home halves + Unstraightened's
+                     module, i.e. the generator's sharedModules.
+          facts      plain data: host, system, tuning levers, the registry's
+                     effective axes per user.
+          mkHome     { username, modules ? [ ], asSubmodule ? true } -> a
+                     home-manager configuration (has .activationPackage),
+                     built by the SAME generator as the integrated
+                     home-manager.users.<name>. See lib/home-generator.nix
+                     for asSubmodule and why HM's homeManagerConfiguration
+                     cannot be used on these hosts.
+      */
+      mkHomeLib =
+        hostName: nixos:
+        let
+          gen = import ./lib/home-generator.nix {
+            homeModules = [ homeFeatures ];
+            inherit inputs hostName;
+          };
+          t = nixos.config.my.tuning;
+        in
+        {
+          inherit (nixos) pkgs;
+          osConfig = nixos.config;
+          modules = gen.sharedModules;
+          facts = {
+            inherit hostName;
+            system = nixos.pkgs.stdenv.hostPlatform.system;
+            tuning = {
+              inherit (t) enable march;
+              lto = t.lto.enable;
+              o3 = t.o3.enable;
+              intraISACross = t.intraISACross.enable;
+            };
+            impermanence = false;
+            users = registry.effective.${hostName} or { };
+          };
+          mkHome = args: gen.mkHome ({ inherit nixos; } // args);
+        };
+
+      registry = import ./registry { inherit lib; };
     in
     {
       nixosConfigurations.victus-15 = mkHost "victus-15";
@@ -200,7 +251,16 @@
         (host -> user -> axes). `nix eval .#registry.effective` is the quickest
         way to see what a type change would mean before any host evaluates.
       */
-      registry = import ./registry { inherit lib; };
+      inherit registry;
+
+      homeLib = lib.mapAttrs mkHomeLib self.nixosConfigurations;
+
+      /*
+        homeConfigurationFor "<host>" { username = "r0k0r"; modules = [ ... ]; }
+        -- the same as homeLib.<host>.mkHome, for a user repo that wants one
+        call per homeConfigurations entry.
+      */
+      lib.homeConfigurationFor = host: args: self.homeLib.${host}.mkHome args;
       homeModules.default = homeFeatures;
 
       /*

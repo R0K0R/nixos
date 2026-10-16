@@ -16,13 +16,17 @@
 */
 { homeModules, inputs, hostName }:
 
+let
+  # Shared with homeLib's standalone mkHome; see lib/home-generator.nix.
+  gen = import ./home-generator.nix { inherit homeModules inputs hostName; };
+in
 { config, lib, ... }:
 
 {
   home-manager = {
     useGlobalPkgs = true;
     useUserPackages = true;
-    extraSpecialArgs = { inherit inputs hostName; };
+    inherit (gen) extraSpecialArgs;
     backupFileExtension = "hm-backup";
     # Allow replacing an existing *.hm-backup when backing up again (avoids an
     # activation crash on the second run).
@@ -33,7 +37,7 @@
       rather than a per-user config so one `my.<feature>.enable = true` in the
       host file drives both halves; the home side gates on osConfig.my.*.
     */
-    sharedModules = homeModules ++ [ inputs.feat-emacs.homeModule ];
+    inherit (gen) sharedModules;
 
     /*
       Generated from my.users, never hardcoded.
@@ -46,8 +50,10 @@
       collided. The host did not evaluate at all.
 
       THE RULE: anything per-user is generated HERE, into
-      home-manager.users.<name>. sharedModules are evaluated once per user and
-      may only carry what is true of every user, so an identity -- username,
+      home-manager.users.<name> -- by gen.userModule, which homeLib's
+      standalone mkHome applies too, so the two homes cannot drift.
+      sharedModules are evaluated once per user and may only carry what is
+      true of every user, so an identity -- username,
       home directory, stateVersion -- can never live in one. Features scope
       themselves per user through lib/in-scope.nix instead, which is a `config`
       condition rather than an identity.
@@ -57,8 +63,6 @@
       -- imports resolve before the fixpoint, so they cannot read config -- and
       that impossibility is exactly why the scoping lives inside each module.
     */
-    users = lib.mapAttrs (username: u: {
-      home.stateVersion = u.stateVersion;
-    }) (lib.filterAttrs (_: u: u.home) config.my.users);
+    users = gen.users lib config;
   };
 }
