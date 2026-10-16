@@ -155,7 +155,20 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = lib.mkMerge [
+  {
+    /*
+      my.ccache is a feature and knows nothing about tuning; this is its only
+      consumer, so this is where an unconsumed ccache.enable can be noticed.
+      A warning, not an assertion: the builder half is still useful, and an
+      untuned host with ccache on is a harmless no-op rather than a broken
+      machine. Warnings do not enter any derivation.
+    */
+    warnings = lib.optional (
+      config.my.ccache.enable && !(cfg.enable && config.my.tuning.enable && config.my.tuning.march != null)
+    ) "my.ccache.enable has no effect here: only my.tuning.heavy wraps packages in ccache, and it acts only with my.tuning.enable and my.tuning.march set. (my.ccache.builder still applies.)";
+  }
+  (lib.mkIf cfg.enable {
     nixpkgs.overlays = lib.mkBefore [
       (import ./overlays/heavy.nix {
         inherit lib;
@@ -172,5 +185,6 @@ in
         };
       })
     ];
-  };
+  })
+  ];
 }

@@ -238,23 +238,9 @@
       patching and yulee-sandbox test exclusions, none of which applies here.
     */
     tuning = {
-      # build-time accelerators for the whole tuned host set (tuning/heavy.nix) and
-      # step 1 of content-addressed derivations (tuning/ca.nix). Step 2
-      # (contentAddress) waits until ca-derivations is live on all three
-      # machines, yulee by hand.
+      # build-time accelerators for the whole tuned host set (tuning/heavy.nix).
+      # Content addressing is its own feature now, my.ca-derivations below.
       heavy.enable = true;
-      ca.enable = true;
-      # Needs ca-derivations ALREADY live on the daemon that evaluates and on
-      # every builder -- forcing drvPath writes the derivation through the
-      # daemon, which is what rejects it, so no client flag helps. yulee has it
-      # in nix.conf; galaxybook and victus-15 need the transient drop-in in
-      # tuning/ca.nix's header before their first switch with this on.
-      # ON together: contentAddress needs stripRefChecks, because a derivation
-      # anywhere downstream of a CA one gets a deferred output path and any
-      # reference check naming it then holds a placeholder nix rejects. 36 of
-      # 919 candidates carry such a check; clearing them is the price.
-      ca.contentAddress = true;
-      ca.stripRefChecks = true;
       # Literal, and it must stay one -- see the note in galaxybook4-pro360.
       enable = true;
       march = "znver3";
@@ -264,9 +250,23 @@
       upstreamTools.enable = true;
       refreshTool.enable = true;
     };
+    # Step 1 (the daemon flag) and step 2 (the tuned host set content-
+    # addressed). Set explicitly: tuning no longer implies it.
+    ca-derivations.enable = true;
+    # Needs ca-derivations ALREADY live on the daemon that evaluates and on
+    # every builder -- forcing drvPath writes the derivation through the
+    # daemon, which is what rejects it, so no client flag helps. yulee has it
+    # in nix.conf; galaxybook and victus-15 need the transient drop-in in
+    # features/nix/ca-derivations' header before their first switch with this on.
+    # ON together: packages = "tuned" needs stripRefChecks, because a derivation
+    # anywhere downstream of a CA one gets a deferred output path and any
+    # reference check naming it then holds a placeholder nix rejects. 36 of
+    # 919 candidates carry such a check; clearing them is the price.
+    ca-derivations.packages = "tuned";
+    ca-derivations.stripRefChecks = true;
     ccache.enable = true;
     # Cross-derivation reuse: patched ccache + per-package random seed. Pairs
-    # with ca.contentAddress rather than competing with it -- CA cuts off when a
+    # with ca-derivations.packages rather than competing with it -- CA cuts off when a
     # dependency rebuilds to identical BYTES, this one when it rebuilds to
     # different bytes but identical HEADERS.
     ccache.crossDerivation.enable = true;

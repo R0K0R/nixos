@@ -36,7 +36,8 @@ in
       forkWanted): march is the one lever that needs it, and every other lever
       that would need it asserts march. `enable = true` with `march = null`
       therefore runs on plain upstream nixpkgs and keeps the levers that do not
-      care (heavy, ca, refreshTool).
+      care (heavy, refreshTool). Content addressing is not a tuning lever at all
+      any more: it is features/nix/ca-derivations.
 
       Because the choice is an input rather than an option value, it is read out
       of the host file by raw import in flake.nix -- see the note there. It must

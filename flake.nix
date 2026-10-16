@@ -179,7 +179,8 @@
         So `enable = true` with `march = null` used to buy a full rebuild on the
         fork with no tuning in it at all -- the trap the enable option's
         description warns about. It now gets upstream nixpkgs and substitutes;
-        heavy/ca/refreshTool, which do not depend on the fork, still apply.
+        heavy/refreshTool, which do not depend on the fork, still apply (CA is
+        its own feature now, features/nix/ca-derivations).
         Both hosts set march, so nothing about them moves.
       */
       forkWanted = r: r.enable && r.march != null;
