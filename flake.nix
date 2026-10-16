@@ -170,17 +170,17 @@
         gcc.arch, hostPlatform with it) and the ~63 pr/* fixes that make that
         split build. Its cc-wrapper/setup-hook.sh patch -- the one whose bytes
         move stdenv's hash and rebuild everything -- only acts under
-        NIX_IS_INTRA_ISA_CROSS, i.e. only with march. The other levers reach
-        the fork only THROUGH march: o3, lto, intraISACross and upstreamTools
-        each assert march (tuning/nixos.nix) because their overlays skip any
-        package set without gcc.arch, and qtPatches is meteorlake-specific
-        qtbase patching that is now asserted to need march as well.
+        NIX_IS_INTRA_ISA_CROSS, i.e. only with march. intraISACross,
+        upstreamTools and qtPatches reach the fork only THROUGH march: each
+        asserts it (tuning/nixos.nix), being fixes for the split or for the
+        fork's meteorlake qtbase. o3 and lto do not need it at all: without
+        march they run natively on upstream (tuning/overlays/native-target.nix).
 
         So `enable = true` with `march = null` used to buy a full rebuild on the
         fork with no tuning in it at all -- the trap the enable option's
         description warns about. It now gets upstream nixpkgs and substitutes;
-        heavy/refreshTool, which do not depend on the fork, still apply (CA is
-        its own feature now, features/nix/ca-derivations).
+        o3/lto (native mode) and heavy/refreshTool, which do not depend on the
+        fork, still apply (CA is its own feature now, features/nix/ca-derivations).
         Both hosts set march, so nothing about them moves.
       */
       forkWanted = r: r.enable && r.march != null;
@@ -328,10 +328,10 @@
 
       /*
         The evaluation matrix: lib.matrix.<host>.<variant> is a full
-        nixosSystem with optional levers toggled (off, march, lto, o3, ccache,
-        ca, all, plus two expected failures). See lib/matrix.nix for what each
-        variant forces and why emacs is off in it; scripts/eval-matrix.sh runs
-        the lot with builds disabled.
+        nixosSystem with optional levers toggled (off, march, lto, o3, lto-o3,
+        march-lto, march-o3, ccache, ca, all). See lib/matrix.nix for what
+        each variant forces and why emacs is off in it; scripts/eval-matrix.sh
+        runs the lot with builds disabled.
 
         Under lib, NOT checks: `nix flake check` builds checks, and a variant
         on plain upstream nixpkgs is a whole different system to fetch or

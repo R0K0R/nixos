@@ -174,7 +174,9 @@ on upstream nixpkgs:
 - **tuning** -- three independent levers, all default off:
   - `march` -- the only one needing the fork (and SDE Emacs where builders
     cannot run the target), decided pre-eval;
-  - `lto`, `o3`.
+  - `lto`, `o3` -- independent of march. Without it they tune the native
+    package set on upstream nixpkgs, skipping libraries a build tool links
+    and keeping everything not host-runtime at its untuned derivation.
   Per-user `tuning.json` in the user repo, one add-only list per lever, applied
   user-side through the exported classifier on top of the base world.
 
@@ -213,6 +215,10 @@ All of these leave both hosts' toplevels byte-identical.
 3. **Nested features.** Recursive feature walk, features grouped into
    categories, leaf-name import order.
 4. **Fork only for march.** `enable = true, march = null` gets upstream nixpkgs.
+   **lto and o3 without march** run in a native mode on upstream nixpkgs
+   (`tuning/overlays/native-target.nix`, `tuning/native-build-tools.nix`, the
+   native branch of `upstream-tools.nix`); the matrix evaluates `lto`, `o3`
+   and `lto-o3` without march.
 
 ### Next
 

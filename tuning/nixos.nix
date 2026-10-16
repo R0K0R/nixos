@@ -9,6 +9,32 @@ let
     packages) roughly doubles eval time for no benefit, since both need the
     identical result.
   */
+  # o3/lto without march: tune the one native set (overlays/native-target.nix).
+  native = cfg.march == null;
+
+  # Native mode only: the candidates a build tool links, left untuned there.
+  nativeBuildTools = import ./native-build-tools.nix { inherit inputs lib; };
+
+  /*
+    Native mode only: this host's package set as it would be with o3/lto off --
+    the alias target for everything that is not host-runtime. Built the way
+    nixos/modules/misc/nixpkgs.nix builds `pkgs` for a native host (same
+    nixpkgs, nixpkgs.config, nixpkgs.overlays, localSystem = hostPlatform), so
+    its derivations ARE the all-off variant's, plus a config marker that the
+    tuning overlays read to stand down (overlays/native-target.nix). nixpkgs'
+    config is freeform, and no package reads that key, so the marker moves no
+    derivation.
+
+    inputs.nixpkgs-upstream rather than `pkgs.path`: native means march = null,
+    which flake.nix forkWanted maps to upstream, and reading `pkgs` here would
+    tie this to the fixpoint it is an input of.
+  */
+  nativeBaseline = import inputs.nixpkgs-upstream {
+    localSystem = config.nixpkgs.hostPlatform;
+    config = config.nixpkgs.config // { tuningNativeBaseline = true; };
+    overlays = config.nixpkgs.overlays;
+  };
+
   hostRuntimeClassifier = import ./host-runtime-classifier.nix {
     inherit inputs;
     host = hostName;
@@ -36,7 +62,7 @@ in
       forkWanted): march is the one lever that needs it, and every other lever
       that would need it asserts march. `enable = true` with `march = null`
       therefore runs on plain upstream nixpkgs and keeps the levers that do not
-      care (heavy, refreshTool). Content addressing is not a tuning lever at all
+      care (o3 and lto, in their native mode; heavy, refreshTool). Content addressing is not a tuning lever at all
       any more: it is features/nix/ca-derivations.
 
       Because the choice is an input rather than an option value, it is read out
@@ -81,6 +107,12 @@ in
       tuned host; nothing in it is specific to one machine
     '';
 
+    /*
+      Independent of march. With it they tune the gcc.arch host splice; without
+      it (march = null, plain upstream nixpkgs) they tune the one native set,
+      minus anything a build tool links, with everything not host-runtime kept
+      at its untuned derivation. See the NATIVE ISOLATION entry below.
+    */
     o3.enable = lib.mkEnableOption "the -O3 overlay, applied to host-runtime packages only";
     lto.enable = lib.mkEnableOption "the Gentoo-style LTO overlay, applied to host-runtime packages only";
 
@@ -177,12 +209,21 @@ in
       still lands after them. If that ever stops being true, upstream-tools'
       1600 is the only ordering that actually matters to correctness.)
     */
+    /*
+      o3 and lto take `native` so they work WITHOUT march: three levers, not
+      one lever and two riders. With march they tune the gcc.arch host splice
+      exactly as before (native = false is the old code path, so a march'd
+      host's derivations do not move); without it they tune the one native set
+      instead (overlays/native-target.nix). The native half of what the split
+      used to guarantee -- build tools untuned and substitutable -- is the
+      native-isolation entry below.
+    */
     (lib.mkIf cfg.o3.enable {
-      nixpkgs.overlays = [ (import ./overlays/o3.nix { inherit hostRuntimeClassifier; }) ];
+      nixpkgs.overlays = [ (import ./overlays/o3.nix { inherit hostRuntimeClassifier native nativeBuildTools; }) ];
     })
 
     (lib.mkIf cfg.lto.enable {
-      nixpkgs.overlays = [ (import ./overlays/gentoo-lto.nix { inherit hostRuntimeClassifier; }) ];
+      nixpkgs.overlays = [ (import ./overlays/gentoo-lto.nix { inherit hostRuntimeClassifier native nativeBuildTools; }) ];
     })
 
     (lib.mkIf cfg.intraISACross.enable {
@@ -194,6 +235,46 @@ in
     (lib.mkIf cfg.upstreamTools.enable {
       nixpkgs.overlays = lib.mkOrder 1600 [
         (import ./overlays/upstream-tools.nix { inherit lib inputs hostRuntimeClassifier; })
+      ];
+    })
+
+    /*
+      NATIVE ISOLATION: part of the o3/lto levers themselves when march is
+      null, not the upstreamTools lever and not something it auto-enables.
+
+      Without the split, pkgsBuildHost IS pkgs, so a tuned openssl would also
+      be the one every curl/git/python3 build tool links: build tools change,
+      stop substituting, and take their consumers with them. Two halves keep
+      that from happening: o3/lto skip every candidate a build tool links
+      (native-build-tools.nix, passed to them above), and this overlay points
+      every attribute the classifier does not call host-runtime back at
+      nativeBaseline -- the derivation it is with o3/lto off -- so only what
+      runs here is rebuilt. Full reasoning, measurements, and where it is
+      weaker than the split, in overlays/upstream-tools.nix (NATIVE MODE).
+
+      Why not the alternatives:
+
+        a generic "x86-64" hostPlatform, to manufacture a split: it IS a
+          split, i.e. IntraISACross -- it needs the fork (the cc-wrapper
+          setup-hook acts under NIX_IS_INTRA_ISA_CROSS) and rebuilds the
+          whole host set through it, which is march with a no-op -march.
+          "lto without march" would then not be on upstream nixpkgs at all.
+        the overlays with only the classifier as filter: 2913 derivations
+          with new outputs for lto alone on galaxybook4-pro360, python3, perl,
+          meson, clang and a full gcc among them (native-build-tools.nix).
+        a tuned second fixpoint whose host-runtime names are copied in: its
+          host-runtime packages would be built with tuned build tools (cmake
+          over a tuned curl), so the build tools change anyway.
+
+      Same mkOrder 1600 as upstreamTools, for the same reason: last, so it
+      sees every other overlay's result. The two can never both be on (the
+      upstreamTools lever asserts march, this one requires march = null).
+    */
+    (lib.mkIf (native && (cfg.o3.enable || cfg.lto.enable)) {
+      nixpkgs.overlays = lib.mkOrder 1600 [
+        (import ./overlays/upstream-tools.nix {
+          inherit lib inputs hostRuntimeClassifier native nativeBaseline;
+        })
       ];
     })
 
@@ -234,18 +315,20 @@ in
     }
 
     /*
-      Separating the switches makes it possible to enable a tuning overlay
-      WITHOUT march, which would not error -- it would do nothing at all.
-      Both o3.nix and gentoo-lto.nix skip unless
-      `stdenv.hostPlatform.gcc.arch` is non-empty (their platform guard, which
-      exists so tuning never touches pkgsBuildHost and cost the ~91% of the
-      closure that substitutes from cache.nixos.org). With march unset NO
-      package set carries gcc.arch, so the guard skips everything.
+      Which levers still need march, and why o3/lto no longer do.
 
-      upstream-tools is worse than inert without the split: its host/build
-      discrimination collapses, and it aliases EVERYTHING to upstream --
-      silently deleting whatever tuning is enabled. That is the failure the
-      march option's own description warns about.
+      o3 and lto used to be asserted here too: their overlays skipped every
+      package set without gcc.arch, so without march they were silently inert.
+      They now carry a native mode (overlays/native-target.nix and the NATIVE
+      ISOLATION entry above), so they are levers in their own right.
+
+      What remains genuinely needs the split. upstreamTools (the lever) is
+      worse than inert without it: its host/build discrimination collapses
+      and it aliases EVERYTHING to upstream -- silently deleting whatever
+      tuning is enabled. Its native counterpart is the NATIVE ISOLATION entry,
+      which o3/lto bring along themselves rather than by enabling this
+      lever. intraISACross and qtPatches are fixes for the split and for the
+      fork's meteorlake qtbase.
 
       So: assert, never auto-enable, per features/_meta's rule. The message
       names the exact line to add.
@@ -282,16 +365,6 @@ in
             message = "my.tuning.${o.name}.enable requires my.tuning.march to be set (it is null; ${o.why})";
           })
           [
-            {
-              name = "o3";
-              enabled = cfg.o3.enable;
-              why = "o3.nix skips every package when hostPlatform.gcc.arch is empty";
-            }
-            {
-              name = "lto";
-              enabled = cfg.lto.enable;
-              why = "gentoo-lto.nix skips every package when hostPlatform.gcc.arch is empty";
-            }
             {
               name = "upstreamTools";
               enabled = cfg.upstreamTools.enable;

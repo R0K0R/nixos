@@ -127,6 +127,10 @@
   inputs,
   hostRuntimeClassifier,
   system ? "x86_64-linux",
+  # true = the march-less mode (tuning/nixos.nix sets it when o3/lto are on
+  # with march = null). See NATIVE MODE at the bottom of this file.
+  native ? false,
+  nativeBaseline ? null,
   /*
     Two exclusions the target-awareness test below cannot express, because they
     are not packages that target a platform -- they ARE platform machinery:
@@ -339,6 +343,19 @@ let
   ) structurallyKeepableNames;
 
   aliasAttrs = names: builtins.listToAttrs (map (name: { inherit name; value = upstream.${name}; }) names);
+
+  /*
+    NATIVE MODE names: everything structurally aliasable that is not
+    host-runtime. Unlike hostAliasNames, knownPatchedNames is not subtracted --
+    the native alias target is the host's own untuned set, which HAS those
+    patches (see the branch below).
+  */
+  nativeAliasNames = builtins.filter (
+    n: !(neverAliasSet ? ${n}) && !(hostRuntimeClassifier.isHostRuntime n)
+  ) structurallyKeepableNames;
+  nativeAliasAttrs = builtins.listToAttrs (
+    map (name: { inherit name; value = nativeBaseline.${name}; }) nativeAliasNames
+  );
 in
 
 final: prev:
@@ -348,6 +365,82 @@ final: prev:
 # gentoo-lto-overlay.nix began.
 if builtins.match ".*bootstrap.*" (prev.stdenv.name or "") != null then
   { }
+
+/*
+  NATIVE MODE (march = null, o3 and/or lto on), on plain upstream nixpkgs.
+
+  There is no split to key off, and no fork to substitute away from: the host's
+  base package set already IS nixpkgs-upstream. What o3.nix and gentoo-lto.nix
+  break natively is something else: pkgsBuildHost is the same set as pkgs, so
+  whatever they tune is also what every package that BUILDS with it sees.
+
+  That is handled in two halves.
+
+  1. Libraries a build tool links are not tuned at all natively
+     (tuning/native-build-tools.nix): openssl, ncurses, util-linux, glib and
+     the like stay untuned, so python3, perl, curl, git, clang and the rest of
+     the toolchain never change. Without that, nothing here could help --
+     python3 is host-runtime itself, so this branch keeps it in the tuned
+     fixpoint, and one name cannot be tuned here and untuned there.
+
+  2. This branch: every structurally-aliasable attribute the classifier does
+     NOT call host-runtime is pointed at `nativeBaseline`, this host's package
+     set exactly as it would be with o3/lto off. Whatever is left that is
+     neither host-runtime nor a seed of (1) -- a build-only tool or helper that
+     happens to link a tuned library -- comes back as the identical derivation
+     and substitutes. Host-runtime packages stay in this fixpoint, see the
+     tuned libraries, and are rebuilt; that is the lever doing its job.
+     Measured on galaxybook4-pro360, lto alone vs all off: 1087 derivations
+     with new outputs without this branch, 541 with it.
+
+  nativeBaseline is NOT a fresh upstream import, and that is why two of the
+  cross branch's guards are absent here. tuning/nixos.nix builds it from this
+  host's own nixpkgs.config and full nixpkgs.overlays list (extraOverlays,
+  feature overlays), with a config marker that switches o3/lto/this overlay
+  off inside it, so its derivations are the all-off variant's. A fresh import
+  would revert every overlay under each aliased name (the mesa trim, niri,
+  libfprint's SDCP patch). With the real baseline an alias is never
+  destructive -- a classifier false negative only forfeits tuning, it cannot
+  discard a patch -- so neither knownPatchedNames nor the hasWarmCache gate,
+  both about exactly that, apply. neverAliasNames still does: the
+  wrapGAppsHook duplication is about mixing an untuned propagated gtk3 into a
+  tuned consumer, which is the same here.
+
+  Where it is NOT equivalent to the split, stated rather than hidden:
+
+  - A library a build tool links goes untuned even where an application
+    links it too (1). In the split it would be tuned for the application and
+    untuned for the tool. That is the price of no split, and the reason march
+    stays the stronger setting.
+
+  - Scoped package sets (python3Packages, qt6, kdePackages) are not aliased,
+    here as in the cross branch. A python package whose CHECK inputs reach a
+    tuned library is rebuilt: 54 of the 541 above (pynacl -> libsodium,
+    matplotlib -> ffmpeg -> svt-av1, then black, rich, httpx through test
+    dependencies). They are pure-python rebuilds, not toolchain.
+
+  - Hooks that propagate a tuned runtime library change with it:
+    wrapGAppsHook (librsvg) under lto, the qmake/wrapQtApps hooks (qtbase over
+    a tuned mesa) under o3. That is how the consumers get the tuned copy,
+    and the split does the same.
+
+  - Tuning zlib, xz, bzip2 and pcre2 is a no-op natively. The native stdenv's
+    final stage re-inherits them from its bootstrap stage (pkgs/stdenv/linux,
+    `overrides`), and stage.nix applies those stdenvOverrides AFTER every
+    overlay -- the same mechanism that keeps gcc and binutils the stdenv's own.
+    With march the host splice is a cross stage without such overrides, so
+    there they are tuned.
+
+  - The classifier's caches are keyed on the FORK's narHash (lookup.nix reads
+    inputs.nixpkgs even when the host runs upstream), so they stay warm here.
+    They hold attribute names and pnames, which the fork's patch series does
+    not rename, so that is correct rather than lucky.
+*/
+else if native then
+  if (prev.config.tuningNativeBaseline or false) || !(import ./native-target.nix { inherit native prev; }) then
+    { }
+  else
+    nativeAliasAttrs
 
 # Only the BUILD platform, identified as hostPlatform == buildPlatform.
 #

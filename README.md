@@ -310,8 +310,8 @@ because each changes the system.
 | piece | where | requires | status |
 |---|---|---|---|
 | tuning lever `march` | `my.tuning.march` | the fork (selected automatically) | exists; on for both hosts |
-| tuning lever `o3` | `my.tuning.o3.enable` | `march` | exists; on for both hosts |
-| tuning lever `lto` | `my.tuning.lto.enable` | `march` | exists; on for both hosts |
+| tuning lever `o3` | `my.tuning.o3.enable` | -- (`my.tuning.enable`; native mode without march) | exists; on for both hosts, with march |
+| tuning lever `lto` | `my.tuning.lto.enable` | -- (`my.tuning.enable`; native mode without march) | exists; on for both hosts, with march |
 | heavy (mold + ccache over the tuned set) | `my.tuning.heavy` | -- | exists |
 | ccache | `my.ccache` (features/nix/ccache) | client half; `builder` half on NixOS builders | exists; to be split out of tuning's reach as its own optional feature |
 | content-addressed derivations | `my.ca-derivations` (features/nix/ca-derivations; the "tuned" package policy is applied by tuning/ca.nix and needs march) | ca-derivations live on the evaluating daemon and every builder | exists |
@@ -345,11 +345,15 @@ and `my.tuning.march` out of the host file by raw import (they must be literals;
 an assertion catches any divergence from what the module system evaluates). The
 fork is used only for `enable && march != null`. The reason: the fork's
 cc-wrapper `setup-hook.sh` patch, whose bytes move stdenv's hash and rebuild
-everything, only acts under IntraISACross, i.e. with march. `o3`, `lto`,
-`intraISACross`, `upstreamTools` and `qtPatches` all assert march because their
-overlays skip any package set without `gcc.arch`. `enable = true, march = null`
-used to buy a full rebuild on the fork with nothing tuned; it now gets upstream
-nixpkgs and keeps the levers that do not care (heavy, ca, refreshTool).
+everything, only acts under IntraISACross, i.e. with march. `intraISACross`,
+`upstreamTools` and `qtPatches` assert march: they are fixes for the split, or
+for the fork's meteorlake qtbase. `enable = true, march = null` gets upstream
+nixpkgs and keeps the levers that do not need the fork: `o3` and `lto` (in
+native mode, below), heavy, refreshTool.
+
+**march, lto and o3 are three independent levers.** Any combination evaluates
+(`lib/matrix.nix`: `lto`, `o3`, `lto-o3` without march, `march-lto`,
+`march-o3` with it).
 
 **Why IntraISACross.** march declares `buildPlatform` *without* `gcc.arch` so it
 differs from `hostPlatform`, making the build an intra-ISA cross rather than a
@@ -358,6 +362,29 @@ there is only one package set, so that overlay would alias *everything* to
 upstream and silently delete the tuning. With the split, `pkgsBuildHost` is
 plain x86_64 and byte-identical to upstream (build tools come from
 cache.nixos.org) while `pkgs` stays tuned.
+
+**lto and o3 without march** run natively on plain upstream nixpkgs. With no
+split, build tools and the packages that run here are one package set, so
+tuning a library also changes every build tool that links it. Two mechanisms
+replace what the split did:
+
+- `tuning/native-build-tools.nix`: a candidate in the runtime closure of a build
+  tool (python3, perl, curl, git, clang, cmake, meson, glib, numpy...) is left
+  untuned. So openssl, ncurses and util-linux stay as upstream builds them,
+  and codecs, numerics, image and GUI libraries are tuned.
+- the native branch of `tuning/overlays/upstream-tools.nix`: every attribute
+  the classifier does not call host-runtime is aliased to the host's *untuned*
+  package set (its own config and overlays, with o3/lto switched off), so it
+  stays the all-off derivation and substitutes.
+
+On galaxybook4-pro360, `lto` alone changes 541 derivations against `off`
+(compared by output path), `o3` alone 814. None of them is gcc, binutils,
+cmake, meson, ninja, python3, perl, clang, rustc or nodejs. 54 of the 541 are
+python3Packages that reach a tuned library only through check inputs; scoped
+package sets are not aliased. A library both a build tool and an application
+link stays untuned natively, which is why march remains the stronger setting.
+Natively zlib, xz, bzip2 and pcre2 cannot be tuned at all: the native stdenv
+re-imports them from its bootstrap stage after every overlay.
 
 **O3 and LTO apply only to what runs here.** The **host-runtime classifier**
 decides which packages that is. It has three tiers: Tier 1 is the live system
