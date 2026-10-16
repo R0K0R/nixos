@@ -1,4 +1,4 @@
-{ config, inputs, lib, hostName, tuningEnabledRaw, ... }:
+{ config, inputs, lib, hostName, tuningEnabledRaw, tuningMarchRaw, ... }:
 
 let
   cfg = config.my.tuning;
@@ -23,7 +23,8 @@ in
       OFF (the default) is not merely "no -march". It selects a different
       nixpkgs INPUT for this host -- plain upstream, so the entire package set
       substitutes from cache.nixos.org. Turning march off while staying on the
-      fork does NOT achieve that: the fork patches
+      fork would NOT achieve that (which is why march = null now leaves the fork
+      too, below): the fork patches
       pkgs/build-support/cc-wrapper/setup-hook.sh, whose bytes are a build input
       to cc-wrapper, so stdenv's hash moves and every package rebuilds no matter
       what the tuning switches say. Measured: reverting that one file alone
@@ -31,10 +32,16 @@ in
       gcc.arch and no overlays. Two more such files (qt-5 and qt-6
       qtbase-setup-hook.sh) do the same for the whole Qt package set.
 
+      The fork itself is selected only when `march` is also set (flake.nix
+      forkWanted): march is the one lever that needs it, and every other lever
+      that would need it asserts march. `enable = true` with `march = null`
+      therefore runs on plain upstream nixpkgs and keeps the levers that do not
+      care (heavy, ca, refreshTool).
+
       Because the choice is an input rather than an option value, it is read out
       of the host file by raw import in flake.nix -- see the note there. It must
-      therefore be a LITERAL true/false in hosts/<name>/default.nix: no mkIf, no
-      mkMerge, no reference to `config`. The assertion below catches any
+      therefore be a LITERAL true/false in hosts/<name>/default.nix (and march a
+      literal string or null): no mkIf, no mkMerge, no reference to `config`. The assertion below catches any
       divergence between what flake.nix read and what the module system
       evaluated, so an ignored definition can never pass silently.
 
@@ -206,17 +213,20 @@ in
     {
       assertions = [
         {
-          assertion = cfg.enable == tuningEnabledRaw;
+          assertion = cfg.enable == tuningEnabledRaw && cfg.march == tuningMarchRaw;
           message = ''
-            my.tuning.enable evaluated to ${lib.boolToString cfg.enable}, but flake.nix
-            read ${lib.boolToString tuningEnabledRaw} from hosts/${hostName}/default.nix,
-            and has already selected the ${
-              if tuningEnabledRaw then "patched fork" else "plain upstream"
+            my.tuning.enable/march evaluated to ${lib.boolToString cfg.enable}/${
+              toString cfg.march
+            }, but flake.nix read ${lib.boolToString tuningEnabledRaw}/${
+              toString tuningMarchRaw
+            } from hosts/${hostName}/default.nix, and has already selected the ${
+              if tuningEnabledRaw && tuningMarchRaw != null then "patched fork" else "plain upstream"
             } nixpkgs on that basis.
 
-            Set my.tuning.enable as a literal in hosts/${hostName}/default.nix. It cannot
-            be defined from another module or wrapped in mkIf/mkMerge: the nixpkgs input
-            is chosen before the module system exists.
+            Set my.tuning.enable and my.tuning.march as literals in
+            hosts/${hostName}/default.nix. They cannot be defined from another module or
+            wrapped in mkIf/mkMerge: the nixpkgs input is chosen before the module system
+            exists.
           '';
         }
       ];
@@ -285,6 +295,11 @@ in
               name = "upstreamTools";
               enabled = cfg.upstreamTools.enable;
               why = "without the split it aliases everything to upstream, deleting all tuning";
+            }
+            {
+              name = "qtPatches";
+              enabled = cfg.qtPatches.enable;
+              why = "it patches the fork's meteorlake qtbase, and without march flake.nix selects plain upstream nixpkgs";
             }
             {
               name = "intraISACross";

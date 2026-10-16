@@ -107,10 +107,11 @@
       /*
         WHICH NIXPKGS A HOST GETS, decided before the module system exists.
 
-        `my.tuning.enable = false` hands a host plain upstream nixpkgs so its
-        whole package set substitutes from cache.nixos.org. That cannot be an
+        `my.tuning.enable = false` -- or `march = null`, see forkWanted below --
+        hands a host plain upstream nixpkgs so its whole package set
+        substitutes from cache.nixos.org. That cannot be an
         ordinary option read from `config`: the input has to be chosen to build
-        the fixpoint that `config` lives in. So the literal is read out of the
+        the fixpoint that `config` lives in. So the literals are read out of the
         host file by RAW IMPORT -- the same technique
         tuning/runtime-cache/lookup.nix:185 uses for my.packages.extra, with the
         same constraint and the same _type rejection, because there is no module
@@ -133,35 +134,67 @@
         NixOS module tree are byte-identical either way. This swaps the package
         set, not the module system.
       */
-      tuningEnabledOf =
+      tuningRawOf =
         hostName:
         let
           raw = import (./hosts + "/${hostName}") {
             inherit inputs lib hostName;
-            pkgs = throw "flake.nix: hosts/${hostName} -- my.tuning.enable must not read `pkgs`";
-            config = throw "flake.nix: hosts/${hostName} -- my.tuning.enable must not read `config`";
+            pkgs = throw "flake.nix: hosts/${hostName} -- my.tuning.{enable,march} must not read `pkgs`";
+            config = throw "flake.nix: hosts/${hostName} -- my.tuning.{enable,march} must not read `config`";
           };
-          v = raw.my.tuning.enable or false;
+          t = raw.my.tuning or { };
+          enable = t.enable or false;
+          march = t.march or null;
+          wrapped =
+            name: v: expect:
+            throw ''
+              flake.nix: hosts/${hostName}/default.nix wraps my.tuning.${name} in ${
+                v._type or builtins.typeOf v
+              }.
+              It must be a literal ${expect}. The nixpkgs input is chosen before the
+              module system exists, so nothing here can resolve mkIf/mkMerge.'';
         in
-        if builtins.isBool v then
-          v
-        else
-          throw ''
-            flake.nix: hosts/${hostName}/default.nix wraps my.tuning.enable in ${
-              v._type or builtins.typeOf v
-            }.
-            It must be a literal `true` or `false`. The nixpkgs input is chosen before the
-            module system exists, so nothing here can resolve mkIf/mkMerge.'';
+        {
+          enable = if builtins.isBool enable then enable else wrapped "enable" enable "`true` or `false`";
+          march =
+            if march == null || builtins.isString march then
+              march
+            else
+              wrapped "march" march "string or null";
+        };
+
+      /*
+        THE FORK ONLY WHERE A LEVER NEEDS IT, and the one that does is march.
+
+        What the fork is for: the IntraISACross split (buildPlatform without
+        gcc.arch, hostPlatform with it) and the ~63 pr/* fixes that make that
+        split build. Its cc-wrapper/setup-hook.sh patch -- the one whose bytes
+        move stdenv's hash and rebuild everything -- only acts under
+        NIX_IS_INTRA_ISA_CROSS, i.e. only with march. The other levers reach
+        the fork only THROUGH march: o3, lto, intraISACross and upstreamTools
+        each assert march (tuning/nixos.nix) because their overlays skip any
+        package set without gcc.arch, and qtPatches is meteorlake-specific
+        qtbase patching that is now asserted to need march as well.
+
+        So `enable = true` with `march = null` used to buy a full rebuild on the
+        fork with no tuning in it at all -- the trap the enable option's
+        description warns about. It now gets upstream nixpkgs and substitutes;
+        heavy/ca/refreshTool, which do not depend on the fork, still apply.
+        Both hosts set march, so nothing about them moves.
+      */
+      forkWanted = r: r.enable && r.march != null;
 
       mkHost =
         hostName:
         let
-          tuningEnabledRaw = tuningEnabledOf hostName;
-          np = if tuningEnabledRaw then nixpkgs else inputs.nixpkgs-upstream;
+          tuningRaw = tuningRawOf hostName;
+          tuningEnabledRaw = tuningRaw.enable;
+          tuningMarchRaw = tuningRaw.march;
+          np = if forkWanted tuningRaw then nixpkgs else inputs.nixpkgs-upstream;
         in
         np.lib.nixosSystem {
           system = "x86_64-linux";
-          specialArgs = { inherit inputs hostName tuningEnabledRaw; };
+          specialArgs = { inherit inputs hostName tuningEnabledRaw tuningMarchRaw; };
           modules = [
             home-manager.nixosModules.home-manager
             nixosFeatures
