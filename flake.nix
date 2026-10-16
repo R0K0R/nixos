@@ -185,10 +185,15 @@
       */
       forkWanted = r: r.enable && r.march != null;
 
-      mkHost =
-        hostName:
+      /*
+        mkHostWith exists for lib.matrix (lib/matrix.nix): a synthetic variant
+        supplies its own tuningRaw and an extra module. A real host passes
+        neither, so its module list is exactly what it was.
+      */
+      mkHost = hostName: mkHostWith { inherit hostName; };
+      mkHostWith =
+        { hostName, tuningRaw ? tuningRawOf hostName, extraModules ? [ ] }:
         let
-          tuningRaw = tuningRawOf hostName;
           tuningEnabledRaw = tuningRaw.enable;
           tuningMarchRaw = tuningRaw.march;
           np = if forkWanted tuningRaw then nixpkgs else inputs.nixpkgs-upstream;
@@ -218,7 +223,7 @@
             # hits cache.nixos.org and doesn't need to be built from our patched stdenv.
             { system.build.nixos-rebuild = lib.mkForce
                 inputs.nixpkgs-upstream.legacyPackages.x86_64-linux.nixos-rebuild; }
-          ];
+          ] ++ extraModules;
         };
 
       /*
@@ -271,6 +276,11 @@
         };
 
       registry = import ./registry { inherit lib; };
+
+      matrix = import ./lib/matrix.nix {
+        inherit lib mkHostWith tuningRawOf;
+        hosts = [ "galaxybook4-pro360" "victus-15" ];
+      };
     in
     {
       nixosConfigurations.victus-15 = mkHost "victus-15";
@@ -299,6 +309,21 @@
         call per homeConfigurations entry.
       */
       lib.homeConfigurationFor = host: args: self.homeLib.${host}.mkHome args;
+
+      /*
+        The evaluation matrix: lib.matrix.<host>.<variant> is a full
+        nixosSystem with optional levers toggled (off, march, lto, o3, ccache,
+        ca, all, plus two expected failures). See lib/matrix.nix for what each
+        variant forces and why emacs is off in it; scripts/eval-matrix.sh runs
+        the lot with builds disabled.
+
+        Under lib, NOT checks: `nix flake check` builds checks, and a variant
+        on plain upstream nixpkgs is a whole different system to fetch or
+        build. These are for evaluating, never for building.
+      */
+      lib.matrix = matrix.matrix;
+      lib.matrixWithEmacs = matrix.matrixWithEmacs;
+      lib.matrixInfo = matrix.matrixInfo;
 
       /*
         `nix flake init -t <this flake>#home`: a user's home repo, consuming
