@@ -46,7 +46,7 @@ GCC's libstdc++ into the libc++ build is what produces the `abort` /
 **`-Wno-error=maybe-uninitialized` → "unknown warning option".** This fork
 injected the GCC-only `-Wno-error=maybe-uninitialized` into
 `NIX_CFLAGS_COMPILE`/`NIX_CXXFLAGS_COMPILE` for *every* build, via the stdenv
-`preHook` in `modules/nixos/nix/pkgs-config.nix`. clang has no
+`preHook` in `tuning/pkgs-config.nix`. clang has no
 `-Wmaybe-uninitialized`, so it emitted "unknown warning option" on every
 compile — which matches `FAIL_REGEX "unknown [^\n]*option"`.
 
@@ -89,7 +89,7 @@ a tidiness issue, not this bug.
 ## What actually fixed it
 
 The waiver is now **gated on the compiler at build time**, in
-`modules/nixos/nix/pkgs-config.nix`, so clang stdenvs never see it:
+`tuning/pkgs-config.nix`, so clang stdenvs never see it:
 
 ```nix
 + lib.optionalString ((prev.stdenv.hostPlatform.gcc or { }).arch or "" == "meteorlake") ''
