@@ -161,8 +161,11 @@ let
     recursion nixpkgs hits internally once this walks hundreds of packages.
     Anything overlay-provided is wired in the feature's nixos.nix instead.
   */
-  featureDir = ../../features;
-  featureNames = builtins.attrNames (builtins.readDir featureDir);
+  # Recursive, the same walk flake.nix collects modules with -- a feature
+  # nested in a category must contribute anchors too (lib/feature-dirs.nix).
+  featureDirs = import ../../lib/feature-dirs.nix ../../features;
+  featureNames = map (f: f.name) featureDirs;
+  featurePath = builtins.listToAttrs (map (f: { inherit (f) name; value = f.path; }) featureDirs);
   hostsDir = ../../hosts;
 
   /*
@@ -220,7 +223,7 @@ let
   featurePackageSets = builtins.filter (x: x != null) (
     map (
       name:
-      let f = featureDir + "/${name}/packages.nix";
+      let f = featurePath.${name} + "/packages.nix";
       in if builtins.pathExists f then import f { pkgs = freshPkgs; } else null
     ) enabledFeatures
   );

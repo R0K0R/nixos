@@ -88,13 +88,17 @@
         were dead and broken (one did not even parse) precisely because the old
         hand-written list never referenced them. Nothing may live under
         features/ that is not a real module.
+
+        The walk is recursive (lib/feature-dirs.nix): a directory without
+        nixos.nix/home.nix is a category, so features can be grouped as
+        features/<category>/<feature>/. Same walk as tuning's Tier 3 anchors.
       */
-      featureNames = builtins.attrNames (builtins.readDir ./features);
+      featureDirs = import ./lib/feature-dirs.nix ./features;
       collect =
         layer:
         {
           imports = builtins.filter builtins.pathExists (
-            map (n: ./features + "/${n}/${layer}") featureNames
+            map (f: f.path + "/${layer}") featureDirs
           );
         };
       nixosFeatures = collect "nixos.nix";
@@ -261,6 +265,15 @@
         call per homeConfigurations entry.
       */
       lib.homeConfigurationFor = host: args: self.homeLib.${host}.mkHome args;
+
+      /*
+        `nix flake init -t <this flake>#home`: a user's home repo, consuming
+        homeLib. Outputs only -- nothing here evaluates on any host.
+      */
+      templates.home = {
+        path = ./templates/home;
+        description = "Standalone home-manager repo on top of this system flake's homeLib";
+      };
       homeModules.default = homeFeatures;
 
       /*
