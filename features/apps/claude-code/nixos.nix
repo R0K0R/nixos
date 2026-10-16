@@ -31,6 +31,18 @@ in
       '';
     };
 
+    package = lib.mkOption {
+      type = lib.types.package;
+      readOnly = true;
+      default = claude-code;
+      defaultText = lib.literalMD "the vendored package, wrapped with `extraBinPackages`";
+      description = ''
+        The claude-code this feature installs, for other features that start
+        it themselves (features/session/fallback-session). Read-only: the
+        knobs are the pin (flake.lock) and extraBinPackages.
+      '';
+    };
+
     shareWithRoot = lib.mkOption {
       type = lib.types.bool;
       default = false;
