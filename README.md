@@ -314,7 +314,7 @@ because each changes the system.
 | tuning lever `lto` | `my.tuning.lto.enable` | `march` | exists; on for both hosts |
 | heavy (mold + ccache over the tuned set) | `my.tuning.heavy` | -- | exists |
 | ccache | `my.ccache` (features/nix/ccache) | client half; `builder` half on NixOS builders | exists; to be split out of tuning's reach as its own optional feature |
-| content-addressed derivations | `my.tuning.ca` (tuning/ca.nix) | ca-derivations live on the evaluating daemon and every builder | exists inside tuning; **planned** as its own feature |
+| content-addressed derivations | `my.ca-derivations` (features/nix/ca-derivations; the "tuned" package policy is applied by tuning/ca.nix and needs march) | ca-derivations live on the evaluating daemon and every builder | exists |
 | btrfs-layout | -- | -- | **planned** |
 | impermanence | -- | btrfs-layout | **planned** |
 | guest-overlay (per-guest overlay stores) | -- | btrfs-layout | **planned**, after testing the experimental Nix pieces |
@@ -435,6 +435,14 @@ Per-feature `update.sh` scripts bump pinned upstreams
 assertions, `_meta`'s included. It triggers Unstraightened's IFD on any change
 that moves the package set, so run it with a reachable builder or
 `--builders ''`.
+
+`scripts/eval-matrix.sh` keeps the optional pieces optional. It evaluates, and
+never builds, synthetic variants of each real host defined in `lib/matrix.nix`:
+everything off (plain upstream nixpkgs), each lever and feature alone, and all
+on. It reports any variant whose result differs from the expected one. The real
+`nixosConfigurations` are untouched by it. The "all" variant, with emacs on,
+evaluates to exactly the real host's toplevel, which is how the matrix is known
+to be faithful. Run it after any change to tuning, ccache, CA or `_meta`.
 
 ### Users (home)
 
