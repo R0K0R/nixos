@@ -19,13 +19,46 @@
   collision -- the uid comes back on the next host that adds the name -- so the
   global checks below run whenever ANY host reads the registry.
 
-  AXES WITHOUT MACHINERY. tmpfs/impermanent homes, overlay stores, nix=none,
-  kiosk sessions and the handover type are validated here (so the data format
-  is settled and contradictions are caught now) but `materialize` refuses them
-  with "not implemented yet". No host uses them today; the refusal is what stops
-  one from silently getting a persistent home while the registry says tmpfs.
-  `builders` and `grants` are validated and exposed as facts but have no effect
-  on the system yet either; see the TODOs in registry/types.nix.
+  AXES AND THEIR MACHINERY. home = "tmpfs", nix = "none" / "untrusted", kiosk
+  sessions and with them the handover and untrusted types are implemented
+  (features/core/users: tmpfs-home.nix, kiosk.nix, nix-access.nix).
+  home = "impermanent" and nix = "overlay" are validated here (so the data
+  format is settled and contradictions are caught now) but `materialize`
+  refuses them with "not implemented yet": they need the impermanence and
+  guest-overlay features, which do not exist. The refusal is what stops a host
+  from silently getting a persistent home while the registry says otherwise.
+  `grants` beyond sudo <-> wheel are data only; see registry/types.nix.
+
+  WHAT NIX CAN AND CANNOT ENFORCE PER USER. The daemon knows exactly two
+  per-user lists: allowed-users (may connect at all) and trusted-users (may
+  pass privileged settings: --builders, substituters, max-jobs, ...).
+  Everything else -- max-jobs, the builders in /etc/nix/machines -- is a
+  DAEMON setting applied to every build it accepts, whoever asked. So:
+
+    nix = "none"       enforceable: not in allowed-users.
+    nix = "untrusted"  enforceable: not in trusted-users. The user still gets
+                       builds, with the HOST's max-jobs and, on a builder
+                       client, the host's remote builders -- the daemon
+                       dispatches for him, he just cannot pick them.
+    builders = false   enforceable only as "cannot name builders of his own"
+                       (that needs trust). It does NOT keep his builds off the
+                       daemon's builders; `nixFacts` says where they go.
+    localBuilds narrowing (hosts.nix narrow.<user>.localBuilds = false)
+                       there is no per-user max-jobs, so it is accepted only
+                       where it is already true: the host builds nothing
+                       locally for anyone (features.<host>.localBuilds = false,
+                       i.e. max-jobs = 0, galaxybook's no-local-builds rule)
+                       or the user has no daemon access. Anywhere else it is
+                       refused rather than recorded as a promise nothing keeps.
+
+  `nixFacts` is that honest version, per host and user, for homeLib facts.
+
+  TYPE TRANSITIONS. A type is not only a preset, it is a promise about what
+  is on disk: a persistent home, a nix profile. `transition` decides whether
+  moving a user from a recorded (deployed) type to the current one is safe;
+  features/core/users/type-record.nix records the deployed type per user and
+  refuses the unsafe moves at switch time unless the user file carries the
+  matching `acceptTypeChange = "<old type>-><new type>"`.
 */
 { lib }:
 
@@ -181,6 +214,29 @@ let
     else
       e // n;
 
+  /*
+    narrow.<user>.localBuilds = false: "nothing builds on this machine's CPU
+    for this user". Nix has no per-user max-jobs, so the only honest way to
+    accept it is where it already holds -- see the header. Not an axis (types
+    have no say in it, it is a property of the host's daemon) and therefore
+    stripped before `narrow`, which only knows axes.
+  */
+  checkLocalBuilds =
+    where: hostFeatures: e: n:
+    if !(n ? localBuilds) then
+      e
+    else if n.localBuilds != false then
+      throw "registry: ${where}: narrow.localBuilds can only be false (hosts narrow, never widen)"
+    else if elem e.nix [ "untrusted" "admin" ] && (hostFeatures.localBuilds or true) then
+      throw ''
+        registry: ${where}: narrow.localBuilds = false cannot be enforced here. Nix has no
+        per-user max-jobs: the daemon builds for every user it accepts, with the host's own
+        max-jobs. Either make it a host policy (max-jobs = 0 and features.<host>.localBuilds
+        = false in registry/hosts.nix, as on galaxybook4-pro360), or narrow nix to "none"
+        for this user.''
+    else
+      e;
+
   checkUids =
     users:
     let
@@ -219,6 +275,23 @@ in
 
       globalOk =
         checkUids users
+        && lib.all (
+          n:
+          let
+            u = users.${n};
+            where = "registry/users/${n}.nix";
+          in
+          (
+            !(u ? tmpfsSize)
+            || (isString u.tmpfsSize && builtins.match "[1-9][0-9]*[kKmMgG%]?" u.tmpfsSize != null)
+            || throw "registry: ${where}: tmpfsSize must be a tmpfs size= value like \"2G\" or \"25%\", got ${builtins.toJSON u.tmpfsSize}"
+          )
+          && (
+            !(u ? acceptTypeChange)
+            || (isString u.acceptTypeChange && builtins.match "[a-z0-9-]+->[a-z0-9-]+" u.acceptTypeChange != null)
+            || throw "registry: ${where}: acceptTypeChange must be \"<old type>-><new type>\", got ${builtins.toJSON u.acceptTypeChange}"
+          )
+        ) (attrNames users)
         # Every type is checked even when no user has it, so a broken preset is
         # caught the day it is written, not the day someone is given it.
         && lib.all (
@@ -228,8 +301,11 @@ in
             e = effectiveAxes types "<preset ${tn}>" { type = tn; };
           in
           builtins.seq (mapAttrs (_: _: null) e) (
-            subtractLists axes t.overridable == [ ]
-            || throw "registry/types.nix: ${tn}.overridable names unknown axes: ${fmtList (subtractLists axes t.overridable)}"
+            (
+              subtractLists axes t.overridable == [ ]
+              || throw "registry/types.nix: ${tn}.overridable names unknown axes: ${fmtList (subtractLists axes t.overridable)}"
+            )
+            && (builtins.isInt (t.rank or null) || throw "registry/types.nix: ${tn}.rank must be an integer (demotion order, see the header there)")
           )
         ) (attrNames types)
         && lib.all (
@@ -258,12 +334,125 @@ in
           n:
           let
             where = "user ${n} on host ${hn}";
+            f = hosts.features.${hn} or { };
+            nw = h.narrow.${n} or { };
             e0 = effectiveAxes types n users.${n};
-            e1 = narrow where e0 (h.narrow.${n} or { });
+            e1 = narrow where e0 (removeAttrs nw [ "localBuilds" ]);
           in
-          guard (contradictions where (hosts.features.${hn} or { }) e1)
+          guard (checkLocalBuilds where f (contradictions where f e1) nw)
         )
       ) hosts.hosts;
+
+      /*
+        host -> user -> what the nix daemon actually does for this user (see
+        the header: what Nix can and cannot enforce per user). Unmanaged or
+        unlisted host facts default to the daemon's own defaults: local builds
+        on, no remote builders.
+      */
+      nixFacts = mapAttrs (
+        hn: h:
+        let
+          f = hosts.features.${hn} or { };
+        in
+        lib.genAttrs h.users (
+          n:
+          let
+            e = effective.${hn}.${n};
+            daemon = elem e.nix [ "untrusted" "admin" ];
+          in
+          {
+            access = e.nix;
+            inherit daemon;
+            trusted = e.nix == "admin";
+            builds = {
+              local = daemon && (f.localBuilds or true);
+              # The daemon's builders, dispatched for anyone it accepts.
+              remote = daemon && (f.builderClient or false);
+            };
+            # May name builders/substituters of its own (trusted-user rights).
+            ownBuilders = e.builders;
+          }
+        )
+      ) hosts.hosts;
+
+      /*
+        Deployed type -> current type. A record is { type, home, nix }; the
+        three things whose change can strand data or break a login:
+
+          home persistent -> anything else
+            the on-disk home is hidden under a tmpfs (or wiped at boot). Not
+            deleted, but unreachable for that user from then on.
+          nix to a lower rank
+            profiles, home-manager generations, gcroots the user relies on
+            stop being usable (none: the daemon refuses him outright).
+          type to a lower rank (registry/types.nix `rank`)
+            a demotion, even where the axes happen to stay put -- member ->
+            untrusted with nix overridden back to "untrusted" still drops the
+            home-manager session and the grants.
+
+        An unknown recorded type or axis value (a type since renamed, a
+        hand-edited file) counts as dangerous: there is nothing to compare.
+      */
+      transition =
+        let
+          rankIn = list: v: lib.lists.findFirstIndex (x: x == v) null list;
+          typeRank = t: types.${t}.rank or null;
+          lower = a: b: a == null || b == null || a < b;
+          reasonsFor =
+            old: new:
+            lib.optional (
+              old.home != new.home && (new.home == "tmpfs" || old.home == "persistent")
+            ) "home ${old.home} -> ${new.home} hides the existing home"
+            ++ lib.optional (lower (rankIn axisValues.nix new.nix) (rankIn axisValues.nix old.nix)) "nix ${old.nix} -> ${new.nix} loses store access"
+            ++ lib.optional (lower (typeRank new.type) (typeRank old.type)) "type ${old.type} -> ${new.type} is a demotion";
+          label = old: new: "${old.type}->${new.type}";
+          domain = lib.concatMap (
+            t: lib.concatMap (hm: map (x: { type = t; home = hm; nix = x; }) axisValues.nix) axisValues.home
+          ) (attrNames types);
+          fmt = r: "${r.type} ${r.home} ${r.nix}";
+        in
+        rec {
+          recordOf = type: e: { inherit type; inherit (e) home nix; };
+          inherit fmt label;
+          /*
+            "same" | "safe" | "accepted" | { refused = [ reasons ]; }
+            `accept` is the user file's acceptTypeChange (or null).
+          */
+          verdict =
+            old: new: accept:
+            let
+              rs = reasonsFor old new;
+            in
+            if old == new then
+              "same"
+            else if rs == [ ] then
+              "safe"
+            else if accept == label old new then
+              "accepted"
+            else
+              { refused = rs; };
+          /*
+            The same rule as a throw, for evaluation-time use (tests, a
+            `nix eval` before a switch).
+          */
+          check =
+            who: old: new: accept:
+            let
+              v = verdict old new accept;
+            in
+            if builtins.isString v then
+              v
+            else
+              throw ''
+                registry: user ${who}: deployed as ${fmt old}, now ${fmt new}: ${concatStringsSep "; " v.refused}.
+                Add acceptTypeChange = "${label old new}"; to registry/users/${who}.nix to do it anyway.'';
+          /*
+            Every recorded state the CURRENT record may follow without a
+            refusal -- what type-record.nix bakes into its shell check, so
+            the rule above is the only copy of the rule.
+          */
+          admissible = new: accept: map fmt (lib.filter (old: builtins.isString (verdict old new accept)) domain);
+        };
 
       notYet =
         where: what:
@@ -295,14 +484,12 @@ in
               where = "user ${n} on host ${hn}";
               groups = h.groups.${n} or u.groups or null;
             in
-            if u.type == "handover" then
-              notYet where "the handover type"
-            else if e.home != "persistent" then
-              notYet where "home = \"${e.home}\""
-            else if e.nix == "overlay" || e.nix == "none" then
-              notYet where "nix = \"${e.nix}\""
-            else if sessionKind e.session == "kiosk" then
-              notYet where "a kiosk session"
+            if e.home == "impermanent" then
+              notYet where "home = \"impermanent\" (needs the impermanence feature)"
+            else if e.nix == "overlay" then
+              notYet where "nix = \"overlay\" (needs the guest-overlay feature)"
+            else if sessionKind e.session == "kiosk" && !(pkgs ? ${e.session.kiosk}) then
+              throw "registry: ${where}: session.kiosk = \"${e.session.kiosk}\" is not a package attribute of this host's pkgs"
             else if groups != null && (elem "wheel" groups != elem "sudo" e.grants) then
               throw ''
                 registry: ${where}: groups ${if elem "wheel" groups then "include" else "omit"} wheel but grants
@@ -311,7 +498,31 @@ in
               {
                 primary = n == h.primary;
                 home = e.session == "home-manager";
+                # Consumed only by assertions, mkIf-gated settings and the
+                # opt-in type record, so passing them for every user moves
+                # nothing on a host whose users are all persistent admins
+                # and members.
+                inherit (e) nix;
+                typeRecord =
+                  let
+                    r = transition.recordOf u.type e;
+                    accept = u.acceptTypeChange or null;
+                  in
+                  {
+                    current = transition.fmt r;
+                    admissible = transition.admissible r accept;
+                    inherit accept;
+                  };
               }
+              # A tmpfs home is mounted by uid (user@<uid>.service, the mount's
+              # uid= option), so its uid is pinned -- unlike the persistent
+              # users' (see above), pinning a NEW account's uid changes nothing
+              # that already exists.
+              // lib.optionalAttrs (e.home == "tmpfs") {
+                inherit (u) uid;
+                tmpfsHome.size = u.tmpfsSize or "2G";
+              }
+              // lib.optionalAttrs (sessionKind e.session == "kiosk") { kiosk = pkgs.${e.session.kiosk}; }
               // lib.optionalAttrs (u ? description) { inherit (u) description; }
               // lib.optionalAttrs (u ? passwordSecret) { inherit (u) passwordSecret; }
               // lib.optionalAttrs (u ? stateVersion) { inherit (u) stateVersion; }
@@ -327,6 +538,8 @@ in
         types
         hosts
         effective
+        nixFacts
+        transition
         materialize
         ;
       check = globalOk;

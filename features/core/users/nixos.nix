@@ -45,6 +45,19 @@ let
   primaries = lib.attrNames (lib.filterAttrs (_: u: u.primary) cfg);
 in
 {
+  /*
+    The machinery behind the registry's non-default axes, one file each. All
+    of it is keyed off the per-account options below and gated on some
+    account actually using it, so a host whose accounts are all persistent,
+    nix-using, home-manager people gets exactly the system it had.
+  */
+  imports = [
+    ./tmpfs-home.nix
+    ./kiosk.nix
+    ./nix-access.nix
+    ./type-record.nix
+  ];
+
   options.my.users = lib.mkOption {
     default = { };
     description = ''
@@ -153,6 +166,56 @@ in
               description = "Login shell. Null keeps the NixOS default.";
             };
 
+            nix = lib.mkOption {
+              type = lib.types.nullOr (lib.types.enum [ "none" "untrusted" "admin" ]);
+              default = null;
+              description = ''
+                The registry's nix axis (nix-access.nix). "none": left out of
+                nix.settings.allowed-users. "untrusted": asserted absent from
+                trusted-users. "admin": nothing yet -- trusted-users is still
+                set per host. null (an account not from the registry): no
+                checks.
+              '';
+            };
+
+            tmpfsHome = lib.mkOption {
+              type = lib.types.nullOr (
+                lib.types.submodule {
+                  options.size = lib.mkOption {
+                    type = lib.types.str;
+                    default = "2G";
+                    description = "tmpfs size= (bytes with k/m/g suffix, or a % of RAM).";
+                  };
+                }
+              );
+              default = null;
+              description = ''
+                Make the home a fresh tmpfs per login (tmpfs-home.nix): mounted
+                when the user's manager starts, gone when it stops. Requires a
+                pinned uid.
+              '';
+            };
+
+            kiosk = lib.mkOption {
+              type = lib.types.nullOr lib.types.package;
+              default = null;
+              description = ''
+                Offer a greetd session that runs this package alone under cage
+                (kiosk.nix). Its meta.mainProgram is what runs.
+              '';
+            };
+
+            typeRecord = lib.mkOption {
+              type = lib.types.nullOr lib.types.raw;
+              default = null;
+              internal = true;
+              description = ''
+                From the registry: { current; admissible; accept; } for
+                type-record.nix -- this account's "type home nix" line, the
+                recorded lines it may follow, and its acceptTypeChange.
+              '';
+            };
+
             stateVersion = lib.mkOption {
               type = lib.types.str;
               default = "26.05";
@@ -239,6 +302,9 @@ in
             hashedPasswordFile = "/run/agenix/hashed-password-${username}";
           }
           // lib.optionalAttrs (u.shell != null) { inherit (u) shell; }
+          # tmpfs-home.nix owns the directory: it is a mountpoint, and the
+          # users script must not create (and chown) a persistent one under it.
+          // lib.optionalAttrs (u.tmpfsHome != null) { createHome = false; }
         ) cfg)
 
         (lib.mapAttrs (_: ps: { packages = ps; }) config.my.packages.perUser)

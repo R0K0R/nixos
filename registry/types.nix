@@ -15,24 +15,39 @@
     session   home-manager | system-default | { kiosk = "<package attr>"; }
               What a login gets: the user's own home-manager generation, the
               system's defaults with no per-user generation, or one program.
-    builders  bool -- may dispatch to the remote builders (needs nix = admin).
+    builders  bool -- may name builders and substituters of his own (needs
+              nix = admin: --builders is a trusted-user setting). It cannot
+              keep a user's builds off the host daemon's OWN builders; the
+              daemon dispatches for everyone it accepts. lib/registry.nix's
+              header and `nixFacts` say what actually happens.
     grants    subset of [ sudo network media serial input ] -- capabilities a
               host turns into its own groups. Only "sudo" <-> wheel is checked
               against the host's group list today.
+
+  `rank` orders the types for transitions: moving a deployed user to a type
+  of lower rank is a demotion, refused at switch time (when
+  my.registry.recordTypes is on) unless his file says
+  acceptTypeChange = "<old>-><new>". See lib/registry.nix `transition`.
+
+  Per-user keys that go with some types (registry/users/<name>.nix):
+    tmpfsSize         size= of a tmpfs home, default "2G".
+    acceptTypeChange  "<old type>-><new type>": consent to one dangerous
+                      transition. Inert once the new type is recorded.
 
   `overridable` is per type and deliberately short. An override outside it is
   an error, not a silent no-op: a "member" whose file says nix = admin is an
   admin with a misleading label, and the label is what people read.
 
-  TODO (nix trust): `nix` is validated but NOT yet wired to the daemon.
-  trusted-users is still written per host (my.nix-settings.trustedUsers =
-  [ "r0k0r" ] on both hosts), which happens to match today's registry exactly
+  NIX TRUST, HALF WIRED. nix = "none" drives allowed-users, and every user
+  whose nix is not "admin" is asserted to be absent from trusted-users. The
+  other direction is NOT wired: trusted-users is still written per host
+  (my.nix-settings.trustedUsers = [ "r0k0r" ] on both hosts), which happens
+  to match today's registry exactly
   (r0k0r admin, benjamin member = untrusted). Deriving trusted-users from here
   is a system change and a workflow change (the user plans to make himself
   untrusted too, with a standalone home repo), so it is left for that step.
 
-  TODO (builders, grants): data only. Today every user can use
-  /etc/nix/machines through the daemon, and groups still come from
+  TODO (grants): data only beyond sudo <-> wheel; groups still come from
   registry/hosts.nix `groups` / the user file's `groups`.
 */
 {
@@ -42,6 +57,7 @@
     session = "home-manager";
     builders = true;
     grants = [ "sudo" "network" "media" ];
+    rank = 3;
     overridable = [ "home" "session" "grants" ];
   };
 
@@ -51,6 +67,7 @@
     session = "home-manager";
     builders = false;
     grants = [ "network" "media" ];
+    rank = 2;
     overridable = [ "home" "session" "grants" ];
   };
 
@@ -63,6 +80,7 @@
     session = "system-default";
     builders = false;
     grants = [ ];
+    rank = 1;
     overridable = [ "home" "nix" "session" ];
   };
 
@@ -74,6 +92,7 @@
     session = { kiosk = "firefox"; };
     builders = false;
     grants = [ ];
+    rank = 0;
     overridable = [ "session" ];
   };
 }

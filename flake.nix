@@ -239,7 +239,9 @@
           modules    the collected feature home halves + Unstraightened's
                      module, i.e. the generator's sharedModules.
           facts      plain data: host, system, tuning levers, the registry's
-                     effective axes per user.
+                     effective axes per user, and `nix`: what the daemon
+                     actually does for each user (daemon access, trust,
+                     local/remote builds).
           mkHome     { username, modules ? [ ], asSubmodule ? true } -> a
                      home-manager configuration (has .activationPackage),
                      built by the SAME generator as the integrated
@@ -265,6 +267,8 @@
             inherit inputs hostName;
           };
           t = nixos.config.my.tuning;
+          reg = nixos.config.my.registry.loaded;
+          hf = reg.hosts.features.${hostName} or { };
         in
         {
           inherit (nixos) pkgs;
@@ -280,7 +284,21 @@
               intraISACross = t.intraISACross.enable;
             };
             impermanence = false;
-            users = registry.effective.${hostName} or { };
+            # From the registry this host was evaluated with (the same data
+            # its accounts came from; a test's extended registry included).
+            users = reg.effective.${hostName} or { };
+            /*
+              What the daemon does for each user here -- the honest version
+              of the nix and builders axes (lib/registry.nix's header):
+              users.<n>.builds.local is false wherever max-jobs = 0, for
+              everyone; builds.remote is the daemon's own builders, which
+              apply to untrusted users too.
+            */
+            nix = {
+              localBuilds = hf.localBuilds or true;
+              remoteBuilds = hf.builderClient or false;
+              users = reg.nixFacts.${hostName} or { };
+            };
           };
           mkHome = args: gen.mkHome ({ inherit nixos; } // args);
           epoch = nixos.config.system.build.epoch;
@@ -362,6 +380,9 @@
         inherit lib;
         mkHostWith = mkHostWith;
         mkHomeLib = mkHomeLib;
+      };
+      evalTests.user-types = import ./tests/user-types.nix {
+        inherit lib mkHostWith mkHomeLib;
       };
 
       /*
