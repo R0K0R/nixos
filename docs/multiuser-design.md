@@ -219,18 +219,33 @@ All of these leave both hosts' toplevels byte-identical.
    (`tuning/overlays/native-target.nix`, `tuning/native-build-tools.nix`, the
    native branch of `upstream-tools.nix`); the matrix evaluates `lto`, `o3`
    and `lto-o3` without march.
+5. **handover and untrusted types** (step 9 of the original plan): tmpfs
+   homes bound to `user@<uid>.service` with logind killing those users'
+   processes at logout, kiosk sessions (cage + a system package), `nix =
+   none` via allowed-users (written only on a host that has such a user),
+   `nix = untrusted` asserted out of trusted-users, honest nix facts in
+   homeLib (`facts.nix`), `narrow.<user>.localBuilds` accepted only where a
+   host policy already makes it true. The deployed-type record and
+   `acceptTypeChange` exist behind `my.registry.recordTypes.enable`, off.
+   Evaluated by `tests/user-types-eval.sh`. Still open: pinning a kiosk user
+   to the kiosk session (greeter), a passwordless/autologin handover login,
+   logind's 10 s UserStopDelaySec window, impermanent homes and overlay
+   stores.
 
 ### Next
 
-5. **Wire the nix axis**: `trusted-users` from the registry; pass `uid` to
-   `users.users`; grants to groups.
+5. **Wire the nix axis** (rest of it): `trusted-users` from the registry
+   (`none`/`allowed-users` and the not-trusted assertion are done); pass `uid`
+   to `users.users` for existing accounts; grants to groups; turn on
+   `my.registry.recordTypes` per host (one cheap rebuild each).
 6. **Cutover to standalone home-manager**: the system stops integrating
    home-manager for `session = home-manager` users; home repos switch to
    `asSubmodule = false`; `hm-switch` wrapper.
 7. **Epoch + history + fallback session**, with Claude Code in the fallback.
 8. **Optional features split out**: ccache, CA, btrfs-layout, luks,
    impermanence, each with `_meta` requires.
-9. **handover and untrusted types**: tmpfs homes, kiosk sessions, `nix = none`.
+9. ~~**handover and untrusted types**~~: done (see "Done" above); left: kiosk
+   session pinning, handover login credentials.
 10. **guest-overlay**, only after testing the experimental pieces:
     `local-overlay-store` on frozen btrfs snapshots, `read-only-local-store`,
     and the build hook between overlays.
