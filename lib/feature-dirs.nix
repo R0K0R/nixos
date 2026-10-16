@@ -24,11 +24,18 @@
   their own top-level readDir, and a nested feature seen by one walk and not
   the other would have its packages silently classified not-host-runtime.
 
-  ORDER: depth-first, alphabetical at every level -- for today's flat tree
-  exactly `attrNames (readDir ./features)`. List-typed options concatenate in
-  this order (see features/dms/compositor.nix on why dms/hyprland need explicit
-  mkBefore/mkAfter), so moving a feature into a category can reorder such
-  lists; check with a drv comparison when moving.
+  ORDER: sorted by leaf name, NOT by path. List-typed options concatenate in
+  module import order (see features/dms/compositor.nix on why dms/hyprland
+  need explicit mkBefore/mkAfter), and environment.systemPackages,
+  home.packages and friends end up as buildEnv `paths`, whose order is part
+  of the system-path / home-manager-path derivation. A depth-first walk would
+  make that order depend on which category a feature sits in, so filing a
+  feature under a different category -- a purely organisational act --
+  would reorder those lists and change the system. Sorting by the leaf name
+  (unique, see below) makes the order exactly what the old flat
+  `attrNames (readDir ./features)` gave, and independent of the category
+  layout. Categories are therefore free to rearrange; renaming a feature is
+  not (it was never free: it renames my.<name> too).
 */
 root:
 
@@ -55,7 +62,9 @@ let
     else
       builtins.concatMap (n: walk (if rel == "" then n else "${rel}/${n}") (dir + "/${n}")) subdirs;
 
-  found = walk "" root;
+  # sort uses the same byte-wise string order as attrNames, so for a flat
+  # tree this is the identity on the walk's own order.
+  found = builtins.sort (a: b: a.name < b.name) (walk "" root);
 
   byName = builtins.groupBy (f: f.name) found;
   dups = builtins.filter (n: builtins.length byName.${n} > 1) (builtins.attrNames byName);

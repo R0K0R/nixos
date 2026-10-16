@@ -292,11 +292,11 @@
         ]
       },
       "locked": {
-        "path": "./features/agenix",
+        "path": "./features/core/agenix",
         "type": "path"
       },
       "original": {
-        "path": "./features/agenix",
+        "path": "./features/core/agenix",
         "type": "path"
       },
       "parent": []
@@ -306,11 +306,11 @@
         "claude-code-bin": "claude-code-bin"
       },
       "locked": {
-        "path": "./features/claude-code",
+        "path": "./features/apps/claude-code",
         "type": "path"
       },
       "original": {
-        "path": "./features/claude-code",
+        "path": "./features/apps/claude-code",
         "type": "path"
       },
       "parent": []
@@ -320,11 +320,11 @@
         "claude-desktop-bin": "claude-desktop-bin"
       },
       "locked": {
-        "path": "./features/claude-desktop",
+        "path": "./features/apps/claude-desktop",
         "type": "path"
       },
       "original": {
-        "path": "./features/claude-desktop",
+        "path": "./features/apps/claude-desktop",
         "type": "path"
       },
       "parent": []
@@ -334,11 +334,11 @@
         "claude-science-bin": "claude-science-bin"
       },
       "locked": {
-        "path": "./features/claude-science",
+        "path": "./features/apps/claude-science",
         "type": "path"
       },
       "original": {
-        "path": "./features/claude-science",
+        "path": "./features/apps/claude-science",
         "type": "path"
       },
       "parent": []
@@ -356,11 +356,11 @@
         "vehicle-motion-cues": "vehicle-motion-cues"
       },
       "locked": {
-        "path": "./features/dms",
+        "path": "./features/session/dms",
         "type": "path"
       },
       "original": {
-        "path": "./features/dms",
+        "path": "./features/session/dms",
         "type": "path"
       },
       "parent": []
@@ -370,11 +370,11 @@
         "easyeffects-presets": "easyeffects-presets"
       },
       "locked": {
-        "path": "./features/easyeffects",
+        "path": "./features/apps/easyeffects",
         "type": "path"
       },
       "original": {
-        "path": "./features/easyeffects",
+        "path": "./features/apps/easyeffects",
         "type": "path"
       },
       "parent": []
@@ -388,11 +388,11 @@
         ]
       },
       "locked": {
-        "path": "./features/emacs",
+        "path": "./features/apps/emacs",
         "type": "path"
       },
       "original": {
-        "path": "./features/emacs",
+        "path": "./features/apps/emacs",
         "type": "path"
       },
       "parent": []
@@ -405,11 +405,11 @@
         ]
       },
       "locked": {
-        "path": "./features/hakuspace",
+        "path": "./features/session/hakuspace",
         "type": "path"
       },
       "original": {
-        "path": "./features/hakuspace",
+        "path": "./features/session/hakuspace",
         "type": "path"
       },
       "parent": []
@@ -420,11 +420,11 @@
         "rhwp-src": "rhwp-src"
       },
       "locked": {
-        "path": "./features/hop",
+        "path": "./features/apps/hop",
         "type": "path"
       },
       "original": {
-        "path": "./features/hop",
+        "path": "./features/apps/hop",
         "type": "path"
       },
       "parent": []
@@ -435,11 +435,11 @@
         "hyprland-nixos": "hyprland-nixos"
       },
       "locked": {
-        "path": "./features/hyprland",
+        "path": "./features/session/hyprland",
         "type": "path"
       },
       "original": {
-        "path": "./features/hyprland",
+        "path": "./features/session/hyprland",
         "type": "path"
       },
       "parent": []
@@ -452,11 +452,11 @@
         ]
       },
       "locked": {
-        "path": "./features/niri",
+        "path": "./features/session/niri",
         "type": "path"
       },
       "original": {
-        "path": "./features/niri",
+        "path": "./features/session/niri",
         "type": "path"
       },
       "parent": []
@@ -466,11 +466,11 @@
         "samsung-galaxy-book-linux-fixes": "samsung-galaxy-book-linux-fixes"
       },
       "locked": {
-        "path": "./features/samsung-galaxybook",
+        "path": "./features/hardware/samsung-galaxybook",
         "type": "path"
       },
       "original": {
-        "path": "./features/samsung-galaxybook",
+        "path": "./features/hardware/samsung-galaxybook",
         "type": "path"
       },
       "parent": []

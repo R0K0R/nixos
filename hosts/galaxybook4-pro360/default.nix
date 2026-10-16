@@ -295,10 +295,10 @@ in
       # rhwp's CLI, so Claude can read HWP/HWPX documents: export-text,
       # export-markdown, export-svg, info and the rest.
       extraBinPackages = [
-        (pkgs.callPackage ../../features/hop/rhwp.nix { rhwpSrc = inputs.feat-hop.rhwp; })
+        (pkgs.callPackage ../../features/apps/hop/rhwp.nix { rhwpSrc = inputs.feat-hop.rhwp; })
         # Inline images in replies via kitty Unicode placeholders; see
         # ~/.claude/CLAUDE.md for how Claude is told to use it.
-        (pkgs.callPackage ../../features/claude-code/kitty-inline-img.nix { })
+        (pkgs.callPackage ../../features/apps/claude-code/kitty-inline-img.nix { })
       ];
       shareWithRoot = true;
       gemma.enable = true;
@@ -623,8 +623,8 @@ in
         # every sign) and dropped PAM to the password although the finger matched.
         # The patch turns that into "scan again". See its header.
         patches = [
-          ../../features/samsung-galaxybook/libfprint-egismoc-open-busy.patch
-          ../../features/samsung-galaxybook/libfprint-egismoc-sdcp-identify-retry.patch
+          ../../features/hardware/samsung-galaxybook/libfprint-egismoc-open-busy.patch
+          ../../features/hardware/samsung-galaxybook/libfprint-egismoc-sdcp-identify-retry.patch
         ];
       });
     })

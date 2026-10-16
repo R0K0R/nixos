@@ -98,7 +98,7 @@ else
         ccachePkg =
           if ccache.normalize then
             prev.buildPackages.ccache.overrideAttrs (o: {
-              patches = (o.patches or [ ]) ++ [ ../../features/ccache/nix-store-normalize.patch ];
+              patches = (o.patches or [ ]) ++ [ ../../features/nix/ccache/nix-store-normalize.patch ];
             })
           else
             prev.buildPackages.ccache;

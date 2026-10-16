@@ -19,38 +19,38 @@
       `rm -r features/<name>` takes that feature's whole dependency surface with
       it and the root flake stops carrying pins for things it does not use.
     */
-    feat-claude-code.url = "path:./features/claude-code";
-    feat-hop.url = "path:./features/hop";
-    feat-claude-desktop.url = "path:./features/claude-desktop";
-    feat-claude-science.url = "path:./features/claude-science";
-    feat-samsung-galaxybook.url = "path:./features/samsung-galaxybook";
-    feat-easyeffects.url = "path:./features/easyeffects";
-    feat-hyprland.url = "path:./features/hyprland";
+    feat-claude-code.url = "path:./features/apps/claude-code";
+    feat-hop.url = "path:./features/apps/hop";
+    feat-claude-desktop.url = "path:./features/apps/claude-desktop";
+    feat-claude-science.url = "path:./features/apps/claude-science";
+    feat-samsung-galaxybook.url = "path:./features/hardware/samsung-galaxybook";
+    feat-easyeffects.url = "path:./features/apps/easyeffects";
+    feat-hyprland.url = "path:./features/session/hyprland";
 
     # Module/overlay-providing sub-flakes need the second half of the two-level
     # follows -- see each sub-flake's own header for why both are required.
     feat-niri = {
-      url = "path:./features/niri";
+      url = "path:./features/session/niri";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     feat-dms = {
-      url = "path:./features/dms";
+      url = "path:./features/session/dms";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     feat-hakuspace = {
-      url = "path:./features/hakuspace";
+      url = "path:./features/session/hakuspace";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     feat-agenix = {
-      url = "path:./features/agenix";
+      url = "path:./features/core/agenix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     feat-emacs = {
-      url = "path:./features/emacs";
+      url = "path:./features/apps/emacs";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
