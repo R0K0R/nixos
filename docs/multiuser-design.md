@@ -127,11 +127,12 @@ overlay.
 
 | alternative | why rejected |
 |---|---|
-| Signatures + a Nix patch (per-user signing keys, daemon patched to separate trust by key) | the user does not want to carry a Nix patch; it couples every Nix bump to a local fork |
-| Salting guest derivations (perturb guest drvs so their paths can never collide with admin paths) | rebuilds everything for every guest, defeats substitution, and is a convention a guest can simply not follow |
-| Wrapper-only remote builds (guests reach builders only through a wrapper that copies results back) | wrappers are bypassable and miss IFD and the build hook; the overlay store gives the transparent build hook instead |
-| An untuned pin just for the singletons (glibc/systemd/... from upstream, the rest tuned) | a second package set with two of each singleton in play; the epoch mechanism handles singleton coupling without it |
-| Two nixpkgs pins (system on one, homes on another) | a second package set: everything rebuilt on IntraISACross hosts and two glibcs loaded side by side |
+| Signed build records + a Nix patch (the daemon signs realisations of trusted clients' builds; trusted clients resolve only signed ones, so guest-built CA records are ignored) | needs a local Nix patch (today a daemon trusts its own build-trace rows unconditionally), and does nothing for input-addressed paths |
+| Salting guest derivations (an unused `__guestSalt` on every drv outside a published admin-built set, so guest records/paths never collide with admin ones) | needs a ~20k-drv published set per release and a double evaluation, and still leaves remote input-addressed guest builds needing trust on the builder; the per-guest overlay store isolates more with plain Nix behaviour |
+| Wrapper-only remote builds (guests build via `--store ssh-ng://` + copy back, untrusted) | the normal workflow would depend on a wrapper; the overlay store keeps the transparent build hook |
+| A separate guest store on the builder only | results come back into the user machine's shared store, where a key cannot be scoped to path names, so forged paths still reach the admin |
+| A separately pinned, untuned singleton layer | the singletons would lose tuning, or a second tuned toolchain would be needed; a single nixpkgs makes the separate pin unnecessary |
+| Two nixpkgs pins with the singletons' stdenv grafted onto the newer one | grafting stdenv across nixpkgs revisions is fragile; single nixpkgs instead, and anything newer is a self-written derivation or a feature |
 
 ## User types
 
