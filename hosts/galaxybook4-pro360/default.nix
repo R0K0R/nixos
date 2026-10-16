@@ -156,25 +156,8 @@ in
     # different bytes but identical HEADERS.
     ccache.crossDerivation.enable = true;
 
-    /*
-      The people who use this machine. Declaring an account creates it; the
-      primary is what every feature's `users` option defaults to.
-
-      extraGroups is written out in full, including the option's own defaults,
-      because a definition REPLACES the default rather than merging with it --
-      listing only "dialout" here would silently drop wheel and take sudo with
-      it. dialout is for arduino-cli/arduino-ide (/dev/ttyACM*, /dev/ttyUSB*).
-    */
-    users.r0k0r = {
-      primary = true;
-      extraGroups = [ "wheel" "networkmanager" "video" "audio" "dialout" ];
-      # Was /etc/nixos/secrets/hashed-password-r0k0r -- an untracked file that
-      # had to exist on the machine before login worked, and in fact did NOT
-      # exist here (mutableUsers = true meant the live shadow entry carried
-      # the password and the missing file went unnoticed).
-      passwordSecret = ../../age/hashed-password-r0k0r.age;
-      shell = pkgs.zsh;
-    };
+    # Accounts (r0k0r, primary; groups incl. dialout) come from
+    # registry/hosts.nix + registry/users/ -- see lib/registry-users.nix.
     upower.enable = true;
     fonts.enable = true;
     keyd.enable = true;

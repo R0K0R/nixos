@@ -83,46 +83,19 @@
     };
 
     /*
-      Both humans on this machine. Declaring an account creates it, and the
-      primary is what every feature's `users` option defaults to -- so benjamin
-      gets an account and a home-manager configuration, but none of the features
-      scoped to the primary unless he is named explicitly.
+      Both humans on this machine (r0k0r primary, benjamin) come from
+      registry/hosts.nix + registry/users/ -- see lib/registry-users.nix.
 
-      Password hashes come from agenix now, not from untracked files under
-      /etc/nixos/secrets that had to be placed on the machine by hand and were
-      invisible to the repo. passwordSecret sets hashedPasswordFile to the
-      decrypted /run/agenix path, so the hash still never enters the store --
-      only the ciphertext is committed.
-
-      users.mutableUsers = false below makes a password source mandatory on
-      every declared account, which features/users asserts. That also makes
-      this the one migration on this host that can lock you out: prove
-      decryption works BEFORE the switch that depends on it,
+      Password hashes come from agenix. users.mutableUsers = false below makes a
+      password source mandatory on every declared account, which features/users
+      asserts. That also makes this the one migration on this host that can
+      lock you out: prove decryption works BEFORE a switch that depends on it,
 
         sudo age -d -i /etc/ssh/ssh_host_ed25519_key age/hashed-password-r0k0r.age
 
-      and keep the old /etc/nixos/secrets files until you have logged in on the
-      new generation.
-
-      r0k0r's file is SHARED with galaxybook -- one account, one password. If
-      the two machines had drifted, this switch silently adopts galaxybook's
-      hash here. benjamin exists only on this host, so his is victus-15-only.
+      r0k0r's file is SHARED with galaxybook -- one account, one password.
+      benjamin exists only on this host, so his is victus-15-only.
     */
-    users = {
-      r0k0r = {
-        primary = true;
-        extraGroups = [ "networkmanager" "wheel" ];
-        passwordSecret = ../../age/hashed-password-r0k0r.age;
-        shell = pkgs.zsh;
-      };
-
-      benjamin = {
-        description = "Benjamin S.H. Lee";
-        extraGroups = [ "networkmanager" "wheel" ];
-        passwordSecret = ../../age/hashed-password-benjamin.age;
-        shell = pkgs.fish;
-      };
-    };
 
     /*
       Its own ed25519 identity, NOT a copy of galaxybook's -- see the

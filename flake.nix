@@ -168,6 +168,9 @@
             ./tuning
             # home-manager wiring, shared with tier2-eval so the classifier sees
             # the same home packages this host does. See lib/home-manager.nix.
+            # my.users from registry/ -- people are flake-level data, a host
+            # only lists who lives on it. See lib/registry.nix.
+            ./lib/registry-users.nix
             (import ./lib/home-manager.nix {
               homeModules = [ homeFeatures ];
               inherit inputs hostName;
@@ -191,6 +194,13 @@
         nixosConfigurations from depending on the flake's own output fixpoint.
       */
       nixosModules.default = nixosFeatures;
+
+      /*
+        The user registry, validated: users, types, hosts, and `effective`
+        (host -> user -> axes). `nix eval .#registry.effective` is the quickest
+        way to see what a type change would mean before any host evaluates.
+      */
+      registry = import ./registry { inherit lib; };
       homeModules.default = homeFeatures;
 
       /*

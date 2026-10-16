@@ -104,6 +104,9 @@ let
       */
       flake.nixosModules.default
       (flakeRoot + "/tuning")
+      # Accounts come from registry/ now, not the host file; same module mkHost
+      # uses, or pass1 has no users and no home.packages anchors.
+      (flakeRoot + "/lib/registry-users.nix")
 
       # Same home-manager wiring mkHost uses. Without it this eval has no
       # home-manager users, and every home.packages entry silently drops out of
