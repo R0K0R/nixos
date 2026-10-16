@@ -252,7 +252,9 @@ shows what each user ends up with on each host.
 
 **`registry/users/<name>.nix`** -- one file per person: `uid`, `type`, `shell`
 (a package *attribute name*, resolved by the host's own pkgs), `passwordSecret`,
-optional `overrides` and `groups`.
+optional `overrides` and `groups`; `tmpfsSize` (default `"2G"`) for a tmpfs
+home; `acceptTypeChange = "<old>-><new>"` to consent to one dangerous type
+change (below).
 
 **`registry/types.nix`** -- presets over five axes:
 
@@ -261,15 +263,15 @@ optional `overrides` and `groups`.
 | `home` | `persistent` \| `tmpfs` \| `impermanent` | where the home directory lives |
 | `nix` | `none` \| `overlay` \| `untrusted` \| `admin` | what the user may do with the nix daemon |
 | `session` | `home-manager` \| `system-default` \| `{ kiosk = "<pkg>"; }` | what a login gets |
-| `builders` | bool | may dispatch to remote builders (needs `nix = admin`) |
+| `builders` | bool | may name builders/substituters of its own (needs `nix = admin`); see below for what the daemon does regardless |
 | `grants` | subset of `sudo network media serial input` | capabilities a host turns into its groups |
 
-| type | home | nix | session | overridable |
-|---|---|---|---|---|
-| `admin` | persistent | admin | home-manager | home, session, grants |
-| `member` | persistent | untrusted | home-manager | home, session, grants |
-| `untrusted` | persistent | none | system-default | home, nix, session |
-| `handover` | tmpfs | none | kiosk (firefox) | session |
+| type | rank | home | nix | session | overridable |
+|---|---|---|---|---|---|
+| `admin` | 3 | persistent | admin | home-manager | home, session, grants |
+| `member` | 2 | persistent | untrusted | home-manager | home, session, grants |
+| `untrusted` | 1 | persistent | none | system-default | home, nix, session |
+| `handover` | 0 | tmpfs | none | kiosk (firefox) | session |
 
 Rules (`lib/registry.nix`, all `throw`s with the file name, so they fire when
 *any* host reads the registry rather than only when someone builds the host
@@ -281,7 +283,8 @@ concerned):
   overlay store on a host without the guest-overlay feature, builders without
   nix admin.
 - **Hosts narrow, never widen** (`registry/hosts.nix` `narrow.<user>`): builders
-  true to false, grants to a subset, nix to a lower rank.
+  true to false, grants to a subset, nix to a lower rank, and
+  `localBuilds = false` -- accepted only where it already holds (below).
 - **uids are never reused.** Removing someone is `removed = true;` with the file
   kept -- a tombstone -- because files on disk and in backups still carry the
   uid. A host listing a tombstoned user is an error.
@@ -295,15 +298,55 @@ without evaluating that host. They are facts, not switches: the switches are
 still `my.*` in the host file.
 
 **What the axes do today.** `my.users` on both hosts comes from the registry
-(`lib/registry-users.nix`). Axis values without machinery -- tmpfs/impermanent
-homes, `nix = none`/`overlay`, kiosk sessions, the handover type -- are
-validated but refused with "not implemented yet", so a host cannot silently get
-a persistent home while the registry says tmpfs. The `nix` axis is **not yet
-wired** to the daemon: `trusted-users` is still set per host
-(`my.nix-settings.trustedUsers = [ "r0k0r" ]`), which happens to match the
-registry exactly. `uid` is recorded but not yet passed to `users.users`;
-`builders` and `grants` are data only. All three are **planned** next steps
-because each changes the system.
+(`lib/registry-users.nix`); the machinery is in `features/core/users/`, each
+piece gated on some account using it, so both real hosts are unchanged:
+
+| axis value | machinery |
+|---|---|
+| `home = tmpfs` | `tmpfs-home.nix`: a tmpfs (size `tmpfsSize`) mounted **per login**, bound to `user@<uid>.service` (RequiredBy/Before/PartOf, LazyUnmount) -- mounted before the user's manager starts, detached when it stops, the same lifetime logind gives `/run/user/<uid>`. logind kills those users' processes at logout (`KillUserProcesses` + `KillOnlyUsers`), so a straggler cannot keep the user, and with it the home, alive; lingering is refused. `createHome = false`: if the mount fails the home is root-owned, never persistent. Pins the uid. Re-login inside logind's 10 s `UserStopDelaySec` keeps the home. |
+| `session = { kiosk = "<pkg>"; }` | `kiosk.nix`: a "Kiosk (<prog>)" wayland-session running `cage -s -- <pkg>` from the system pkgs (handover: firefox). Not enforced that the kiosk user *picks* it; that is the greeter's choice. |
+| `nix = none` | `nix-access.nix`: left out of `nix.settings.allowed-users`. The list is only written on a host that has such a user; elsewhere it stays at its default `*`, so nix.conf is unchanged. `my.registry.nix.extraAllowedUsers` for service accounts. |
+| `nix = untrusted` | asserted absent from `trusted-users` (by name, `*` or `@group`). |
+| `nix = admin` | nothing yet: `trusted-users` is still per host (`my.nix-settings.trustedUsers`). |
+| `home = impermanent`, `nix = overlay` | refused, "not implemented yet" (need impermanence / guest-overlay). |
+
+**What Nix enforces per user, honestly.** The daemon has two per-user lists,
+allowed-users and trusted-users. `max-jobs` and the builders in
+`/etc/nix/machines` are daemon settings applied to every build it accepts: an
+untrusted user on galaxybook gets no local builds (max-jobs 0, for everyone)
+and *does* get the remote builders (the daemon dispatches for him; he just
+cannot name his own). So `builders = false` means "cannot pick builders",
+and `narrow.<user>.localBuilds = false` is accepted only on a host whose
+`features.<host>.localBuilds` is false or for a user without daemon access --
+anywhere else it is refused rather than recorded as a promise nothing keeps.
+`homeLib.<host>.facts.nix` reports what actually happens: `localBuilds`,
+`remoteBuilds`, and per user `access`, `daemon`, `trusted`, `builds.local`,
+`builds.remote`, `ownBuilders`. `localBuilds` and `builderClient` in
+`registry/hosts.nix` are asserted against `nix.settings.max-jobs` and
+`nix.distributedBuilds`.
+
+**Deployed type.** With `my.registry.recordTypes.enable` (default **off**:
+it adds a pre-switch check and an activation snippet, i.e. changes the
+toplevel), activation records each account as `<type> <home> <nix>` in
+`/var/lib/nixos-users/<user>.type`, and a pre-switch check refuses (for
+switch, boot and test, before anything changes) a move away from the
+recorded line that is dangerous -- home leaving persistent (or going to
+tmpfs), nix or type rank going down, or a record it does not recognise --
+unless the user file says `acceptTypeChange = "<old type>-><new type>"`. A
+missing record is just written, an unchanged one is a no-op, and consent is
+inert once the new type is recorded. The rule lives once, in
+`lib/registry.nix` `transition`; the shell only checks membership in the list
+of admissible predecessors the registry enumerates.
+
+`uid` is passed to `users.users` only for tmpfs users (new accounts); for the
+existing ones it is recorded but not passed yet (it would rewrite
+users-groups.json). `grants` beyond sudo <-> wheel are data only.
+
+`tests/user-types-eval.sh` evaluates a synthetic galaxybook with a handover
+and an untrusted user and the type record on, with builds disabled, and
+checks the mount, logind, kiosk session, allowed-users, facts, the generated
+check, and that the dangerous transitions and unenforceable narrowings are
+refused.
 
 ## Optional pieces
 
