@@ -37,6 +37,10 @@
           name = "${username}@${host}";
           value = system.homeLib.${host}.mkHome {
             inherit username;
+            # Add system.homeLib.${host}.epochModule here to record the
+            # system epoch in each generation ($generation/epoch), which
+            # hm-rollback and the system's session-epoch-check read. It
+            # changes the activation package, hence opt-in.
             modules = [ ./modules ];
           };
         }) myHosts

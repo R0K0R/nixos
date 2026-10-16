@@ -184,8 +184,15 @@
       */
       forkWanted = r: r.enable && r.march != null;
 
-      mkHost =
-        hostName:
+      mkHost = hostName: mkHostWith hostName [ ];
+
+      /*
+        mkHost with modules appended -- for evaluation tests (tests/) that need
+        a synthetic copy of a real host. Appending [ ] leaves the real hosts'
+        module list, hence their toplevels, exactly as they were.
+      */
+      mkHostWith =
+        hostName: extraModules:
         let
           tuningRaw = tuningRawOf hostName;
           tuningEnabledRaw = tuningRaw.enable;
@@ -217,7 +224,8 @@
             # hits cache.nixos.org and doesn't need to be built from our patched stdenv.
             { system.build.nixos-rebuild = lib.mkForce
                 inputs.nixpkgs-upstream.legacyPackages.x86_64-linux.nixos-rebuild; }
-          ];
+          ]
+          ++ extraModules;
         };
 
       /*
@@ -240,6 +248,16 @@
                      home-manager.users.<name>. See lib/home-generator.nix
                      for asSubmodule and why HM's homeManagerConfiguration
                      cannot be used on these hosts.
+          epoch      this revision's system epoch (features/core/epoch,
+                     lib/epoch.nix) -- what a home built from this homeLib
+                     was built against.
+          epochModule  home module writing that epoch (and the rev) into
+                     every generation as `$generation/epoch`, which
+                     session-epoch-check and hm-rollback read. NOT in
+                     `modules`: adding a file to the generation changes the
+                     activation package, so including it by default would
+                     move every existing home. A user repo opts in with
+                     modules = [ ... system.homeLib.<host>.epochModule ].
       */
       mkHomeLib =
         hostName: nixos:
@@ -267,6 +285,12 @@
             users = registry.effective.${hostName} or { };
           };
           mkHome = args: gen.mkHome ({ inherit nixos; } // args);
+          epoch = nixos.config.system.build.epoch;
+          epochModule = import ./features/core/epoch/epoch-home.nix {
+            inherit lib;
+            epoch = nixos.config.system.build.epoch;
+            rev = nixos.config.my.epoch.rev;
+          };
         };
 
       registry = import ./registry { inherit lib; };
@@ -308,6 +332,19 @@
         description = "Standalone home-manager repo on top of this system flake's homeLib";
       };
       homeModules.default = homeFeatures;
+
+      /*
+        Evaluation-only tests: NOT under checks, because `nix flake check`
+        builds checks. Force them with builds disabled, as
+        tests/session-safety-eval.sh does, so an unbuilt IFD fails instead of
+        building. Each is a synthetic copy of a real host (mkHostWith), never
+        the host itself.
+      */
+      evalTests.session-safety = import ./tests/session-safety.nix {
+        inherit lib;
+        mkHostWith = mkHostWith;
+        mkHomeLib = mkHomeLib;
+      };
 
       /*
         `nix flake check` as the one-command gate. Forcing each host's toplevel
