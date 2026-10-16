@@ -21,10 +21,21 @@
             only make sense with it at their host values: intraISACross,
             upstreamTools, qtPatches, refreshTool. Off = plain upstream
             nixpkgs, those forced off.
-    lto/o3  their own enable. Both REQUIRE march today (their overlays skip
-            any package set without gcc.arch, and tuning/nixos.nix asserts
-            it), so "lto alone" means march + lto, and the *-nomarch
-            variants exist to show that assertion firing: expected to fail.
+    lto/o3  their own enable, independent of march. Alone (`lto`, `o3`)
+            they run on plain upstream nixpkgs and tune the one native set,
+            with build tools pointed back at upstream (tuning/nixos.nix,
+            NATIVE ISOLATION); `lto-o3` is both, natively; `march-lto` and
+            `march-o3` are the IntraISACross combination. All must evaluate.
+            They used to assert march, and two *-nomarch variants expected
+            that to fire.
+
+            Measured 2026-10-17 on galaxybook4-pro360, closure of `lto`
+            against `off` by OUTPUT path (drv paths over-count: a tuned curl
+            changes every fetchurl .drv without changing one output): 541
+            derivations with new outputs, all applications and their
+            libraries plus 54 python3Packages pulled in through check inputs;
+            no gcc, binutils, cmake, meson, ninja, python3, perl, clang, rustc
+            or nodejs among them. `o3` alone: 814, the same.
     ccache  my.ccache (client, crossDerivation, builder at host values) and
             my.tuning.heavy, its only consumer. Without march heavy's overlay
             is inert and tuning/heavy.nix warns; that is the point of the
@@ -57,10 +68,11 @@ let
   variants = {
     off = { levers = off; expect = "pass"; };
     march = { levers = off // { march = true; }; expect = "pass"; };
-    lto = { levers = off // { march = true; lto = true; }; expect = "pass"; };
-    o3 = { levers = off // { march = true; o3 = true; }; expect = "pass"; };
-    lto-nomarch = { levers = off // { lto = true; }; expect = "fail"; why = "lto requires march (assertion)"; };
-    o3-nomarch = { levers = off // { o3 = true; }; expect = "fail"; why = "o3 requires march (assertion)"; };
+    lto = { levers = off // { lto = true; }; expect = "pass"; };
+    o3 = { levers = off // { o3 = true; }; expect = "pass"; };
+    lto-o3 = { levers = off // { lto = true; o3 = true; }; expect = "pass"; };
+    march-lto = { levers = off // { march = true; lto = true; }; expect = "pass"; };
+    march-o3 = { levers = off // { march = true; o3 = true; }; expect = "pass"; };
     ccache = { levers = off // { ccache = true; }; expect = "pass"; };
     ca = { levers = off // { ca = true; }; expect = "pass"; };
     all = { levers = { march = true; lto = true; o3 = true; ccache = true; ca = true; }; expect = "pass"; };

@@ -1,4 +1,4 @@
-{ hostRuntimeClassifier }:
+{ hostRuntimeClassifier, native ? false, nativeBuildTools ? null }:
 final: prev:
 # nixpkgs' own stdenv bootstrap chain (pkgs/stdenv/booter.nix) re-evaluates
 # the entire overlay list fresh for each bootstrap stage, with that stage's
@@ -19,9 +19,11 @@ final: prev:
 # buys nothing. Worse, it makes every build-platform derivation differ from
 # upstream and lose cache.nixos.org substitutability; measured, build-platform is
 # ~91% of the toplevel closure (17444 of 19045 drvs).
+#
+# `native` (march = null): see tuning/overlays/native-target.nix.
 if
   builtins.match ".*bootstrap.*" (prev.stdenv.name or "") != null
-  || ((prev.stdenv.hostPlatform.gcc or { }).arch or "") == ""
+  || !(import ./native-target.nix { inherit native prev; })
 then
   { }
 else
@@ -160,7 +162,12 @@ let
   # by construction -- a build-only package has no runtime consumer, so nothing
   # could ever legitimately reference the variant, and nothing in the tree did.
   # Removed: it changed no derivation, it only inflated apparent coverage.
-  hostRuntimeNames = builtins.filter hostRuntimeClassifier.isHostRuntime existingPackages;
+  #
+  # Natively (no march) also minus anything a build tool links: there is no
+  # separate build splice to keep it untuned on. See tuning/native-build-tools.nix.
+  hostRuntimeNames = builtins.filter (
+    n: hostRuntimeClassifier.isHostRuntime n && !(native && nativeBuildTools.isBuildToolLinked n)
+  ) existingPackages;
 in
 builtins.listToAttrs (
   map (name: { inherit name; value = addFlags prev.${name}; }) hostRuntimeNames
