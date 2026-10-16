@@ -47,6 +47,20 @@ ${lib.optionalString cfg.crossDerivation.enable ''
 in
 {
   options.my.ccache = {
+    /*
+      INDEPENDENT of tuning and of ca-derivations, as far as this module is
+      concerned: nothing here reads my.tuning or my.ca-derivations, and every
+      combination evaluates (see lib.matrix in flake.nix). What it is NOT is
+      self-applying. The client half below only produces `wrapperConfig`; the
+      one consumer that puts ccache into derivations is tuning/heavy.nix, and
+      that overlay acts only on a march'd host set. On an untuned host this
+      is deliberate, not an omission: wrapping upstream packages in ccache
+      would move their hashes off cache.nixos.org, trading a free download for
+      a cached rebuild. tuning/heavy.nix warns when enable is set with no
+      consumer. The builder half (cache dirs, sandbox path, peers) is useful
+      on its own -- a builder serves other hosts' tuned builds whether or not
+      it is tuned itself.
+    */
     enable = lib.mkEnableOption "ccache for the packages in my.tuning.heavy (client half: the compiler wrapper's config)";
 
     cacheDir = lib.mkOption {
