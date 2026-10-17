@@ -157,6 +157,13 @@ in
     && lib.all (g: lib.elem g c.users.users.r0k0r.extraGroups) [ "wheel" "networkmanager" "video" "audio" "dialout" ]
   ) (builtins.toJSON (lib.mapAttrs (_: u: u.extraGroups) (lib.getAttrs [ "r0k0r" "guest" "visitor" ] c.users.users)));
 
+  # -- home cutover -----------------------------------------------------
+  standaloneHome = expect "r0k0r standalone: not integrated, CLI shipped, home still evaluable" (
+    !(c.home-manager.users ? r0k0r)
+    && lib.any (p: (p.pname or p.name or "") == "home-manager") c.environment.systemPackages
+    && !((mkHomeLib host on).mkHome { username = "r0k0r"; }).config.submoduleSupport.enable
+  ) (toString (lib.attrNames c.home-manager.users));
+
   # -- uids --------------------------------------------------------------
   uids = expect "every registry account has its registry uid" (
     lib.mapAttrs (_: u: u.uid) (lib.getAttrs [ "r0k0r" "guest" "visitor" ] c.users.users)
@@ -238,6 +245,12 @@ in
           host
           on.pkgs
         ).visitor
+    );
+    # Only a home-manager session has a home to activate.
+    standaloneKiosk = mustFail "homeActivation = standalone on a kiosk user" (
+      lib.attrNames
+        ((regWith (r: r // { users = r.users // { guest = r.users.guest // { homeActivation = "standalone"; }; }; })).materialize host on.pkgs)
+        .guest
     );
     # Groups are derived; a hand-written list is refused, not merged.
     handGroups = mustFail "groups in a user file" (

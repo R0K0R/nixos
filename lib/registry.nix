@@ -509,6 +509,10 @@ in
               notYet where "nix = \"overlay\" (needs the guest-overlay feature)"
             else if sessionKind e.session == "kiosk" && !(pkgs ? ${e.session.kiosk}) then
               throw "registry: ${where}: session.kiosk = \"${e.session.kiosk}\" is not a package attribute of this host's pkgs"
+            else if (u.homeActivation or "system") == "standalone" && e.session != "home-manager" then
+              throw ''
+                registry: ${where}: homeActivation = "standalone" but session is ${builtins.toJSON e.session}.
+                Only a home-manager session has a home to activate.''
             else if u ? groups || h ? groups then
               throw ''
                 registry: ${where}: `groups` is gone -- groups are derived from grants
@@ -540,6 +544,7 @@ in
               // lib.optionalAttrs (u ? description) { inherit (u) description; }
               // lib.optionalAttrs (u ? passwordSecret) { inherit (u) passwordSecret; }
               // lib.optionalAttrs (u ? sshKeys) { inherit (u) sshKeys; }
+              // lib.optionalAttrs (u ? homeActivation) { inherit (u) homeActivation; }
               // lib.optionalAttrs (u ? stateVersion) { inherit (u) stateVersion; }
               // lib.optionalAttrs (u ? shell) { shell = pkgs.${u.shell}; }
               // { extraGroups = groups; }

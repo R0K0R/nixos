@@ -84,7 +84,7 @@ from this flake through `homeLib.<host>`:
 | `modules` | the feature `home.nix` halves plus Unstraightened's module -- the same `sharedModules` the integrated home-manager uses |
 | `facts` | plain data: host, system, the tuning levers, the registry's effective axes per user |
 | `osConfig` | the host's NixOS config. **Transitional**: the feature home halves still read `osConfig.my.*`; `facts` is meant to replace it. |
-| `mkHome { username, modules ? [], asSubmodule ? true }` | a home-manager configuration (`.activationPackage`) built by the same generator as the integrated `home-manager.users.<name>` |
+| `mkHome { username, modules ? [], asSubmodule ? <per homeActivation> }` | a home-manager configuration (`.activationPackage`) built by the same generator as the integrated `home-manager.users.<name>` |
 
 `lib.homeConfigurationFor "<host>" { ... }` is the same as a one-call helper,
 and `nix flake init -t github:R0K0R/nixos#home` creates a minimal home repo
@@ -96,26 +96,30 @@ IntraISACross host is a different, untuned package set. It evaluates
 home-manager's module list the way `nixos/common.nix` does instead
 (`lib/home-generator.nix`).
 
-### Transitional state
+### Who activates a home
 
-**The system still integrates home-manager.** Every `nixos-rebuild switch`
-activates `home-manager.users.<name>` for each user, exactly as before.
-`homeLib.<host>.mkHome` with its default `asSubmodule = true` reproduces that
-home **byte for byte**: the standalone activation package's drvPath equals the
-integrated one (verified for r0k0r on both hosts and benjamin on victus-15).
-`asSubmodule = true` means `home.packages` are installed by the system
-(`users.users.<n>.packages`), not into the user's own profile.
+Per account, from the registry file's `homeActivation`:
 
-**Do not activate both.** Running `home-manager switch` from a home repo while
-the system also activates that home gives two activators for one generation:
-each rewrites the other's profile links, and whichever ran last wins until the
-next system rebuild. Until the cutover, change a home by changing this repo.
+- **`"standalone"`** (r0k0r): the user's own repo activates the home with
+  `home-manager switch --flake ~/config/home#<user>@<host>`. The system does
+  not integrate it (no `home-manager.users.<n>`, no
+  `home-manager-<n>.service`, no `/etc/profiles/per-user/<n>`), ships the
+  `home-manager` CLI (the same home-manager input, the system's Nix), and
+  still EVALUATES the home for the tuning classifier
+  (`tier2-eval.nix` `standaloneHomes`), so its packages stay anchors.
+  `mkHome` defaults to `asSubmodule = false`: packages go into the user's
+  `~/.nix-profile`.
+- **`"system"`** (default; benjamin, who has no repo): integrated as before,
+  activated on every `nixos-rebuild switch`. `mkHome` defaults to
+  `asSubmodule = true` and reproduces that home byte for byte.
 
-At the cutover (**planned**) the system drops its integrated home-manager for
-users with `session = home-manager`, home repos pass `asSubmodule = false`
-(packages into the user's own profile), and users rebuild with `home-manager
-switch` or the **planned** `hm-switch` wrapper (advisory checks against the
-system's epoch history before switching).
+Never both for one account: two activators for one home rewrite each other's
+generation and profile links. Moving an account to standalone: create the
+repo, activate its home once (`nix build ...activationPackage` then
+`activate`: the CLI arrives with the system switch), then set
+`homeActivation = "standalone"` and switch the system. The cutover kept r0k0r's
+home packages the same derivations (`config.home.path`; on galaxybook two
+session variables now name `~/.nix-profile`).
 
 ## Layout
 
@@ -523,10 +527,7 @@ to be faithful. Run it after any change to tuning, ccache, CA or `_meta`.
 
 ### Users (home)
 
-Today: nothing separate. The system activates every home on `nixos-rebuild
-switch`; see [Transitional state](#transitional-state).
-
-After the **planned** cutover:
+Standalone accounts (see [Who activates a home](#who-activates-a-home)):
 
 ```sh
 home-manager switch --flake ~/config/home#<user>@<host>
@@ -568,7 +569,8 @@ Options only for what actually varies. Most features have nothing but `enable`.
    `groups` if the defaults are not right)
 4. `nix eval .#registry.effective` to check the result
 5. the user creates a home repo with `nix flake init -t github:R0K0R/nixos#home`;
-   until the cutover the system activates that user's home itself
+   the system activates their home until their file says
+   `homeActivation = "standalone"`
 
 Removing a user: set `removed = true;` in the file, keep it, and drop the name
 from `registry/hosts.nix`.

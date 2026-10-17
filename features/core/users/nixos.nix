@@ -222,6 +222,19 @@ in
               '';
             };
 
+            homeActivation = lib.mkOption {
+              type = lib.types.enum [ "system" "standalone" ];
+              default = "system";
+              description = ''
+                Who activates this account's home (when `home` is true).
+                "system": the integrated home-manager.users.<name>, on every
+                nixos-rebuild switch. "standalone": the user's own home repo,
+                `home-manager switch --flake ~/config/home` -- the system only
+                EVALUATES the home (tuning anchors) and ships the home-manager
+                CLI. From the registry file's `homeActivation`.
+              '';
+            };
+
             stateVersion = lib.mkOption {
               type = lib.types.str;
               default = "26.05";

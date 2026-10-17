@@ -25,14 +25,15 @@
   per-user glue (submoduleSupport, username/homeDirectory/uid from
   users.users, nix.enable/package from the system).
 
-  `asSubmodule` (default true) keeps that glue's submoduleSupport half:
+  `asSubmodule` (default: true for homeActivation = "system", false for
+  "standalone") keeps that glue's submoduleSupport half:
   externalPackageInstall means home.packages are installed by the SYSTEM via
   users.users.<name>.packages, and activation does not touch a nix profile.
   That is what makes the activation package byte-identical to the integrated
-  one, which is the property to keep while both paths coexist. At the cutover
-  (system drops its integrated home-manager) the user repo passes
-  asSubmodule = false: packages then go into the user's own profile, as a real
-  standalone install needs, and the activation package necessarily differs.
+  one, which is the property to keep while both paths coexist. A standalone
+  account (the system no longer integrates its home) gets false: packages
+  then go into the user's own profile, as a real standalone install needs,
+  and the activation package necessarily differs.
 */
 { homeModules, inputs, hostName }:
 
@@ -47,11 +48,21 @@ let
     than closing over them so both callers can hand theirs in.
   */
   homeUsers = lib: osConfig: lib.filterAttrs (_: u: u.home) osConfig.my.users;
+
+  /*
+    THE CUTOVER, per user. Only homeActivation = "system" accounts become
+    home-manager.users.<name> (activated by every system switch). A
+    "standalone" account's home is activated by its own repo through
+    mkHome, and the system merely evaluates it for the tuning classifier
+    (tuning/runtime-cache/tier2-eval.nix, `standaloneHomes`).
+  */
+  systemUsers = lib: osConfig: lib.filterAttrs (_: u: u.homeActivation == "system") (homeUsers lib osConfig);
+  standaloneUsers = lib: osConfig: lib.filterAttrs (_: u: u.homeActivation == "standalone") (homeUsers lib osConfig);
 in
 {
-  inherit sharedModules extraSpecialArgs userModule homeUsers;
+  inherit sharedModules extraSpecialArgs userModule homeUsers systemUsers standaloneUsers;
 
-  users = lib: osConfig: lib.mapAttrs (_: userModule) (homeUsers lib osConfig);
+  users = lib: osConfig: lib.mapAttrs (_: userModule) (systemUsers lib osConfig);
 
   mkHome =
     {
@@ -59,7 +70,10 @@ in
       nixos,
       username,
       modules ? [ ],
-      asSubmodule ? true,
+      # Default follows who activates the home: true (system-installed
+      # packages, identical to the integrated home) for "system" accounts,
+      # false (packages in the user's own profile) for "standalone" ones.
+      asSubmodule ? null,
     }:
     let
       hm = inputs.home-manager;
@@ -73,10 +87,11 @@ in
         (homeUsers lib osConfig).${username} or (throw ''
           homeLib.${hostName}.mkHome: "${username}" has no home on ${hostName}
           (not in registry/hosts.nix for this host, or its session is not home-manager).'');
+      submodule = if asSubmodule == null then u.homeActivation == "system" else asSubmodule;
 
       # nixos/common.nix's per-user glue, verbatim apart from the switch.
       glue = {
-        submoduleSupport = lib.mkIf asSubmodule {
+        submoduleSupport = lib.mkIf submodule {
           enable = true;
           externalPackageInstall = cfg.useUserPackages;
         };

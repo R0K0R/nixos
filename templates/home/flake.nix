@@ -27,10 +27,10 @@
         `home-manager switch --flake .` looks them up: "<user>@<hostname>".
 
         mkHome builds the SAME home the system's integrated home-manager does
-        for this user (identical activation package) plus ./modules. Keep the
-        default asSubmodule = true while the system still activates homes
-        itself; pass asSubmodule = false once it stops, so home.packages go to
-        your own profile.
+        for this user plus ./modules. asSubmodule follows your registry
+        homeActivation: true (identical to the integrated home) while the
+        system activates it, false once your file says "standalone", so
+        home.packages go to your own profile.
       */
       homeConfigurations = builtins.listToAttrs (
         map (host: {

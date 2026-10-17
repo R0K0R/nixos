@@ -16,7 +16,7 @@ A standalone home-manager repo built on the system flake's `homeLib`.
 - `persist.nix` is reserved for the paths to keep when your home is
   impermanent. Nothing reads it yet; no host has impermanent homes today.
 
-While the system still activates homes itself (integrated home-manager), the
-default `asSubmodule = true` gives an activation package identical to the
-system's. After the cutover, pass `asSubmodule = false` so `home.packages`
-are installed into your own profile.
+While the system still activates your home (registry `homeActivation =
+"system"`, the default), mkHome's activation package is identical to the
+system's. Once your file says `"standalone"`, mkHome installs `home.packages`
+into your own profile and you switch with `home-manager switch --flake .`.

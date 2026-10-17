@@ -262,11 +262,23 @@ deliberate system change.
    accounts without a list getting my.users' default, wheel included.
    `my.registry.recordTypes` is on for both hosts.
 
+9. **Home-manager cutover, per account.** Registry `homeActivation`
+   ("system" default | "standalone"); r0k0r is standalone, benjamin stays
+   integrated (no repo). Standalone accounts are not in home-manager.users;
+   the system ships the home-manager CLI (system Nix inside its
+   nixos-option) and tier2-eval evaluates their homes through the same
+   generator, so the anchor set is unchanged (+ the CLI itself). mkHome's
+   asSubmodule defaults per account. r0k0r's home.path is the same
+   derivation as the integrated one on victus-15; on galaxybook it differs
+   only by two session vars naming ~/.nix-profile. Toplevels: home packages
+   leave the system closure; glue, the CLI and inetutils (its dependency)
+   change; no package changes. Deployment order: victus-15, then per host
+   activate the home first, then switch the system (home repo README).
+
 ### Next
 
-6. **Cutover to standalone home-manager**: the system stops integrating
-   home-manager for `session = home-manager` users; home repos switch to
-   `asSubmodule = false`; `hm-switch` wrapper.
+6. **hm-switch** (features/core/epoch, off): turn on with my.epoch once the
+   epoch history is wanted; plain `home-manager switch` works meanwhile.
 7. **Epoch + history + fallback session**, with Claude Code in the fallback.
 8. **Optional features split out**: ccache, CA, btrfs-layout, luks,
    impermanence, each with `_meta` requires.

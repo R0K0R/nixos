@@ -123,8 +123,24 @@ let
   };
   cfg = pass1.config;
 
+  /*
+    Integrated homes, plus the standalone ones (homeActivation = "standalone")
+    the system no longer activates but still knows: evaluated with the same
+    generator homeLib.mkHome uses, minus the user repo's own modules (those
+    are the user's tuning.json's business). Without this, the cutover would
+    drop every package of a standalone home out of the anchor set -- the
+    exact silent untuning lib/home-manager.nix's header describes.
+  */
+  gen = import (flakeRoot + "/lib/home-generator.nix") {
+    homeModules = [ flake.homeModules.default ];
+    inherit inputs;
+    hostName = host;
+  };
+  standaloneHomes = lib.mapAttrs (username: _: (gen.mkHome { nixos = pass1; inherit username; }).config) (
+    gen.standaloneUsers lib cfg
+  );
   homePackages = lib.concatMap (u: u.home.packages or [ ]) (
-    lib.attrValues (cfg.home-manager.users or { })
+    lib.attrValues (cfg.home-manager.users or { }) ++ lib.attrValues standaloneHomes
   );
 
   graphics =

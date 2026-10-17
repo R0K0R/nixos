@@ -16,6 +16,9 @@
   # -- and on galaxybook that file did not even exist (mutableUsers = true meant
   # the live shadow entry carried the password and the gap went unnoticed).
   passwordSecret = ../../age/hashed-password-r0k0r.age;
+  # His home is activated by his own repo (~/config/home, github:R0K0R/home)
+  # with `home-manager switch --flake ~/config/home`, not by system switches.
+  homeActivation = "standalone";
   # Public keys that may log in as him, on every NixOS host he lives on
   # (users.users.<n>.openssh.authorizedKeys). His own key, never the builder
   # key: that one is root's.
