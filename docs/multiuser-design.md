@@ -37,7 +37,9 @@ trust.
 Why one nixpkgs: on an IntraISACross host a second nixpkgs is a second package
 set, untuned, with its own glibc and systemd -- everything rebuilt, and two
 copies of every singleton loaded side by side. A home built against the host's
-own `pkgs` reuses the system's store paths.
+own `pkgs` reuses the system's store paths. One pin does not mean one package
+set: a user may choose their own tuning, which instantiates the SAME pin
+differently (see [Per-user tuning](#per-user-tuning)).
 
 ## Singletons and the epoch
 
@@ -132,6 +134,12 @@ overlay.
 | Wrapper-only remote builds (guests build via `--store ssh-ng://` + copy back, untrusted) | the normal workflow would depend on a wrapper; the overlay store keeps the transparent build hook |
 | A separate guest store on the builder only | results come back into the user machine's shared store, where a key cannot be scoped to path names, so forged paths still reach the admin |
 | A separately pinned, untuned singleton layer | the singletons would lose tuning, or a second tuned toolchain would be needed; a single nixpkgs makes the separate pin unnecessary |
+| Per-user `tuning.json` with add-only package lists per lever | the user's real home (closure + evaluation) is better evidence than a hand list, and the set choice belongs in the home's own options |
+| Leaf-only per-user tuning (`pkgs // { foo = tuned foo; }`) | users want to choose their whole set, march included, untuned as well as tuned |
+| Classifier caches in the flake, written by the system only | the system cannot see a user repo's own modules; users could not contribute evidence and root could not refresh it for them |
+| Reading the cache with `--impure` | evaluation would depend on machine state, and the eval worker would not see another host's files; a locked input is reproducible |
+| One cache repo (git, GitHub) for all hosts | not needed: per-host plain directories plus gather/relock/distribute do the same without another repo |
+| Root evaluating user repos as root | a user's flake.lock can name root-only paths, which would land in the world-readable store; refreshes run as the user |
 | Two nixpkgs pins with the singletons' stdenv grafted onto the newer one | grafting stdenv across nixpkgs revisions is fragile; single nixpkgs instead, and anything newer is a self-written derivation or a feature |
 
 ## User types
@@ -177,8 +185,123 @@ on upstream nixpkgs:
   - `lto`, `o3` -- independent of march. Without it they tune the native
     package set on upstream nixpkgs, skipping libraries a build tool links
     and keeping everything not host-runtime at its untuned derivation.
-  Per-user `tuning.json` in the user repo, one add-only list per lever, applied
-  user-side through the exported classifier on top of the base world.
+  Per user: the home option `my.tuning` picks the levers of that user's own
+  package set, and every user's home feeds the host's classifier cache -- see
+  [Per-user tuning](#per-user-tuning). (This replaces the earlier per-user
+  `tuning.json` with add-only package lists.)
+
+## Per-user tuning
+
+Agreed 2026-10-17. Not implemented: a draft of the package-set half
+(`lib/user-tuning.nix`) exists uncommitted, built for the superseded
+`tuning.json`.
+
+### Each user picks their package set
+
+A home option, defined in the user's own modules (any of them, per host as
+they like):
+
+```nix
+my.tuning = { march = "system"; lto = false; o3 = true; };
+```
+
+Each lever is `"system"` (default: whatever the host does), `true` or
+`false`; `march` may also be a gcc arch string, required for `true` on a host
+with no march of its own. All `"system"` is the host's own `pkgs` -- every
+existing home is unchanged. All `false` is plain upstream nixpkgs, which
+substitutes from cache.nixos.org even on a tuned host; a tuned choice on an
+untuned host is just as allowed.
+
+Mechanism: `homeLib.<host>.mkHome` defines `_module.args.pkgs = pkgsFor
+config.my.tuning`, overriding home-manager's mkDefault -- the pattern
+home-manager's own nixpkgs module uses. `pkgsFor` is the host's set as the
+eval matrix builds its variants: the REAL host file through mkHostWith with
+the three levers forced, everything else (hardware and feature overlays,
+ccache/heavy, CA -- minus CA's "tuned" policy without march) the host's.
+Without march the levers that exist only for the IntraISACross split go too;
+march on a host without one turns on intraISACross and upstreamTools. A
+choice equal to the host's returns the host's `pkgs` value itself.
+
+- `my.tuning` definitions must be literals and must not read `pkgs` (the set
+  depends on them): infinite recursion otherwise, as with home-manager's
+  nixpkgs module and the host files' raw-imported tuning.
+- Still ONE pin: the fork is upstream plus patches at the same revision, so
+  every library is the same version as the system's; mixing with in-process
+  system code relies on the loader reusing an already-loaded soname. The
+  known risk is fork patches that change an ABI (qtPatches): a system Qt
+  plugin built against patched qtbase inside a user's upstream Qt. Accepted
+  for now.
+- Singleton services (daemon, dbus, polkit, logind, greetd, portals, the
+  compositor) always run from the system's set; users talk to them over
+  protocols. In-process plugins of a system service (Hyprland plugins) must
+  come from the system's set, never a user's.
+- Cost: a choice different from the host's is a set the system has not
+  built. The daemon builds it (system builders; overlay guests their own).
+  Accepted: admins stop what takes too long.
+- One extra full evaluation of the host per distinct choice.
+- Integrated homes (`homeActivation = "system"`) follow the system; per-user
+  tuning is for standalone homes.
+
+### Every user feeds the classifier
+
+The classifier (`tuning/runtime-cache/lookup.nix`) decides what the levers
+touch: o3/lto candidates that are host-runtime get tuned; under march,
+host packages that are NOT host-runtime are substituted from upstream. Today
+its caches see a standalone home only through the system's own evaluation of
+it (system feature modules, `home.packages`), and live in the flake. They
+move out and split per user:
+
+```
+/var/lib/tuning-cache/<host>/system.nix          tier 1 + tier 2 of the system
+/var/lib/tuning-cache/<host>/users/<user>.nix    that user's evidence
+```
+
+Plain directories, per host, not a flake and not a git repo. Users write their
+own file; root may write anyone's. Each file is stamped with the nixpkgs hash
+it was taken against (stale = ignored, as today). The host's final cache is
+the UNION of all files in its directory -- every user's evidence counts,
+automatically.
+
+A user's evidence is BOTH:
+- the closure of their current home generation (tier 1's method: everything
+  the home references, after a switch), and
+- an evaluation of their home repo (tier 2's method: their own modules
+  included, before a switch).
+
+`tuning-refresh` produces it. Users run it for themselves; root runs it for
+users who did not -- ALWAYS AS THE USER (runuser / systemd-run --uid; an
+overlay guest through their user service, which has their namespace), never
+as root: a user's flake.lock can name root-only paths, and a root evaluation
+would copy them into the world-readable store. Root's own runs cover the
+system file and, after a nixpkgs bump, every user (every stamp goes stale at
+once).
+
+The system flake reads each host's directory as a locked input:
+
+```nix
+tuning-cache-galaxybook4-pro360 = { url = "path:/var/lib/tuning-cache/galaxybook4-pro360"; flake = false; };
+tuning-cache-victus-15          = { url = "path:/var/lib/tuning-cache/victus-15";          flake = false; };
+```
+
+Relocking is by hand, one admin script:
+1. gather: copy every host's directory to the relocking machine, same path;
+2. relock: `nix flake update tuning-cache-*`, commit;
+3. distribute: `nix copy` every locked store path to every host -- so a host
+   whose directory changed since (users keep writing) still evaluates the
+   locked content.
+
+Accepted consequences:
+- Any user's evidence changes the shared set: what it marks host-runtime is
+  tuned for everyone following the system and, under march, no longer
+  substituted from upstream -- rebuilds on the shared builders, and the
+  epoch moves when the surface is touched (homes rebuilt, re-login).
+- A package is classified only after a refresh and relock, so a new one is
+  built twice: from the old cache first (untuned/upstream under march), tuned
+  after.
+- User files are Nix, evaluated by every system rebuild; a broken one breaks
+  the rebuild and the admin fixes it.
+- Relock commits are manual.
+- Tombstoned users' files are removed (or skipped by the merge).
 
 ## Threat model
 
@@ -318,3 +441,9 @@ deliberate system change.
     /nix is a btrfs subvolume (not the host-shared store the test driver
     mounts by default).
 12. **Eval matrix**: all optional pieces off, all on, and each alone.
+13. **Per-user tuning** (see that section): the home option `my.tuning` and
+    `mkHome`'s `_module.args.pkgs`; `/var/lib/tuning-cache/<host>/` with
+    per-user files, `tuning-refresh` (closure + evaluation, run as the user),
+    lookup.nix reading the per-host locked inputs, the gather/relock/
+    distribute script; the current tier1/tier2 files become the hosts'
+    `system.nix`.
