@@ -243,6 +243,18 @@ deliberate system change.
    -- 18 changed derivations on galaxybook, 24 on victus, all activation
    and etc glue, no packages.
 
+7. **People untrusted.** The admin preset is `nix = untrusted` (overridable),
+   so trusted-users is root on galaxybook and root + nix-ssh on victus.
+   victus serves builds as `nix-ssh` (`my.remote-builder.server` =
+   `nix.sshServe`, ssh-ng, write, trusted, forced to its own nix-daemon,
+   builder key only); a peer's `daemonUser` names it for /etc/nix/machines
+   and the ssh-ng substituter, `sshUser` stays the person's login for the
+   wrappers' untrusted steps. Wrappers that pin builders re-exec under sudo
+   (or sudo just the copy-back and build). OPEN: the builder key is the trust
+   credential now, and it is still readable by r0k0r on galaxybook (agenix
+   owner r0k0r, for interactive `ssh victus-15`) -- making it root-only
+   needs his personal key for interactive ssh first.
+
 ### Next
 
 5. **Wire the nix axis** (rest of it): grants to groups; turn on

@@ -144,7 +144,7 @@ in
   nixConf = expect "nix.conf differs from the real host's" (
     c.environment.etc."nix/nix.conf".source.drvPath != off.config.environment.etc."nix/nix.conf".source.drvPath
   ) c.environment.etc."nix/nix.conf".source.drvPath;
-  trustedUsers = expect "trusted-users = root + the nix = admin accounts" (c.nix.settings.trusted-users == [ "root" "r0k0r" ]) (
+  trustedUsers = expect "trusted-users = root (no registry person is nix = admin)" (c.nix.settings.trusted-users == [ "root" ]) (
     toString c.nix.settings.trusted-users
   );
   trustedByHandCaught = expect "extraTrustedUsers naming visitor fails an assertion" (

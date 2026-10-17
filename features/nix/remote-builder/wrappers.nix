@@ -25,9 +25,31 @@ let
       exec ${lib.concatStringsSep " \\\n  " args} "$@"
     '';
 
+  /*
+    TRUST. Pinning builders, max-jobs and cores are trusted-user settings, and
+    people are untrusted (registry: nix = "untrusted"): from them the daemon
+    ignores these flags with a warning and builds with the system's list. So
+    the wrappers that rely on them run their nix as root -- mkRootScript
+    re-execs under sudo, remoteEval uses sudo for the copy-back and the
+    build. Evaluation and the flake archive stay the user's: neither needs
+    trust (sources and .drv files are content-addressed). The nix-shell
+    wrappers cannot do that -- a shell as root is not the point -- so for an
+    untrusted user they fall back to the system builders.
+
+    builderSpec and substituterArgs name the peer's daemonUser: they are read
+    by the DAEMON, which needs a trusted account on the peer.
+  */
+  mkRootScript =
+    name: args:
+    pkgs.writeScriptBin name ''
+      #! /bin/sh
+      [ "$(id -u)" -eq 0 ] || exec sudo -- "$0" "$@"
+      exec ${lib.concatStringsSep " \\\n  " args} "$@"
+    '';
+
   builderSpec =
     name: p:
-    "ssh-ng://${p.sshUser}@${name} x86_64-linux ${cfg.sshKey} "
+    "ssh-ng://${p.daemonUser}@${name} x86_64-linux ${cfg.sshKey} "
     + "${toString p.maxJobs} ${toString p.speedFactor} ${lib.concatStringsSep "," p.features}";
 
   /*
@@ -47,7 +69,7 @@ let
   */
   substituterArgs =
     name: p:
-    [ ''--option substituters "https://cache.nixos.org ssh-ng://${p.sshUser}@${name}"'' ];
+    [ ''--option substituters "https://cache.nixos.org ssh-ng://${p.daemonUser}@${name}"'' ];
 
   /*
     `--option builders` rather than the bare `--builders` flag: it reaches both
@@ -70,7 +92,7 @@ let
     from /etc/nix/machines.
   */
   # The local-eval path: evaluate HERE, build on the peer. Now the fallback of rebuildFor.
-  localEvalFor = name: p: mkScript "nixos-rebuild-${name}-local-eval" (
+  localEvalFor = name: p: mkRootScript "nixos-rebuild-${name}-local-eval" (
     [ "nixos-rebuild" "--flake ${flakeRef}" "--option max-jobs 0" ''--option builders "${builderSpec name p}"'' ]
     ++ substituterArgs name p
   );
@@ -162,13 +184,15 @@ let
         || fallback "listing the derivations on ${name} failed" "$@"
       missing=$(printf '%s\n' "$list" | while read -r p; do [ -e "$p" ] || printf '%s\n' "$p"; done)
       if [ -n "$missing" ]; then
-        # no root needed: a trusted user may copy unsigned paths in; activation below is root's
-        printf '%s\n' "$missing" | nix copy --no-recursive --no-check-sigs --from ${store} --stdin \
+        # root: unsigned paths, and the user is untrusted. (.drv files are
+        # content-addressed and would pass anyway; root makes it not matter.)
+        printf '%s\n' "$missing" | as_root nix copy --no-recursive --no-check-sigs --from ${store} --stdin \
           || fallback "copying the derivations back from ${name} failed" "$@"
       fi
 
       echo ">> building" >&2
-      out=$(nix build --no-link --print-out-paths "$drv^out" ${buildArgs}) \
+      # root: buildArgs pin builders/max-jobs, which an untrusted user cannot.
+      out=$(as_root nix build --no-link --print-out-paths "$drv^out" ${buildArgs}) \
         || { echo "${scriptName}: build failed (see above)" >&2; exit 1; }
       out=$(printf '%s\n' "$out" | tail -n1)
       case "$out" in /nix/store/*) ;; *) echo "${scriptName}: no store path from the build: $out" >&2; exit 1 ;; esac
@@ -193,7 +217,7 @@ let
     ''--option substituters "https://cache.nixos.org"''
   ];
 
-  localRebuild = mkScript "nixos-rebuild-local" (
+  localRebuild = mkRootScript "nixos-rebuild-local" (
     # Same --option reasoning as rebuildFor: an empty builder list has to apply
     # during evaluation too, or an IFD build escapes to /etc/nix/machines.
     [ "nixos-rebuild" "--flake ${flakeRef}" ''--option builders ""'' ] ++ localArgs

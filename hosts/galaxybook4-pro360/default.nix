@@ -355,7 +355,9 @@ in
       # content-addressed output, and ssh:// is LegacySSHStore, which has no
       # queryRealisation. It aborts with a SIGABRT stack trace rather than
       # skipping the substituter (measured 2026-09-07, nix 2.34.8).
-      substituters = [ "ssh-ng://r0k0r@yulee" "ssh-ng://r0k0r@victus-15" ];
+      # nix-ssh on victus-15: its trusted builder account (my.remote-builder.server).
+      # yulee is unmanaged; its own nix.conf trusts r0k0r.
+      substituters = [ "ssh-ng://r0k0r@yulee" "ssh-ng://nix-ssh@victus-15" ];
       trustedPublicKeys = [
         "yulee-1:KgdwkCN5m+hewJTk+A05PjwI3BbnZAE9NW2n634N7vM="
         "victus-15-1:W5OP8VVbu7Q7z2o5grHJ5Zp+ynm536+QVv+b8fBQJlQ="
@@ -387,6 +389,7 @@ in
         # against yulee's Zen 5) so the scheduler prefers yulee for big jobs.
         # The gccarch reasoning above applies here verbatim.
        victus-15 = {
+          daemonUser = "nix-ssh";
           maxJobs = 5;
           speedFactor = 4;
           features = [ "benchmark" "big-parallel" "kvm" "nixos-test" "ca-derivations" ];

@@ -26,7 +26,8 @@ let
   # Parked peers vanish from /etc/nix/machines entirely.
   activePeers = lib.filterAttrs (_: p: p.enable) cfg.peers;
 
-  peerModule = { name, ... }: {
+  # `config` stays the HOST config (primaryUser below); the peer is args.config.
+  peerModule = { name, ... }@args: let p = args.config; in {
     options = {
       enable = lib.mkOption {
         type = lib.types.bool;
@@ -54,7 +55,26 @@ let
         type = lib.types.str;
         default = config.my.internal.primaryUser;
         defaultText = lib.literalExpression "the primary user";
-        description = "SSH user on the peer.";
+        description = ''
+          SSH user on the peer for the HUMAN's store operations: the wrappers'
+          `nix flake archive --to`, evaluation over ssh, copying derivations
+          back. Needs no trust there -- sources and .drv files are
+          content-addressed, which a daemon accepts from untrusted clients.
+        '';
+      };
+      daemonUser = lib.mkOption {
+        type = lib.types.str;
+        default = p.sshUser;
+        defaultText = lib.literalExpression "sshUser";
+        description = ''
+          SSH user the DAEMON logs in as: /etc/nix/machines, the ssh-ng
+          substituter, the wrappers' pinned builder. Building input-addressed
+          derivations over ssh-ng needs a TRUSTED user on the peer, and people
+          are not trusted (registry: nix = "untrusted"), so a NixOS peer
+          serves a dedicated "nix-ssh" account (my.remote-builder.server)
+          whose forced command is the peer's own nix-daemon. Unmanaged peers
+          (yulee) keep whatever their own nix.conf trusts.
+        '';
       };
       maxJobs = lib.mkOption {
         type = lib.types.ints.positive;
@@ -84,6 +104,18 @@ in
     ./peer-victus-15.nix
     ./wrappers.nix
   ];
+
+  /*
+    The other side: this host as a peer other hosts' daemons build on. Upstream
+    nix.sshServe -- a "nix-ssh" system account whose ForceCommand is
+    ${nix.package}/bin/nix-daemon --stdio (THIS host's Nix, not whatever is on
+    a login PATH), trusted, authorized for the builder key only. Clients name
+    it as the peer's daemonUser.
+  */
+  options.my.remote-builder.server.enable = lib.mkEnableOption ''
+    this host as a remote builder: a trusted "nix-ssh" account for the client
+    daemons' builder key (nix.sshServe, ssh-ng, write)
+  '';
 
   options.my.remote-builder.client = {
     enable = lib.mkEnableOption ''
@@ -197,7 +229,19 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = lib.mkMerge [
+  (lib.mkIf config.my.remote-builder.server.enable {
+    nix.sshServe = {
+      enable = true;
+      protocol = "ssh-ng";
+      write = true;
+      trusted = true;
+      keys = [ (lib.fileContents ./nix-remote-builder.pub) ];
+    };
+    # trusted = true adds nix-ssh to trusted-users itself. Not a person, so
+    # not in the registry, and the nix-access assertion does not cover it.
+  })
+  (lib.mkIf cfg.enable {
     nix.distributedBuilds = true;
 
     # Make the builder SSH key readable by r0k0r so `ssh <peer>` works
@@ -244,12 +288,13 @@ in
         stack trace (measured 2026-09-07, nix 2.34.8).
 
         ssh-ng speaks the daemon protocol over ssh, so the peer's own daemon
-        settings apply and the connecting user must be trusted there. Verified:
-        yulee (Nix 2.18.1) and victus-15 (2.34.8) both answer `store info` over
-        ssh-ng with Trusted: 1 for this key.
+        settings apply and the connecting user must be trusted there -- hence
+        daemonUser: nix-ssh on a NixOS peer (my.remote-builder.server), r0k0r
+        on yulee, whose hand-written nix.conf trusts him.
       */
       protocol = "ssh-ng";
-      inherit (p) maxJobs speedFactor sshUser;
+      inherit (p) maxJobs speedFactor;
+      sshUser = p.daemonUser;
       sshKey = cfg.sshKey;
       /*
         The peer's OWN declared capability list, not a list derived from this
@@ -291,6 +336,10 @@ in
       trusted-public-keys = [
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
       ] ++ cfg.trustedPublicKeys;
+      # No trusted-substituters needed for untrusted users: the daemon lets them
+      # pick any entry of this list too, so narrowing it to cache.nixos.org
+      # (keeping a dead peer out of an eval) still works.
     };
-  };
+  })
+  ];
 }

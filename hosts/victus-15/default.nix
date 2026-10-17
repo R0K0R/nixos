@@ -267,6 +267,9 @@
     # dependency rebuilds to identical BYTES, this one when it rebuilds to
     # different bytes but identical HEADERS.
     ccache.crossDerivation.enable = true;
+    # Builds for galaxybook's daemon as the trusted "nix-ssh" account; the
+    # people on this machine are untrusted (registry).
+    remote-builder.server.enable = true;
     ccache.builder = {
       enable = true;
       # yulee's write-behind stage, mounted read-only over Tailscale, so a

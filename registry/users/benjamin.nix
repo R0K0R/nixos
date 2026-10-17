@@ -6,8 +6,7 @@
   passwordSecret = ../../age/hashed-password-benjamin.age;
   # He has had wheel on victus-15 since the account was made. That is a member
   # with sudo, stated as an override rather than by calling him an admin --
-  # admin would also say nix = "admin", which he is not (trusted-users is
-  # derived from nix = "admin": r0k0r only).
+  # the type is what people read, and he is a member of this machine.
   overrides.grants = [ "sudo" "network" ];
   groups = [ "networkmanager" "wheel" ];
 }

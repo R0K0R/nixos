@@ -268,7 +268,7 @@ change (below).
 
 | type | rank | home | nix | session | overridable |
 |---|---|---|---|---|---|
-| `admin` | 3 | persistent | admin | home-manager | home, session, grants |
+| `admin` | 3 | persistent | untrusted | home-manager | home, nix, builders, session, grants |
 | `member` | 2 | persistent | untrusted | home-manager | home, session, grants |
 | `untrusted` | 1 | persistent | none | system-default | home, nix, session |
 | `handover` | 0 | tmpfs | none | kiosk (firefox) | session |
@@ -307,7 +307,7 @@ piece gated on some account using it, so both real hosts are unchanged:
 | `session = { kiosk = "<pkg>"; }` | `kiosk.nix`: a "Kiosk (<prog>)" wayland-session running `cage -s -- <pkg>` from the system pkgs (handover: firefox). Not enforced that the kiosk user *picks* it; that is the greeter's choice. |
 | `nix = none` | `nix-access.nix`: left out of `nix.settings.allowed-users`. The list is only written on a host that has such a user; elsewhere it stays at its default `*`, so nix.conf is unchanged. `my.registry.nix.extraAllowedUsers` for service accounts. |
 | `nix = untrusted` | asserted absent from `trusted-users` (by name, `*` or `@group`). |
-| `nix = admin` | `nix-access.nix`: `trusted-users` is derived -- exactly the host's `nix = admin` accounts, plus root and `my.registry.nix.extraTrustedUsers` (non-people only). Host files no longer list trusted users. |
+| `nix = admin` | `nix-access.nix`: `trusted-users` is derived -- exactly the host's `nix = admin` accounts, plus root and `my.registry.nix.extraTrustedUsers` (non-people only). Host files no longer list trusted users. No preset uses it: people are untrusted, admins act through sudo. Remote builds reach a NixOS peer as its trusted `nix-ssh` account (`my.remote-builder.server`, upstream `nix.sshServe`: forced `nix-daemon --stdio`, builder key only); the wrappers that pin builders run their nix as root. |
 | `home = impermanent`, `nix = overlay` | refused, "not implemented yet" (need impermanence / guest-overlay). |
 
 **What Nix enforces per user, honestly.** The daemon has two per-user lists,

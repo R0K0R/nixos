@@ -41,21 +41,26 @@
   NIX TRUST. nix = "none" drives allowed-users; trusted-users is exactly the
   host's nix = "admin" accounts (plus root and
   my.registry.nix.extraTrustedUsers), and every other registry user is
-  asserted absent from it. Making someone untrusted is changing his type
-  here, not editing a host file.
+  asserted absent from it. No preset is nix = "admin" any more: today
+  trusted-users is root (plus nix-ssh on a builder). A person who needs
+  trust says overrides.nix = "admin" in his file (admin type only).
 
   TODO (grants): data only beyond sudo <-> wheel; groups still come from
   registry/hosts.nix `groups` / the user file's `groups`.
 */
 {
+  # Admin through sudo, not through the daemon: untrusted like everyone else
+  # (a trusted user is root-equivalent to the store without a password).
+  # Builders still serve him -- the daemon dispatches for every client -- he
+  # just cannot name his own; root can (sudo nix build --builders ...).
   admin = {
     home = "persistent";
-    nix = "admin";
+    nix = "untrusted";
     session = "home-manager";
-    builders = true;
+    builders = false;
     grants = [ "sudo" "network" "media" ];
     rank = 3;
-    overridable = [ "home" "session" "grants" ];
+    overridable = [ "home" "nix" "builders" "session" "grants" ];
   };
 
   member = {
