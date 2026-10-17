@@ -1,6 +1,6 @@
 # hearth settings for the compositor: the live "feel" knobs (decoration/gaps/blur/animations, applied
-# via `hyprctl keyword` by the watcher in features/bonfire/home.nix) + the discrete window/app keybinds
-# (keybind.<action>, generated from features/hyprland/keybinds.nix, applied on hyprctl reload).
+# via `hyprctl keyword` by the watcher in modules/desktop/bonfire/default.nix) + the discrete window/app keybinds
+# (keybind.<action>, generated from modules/desktop/hyprland/keybinds.nix, applied on hyprctl reload).
 { lib }:
 let
   kb = import ./keybinds.nix;

@@ -1,5 +1,5 @@
-# Configurable discrete window/app keybinds owned by features/hyprland (stage 2 of the keybind
-# configurer; the shell binds live in features/bonfire/keybinds.nix). Consumed by home.nix (baked as the
+# Configurable discrete window/app keybinds owned by modules/desktop/hyprland (stage 2 of the keybind
+# configurer; the shell binds live in modules/desktop/bonfire/keybinds.nix). Consumed by home.nix (baked as the
 # hkb() inline defaults on the matching hl.bind calls) and by hearth.nix (turned into keybind.<action>
 # string settings). The live override flows through the same bonfire keybind watcher + ~/.local/state/
 # bonfire/keybinds.lua, so editing one in the TUI applies on `hyprctl reload`.

@@ -1,4 +1,5 @@
 {
+  config,
   pkgs,
   lib,
   osConfig,
@@ -6,6 +7,8 @@
 }:
 
 let
+  cfg = config.my.hyprland;
+
   # hyprlang (Hyprland's config parser) uses bare $ for its own variable
   # substitution and chokes on embedded shell $(...) / $var syntax in exec
   # strings ("<name> expected near '$'"). Keep the shell logic in a real
@@ -185,7 +188,7 @@ let
   # with nothing running it starts normally. That supersedes the old pgrep/focus/notify wrapper
   # (which couldn't re-show the window at all), so it's gone -- the .desktop override below (which
   # rofi's drun reads too) just passes the flag.
-  opendisplayPkg = pkgs.callPackage ../opendisplay/package.nix { };
+  opendisplayPkg = pkgs.callPackage ../../../packages/opendisplay.nix { };
 
   # Input lock (bound to SUPER+SHIFT+K below): toggle "ignore the laptop keyboard + touchpad" -- for
   # writing / resting a hand on the deck while on the move. Two halves:
@@ -328,7 +331,7 @@ in
     ALL monitors into one image; hyprshot has no such mode, and `-m output`
     captures the focused output only. Nothing else moves.
   */
-  home.packages = lib.mkIf (osConfig.my.desktop.compositor == "hyprland") [
+  home.packages = lib.mkIf (cfg.enable) [
     pkgs.hyprshot
     iioHyprlandWithTransformFix
     # iio-hyprland shells out to `hyprctl -j monitors | jq` internally; without
@@ -342,7 +345,7 @@ in
   # ~/.local/share/applications wins over the system entry by XDG precedence, and rofi's drun reads
   # the same file. Fields mirror the package's .desktop. StartupNotify off: a re-launch just shows
   # the existing window and exits, so a startup spinner that never resolves is worse than none.
-  xdg.desktopEntries = lib.mkIf (osConfig.my.desktop.compositor == "hyprland") {
+  xdg.desktopEntries = lib.mkIf (cfg.enable) {
     "org.opendisplay.desktop" = {
       name = "OpenDisplay";
       comment = "Use an iOS device as a Wayland display";
@@ -355,14 +358,14 @@ in
   };
 
   wayland.windowManager.hyprland = {
-    enable = osConfig.my.desktop.compositor == "hyprland";
+    enable = cfg.enable;
 
     # Lua, not hyprlang. Verified against this exact build's own source
     # (0.56.0's src/config/lua/bindings/*.cpp) rather than assumed from docs
     # of a fast-moving pre-1.0 API -- see extraConfig below for API notes.
     configType = "lua";
 
-    settings = lib.mkIf (osConfig.my.desktop.compositor == "hyprland") {
+    settings = lib.mkIf (cfg.enable) {
       /*
         Everything below is ONE hl.config({...}) call: the Lua renderer emits
         `hl.<name>(...)` per top-level settings key, and `config` is the
@@ -500,7 +503,7 @@ in
             passes = 3;
             vibrancy = 0.17;
             # false, not true. The rofi launcher is now a fullscreen translucent
-            # layer (features/bonfire) that fades in/out with the "layers"
+            # layer (modules/desktop/bonfire) that fades in/out with the "layers"
             # animation. ignore_opacity=true kept its blur at FULL strength through
             # the fade -- so on close the box vanished but the blurred backdrop
             # lingered a beat before snapping off. false makes the blur track the
@@ -619,8 +622,8 @@ in
       # the same preference the pre-readopt commit 990f0f5 carried.
       gesture = [
         # 4-finger drag = the built-in MOVE gesture. On a side-dock pile card (my.pyre) the
-        # PATCHED CMoveTrackpadGesture (features/hyprland/trapezoid.patch) slides THAT card live
-        # under the finger and on release runs gestures:dock_swipe_exec (set in features/pyre ->
+        # PATCHED CMoveTrackpadGesture (the keystone compositor patch (trapezoid.patch, now the fork's `keystone` branch)) slides THAT card live
+        # under the finger and on release runs gestures:dock_swipe_exec (set in modules/desktop/pyre ->
         # dock.sh gesture-move) to cycle or spring back; elsewhere it moves the focused window. This
         # REPLACED the old Lua-function 4-finger gesture (one-shot on release) with continuous.
         {
@@ -636,8 +639,8 @@ in
           action = "workspace";
         }
         # 3-finger HORIZONTAL show/hide of the side-dock pile (my.pyre), now CONTINUOUS: the
-        # PATCHED CDockPileTrackpadGesture (features/hyprland/trapezoid.patch) slides the WHOLE pile
-        # live under the fingers and on release runs gestures:dock_pile_exec (set in features/pyre
+        # PATCHED CDockPileTrackpadGesture (the keystone compositor patch (trapezoid.patch, now the fork's `keystone` branch)) slides the WHOLE pile
+        # live under the fingers and on release runs gestures:dock_pile_exec (set in modules/desktop/pyre
         # -> dock.sh gesture-pile) to settle shown/hidden or spring back. swipe LEFT reveals, RIGHT
         # hides. This REPLACED the old one-shot Lua-FUNCTION gesture (which only decided the verb on
         # release); a plain string action can express it now that the compositor owns the live slide.
@@ -689,9 +692,9 @@ in
       -- happening to be concatenated above it.
       local mod = "${osConfig.my.hyprland.modKey}"
 
-      -- Live keybind overrides (features/hyprland/keybinds.nix + hearth.nix). hkb(action, default)
+      -- Live keybind overrides (modules/desktop/hyprland/keybinds.nix + hearth.nix). hkb(action, default)
       -- returns the user's configured chord for that action, else the inline default. The override
-      -- table is written from settings.json by the bonfire keybind watcher (features/bonfire/home.nix)
+      -- table is written from settings.json by the bonfire keybind watcher (modules/desktop/bonfire/default.nix)
       -- and loaded here via pcall(dofile), so this config never parses JSON; binds that use hkb are
       -- pcall-wrapped, so a bad chord typed in the settings UI skips that one bind rather than failing
       -- the whole config -> a blank session. Same override file the shell binds read (compositor.nix).
@@ -840,7 +843,7 @@ in
       -- saved scales HERE, in-exec: an hl.monitor call makes that output "ruled", so it survives
       -- the reload DETERMINISTICALLY (no stamp, no timing race -- hl.get_monitors() lets us do it
       -- in pure Lua). Source of truth is a plain, hand/GUI-editable config file, one "<key><TAB>
-      -- <scale>" line per monitor, written by the capture hook in features/pyre. Key is stable
+      -- <scale>" line per monitor, written by the capture hook in modules/desktop/pyre. Key is stable
       -- across sessions: "opendisplay" (its output NAME is random each run), else "d:<description>"
       -- for real monitors, else "n:<name>". eDP-1 + DP-1 stay config-managed above
       -- (my.desktop.primaryOutputScale); HEADLESS-* (throwaway test outputs) are ignored.
@@ -977,14 +980,14 @@ in
       hl.window_rule({ match = { class = "^(org\\.opendisplay\\.desktop)$" }, float = true })
       -- The portal FILE PICKER (org.freedesktop.impl.portal.FileChooser=kde -> xdg-desktop-portal-kde,
       -- see features/session-services) must FLOAT, not tile. It's the native dialog Wine/KakaoTalk
-      -- (FileDialogPortal=always, features/kakaotalk) and GTK/Firefox all open to pick/save files. Its
+      -- (FileDialogPortal=always, modules/apps/kakaotalk) and GTK/Firefox all open to pick/save files. Its
       -- Wayland app-id (.class) is "org.freedesktop.impl.portal.desktop.kde" (NOT "xdg-desktop-portal-kde"
       -- -- that's only the window TITLE; verified live via hyprctl clients, where it showed floating:0).
       -- ...at Dolphin's DEFAULT size (measured live: a freshly-opened floating Dolphin is 1200x800), so
       -- the Wine/KakaoTalk file selector opens the same size as the native file manager it mirrors.
       hl.window_rule({ match = { class = "^(org\\.freedesktop\\.impl\\.portal\\.desktop\\.kde)$" }, float = true, size = "1200 800" })
       -- Wine's explorer.exe windows. NONE are user-facing here: a folder window (KakaoTalk's "open
-      -- folder") is redirected to Dolphin + closed by folderToDolphin (features/pyre), and the
+      -- folder") is redirected to Dolphin + closed by folderToDolphin (modules/desktop/pyre), and the
       -- `explorer.exe /desktop` SHELL stub shows up as a stray tiny 160x20 window top-left. So float
       -- them (no tiling reshuffle) AND park them off-screen at (-9999,-9999) with no focus steal --
       -- this SUPPRESSES the stray /desktop stub (and the transient folder window just flashes there
@@ -1115,7 +1118,7 @@ in
       -- too (the hyprlock music widget reflects the new state on its next poll).
       -- XF86 keys for keyboards that emit them; SUPER+[ / ] as the reliable lock-screen
       -- prev/next fallback. NO SUPER+P fallback here: it COLLIDED with the screenshot bind
-      -- in features/bonfire/compositor.nix (Hyprland fires EVERY bind on a combo, so one
+      -- in modules/desktop/bonfire/compositor.nix (Hyprland fires EVERY bind on a combo, so one
       -- press screenshotted AND toggled playback) -- play/pause stays on XF86AudioPlay /
       -- the Fn media key. NOT SUPER+space either: that is the app-menu launcher in the
       -- unlocked compositor, and a locked = true bind fires unlocked too, so it collides.
@@ -1167,7 +1170,7 @@ in
       -- (mod+D was a column-width cycle via `layoutmsg colresize`, but the active
       -- layout no longer accepts that message -- it just errored "unknown dwindle
       -- layoutmsg: colresize". Removed; mod+D now toggles the side dock, see
-      -- features/pyre.)
+      -- modules/desktop/pyre.)
       bindkb(hkb("float", mod .. " + ALT + space"), hl.dsp.window.float())
       -- Same float toggle on Mod+Shift+F (pairs with Mod+F = fullscreen), but
       -- likewise skipped on dock windows (see ksActiveIsDock above).
@@ -1325,7 +1328,7 @@ in
       --
       -- Each screen owns a decade of workspaces, pinned so switching never slips. Decades follow
       -- SCREEN ORDER left-to-right -- nothing hardcoded: leftmost screen = ws 1-10 (named A1..A10),
-      -- next = 11-20 (B1..), etc. (dynamic pin block below + its features/pyre twin for hotplug;
+      -- next = 11-20 (B1..), etc. (dynamic pin block below + its modules/desktop/pyre twin for hotplug;
       -- the chess names drive the waybar display).
       --
       --   SUPER+<n>       -> "scene <n>": snap EVERY screen to its slot <n> at once (macOS Spaces with
@@ -1380,7 +1383,7 @@ in
       -- Per-monitor workspaces: pin each decade to a screen (left-to-right), chess-name them, and
       -- evacuate orphaned windows -- see wsManageLua in the let above. Apply at every config
       -- load/reload HERE, and re-run on every live monitor change (hotplug/disconnect) via the hook
-      -- below, which also captures runtime scales. (Formerly split/duplicated into features/pyre;
+      -- below, which also captures runtime scales. (Formerly split/duplicated into modules/desktop/pyre;
       -- hl.on stacks + reload clears handlers, so this is the single owner now.)
       ${wsManageLua}
       hl.on("monitor.layout_changed", function()
