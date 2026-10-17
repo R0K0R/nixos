@@ -340,6 +340,8 @@ in
             throw "registry/hosts.nix: ${hn} lists users with no registry/users/<name>.nix: ${fmtList missing}"
           else if dead != [ ] then
             throw "registry/hosts.nix: ${hn} lists removed (tombstoned) users: ${fmtList dead}"
+          else if subtractLists h.users (h.localPasswords or [ ]) != [ ] then
+            throw "registry/hosts.nix: ${hn}.localPasswords names accounts that do not live there: ${fmtList (subtractLists h.users (h.localPasswords or [ ]))}"
           else if !(elem h.primary h.users) then
             throw "registry/hosts.nix: ${hn}.primary = \"${h.primary}\" is not one of its users"
           else
@@ -554,7 +556,9 @@ in
               // lib.optionalAttrs (e.home == "tmpfs") { tmpfsHome.size = u.tmpfsSize or "2G"; }
               // lib.optionalAttrs (sessionKind e.session == "kiosk") { kiosk = pkgs.${e.session.kiosk}; }
               // lib.optionalAttrs (u ? description) { inherit (u) description; }
-              // lib.optionalAttrs (u ? passwordSecret) { inherit (u) passwordSecret; }
+              # A host that keeps an account's password local (hosts.nix
+              # localPasswords) does not get the registry's secret for it.
+              // lib.optionalAttrs (u ? passwordSecret && !(elem n (h.localPasswords or [ ]))) { inherit (u) passwordSecret; }
               // lib.optionalAttrs (u ? sshKeys) { inherit (u) sshKeys; }
               // lib.optionalAttrs (u ? homeActivation) { inherit (u) homeActivation; }
               // lib.optionalAttrs (u ? stateVersion) { inherit (u) stateVersion; }

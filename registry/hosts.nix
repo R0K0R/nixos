@@ -8,6 +8,13 @@
              there is no enable, same as my.users.
     primary  the account features default to (my.<feature>.users). Per host,
              because "whose machine is this" is a property of the machine.
+    localPasswords
+             accounts whose password this host keeps for itself (set with
+             passwd, users.mutableUsers left at its default) instead of using
+             the registry's passwordSecret. A secret is encrypted to particular
+             hosts' keys (age/ + secrets.nix); a host that is not a recipient
+             cannot decrypt it, and agenix would then fail at activation. The
+             account's other axes are unchanged.
     narrow   <user> -> axes to narrow on this host (never widen): builders
              true -> false, grants to a subset, nix to a lower rank. Plus
              `localBuilds = false`, accepted only where the host builds
@@ -36,13 +43,25 @@
     };
 
     victus-15 = {
-      # Both humans. benjamin gets an account and a home-manager configuration,
-      # but none of the features scoped to the primary unless he is named
-      # explicitly.
+      # Both humans. benjamin gets an account, but his home is activated by his
+      # own repo (homeActivation = "standalone") and none of the features
+      # scoped to the primary reach him unless he is named explicitly.
       users = [ "r0k0r" "benjamin" ];
       primary = "r0k0r";
       # Headless builder: no media, no serial devices.
       narrow.r0k0r.grants = [ "sudo" "network" ];
+      # He is an admin (it is his machine, dell-latitude) but a guest here as
+      # far as groups go: wheel + networkmanager, exactly what he has had on
+      # this host all along -- no video/audio on a headless builder.
+      narrow.benjamin.grants = [ "sudo" "network" ];
+    };
+
+    # benjamin's own machine. His account's password is his own: the secret in
+    # age/ is encrypted to victus-15 only, which dell-latitude is not.
+    dell-latitude = {
+      users = [ "benjamin" ];
+      primary = "benjamin";
+      localPasswords = [ "benjamin" ];
     };
   };
 
@@ -70,6 +89,19 @@
       localBuilds = true;
       ccache = true;
       ca-derivations = true;
+      guest-overlay = false;
+      impermanence = false;
+    };
+
+    dell-latitude = {
+      managed = true;
+      builder = false;
+      # Dispatches to yulee and victus-15 (my.remote-builder.client).
+      builderClient = true;
+      # max-jobs = 0, set by the remote-builder client: nothing builds here.
+      localBuilds = false;
+      ccache = false;
+      ca-derivations = false;
       guest-overlay = false;
       impermanence = false;
     };
