@@ -11,8 +11,9 @@ builds on this flake's `homeLib` (see [Two repos](#two-repos)).
 |---|---|
 | `galaxybook4-pro360` | Samsung Galaxy Book4 Pro 360 laptop. Meteor Lake, Hyprland desktop. Dispatches builds to victus-15 and yulee. |
 | `victus-15` | HP Victus 15. Ryzen znver3, headless, doubles as a remote builder. |
+| `dell-latitude` | Dell Latitude (Comet Lake), Benjamin Lee's laptop. Untuned, so everything substitutes from cache.nixos.org; Hyprland session from tuigreet, his desktop in his own home repo. Dispatches builds to yulee and victus-15. |
 
-Both hosts currently turn on the `march` tuning lever, which puts them on an
+The first two hosts currently turn on the `march` tuning lever, which puts them on an
 IntraISACross build against a
 [nixpkgs fork](https://github.com/R0K0R/nixpkgs/tree/combined-fundamental) --
 see [Tuning](#tuning). A host with tuning off gets plain upstream nixpkgs and
@@ -169,13 +170,13 @@ empty category and two features with the same leaf name are errors.
 
 | category | features |
 |---|---|
-| `core/` | `_meta` (cross-feature requires/roles), agenix, base, boot, locale, packages, swapfile, users |
+| `core/` | `_meta` (cross-feature requires/roles), agenix, base, boot (+ optional plymouth splash), locale, packages, swapfile, users |
 | `nix/` | ccache, nix-settings, remote-builder |
 | `hardware/` | cuda, embedded-keyboard, keyd, libinput, pipewire, power, samsung-galaxybook, touch-gestures, upower, x-folding-trackpad |
-| `session/` | compositor, cursor-theme, dms, fcitx, fonts, greetd, hakuspace, hyprland, niri, qt-theming, session-env, session-services, sidedock |
-| `net/` | discovery, globaltun, headscale, network, openvpn, wireless-display |
+| `session/` | compositor, cursor-theme, dms, fcitx, fonts, greetd, hakuspace, hyprland, niri, qt-theming, session-env, session-services, sidedock, tuigreet |
+| `net/` | discovery, globaltun, headscale, network, openvpn, syncthing, tailscale, wireless-display |
 | `shell/` | eza, fish, ssh, starship, zsh |
-| `apps/` | astro, claude-code, claude-desktop, claude-science, desktop-apps, easyeffects, emacs, firefox, flamenco, flatpak, fx570ex, hop, kakaotalk, kitty, media, opencode, samsung-ecosystem, waydroid |
+| `apps/` | astro, claude-code, claude-desktop, claude-science, desktop-apps, easyeffects, emacs, firefox, flamenco, flatpak, fx570ex, hop, kakaotalk, kakaotalk-system, kitty, media, opencode, opendisplay, samsung-ecosystem, waydroid |
 | `dev/` | arduino, dev-toolchain, diagnostics, direnv, latex, python-dev, qt-dev |
 
 The category is organisation only. The option is `my.<name>` whatever the
@@ -301,6 +302,15 @@ records cross-host facts (builder role, ccache, CA, guest-overlay,
 impermanence; yulee is listed as an unmanaged builder) that other machines need
 without evaluating that host. They are facts, not switches: the switches are
 still `my.*` in the host file.
+
+`hosts.<host>.localPasswords` lists accounts whose password that host keeps for
+itself (`passwd`, `users.mutableUsers` at its default) instead of using the
+registry file's `passwordSecret`: a secret is encrypted to particular hosts'
+keys, and a host that is not a recipient (dell-latitude, for benjamin's
+victus-15-only secret) could not decrypt it. A client host with a builder key of
+its own authorises it on a NixOS builder with
+`my.remote-builder.server.extraKeys`, and reaches a peer in another tailnet by
+FQDN through the peer's `address`.
 
 **What the axes do today.** `my.users` on both hosts comes from the registry
 (`lib/registry-users.nix`); the machinery is in `features/core/users/`, each

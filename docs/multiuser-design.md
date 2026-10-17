@@ -485,6 +485,24 @@ deliberate system change.
     btrfs-layout (toplevel unchanged). Eval-tested (tests/guest-overlay.nix),
     never run.
 
+11. **dell-latitude, benjamin's machine** (ported from github:sihooleebd/nixos
+    with his commits credited). benjamin becomes an `admin` with a standalone
+    home (victus-15 narrows his grants back to sudo + network, so his groups
+    there are unchanged; his integrated home-manager configuration leaves the
+    victus-15 toplevel). `hosts.<host>.localPasswords`: dell keeps his password
+    local, because `age/hashed-password-benjamin.age` is encrypted to victus-15
+    only. `hosts/dell-latitude` is untuned (plain upstream nixpkgs, everything
+    substitutes) and a remote-builder client of yulee and victus-15 over a
+    different tailnet (`peers.<n>.address`, `my.remote-builder.server.extraKeys`
+    for his own builder key, still to be provided). New features: tuigreet,
+    tailscale (watchdog, resolved, stable Wi-Fi MAC), syncthing, opendisplay,
+    kakaotalk-system, and an optional plymouth splash in `boot`. Shared
+    features gained `my.keyd.layout`/`perDevice`, `my.emacs.font`,
+    `my.power.profile` (default "powersave" = what the module hard-wired; the
+    static EPP udev rule is gone and power-profiles-daemon is pinned instead,
+    which changes galaxybook's toplevel), and the kitty kitten URLs are pinned.
+    His desktop (bonfire, pyre, lyre, ...) is his home repo's. Eval-only.
+
 ### Next
 
 6. **hm-switch** (features/core/epoch, off): turn on with my.epoch once the
