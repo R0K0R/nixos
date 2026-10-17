@@ -62,6 +62,29 @@ let
           content-addressed, which a daemon accepts from untrusted clients.
         '';
       };
+      address = lib.mkOption {
+        type = lib.types.str;
+        default = name;
+        defaultText = lib.literalExpression "the attribute name";
+        description = ''
+          What to actually connect to, when that differs from the peer's name.
+
+          Set ONLY in the peer's ssh_config block (peer-*.nix). Everything else
+          -- /etc/nix/machines, the substituter URLs, the wrapper scripts --
+          keeps using the attribute name, and ssh translates it via
+          `Host <name>` / `HostName <address>`. One place knows the address.
+
+          Needed because MagicDNS does not give every client the same name for
+          the same machine. A client inside the peer's own tailnet resolves the
+          bare name; a client in another tailnet sees the peer as a SHARED
+          node, which gets only its FQDN (`<name>.<tailnet>.ts.net`) -- the
+          bare name does not resolve there at all.
+
+          Whatever this is set to is what ssh verifies against known_hosts (no
+          HostKeyAlias is set), so the peer's knownHosts entry lists it too.
+        '';
+      };
+
       daemonUser = lib.mkOption {
         type = lib.types.str;
         default = p.sshUser;
@@ -112,10 +135,26 @@ in
     a login PATH), trusted, authorized for the builder key only. Clients name
     it as the peer's daemonUser.
   */
-  options.my.remote-builder.server.enable = lib.mkEnableOption ''
-    this host as a remote builder: a trusted "nix-ssh" account for the client
-    daemons' builder key (nix.sshServe, ssh-ng, write)
-  '';
+  options.my.remote-builder.server = {
+    enable = lib.mkEnableOption ''
+      this host as a remote builder: a trusted "nix-ssh" account for the client
+      daemons' builder key (nix.sshServe, ssh-ng, write)
+    '';
+
+    extraKeys = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "ssh-ed25519 AAAA... root@some-client" ];
+      description = ''
+        Further public keys that may log in as the nix-ssh account, besides
+        the shared builder key in ./nix-remote-builder.pub. For a client host
+        with a builder key of its own (sshKeySecret = null, hand-installed):
+        two clients, two credentials, so revoking one does not lock the other
+        out. Each key is a trusted-user credential on this host -- the same
+        weight as the shared one.
+      '';
+    };
+  };
 
   options.my.remote-builder.client = {
     enable = lib.mkEnableOption ''
@@ -235,7 +274,7 @@ in
       protocol = "ssh-ng";
       write = true;
       trusted = true;
-      keys = [ (lib.fileContents ./nix-remote-builder.pub) ];
+      keys = [ (lib.fileContents ./nix-remote-builder.pub) ] ++ config.my.remote-builder.server.extraKeys;
     };
     # trusted = true adds nix-ssh to trusted-users itself. Not a person, so
     # not in the registry, and the nix-access assertion does not cover it.

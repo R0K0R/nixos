@@ -272,7 +272,15 @@
     ccache.crossDerivation.enable = true;
     # Builds for galaxybook's daemon as the trusted "nix-ssh" account; the
     # people on this machine are untrusted (registry).
-    remote-builder.server.enable = true;
+    remote-builder.server = {
+      enable = true;
+      # Further clients' builder keys, one per client host (a client with its
+      # own hand-installed key, sshKeySecret = null). dell-latitude's is
+      # /etc/nix/remote-builder/ssh_key.pub there; benjamin has to provide it.
+      # Not invented, so the list stays empty until he does:
+      #   extraKeys = [ "ssh-ed25519 AAAA... root@dell-latitude" ];
+      extraKeys = [ ];
+    };
     ccache.builder = {
       enable = true;
       # yulee's write-behind stage, mounted read-only over Tailscale, so a
