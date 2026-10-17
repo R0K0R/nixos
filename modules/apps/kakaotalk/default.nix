@@ -66,7 +66,7 @@ let
     # LANG/LC_ALL (it parses the string itself, no glibc locale needed): en_US
     # -> cp1252 (Latin) mangles Hangul typed into KakaoTalk's input to tofu;
     # ko_KR -> cp949 (Korean) and it renders. The locale is built via
-    # i18n.supportedLocales below.
+    # the system's i18n.supportedLocales (see README.md, "What the system must provide").
     export LANG=ko_KR.UTF-8
     export LC_ALL=ko_KR.UTF-8
     # xdg-utils puts `xdg-open` on Wine's PATH so winebrowser can hand URLs/files/folders to the
@@ -216,44 +216,44 @@ in
 {
   options.my.kakaotalk = {
     enable = lib.mkEnableOption
-      "KakaoTalk via Wine -- Korean fonts + ko_KR locale, Daum ad-block, and the XEmbed->SNI tray bridge";
-    # Accounts this feature applies to; defaults to the primary user.
-    users = import ../../lib/user-scope.nix { inherit lib config; };
+      "KakaoTalk via Wine -- patched Wine (portal file dialogs, no Wayland IME path), the launcher, Korean fonts and the XEmbed->SNI tray bridge";
   };
 
   config = lib.mkIf cfg.enable {
-    # Korean fonts, system-level (fontconfig) so Wine/Pango can resolve them --
-    # otherwise KakaoTalk (and Hangul anywhere) renders as tofu boxes. Merges
-    # with the fonts feature's own list.
-    fonts.packages = with pkgs; [ nanum baekmuk-ttf ];
+    # The app itself. winetricks rides along as it did in the per-account package list.
+    # Korean fonts too, so Wine/Pango can resolve them -- otherwise KakaoTalk (and Hangul anywhere)
+    # renders as tofu boxes. Per-user (fontconfig reads ~/.nix-profile/share/fonts), which is
+    # enough for this app; the system's fonts feature may cover them system-wide as well.
+    home.packages = [ winePortal kakaotalk pkgs.winetricks pkgs.nanum pkgs.baekmuk-ttf ];
+    fonts.fontconfig.enable = true;
 
-    # Build the Korean locale so the launcher can run KakaoTalk under
-    # LANG=ko_KR.UTF-8 (see the codepage note in the launcher). supportedLocales
-    # REPLACES the default list (it's an mkDefault), so carry the base two
-    # forward -- defaultLocale (from my.locale) + C -- alongside ko_KR.
-    i18n.supportedLocales = [
-      "C.UTF-8/UTF-8"
-      "${config.i18n.defaultLocale}/UTF-8"
-      "ko_KR.UTF-8/UTF-8"
-    ];
+    /*
+    XEmbed -> StatusNotifier tray bridge. Wine (KakaoTalk) only speaks the legacy
+    X11 XEmbed system tray, which Hyprland doesn't host -- so Wine draws its own
+    floating tray window (the "pill"). xembedsniproxy claims the XEmbed tray
+    selection (Wine hands it the icon, no pill) and re-exposes each icon as an SNI
+    item REGISTERED WITH the existing StatusNotifier watcher (waybar's) -- it does
+    NOT seize org.kde.StatusNotifierWatcher, so it coexists with the bar's tray.
+    (snixembed goes the reverse direction and clobbers the tray -- don't use it.)
 
-    # Blackhole KakaoTalk's ad banners (Kakao/Daum AdFit network). Wine resolves
-    # through the Linux stack, so the prefix's Windows hosts file is ignored, but
-    # /etc/hosts wins anyway -- nsswitch checks `files` before `dns`, so this
-    # beats a MagicDNS/systemd-resolved resolver too. ad.daum.net +
-    # info.ad.daum.net are baked into the KakaoTalk binary; display/analytics are
-    # the same ad-only subdomain family. NOT t1.daumcdn.net -- that CDN also
-    # serves emoticons/images. Restart KakaoTalk after a switch for the banner to
-    # vanish.
-    networking.extraHosts = ''
-      0.0.0.0 ad.daum.net
-      0.0.0.0 info.ad.daum.net
-      0.0.0.0 display.ad.daum.net
-      0.0.0.0 analytics.ad.daum.net
-    '';
-
-    # The app itself, per-account (the primary user, via my.kakaotalk.users),
-    # the same way every other package-owning feature contributes.
-    my.packages.perUser = lib.genAttrs cfg.users (_: [ winePortal kakaotalk ] ++ (with pkgs; [ winetricks ]));
+    Lives here, gated on my.kakaotalk.enable, rather than in the shell feature,
+    because it only ships inside kdePackages.plasma-workspace -- a 3GB closure
+    that has no business landing on hosts without a Wine tray app. The daemon
+    itself is tiny (~30MB RSS). Its 32x32 XEmbed host window is hidden by a
+    window rule in modules/desktop/hyprland (class ^(xembedsniproxy)$).
+  */
+  systemd.user.services.kakaotalk-tray-bridge = {
+    Unit = {
+      Description = "KakaoTalk XEmbed->SNI tray bridge (xembedsniproxy)";
+      PartOf = [ "graphical-session.target" ];
+      After = [ "graphical-session.target" ];
+    };
+    Install.WantedBy = [ "graphical-session.target" ];
+    Service = {
+      ExecStart = "${pkgs.kdePackages.plasma-workspace}/bin/xembedsniproxy";
+      Restart = "on-failure";
+      RestartSec = 2;
+    };
+  };
   };
 }

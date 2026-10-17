@@ -1,9 +1,7 @@
-{ config, lib, pkgs, osConfig, ... }:
+{ config, lib, pkgs, ... }:
 
 let
-  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "neovim"; };
-  cfg = osConfig.my.neovim;
-  enabled = cfg.enable && inScope;
+  cfg = config.my.neovim;
 
   /*
     NvChad's starter, pinned. There is no nvchad package in nixpkgs, and that
@@ -19,7 +17,10 @@ let
     hash = "sha256-xdLr6tlU9uA+wu0pqha2br0fdVm+1MjgjbB5awz9ICU=";
   };
 in
-lib.mkIf enabled {
+{
+options.my.neovim.enable = lib.mkEnableOption "Neovim with the NvChad starter config, and a desktop entry that opens it in kitty";
+
+config = lib.mkIf cfg.enable {
   home.packages = [
     pkgs.neovim
     # lazy.nvim clones plugins over git at first launch; treesitter compiles
@@ -71,4 +72,5 @@ lib.mkIf enabled {
       "text/x-python"
     ];
   };
+};
 }

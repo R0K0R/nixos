@@ -1,9 +1,12 @@
-{ config, lib, pkgs, osConfig, ... }:
+{ config, lib, pkgs, ... }:
 
-let
-  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "desktop-apps"; };
-in
-lib.mkIf (osConfig.my.desktop-apps.enable && inScope) {
+{
+options.my.dolphin.enable = lib.mkEnableOption ''
+  the KDE portal in the home profile and Dolphin's seeded Information (preview) panel. The
+  portal's routing (FileChooser -> kde) is configured by the system's session-services
+'';
+
+config = lib.mkIf config.my.dolphin.enable {
   /*
     The KDE portal in the HOME profile, so the file-picker routing set in
     features/session-services (FileChooser -> kde) actually resolves.
@@ -55,4 +58,5 @@ lib.mkIf (osConfig.my.desktop-apps.enable && inScope) {
         > "$state"
     fi
   '';
+};
 }
