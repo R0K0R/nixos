@@ -1,4 +1,5 @@
 {
+  config,
   pkgs,
   lib,
   osConfig,
@@ -6,6 +7,13 @@
 }:
 
 let
+  # sharedModules are evaluated once per user; this is what makes the whole
+  # Hyprland home half (config, rules, the require("feat.*") lines other
+  # features append, rotation shim) apply only to the accounts
+  # my.hyprland.users names. A user whose home repo owns its own Hyprland
+  # configuration is left out, so the two never merge into one hyprland.lua.
+  inScope = import ../../../lib/in-scope.nix { inherit osConfig config; feature = "hyprland"; };
+
   # hyprlang (Hyprland's config parser) uses bare $ for its own variable
   # substitution and chokes on embedded shell $(...) / $var syntax in exec
   # strings ("<name> expected near '$'"). Keep the shell logic in a real
@@ -122,7 +130,7 @@ let
   '';
 
 in
-lib.mkMerge [
+lib.mkIf inScope (lib.mkMerge [
 {
   /*
     Screenshots. The region snip is now an IN-SHELL Quickshell overlay
@@ -217,4 +225,4 @@ lib.mkMerge [
   (lib.mkIf (osConfig.my.desktop.compositor == "hyprland") {
     xdg.configFile."hypr/feat/touch.lua".source = ./touch.lua;
   })
-]
+])

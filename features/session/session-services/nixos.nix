@@ -38,15 +38,74 @@ let
   '';
 in
 {
-  options.my.session-services.enable = lib.mkEnableOption ''
-    graphical-session plumbing: dconf, compiled GSettings schemas exported
-    session-wide, geoclue2, and the portal/polkit services a bare compositor
-    needs because no desktopManager provides them
-  '';
+  options.my.session-services = {
+    enable = lib.mkEnableOption ''
+      graphical-session plumbing: dconf, compiled GSettings schemas exported
+      session-wide, geoclue2, and the portal/polkit services a bare compositor
+      needs because no desktopManager provides them
+    '';
+
+    kdeFileChooser.enable = lib.mkEnableOption ''
+      the KDE file picker for every open/save/upload dialog: the xdg-desktop-
+      portal FileChooser interface is routed to the KDE backend (Dolphin-style
+      chooser) instead of gtk's, and GTK_USE_PORTAL=1 makes GTK apps ask the
+      portal at all. The KDE portal must also reach the home profile the daemon
+      searches, which is the user's own package list. Off by default so a host
+      that never asked for it keeps the gtk picker'';
+
+    pkexecWrapper.enable = lib.mkEnableOption ''
+      the setuid /run/wrappers/bin/pkexec. polkit itself is always on here, but
+      nixpkgs made the wrapper a separate opt-in after PwnKit, and without it
+      any GUI tool that escalates through pkexec dies with "pkexec must be
+      setuid root". Off by default: it is a setuid binary, so a host takes it
+      deliberately'';
+
+    printing.broadDrivers.enable = lib.mkEnableOption ''
+      a broad CUPS driver set (gutenprint, hplip, brlaser and Brother's generic
+      driver, epson-escpr) plus the system-config-printer GUI. Modern network
+      printers are driverless (IPP Everywhere) and need none of it; this is for
+      older and USB printers. A model-specific driver goes in
+      services.printing.drivers next to this'';
+  };
 
   config = lib.mkMerge [
     # Depended upon by locale-automatic (geoclue2); see features/_meta.
     { my.internal.features.session-services.enabledBy = config.my.session-services.enable; }
+
+    (lib.mkIf (config.my.session-services.enable && config.my.session-services.pkexecWrapper.enable) {
+      # The module's own option, not a hand-rolled security.wrappers.pkexec,
+      # which would collide with the conditional definition the module carries.
+      security.polkit.enablePkexecWrapper = true;
+    })
+
+    (lib.mkIf (config.my.session-services.enable && config.my.session-services.kdeFileChooser.enable) {
+      xdg.portal = {
+        extraPortals = [ pkgs.kdePackages.xdg-desktop-portal-kde ];
+        # gtk stays the general default (it serves Settings, see the UseIn=gnome
+        # note below), but the FILE PICKER goes to KDE. kde.portal declares
+        # UseIn=KDE and would be skipped on a bare compositor; naming it here
+        # overrides that guard exactly as default=gtk overrides gtk's own.
+        config.common."org.freedesktop.impl.portal.FileChooser" = [ "kde" ];
+      };
+      # GTK apps (Firefox, Chrome, GTK dialogs) use their OWN GtkFileChooser
+      # and never consult the portal unless told to, so the routing above would
+      # be invisible to them. Qt/KDE apps use the KDE dialog natively.
+      environment.sessionVariables.GTK_USE_PORTAL = "1";
+    })
+
+    (lib.mkIf (config.my.session-services.enable && config.my.session-services.printing.broadDrivers.enable) {
+      services.printing.drivers = with pkgs; [
+        gutenprint
+        hplip
+        # brlaser covers most Brother lasers (open source); brgenml1 is Brother's
+        # generic driver for the models brlaser misses.
+        brlaser
+        brgenml1lpr
+        brgenml1cupswrapper
+        epson-escpr
+      ];
+      environment.systemPackages = [ pkgs.system-config-printer ];
+    })
 
     (lib.mkIf config.my.session-services.enable {
   /* DMS’s NixOS module turns these on with mkDefault only when HM sets

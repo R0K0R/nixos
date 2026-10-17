@@ -14,7 +14,22 @@ let
       {
         name = "Hyprland";
         file = "hyprland.desktop";
-        bin = "${config.programs.hyprland.package}/bin/start-hyprland";
+        # Under UWSM (programs.hyprland.withUWSM, which the hyprland feature sets)
+        # the compositor must be started THROUGH uwsm: it is what activates
+        # graphical-session.target, and every user service that hangs off that
+        # target (a shell, the rotation reader, tray applets) never starts when
+        # the compositor is launched bare. Same command line nixpkgs' own
+        # programs.uwsm.waylandCompositors entries put in their .desktop files
+        # (`uwsm start -F -- <binary>`); the binary stays start-hyprland, the
+        # launcher the compositor itself asks for.
+        bin =
+          let
+            hypr = "${config.programs.hyprland.package}/bin/start-hyprland";
+          in
+          if config.programs.hyprland.withUWSM then
+            "${lib.getExe config.programs.uwsm.package} start -F -- ${hypr}"
+          else
+            hypr;
       }
     else if compositor == "niri" then
       {

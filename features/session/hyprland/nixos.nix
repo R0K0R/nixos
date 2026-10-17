@@ -18,6 +18,12 @@
     because the value is consumed by a shell script rather than by the config.
   */
   options.my.hyprland = {
+    # Accounts whose home-manager side gets this feature's Hyprland config;
+    # defaults to the primary user. A user who brings their own Hyprland
+    # configuration in a home repo is left out (users = [ ]), while the system
+    # half below (the package, the session entry, UWSM) stays for everyone.
+    users = import ../../../lib/user-scope.nix { inherit lib config; };
+
     keystone.enable = lib.mkEnableOption ''
       EXPERIMENTAL per-window perspective-trapezoid rendering for windows tagged
       "dock" (my.sidedock). Builds the compositor from the fork's `keystone`

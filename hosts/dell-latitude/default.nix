@@ -108,6 +108,15 @@
     "Noto Sans Mono CJK KR"
   ];
 
+  # Lock screen. His home locks with hyprlock; a PAM service of its own keeps
+  # it from falling back to `su`'s stack, which is slow and spawns xauth.
+  security.pam.services.hyprlock = { };
+
+  # blueman's D-Bus mechanism and polkit rules: the backend of the
+  # blueman-applet in his tray, so pairing and connecting do not prompt for root
+  # each time. (my.discovery enables bluez itself.)
+  services.blueman.enable = true;
+
   # Brother DCP-T536DW (USB).
   #  - PRINT: no nixpkgs package exists for this model and it's a plain USB printer (interface
   #    07/02, NOT IPP-over-USB 07/01/04 -- so no driverless/ipp-usb), so its own colour driver is
@@ -270,8 +279,25 @@
       enable = true;
       greeting = "bonfire";
     };
-    qt-theming.enable = true;
-    session-services.enable = true;
+    # qt-theming's home half only repairs DMS's matugen output (a user service
+    # deriving a black KDE scheme from DankMatugen.colors, and qt6ct.conf edits).
+    # He runs no DMS, so it applies to nobody; the system half (the QT_PLUGIN_PATH
+    # entry that makes the qt6ct platform theme loadable) stays.
+    qt-theming = {
+      enable = true;
+      users = [ ];
+    };
+    session-services = {
+      enable = true;
+      # What his desktop leans on that a bare compositor does not provide:
+      # open/save dialogs through the KDE portal (Dolphin-style) with GTK apps
+      # sent to the portal too, pkexec for the GUI tools that escalate through
+      # it, and the broad CUPS driver set with the printer GUI (his Brother
+      # model's own driver is added below).
+      kdeFileChooser.enable = true;
+      pkexecWrapper.enable = true;
+      printing.broadDrivers.enable = true;
+    };
 
     desktop = {
       compositor = "hyprland";
@@ -282,6 +308,19 @@
     network = {
       enable = true;
       kdeconnect.enable = true;
+    };
+
+    # Hyprland: the compositor package, UWSM and the session entry stay the
+    # system's; the CONFIGURATION is his own (a home module in his home repo, with
+    # his keybinds and his rules), so the system's Hyprland home half applies to
+    # nobody here. Left in scope it would write a second Lua config and
+    # hl.config settings that merge into his.
+    hyprland = {
+      users = [ ];
+      # His 3D dock (the "dock"-tagged windows rendered as a perspective
+      # trapezoid) and his home's decoration:keystone_* options need the
+      # keystone build of the compositor: the stock one rejects those keys.
+      keystone.enable = true;
     };
 
     /*
