@@ -38,7 +38,12 @@
 { homeModules, inputs, hostName }:
 
 let
-  sharedModules = homeModules ++ [ inputs.feat-emacs.homeModule ];
+  # ./home-tuning.nix declares the home's my.tuning (per-user tuning); in every
+  # home so a user module may always set it.
+  sharedModules = homeModules ++ [
+    inputs.feat-emacs.homeModule
+    ./home-tuning.nix
+  ];
   extraSpecialArgs = { inherit inputs hostName; };
 
   userModule = u: { home.stateVersion = u.stateVersion; };
@@ -62,7 +67,38 @@ in
 {
   inherit sharedModules extraSpecialArgs userModule homeUsers systemUsers standaloneUsers;
 
-  users = lib: osConfig: lib.mapAttrs (_: userModule) (systemUsers lib osConfig);
+  /*
+    An integrated home is built from the system's set by the system, so its
+    my.tuning must stay at the defaults; per-user tuning is for standalone
+    homes (homeLib.<host>.mkHome).
+  */
+  users =
+    lib: osConfig:
+    lib.mapAttrs (
+      n: u: {
+        imports = [
+          (userModule u)
+          (
+            { config, ... }:
+            {
+              assertions = [
+                {
+                  assertion =
+                    let
+                      t = config.my.tuning;
+                    in
+                    t.march == "system"
+                    && t.lto == "system"
+                    && t.o3 == "system"
+                    && t.packages.o3 ++ t.packages.lto ++ t.exclude.o3 ++ t.exclude.lto == [ ];
+                  message = "my.tuning in ${n}'s home: an integrated home (homeActivation = \"system\") is built from the system's package set; per-user tuning needs homeActivation = \"standalone\".";
+                }
+              ];
+            }
+          )
+        ];
+      }
+    ) (systemUsers lib osConfig);
 
   mkHome =
     {
@@ -70,6 +106,13 @@ in
       nixos,
       username,
       modules ? [ ],
+      # my.tuning (the home's own option) -> the package set the home is built
+      # from. homeLib.<host>.mkHome passes lib/user-tuning.nix's; without it
+      # (tier2-eval's system-side evaluation) a home always gets the host's.
+      pkgsFor ? (_: nixos.pkgs),
+      # config -> extra failure messages (homeLib's surface compatibility
+      # check, lib/surface-check.nix); reported like failed assertions.
+      extraChecks ? (_: [ ]),
       # Default follows who activates the home: true (system-installed
       # packages, identical to the integrated home) for "system" accounts,
       # false (packages in the user's own profile) for "standalone" ones.
@@ -78,6 +121,9 @@ in
     let
       hm = inputs.home-manager;
       osConfig = nixos.config;
+      # The HOST's set: home-manager's module list itself (pkgs.path for its
+      # assertions/meta modules) and the default _module.args.pkgs, which the
+      # tuning module below overrides.
       inherit (nixos) pkgs;
       lib = nixos.lib or pkgs.lib;
       cfg = osConfig.home-manager;
@@ -137,13 +183,17 @@ in
           ++ cfg.sharedModules
           ++ [
             { _module.args.name = lib.mkOptionDefault username; }
+            # The home's package set from its own my.tuning. Normal priority
+            # beats home-manager's `_module.args.pkgs = mkDefault pkgs`; the
+            # same fixpoint home-manager's nixpkgs module relies on.
+            ({ config, ... }: { _module.args.pkgs = pkgsFor config.my.tuning; })
             glue
             (userModule u)
           ]
           ++ modules;
       };
 
-      failed = map (x: x.message) (lib.filter (x: !x.assertion) raw.config.assertions);
+      failed = map (x: x.message) (lib.filter (x: !x.assertion) raw.config.assertions) ++ extraChecks raw.config;
       checked =
         if failed == [ ] then
           raw
@@ -155,6 +205,7 @@ in
     checked
     // {
       inherit (checked.config.home) activationPackage;
-      inherit pkgs;
+      # The set this home was actually built from.
+      pkgs = checked._module.args.pkgs;
     };
 }

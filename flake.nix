@@ -44,6 +44,24 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    /*
+      The tuning classifier's caches, one directory per host:
+      system-tier1.nix / system-tier2.nix (the system's evidence) and
+      users/<user>.nix (each user's, written by tuning-refresh). Union-merged by
+      tuning/runtime-cache/lookup.nix. In the repo until the admin migrates
+      them (scripts/tuning-cache-migrate.sh): then each becomes
+      path:/var/lib/tuning-cache/<host>, a plain directory outside the flake,
+      locked like any input and relocked by hand (scripts/tuning-cache-relock.sh).
+    */
+    tuning-cache-galaxybook4-pro360 = {
+      url = "path:./tuning/runtime-cache/hosts/galaxybook4-pro360";
+      flake = false;
+    };
+    tuning-cache-victus-15 = {
+      url = "path:./tuning/runtime-cache/hosts/victus-15";
+      flake = false;
+    };
+
     feat-agenix = {
       url = "path:./features/core/agenix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -259,6 +277,13 @@
                      move every existing home. A user repo opts in with
                      modules = [ ... system.homeLib.<host>.epochModule ].
       */
+      tuningDefaults = {
+        march = "system";
+        lto = "system";
+        o3 = "system";
+        packages = { o3 = [ ]; lto = [ ]; };
+        exclude = { o3 = [ ]; lto = [ ]; };
+      };
       mkHomeLib =
         hostName: nixos:
         let
@@ -269,6 +294,36 @@
           t = nixos.config.my.tuning;
           reg = nixos.config.my.registry.loaded;
           hf = reg.hosts.features.${hostName} or { };
+          ut = import ./lib/user-tuning.nix { inherit lib mkHostWith tuningRawOf; };
+          sc = import ./lib/surface-check.nix { inherit lib; };
+          /*
+            A home whose set is not the host's must be able to load the
+            system's in-process code (docs/multiuser-design.md, "Surface
+            compatibility"). Compared against the SAME home on the host's set,
+            so mixing the system set already does with itself is not blamed on
+            the user. Skipped -- no second evaluation -- for a host-set home.
+          */
+          surfaceErrors =
+            args: cfg:
+            if ut.isHostSet cfg.my.tuning hostName nixos then
+              [ ]
+            else
+              let
+                base = gen.mkHome ({ inherit nixos; } // args);
+                result = sc.check {
+                  osConfig = nixos.config;
+                  homePackages = cfg.home.packages;
+                  baselinePackages = base.config.home.packages;
+                };
+              in
+              lib.optional (result.conflicts != [ ]) (
+                sc.explain {
+                  who = "homeLib.${hostName}.mkHome ${args.username}";
+                  levers = ut.resolve cfg.my.tuning hostName nixos;
+                  hostLevers = ut.hostLevers nixos;
+                  inherit result;
+                }
+              );
         in
         {
           inherit (nixos) pkgs;
@@ -300,7 +355,21 @@
               users = reg.nixFacts.${hostName} or { };
             };
           };
-          mkHome = args: gen.mkHome ({ inherit nixos; } // args);
+          # The home's own my.tuning picks its package set (lib/user-tuning.nix).
+          mkHome =
+            args:
+            gen.mkHome (
+              {
+                inherit nixos;
+                pkgsFor = t: ut.pkgsFor t hostName nixos;
+                extraChecks = surfaceErrors args;
+              }
+              // args
+            );
+          # For tests and inspection: the set / the levers a my.tuning value
+          # gives on this host (keys as in the home option, all optional).
+          pkgsFor = t: ut.pkgsFor (lib.recursiveUpdate tuningDefaults t) hostName nixos;
+          tuningFor = t: ut.resolve (lib.recursiveUpdate tuningDefaults t) hostName nixos;
           epoch = nixos.config.system.build.epoch;
           epochModule = import ./features/core/epoch/epoch-home.nix {
             inherit lib;
@@ -383,6 +452,10 @@
       };
       evalTests.user-types = import ./tests/user-types.nix {
         inherit lib mkHostWith mkHomeLib;
+      };
+      evalTests.user-tuning = import ./tests/user-tuning.nix {
+        inherit lib inputs mkHostWith;
+        inherit (self) nixosConfigurations homeLib;
       };
       evalTests.guest-overlay = import ./tests/guest-overlay.nix {
         inherit lib mkHostWith mkHomeLib;

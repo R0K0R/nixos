@@ -748,7 +748,9 @@
         "feat-samsung-galaxybook": "feat-samsung-galaxybook",
         "home-manager": "home-manager",
         "nixpkgs": "nixpkgs",
-        "nixpkgs-upstream": "nixpkgs-upstream"
+        "nixpkgs-upstream": "nixpkgs-upstream",
+        "tuning-cache-galaxybook4-pro360": "tuning-cache-galaxybook4-pro360",
+        "tuning-cache-victus-15": "tuning-cache-victus-15"
       }
     },
     "samsung-galaxy-book-linux-fixes": {
@@ -813,6 +815,30 @@
         "repo": "default",
         "type": "github"
       }
+    },
+    "tuning-cache-galaxybook4-pro360": {
+      "flake": false,
+      "locked": {
+        "path": "./tuning/runtime-cache/hosts/galaxybook4-pro360",
+        "type": "path"
+      },
+      "original": {
+        "path": "./tuning/runtime-cache/hosts/galaxybook4-pro360",
+        "type": "path"
+      },
+      "parent": []
+    },
+    "tuning-cache-victus-15": {
+      "flake": false,
+      "locked": {
+        "path": "./tuning/runtime-cache/hosts/victus-15",
+        "type": "path"
+      },
+      "original": {
+        "path": "./tuning/runtime-cache/hosts/victus-15",
+        "type": "path"
+      },
+      "parent": []
     },
     "vehicle-motion-cues": {
       "flake": false,

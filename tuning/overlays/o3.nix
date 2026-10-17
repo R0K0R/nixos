@@ -1,4 +1,13 @@
-{ hostRuntimeClassifier, native ? false, nativeBuildTools ? null }:
+{
+  hostRuntimeClassifier,
+  native ? false,
+  nativeBuildTools ? null,
+  # my.tuning.o3.{candidates,exclude} and the internal `force` (names tuned
+  # regardless of the classifier: a user's explicit my.tuning.packages.o3).
+  candidates,
+  exclude ? [ ],
+  force ? [ ],
+}:
 final: prev:
 # Same bootstrap-stage guard as gentoo-lto-overlay.nix: nixpkgs' own stdenv
 # bootstrap chain re-evaluates the whole overlay list fresh per stage, with
@@ -35,56 +44,9 @@ let
   # Full candidate universe -- host-runtime-classifier.nix decides which
   # treatment each one actually gets (see gentoo-lto-overlay.nix for the
   # full rationale, shared between both overlays).
-  packages = [
-    # Compression
-    "zstd" "zlib" "lz4" "xz" "brotli" "snappy" "bzip2" "zopfli" "libarchive"
-
-    # Media codecs
-    "ffmpeg" "opus" "dav1d" "libaom" "libvpx" "libwebp"
-    "libvorbis" "flac" "lame" "libsamplerate" "mpg123"
-    "x264" "x265"
-
-    # Fonts and text shaping
-    "harfbuzz" "freetype" "pango"
-
-    # Regex / Unicode / XML
-    "pcre2" "icu" "libxml2"
-
-    # Rendering
-    "mesa" "cairo" "pixman" "lcms2" "libpng"
-
-    # Document / image processing
-    "poppler" "mupdf" "imagemagick"
-
-    # Wayland / GUI stack
-    "wlroots" "gtk4" "glib" "libxkbcommon" "pipewire"
-
-    # Tree-sitter (Emacs / editor parsing)
-    "tree-sitter"
-
-    # System libraries and tools
-    # sqlite deliberately excluded: -O3 causes a genuine correctness bug, not
-    # just a build failure. Confirmed via sqlite's own tcltest suite: 1 error
-    # out of 400028 tests (like-14.2, the LIKE operator) under -O3. SQLite's
-    # C code relies on careful patterns (fallthrough switches, pointer
-    # aliasing, integer overflow handling) that aggressive optimizers can
-    # silently miscompile -- well-documented sqlite build-flag sensitivity,
-    # not a one-off fluke. This also matters more than most: nix itself uses
-    # sqlite for its own store database.
-    "diffutils" "ccache"
-
-    # Developer toolchain (mostly build-time-only in practice -- see classifier)
-    "nix" "git" "mold"
-
-    # Serialization / data processing
-    "protobuf" "jq" "abseil-cpp"
-
-    # Crypto (compute-bound paths)
-    "argon2"
-
-    # Storage engines
-    "redis" "lmdb"
-  ];
+  # The candidate universe is my.tuning.o3.candidates (default:
+  # tuning/candidates.nix) plus `force`, minus my.tuning.o3.exclude.
+  packages = builtins.filter (n: !(builtins.elem n exclude)) (candidates ++ force);
 
   existingPackages = builtins.filter (name: prev ? ${name}) packages;
 
@@ -104,7 +66,9 @@ let
   # Natively (no march) also minus anything a build tool links: there is no
   # separate build splice to keep it untuned on. See tuning/native-build-tools.nix.
   hostRuntimeNames = builtins.filter (
-    n: hostRuntimeClassifier.isHostRuntime n && !(native && nativeBuildTools.isBuildToolLinked n)
+    n:
+    builtins.elem n force
+    || (hostRuntimeClassifier.isHostRuntime n && !(native && nativeBuildTools.isBuildToolLinked n))
   ) existingPackages;
 in
 builtins.listToAttrs (

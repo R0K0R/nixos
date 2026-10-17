@@ -4,11 +4,11 @@
   built from for the full design rationale:
   /home/r0k0r/.claude/plans/temporal-crafting-parnas.md
 
-  Tier 1 (tier1/<host>.nix, via refresh-tier1.sh): the REAL live system
+  Tier 1 (<cache>/system-tier1.nix, via refresh-tier1.sh): the REAL live system
   closure (`nix-store -q --requisites /run/current-system`) -- ground truth,
   but only knows about what's already been switched to.
 
-  Tier 2 (tier2/<host>.nix, via refresh-tier2.sh + tier2-eval.nix): a cached
+  Tier 2 (<cache>/system-tier2.nix, via refresh-tier2.sh + tier2-eval.nix): a cached
   eval-time heuristic, closes the gap for packages added but not yet
   switched-to.
 
@@ -114,14 +114,41 @@ let
 
   currentNarHash = inputs.nixpkgs.narHash;
 
-  tier1Path = ./tier1 + "/${host}.nix";
-  tier2Path = ./tier2 + "/${host}.nix";
+  /*
+    This host's cache directory: the flake input tuning-cache-<host> (in the
+    repo until migrated, then /var/lib/tuning-cache/<host> -- flake.nix), or
+    the in-repo copy for a host that has no input.
 
-  tier1 = if builtins.pathExists tier1Path then import tier1Path else null;
-  tier2 = if builtins.pathExists tier2Path then import tier2Path else null;
+      system-tier1.nix   Tier 1 (refresh-tier1.sh)
+      system-tier2.nix   Tier 2 (refresh-tier2.sh)
+      users/<user>.nix   a user's own evidence (tuning-refresh): the closure
+                         of their current home generation plus an evaluation
+                         of their home repo, their own modules included
+
+    Every valid file adds names; a user's file is evidence like Tier 1's, for
+    every set on this host (docs/multiuser-design.md, "Every user feeds the
+    classifier"). The warm-cache guard below stays the SYSTEM's: it is about
+    whether the system's own evidence exists.
+  */
+  cacheDir = inputs."tuning-cache-${host}" or (./hosts + "/${host}");
+  readCache = p: if builtins.pathExists p then import p else null;
+
+  tier1 = readCache (cacheDir + "/system-tier1.nix");
+  tier2 = readCache (cacheDir + "/system-tier2.nix");
 
   tier1Valid = tier1 != null && tier1.nixpkgsNarHash == currentNarHash;
   tier2Valid = tier2 != null && tier2.nixpkgsNarHash == currentNarHash;
+
+  usersDir = cacheDir + "/users";
+  userFiles =
+    if builtins.pathExists usersDir then
+      lib.mapAttrsToList (n: _: usersDir + "/${n}") (
+        lib.filterAttrs (n: t: t == "regular" && lib.hasSuffix ".nix" n) (builtins.readDir usersDir)
+      )
+    else
+      [ ];
+  userCaches = lib.filter (c: c != null && c.nixpkgsNarHash == currentNarHash) (map readCache userFiles);
+  userNames = dropBuildOnly (lib.concatMap (c: c.runtimeNames) userCaches);
   # Exposed for consumers where a Tier 3-only (no cache) answer isn't safe to
   # act on silently -- e.g. host-upstream-substitute-overlay.nix, where a
   # false negative doesn't just skip an optimization (cheap) but replaces a
@@ -293,7 +320,7 @@ let
   # still only happens if isHostRuntime genuinely needs Tier 3 at all, same
   # as before; this only changes membership testing from O(n) to O(1) once
   # a tier is actually consulted.
-  tier1Set = toSet tier1Names;
+  tier1Set = toSet (tier1Names ++ userNames);
   tier2Set = toSet tier2Names;
   tier3Set = toSet tier3Names;
 
@@ -340,6 +367,6 @@ in
   # Order is not kept (attrNames sorts); every consumer filters it or builds an
   # attrset from it.
   runtimeNames = builtins.attrNames (
-    builtins.listToAttrs (map (name: { inherit name; value = null; }) (tier1Names ++ tier2Names ++ tier3Names))
+    builtins.listToAttrs (map (name: { inherit name; value = null; }) (tier1Names ++ userNames ++ tier2Names ++ tier3Names))
   );
 }

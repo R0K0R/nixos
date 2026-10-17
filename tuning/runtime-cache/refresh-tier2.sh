@@ -7,6 +7,7 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 FLAKE_ROOT="$(git rev-parse --show-toplevel)"
+. ./cache-dir.sh
 
 refresh_one() {
   local HOST="$1"
@@ -15,10 +16,9 @@ refresh_one() {
     exit 1
   fi
 
-  local OUT="$FLAKE_ROOT/tuning/runtime-cache/tier2/$HOST.nix"
-  # The cache files are gitignored (generated), so this directory does not exist
-  # in a fresh checkout -- git does not track empty directories.
-  mkdir -p "$(dirname "$OUT")"
+  local OUT TMP_OUT
+  OUT="$(cache_dir "$HOST")/system-tier2.nix"
+  TMP_OUT="$(mktemp)"
   local CAPTURED_AT
   CAPTURED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -28,11 +28,11 @@ refresh_one() {
       r = import $FLAKE_ROOT/tuning/runtime-cache/tier2-eval.nix { host = \"$HOST\"; };
     in
     r // { capturedAt = \"$CAPTURED_AT\"; }
-  " > "$OUT.tmp"
-  mv "$OUT.tmp" "$OUT"
+  " > "$TMP_OUT"
   if command -v nixfmt >/dev/null 2>&1; then
-    nixfmt "$OUT"
+    nixfmt "$TMP_OUT"
   fi
+  put_cache "$TMP_OUT" "$OUT"
   echo "wrote $OUT"
 }
 

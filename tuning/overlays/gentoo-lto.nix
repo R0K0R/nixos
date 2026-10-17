@@ -1,4 +1,14 @@
-{ hostRuntimeClassifier, native ? false, nativeBuildTools ? null }:
+{
+  hostRuntimeClassifier,
+  native ? false,
+  nativeBuildTools ? null,
+  # my.tuning.lto.{candidates,exclude}, the internal `force`, and every name
+  # the o3 lever may claim (o3Names: its candidates and force).
+  candidates,
+  exclude ? [ ],
+  force ? [ ],
+  o3Names,
+}:
 final: prev:
 # nixpkgs' own stdenv bootstrap chain (pkgs/stdenv/booter.nix) re-evaluates
 # the entire overlay list fresh for each bootstrap stage, with that stage's
@@ -61,79 +71,18 @@ let
   # overrideAttrs call on the same package here confuses nixpkgs' env/
   # top-level attribute tracking (observed: "attribute cannot exist in both
   # env and derivation arguments" once two independent overlays each
-  # overrideAttrs the same package). Skip these entirely here. Kept in sync
-  # manually with that file's own candidate list.
-  o3OverlayPackages = [
-    "zstd" "zlib" "lz4" "xz" "brotli" "snappy" "bzip2" "zopfli" "libarchive"
-    "ffmpeg" "opus" "dav1d" "libaom" "libvpx" "libwebp"
-    "libvorbis" "flac" "lame" "libsamplerate" "mpg123"
-    "x264" "x265"
-    "harfbuzz" "freetype" "pango"
-    "pcre2" "icu" "libxml2"
-    "mesa" "cairo" "pixman" "lcms2" "libpng"
-    "poppler" "mupdf" "imagemagick"
-    "wlroots" "gtk4" "glib" "libxkbcommon" "pipewire"
-    "tree-sitter"
-    "sqlite" "diffutils" "ccache"
-    "nix" "git" "mold"
-    "protobuf" "jq" "abseil-cpp"
-    "argon2"
-    "redis" "lmdb"
-  ];
+  # overrideAttrs the same package). Skip these entirely here.
+  # Every name the o3 lever may claim (its candidates + force); was a copy of
+  # o3's list kept in sync by hand.
+  o3OverlayPackages = o3Names;
 
   # Full candidate universe -- every package considered for LTO tuning,
   # regardless of whether it turns out to be a genuine host-runtime dependency
   # or purely a build-time tool. host-runtime-classifier.nix (checked below)
   # is what actually decides which treatment each one gets.
-  packages = [
-    # Compression
-    "lzo" "lzip" "zpaq" "p7zip"
-
-    # Media codecs
-    "libtheora" "speex" "wavpack" "libass" "svt-av1"
-
-    # Fonts and text shaping
-    "fontconfig"
-
-    # Regex / Unicode / XML / JSON
-    "pcre" "libxslt" "oniguruma" "simdjson" "yyjson" "jsoncpp"
-
-    # Rendering
-    "libjpeg" "libjpeg_turbo" "giflib" "librsvg"
-
-    # Document / image processing
-    "poppler_utils" "exiv2" "libraw" "graphicsmagick"
-
-    # Wayland / GUI stack
-    "gtk3" "sdl2" "sdl3"
-
-    # System libraries and tools
-    "ripgrep" "fd" "bat" "fzf" "util-linux"
-
-    # Developer toolchain (mostly build-time-only in practice -- see classifier)
-    "cmake" "ninja" "meson"
-
-    # Serialization / data processing
-    "capnproto" "flatbuffers" "msgpack-c"
-
-    # Crypto (compute-bound paths)
-    "openssl" "libsodium" "mbedtls" "gnutls"
-
-    # Storage engines
-    "leveldb" "rocksdb"
-
-    # Networking
-    "curl" "nghttp2" "c-ares" "libssh2"
-
-    # Numeric / scientific
-    "fftw" "fftwFloat" "openblas" "gsl"
-
-    # Parsing / build tooling (mostly build-time-only in practice -- see classifier)
-    "bison" "flex" "m4"
-
-    # Shell / terminal
-    "tmux" "ncurses" "readline" "zsh" "fish"
-  ];
+  # my.tuning.lto.candidates (default: tuning/candidates.nix) plus `force`,
+  # minus my.tuning.lto.exclude.
+  packages = builtins.filter (n: !(builtins.elem n exclude)) (candidates ++ force);
 
   # Only consider packages that actually exist as top-level attrs (some names
   # may not be defined depending on the nixpkgs revision), and skip anything
@@ -166,7 +115,9 @@ let
   # Natively (no march) also minus anything a build tool links: there is no
   # separate build splice to keep it untuned on. See tuning/native-build-tools.nix.
   hostRuntimeNames = builtins.filter (
-    n: hostRuntimeClassifier.isHostRuntime n && !(native && nativeBuildTools.isBuildToolLinked n)
+    n:
+    builtins.elem n force
+    || (hostRuntimeClassifier.isHostRuntime n && !(native && nativeBuildTools.isBuildToolLinked n))
   ) existingPackages;
 in
 builtins.listToAttrs (

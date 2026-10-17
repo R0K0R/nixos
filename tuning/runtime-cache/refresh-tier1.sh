@@ -14,6 +14,7 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 FLAKE_ROOT="$(git rev-parse --show-toplevel)"
+. ./cache-dir.sh
 
 HOST="${1:-$(hostname)}"
 if [ ! -d "$FLAKE_ROOT/hosts/$HOST" ]; then
@@ -120,10 +121,8 @@ export TIER1_NIXPKGS_REV="$NIXPKGS_REV"
 export TIER1_NIXPKGS_NARHASH="$NIXPKGS_NARHASH"
 export TIER1_CAPTURED_AT="$CAPTURED_AT"
 
-OUT="$FLAKE_ROOT/tuning/runtime-cache/tier1/$HOST.nix"
-# The cache files are gitignored (generated), so this directory does not exist
-# in a fresh checkout -- git does not track empty directories.
-mkdir -p "$(dirname "$OUT")"
+OUT="$(cache_dir "$HOST")/system-tier1.nix"
+TMP_OUT="$(mktemp)"
 
 # Bare `nix eval` (no --json/--raw) on a plain data attrset pretty-prints
 # valid, re-importable Nix syntax directly -- pnames are already correct by
@@ -142,10 +141,10 @@ nix eval --impure --expr '
     capturedAt = getEnv "CAPTURED_AT";
     runtimeNames = pnames;
   }
-' > "$OUT.tmp"
-mv "$OUT.tmp" "$OUT"
+' > "$TMP_OUT"
 if command -v nixfmt >/dev/null 2>&1; then
-  nixfmt "$OUT"
+  nixfmt "$TMP_OUT"
 fi
+put_cache "$TMP_OUT" "$OUT"
 
 echo "wrote $OUT ($(wc -l < "$NAMES_FILE") pnames captured via deriver lookup) -- refresh Tier 2 too if package lists changed since the last capture"

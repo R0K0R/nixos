@@ -1,4 +1,4 @@
-{ config, inputs, lib, hostName, tuningEnabledRaw, tuningMarchRaw, ... }:
+{ config, inputs, lib, pkgs, hostName, tuningEnabledRaw, tuningMarchRaw, ... }:
 
 let
   cfg = config.my.tuning;
@@ -35,6 +35,23 @@ let
     overlays = config.nixpkgs.overlays;
   };
 
+  candidateDefaults = import ./candidates.nix;
+  forced = cfg.o3.force ++ cfg.lto.force;
+  /*
+    What the tuning overlays ask. With no forced names it IS the shared
+    classifier; with some, those names also count as host-runtime -- so
+    upstream-tools does not substitute them from upstream either. heavy.nix
+    and ca.nix keep the plain one (module argument below).
+  */
+  overlayClassifier =
+    if forced == [ ] then
+      hostRuntimeClassifier
+    else
+      hostRuntimeClassifier
+      // {
+        isHostRuntime = n: builtins.elem n forced || hostRuntimeClassifier.isHostRuntime n;
+        runtimeNames = lib.unique (hostRuntimeClassifier.runtimeNames ++ forced);
+      };
   hostRuntimeClassifier = import ./host-runtime-classifier.nix {
     inherit inputs;
     host = hostName;
@@ -116,6 +133,49 @@ in
     o3.enable = lib.mkEnableOption "the -O3 overlay, applied to host-runtime packages only";
     lto.enable = lib.mkEnableOption "the Gentoo-style LTO overlay, applied to host-runtime packages only";
 
+    /*
+      Per-package levers. `candidates` is every package the lever may touch
+      (the classifier then keeps the host-runtime ones), `exclude` takes names
+      back out -- a package a lever breaks. `force` is internal: names tuned
+      REGARDLESS of the classifier and never substituted from upstream, which
+      is how a user's explicit my.tuning.packages.<lever> reaches their own
+      package set (lib/user-tuning.nix); a host has no reason to set it.
+    */
+    o3.candidates = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = candidateDefaults.o3;
+      defaultText = lib.literalExpression "(import ./tuning/candidates.nix).o3";
+      description = "Packages the o3 lever may touch (top-level attribute names).";
+    };
+    o3.exclude = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = "Names the o3 lever must not touch, whatever the candidates say.";
+    };
+    o3.force = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      internal = true;
+      description = "Names o3 tunes regardless of the classifier (a user's explicit list).";
+    };
+    lto.candidates = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = candidateDefaults.lto;
+      defaultText = lib.literalExpression "(import ./tuning/candidates.nix).lto";
+      description = "Packages the lto lever may touch. Names o3 may claim are skipped (one overrideAttrs per package).";
+    };
+    lto.exclude = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = "Names the lto lever must not touch.";
+    };
+    lto.force = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      internal = true;
+      description = "Names lto tunes regardless of the classifier (a user's explicit list).";
+    };
+
     upstreamTools.enable = lib.mkEnableOption ''
       substituting build-platform tools with byte-identical upstream builds, so
       they come from cache.nixos.org instead of being rebuilt
@@ -131,6 +191,18 @@ in
       default = "/home/r0k0r/flakes/nixos";
       description = "Where this flake lives on disk, baked into runtime-cache-refresh.";
     };
+
+    /*
+      The per-user half of the classifier's cache (docs/multiuser-design.md,
+      "Every user feeds the classifier"): /var/lib/tuning-cache/<host>/users,
+      where every user may write their own <user>.nix (sticky, like /tmp),
+      and the tuning-refresh command that writes it. Independent of `enable`:
+      evidence is about which packages run here, whoever tunes them.
+      The system's own files (system-tier{1,2}.nix) and the switch of the
+      flake's tuning-cache-<host> inputs to this directory are the admin's
+      one-time migration, scripts/tuning-cache-migrate.sh.
+    */
+    userCache.enable = lib.mkEnableOption "the per-user tuning cache directory and tuning-refresh";
 
     extraOverlays = lib.mkOption {
       type = lib.types.listOf (lib.types.functionTo (lib.types.functionTo lib.types.attrs));
@@ -170,6 +242,33 @@ in
       surface later as a missing compositor.
     */
     { nixpkgs.overlays = cfg.extraOverlays; }
+
+    (lib.mkIf cfg.userCache.enable {
+      systemd.tmpfiles.rules = [
+        "d /var/lib/tuning-cache 0755 root root -"
+        "d /var/lib/tuning-cache/${hostName} 0755 root root -"
+        "d /var/lib/tuning-cache/${hostName}/users 1777 root root -"
+      ];
+      environment.systemPackages = [
+        (pkgs.writeShellScriptBin "tuning-refresh" ''
+          export PATH=${
+            lib.makeBinPath [
+              config.nix.package
+              pkgs.coreutils
+              pkgs.findutils
+              pkgs.gnugrep
+              pkgs.gnused
+              pkgs.jq
+              pkgs.util-linux
+              config.systemd.package
+            ]
+          }''${PATH:+:$PATH}
+          SYSTEM_FLAKE=${lib.escapeShellArg cfg.flakePath}
+          set -uo pipefail
+          ${builtins.readFile ./runtime-cache/tuning-refresh.sh}
+        '')
+      ];
+    })
 
     /*
       Everything from here to the assertions is the tuning backend proper, and
@@ -219,11 +318,25 @@ in
       native-isolation entry below.
     */
     (lib.mkIf cfg.o3.enable {
-      nixpkgs.overlays = [ (import ./overlays/o3.nix { inherit hostRuntimeClassifier native nativeBuildTools; }) ];
+      nixpkgs.overlays = [
+        (import ./overlays/o3.nix {
+          hostRuntimeClassifier = overlayClassifier;
+          inherit native nativeBuildTools;
+          inherit (cfg.o3) candidates exclude force;
+        })
+      ];
     })
 
     (lib.mkIf cfg.lto.enable {
-      nixpkgs.overlays = [ (import ./overlays/gentoo-lto.nix { inherit hostRuntimeClassifier native nativeBuildTools; }) ];
+      nixpkgs.overlays = [
+        (import ./overlays/gentoo-lto.nix {
+          hostRuntimeClassifier = overlayClassifier;
+          inherit native nativeBuildTools;
+          inherit (cfg.lto) candidates exclude force;
+          # Only what o3 actually claims: nothing when o3 is off in this set.
+          o3Names = lib.optionals cfg.o3.enable (cfg.o3.candidates ++ cfg.o3.force);
+        })
+      ];
     })
 
     (lib.mkIf cfg.intraISACross.enable {
@@ -234,7 +347,7 @@ in
 
     (lib.mkIf cfg.upstreamTools.enable {
       nixpkgs.overlays = lib.mkOrder 1600 [
-        (import ./overlays/upstream-tools.nix { inherit lib inputs hostRuntimeClassifier; })
+        (import ./overlays/upstream-tools.nix { inherit lib inputs; hostRuntimeClassifier = overlayClassifier; })
       ];
     })
 
@@ -273,7 +386,8 @@ in
     (lib.mkIf (native && (cfg.o3.enable || cfg.lto.enable)) {
       nixpkgs.overlays = lib.mkOrder 1600 [
         (import ./overlays/upstream-tools.nix {
-          inherit lib inputs hostRuntimeClassifier native nativeBaseline;
+          inherit lib inputs native nativeBaseline;
+          hostRuntimeClassifier = overlayClassifier;
         })
       ];
     })

@@ -192,9 +192,13 @@ on upstream nixpkgs:
 
 ## Per-user tuning
 
-Agreed 2026-10-17. Not implemented: a draft of the package-set half
-(`lib/user-tuning.nix`) exists uncommitted, built for the superseded
-`tuning.json`.
+Agreed 2026-10-17, implemented 2026-10-18 (evaluation only, nothing built):
+`lib/home-tuning.nix` (the home option), `lib/user-tuning.nix` (the set),
+`lib/surface-check.nix` (the check), `tuning/candidates.nix` + the
+`my.tuning.{o3,lto}.{candidates,exclude}` options, the per-host cache inputs,
+`tuning-refresh`, `scripts/tuning-cache-{migrate,relock}.sh`;
+`tests/user-tuning-eval.sh`. The caches are still in the repo: the migration
+to /var/lib/tuning-cache needs root on each host.
 
 ### Each user picks their package set
 
@@ -501,7 +505,15 @@ deliberate system change.
     /nix is a btrfs subvolume (not the host-shared store the test driver
     mounts by default).
 12. **Eval matrix**: all optional pieces off, all on, and each alone.
-13. **Per-user tuning** (see that section): the home option `my.tuning` and
+13. ~~**Per-user tuning**~~ implemented (see that section); left: the
+    one-time cache migration (root, every host), and a first real
+    tuning-refresh. Measured on implementation: an untuned home on either
+    march host is REFUSED by the surface check -- perl (cross.patch,
+    cross-fdopendir.patch, perl-cross) and sqlite (cross-only autosetup tcl
+    patches) differ between the IntraISACross set and a native one. Both are
+    build-system patches; whether that makes them ABI-neutral cannot be
+    computed, so the agreed rule (fail) stands until decided otherwise.
+    Originally planned: the home option `my.tuning` and
     `mkHome`'s `_module.args.pkgs`; candidate lists as system options
     (`my.tuning.{o3,lto}.{candidates,exclude}`) and home options
     (`my.tuning.{packages,exclude}.{o3,lto}`); the surface compatibility check

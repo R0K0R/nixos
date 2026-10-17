@@ -443,13 +443,33 @@ re-imports them from its bootstrap stage after every overlay.
 
 **O3 and LTO apply only to what runs here.** The **host-runtime classifier**
 decides which packages that is. It has three tiers: Tier 1 is the live system
-closure, Tier 2 a cached eval heuristic, Tier 3 a live recompute. Tiers 1 and 2
-are generated files under `tuning/runtime-cache/`, refreshed by the
-`cache-refresh` commands.
+closure, Tier 2 a cached eval heuristic, Tier 3 a live recompute. The caches
+are one directory per host, read through the flake inputs
+`tuning-cache-<host>`: `system-tier1.nix` and `system-tier2.nix` (the system's,
+refreshed by the `cache-refresh` commands) and `users/<user>.nix` (each user's
+own evidence, written by `tuning-refresh`), union-merged. They live in the repo
+(`tuning/runtime-cache/hosts/<host>`) until the one-time
+`scripts/tuning-cache-migrate.sh` moves them to `/var/lib/tuning-cache/<host>`
+(needs `my.tuning.userCache.enable`); after that `scripts/tuning-cache-relock.sh`
+gathers, relocks and distributes them, by hand.
 
-Per-user tuning (a `tuning.json` in the home repo with one add-only list per
-lever) is **planned**; the file exists in the template and in r0k0r's home repo
-but nothing reads it yet.
+**Which packages a lever may touch is an option:** `my.tuning.{o3,lto}.candidates`
+(defaults in `tuning/candidates.nix`) and `my.tuning.{o3,lto}.exclude`.
+
+**Per-user tuning.** A standalone home picks its own package set with the home
+option `my.tuning = { march; lto; o3; }` (`"system"` = the host's, the default;
+`true`/`false`; march may name an arch) and per-package levers
+`my.tuning.packages.{o3,lto}` / `my.tuning.exclude.{o3,lto}` that apply inside
+that user's set only (an explicitly listed name skips the classifier).
+`homeLib.<host>.mkHome` builds the set as the eval matrix builds host variants
+(`lib/user-tuning.nix`) -- still one nixpkgs pin -- and refuses a home whose set
+cannot safely load the system's in-process code (`lib/surface-check.nix`): the
+graphics driver, NSS, PAM, the locale and the system profile's plugins are walked
+in the system's set, the home's packages in its own, and any library with the
+same version but a different source or patch list fails the evaluation with a
+full explanation. Measured: an untuned home on either march host is refused
+(perl and sqlite carry cross-build patches in the system's IntraISACross set);
+lto/o3 choices pass. `tests/user-tuning-eval.sh`.
 
 ## Rebuilding
 
