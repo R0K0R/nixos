@@ -1,11 +1,11 @@
-# Single source of truth for the configurable SHELL keybinds (features/bonfire/compositor.nix).
+# Single source of truth for the configurable SHELL keybinds (modules/desktop/bonfire/compositor.nix).
 # Consumed twice: compositor.nix bakes these as the kb() defaults + generates the hl.bind calls, and
 # hearth.nix turns each into a `keybind.<action>` string setting. Edit a chord in the hearth TUI and
-# the keybind watcher (features/bonfire/home.nix) rewrites ~/.local/state/bonfire/keybinds.lua + runs
+# the keybind watcher (modules/desktop/bonfire/default.nix) rewrites ~/.local/state/bonfire/keybinds.lua + runs
 # `hyprctl reload`, so it applies live. Chord format is the fork's: "SUPER + SHIFT + K".
 #
 # NOTE: chords bake the literal "SUPER" (the modKey default). A host that changes my.hyprland.modKey
-# would want these updated to match. Stage 1 = the bonfire shell binds only; features/hyprland's own
+# would want these updated to match. Stage 1 = the bonfire shell binds only; modules/desktop/hyprland's own
 # window/workspace/mouse binds are not here yet.
 {
   launcher        = { chord = "SUPER + space";          label = "App launcher";            tier = "common"; };

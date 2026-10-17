@@ -1,5 +1,5 @@
-# hearth settings fragment for the notification centre (features/flare/shell.qml).
-# Flat records keyed by dotted path; assembled into schema.json by features/settings. These are the
+# hearth settings fragment for the notification centre (modules/desktop/flare/shell.qml).
+# Flat records keyed by dotted path; assembled into schema.json by modules/desktop/settings.nix. These are the
 # first migration targets -- the panel will read them live from settings.json (Phase 2b). Add a knob
 # here and it appears in the settings TUI automatically; no UI code needed.
 {

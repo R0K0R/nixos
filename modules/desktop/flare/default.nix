@@ -1,12 +1,14 @@
 { config, lib, pkgs, osConfig, ... }:
 
 let
-  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "flare"; };
+  cfg = config.my.flare;
+  # The modifier the system's Hyprland was built around (a fact about the machine, not a choice
+  # made in this home).
   mod = osConfig.my.hyprland.modKey;
 
   # SUPER+N toggle, mutually exclusive with the pyre: park the dock, then toggle the centre
   # (both claim the right-edge slot + the keystone trapezoid). `pyre` is the dock's PATH wrapper
-  # (features/pyre); guarded so a host without the dock just toggles. The reverse direction
+  # (modules/desktop/pyre); guarded so a host without the dock just toggles. The reverse direction
   # (showing the dock hides this) lives in pyre's dock.sh.
   notifToggle = pkgs.writeShellScript "flare-toggle" ''
     export PATH=${lib.makeBinPath [ pkgs.quickshell pkgs.coreutils ]}''${PATH:+:$PATH}
@@ -17,7 +19,7 @@ let
   '';
 
   # Weather for the panel. Reuses the system `linecast weather` tool (in the user profile, resolved off
-  # the inherited PATH) and the SAME compact format + cache file the lock screen uses (features/bonfire
+  # the inherited PATH) and the SAME compact format + cache file the lock screen uses (modules/desktop/bonfire
   # lockWeatherFetch) -- so they stay consistent and share one 30-min fetch instead of hammering it.
   weatherCmd = pkgs.writeShellScript "flare-weather" ''
     export PATH=${lib.makeBinPath [ pkgs.coreutils pkgs.findutils ]}:$PATH
@@ -33,13 +35,31 @@ let
     [ -s "$cache" ] && cat "$cache"
   '';
 in
-lib.mkIf (osConfig.my.flare.enable && inScope && osConfig.my.desktop.compositor == "hyprland") {
+{
+  options.my.flare.enable = lib.mkEnableOption ''
+    Quickshell notification centre: a SIZED keystone-able panel (the compositor keystone warps it
+    into a dock-card trapezoid, via the "swaync-control-center" layer namespace) carrying wifi/BT/
+    DND/nosleep/nightmode/battery-mode/power/volume/brightness/music/notifications. Replaces swaync
+    once complete; STAGE 1 is a proof-of-concept panel that runs ALONGSIDE swaync for testing.
+    Needs my.hyprland.enable and my.panelbus.enable
+  '';
+
+  config = lib.mkIf cfg.enable {
+  assertions = [
+    {
+      assertion = config.my.hyprland.enable && config.my.panelbus.enable;
+      message = "my.flare needs my.hyprland.enable (its SUPER+N bind and layer rules) and my.panelbus.enable (the dock/panel mutual exclusion).";
+    }
+  ];
+
+  my.settings.fragments = [ (import ./hearth.nix) ];
+
   home.packages = [ pkgs.quickshell ];
 
   # The quickshell config. `quickshell -c flare` resolves to ~/.config/quickshell/flare.
   xdg.configFile."quickshell/flare/shell.qml".source = ./shell.qml;
 
-  # panelbus close handler (features/panelbus): how this centre gets closed when the dock or a pin
+  # panelbus close handler (modules/desktop/panelbus.nix): how this centre gets closed when the dock or a pin
   # opens. Guarded by its daemon being live AND run time-capped by panelbus, so an absent target is a
   # fast no-op (the swaync branch here is the fallback when my.flare is off and swaync is live).
   xdg.configFile."panelbus/handlers/flare".text = ''
@@ -75,7 +95,7 @@ lib.mkIf (osConfig.my.flare.enable && inScope && osConfig.my.desktop.compositor 
       #    short chime (BONFIRE_ALERT_SOUND), and must fire even when the panel is closed (the countdown
       #    keeps running regardless).
       ExecStart = pkgs.writeShellScript "flare-start" ''
-        export PATH=${lib.makeBinPath [ pkgs.hyprsunset pkgs.util-linux pkgs.libnotify pkgs.pipewire pkgs.grim pkgs.slurp pkgs.wl-clipboard pkgs.hyprpicker pkgs.wf-recorder pkgs.procps osConfig.my.panelbus.package ]}''${PATH:+:$PATH}
+        export PATH=${lib.makeBinPath [ pkgs.hyprsunset pkgs.util-linux pkgs.libnotify pkgs.pipewire pkgs.grim pkgs.slurp pkgs.wl-clipboard pkgs.hyprpicker pkgs.wf-recorder pkgs.procps config.my.panelbus.package ]}''${PATH:+:$PATH}
         export BONFIRE_ALERT_SOUND=${pkgs.sound-theme-freedesktop}/share/sounds/freedesktop/stereo/complete.oga
         export BONFIRE_WEATHER_CMD=${weatherCmd}
         # Crisper text at the 0.8 fractional monitor scale: force NATIVE glyph rendering instead of
@@ -100,4 +120,5 @@ lib.mkIf (osConfig.my.flare.enable && inScope && osConfig.my.desktop.compositor 
     -- them here. The panel bg is semi-transparent (bgPanel) so this blur reads as frost.
     hl.layer_rule({ match = { namespace = "^(flare|flare-popup)$" }, blur = true, ignore_alpha = 0.05 })
   '';
+};
 }

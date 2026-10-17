@@ -1,9 +1,8 @@
-{ config, lib, pkgs, osConfig, inputs, ... }:
+{ config, lib, pkgs, osConfig, userInputs, ... }:
 
 let
-  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "bonfire"; };
-  cfg = osConfig.my.bonfire;
-  enabled = cfg.enable && inScope;
+  cfg = config.my.bonfire;
+  enabled = cfg.enable;
 
   bin = name: "${config.home.homeDirectory}/.local/bin/${name}";
 
@@ -41,8 +40,8 @@ let
 
     SYSTEMD RATHER THAN THE COMPOSITOR'S AUTOSTART, which is how upstream does
     it (src/wm/hyprland/config/autostart.lua runs eleven hl.exec_cmd calls on
-    hyprland.start). That file is not installed here -- features/hyprland owns
-    the Hyprland config -- and features/hyprland states the rule directly:
+    hyprland.start). That file is not installed here -- modules/desktop/hyprland owns
+    the Hyprland config -- and modules/desktop/hyprland states the rule directly:
     nothing is spawned from the compositor, least of all a shell, because a
     config reload re-executes the whole Lua script and an exec-once copy
     becomes a second unmanaged instance. Units also restart on failure, which
@@ -100,7 +99,7 @@ let
   # no reload, no monitor touch) -- so a cleared or rechorded key stops firing immediately; the full
   # (re)bind to a NEW chord lands on the next Hyprland start (the config dofile's the refreshed table).
   # `hearth watch keybind` only fires on that prefix; exits 0 (no restart loop) when settings is absent.
-  hearthPkg = inputs.hearth.packages.${pkgs.system}.default;
+  hearthPkg = userInputs.hearth.packages.${pkgs.stdenv.hostPlatform.system}.default;
   keybindApply = pkgs.writeShellScript "bonfire-keybind-apply" ''
     export PATH=${lib.makeBinPath [ hearthPkg pkgs.jq pkgs.coreutils pkgs.hyprland ]}:$PATH
     export HEARTH_DIR="$HOME/.local/state/hearth"
@@ -130,9 +129,9 @@ let
     done
   '';
 
-  # Hyprland "feel" settings (hyprland.* -> features/hyprland/hearth.nix): rounding, gaps, border, blur,
+  # Hyprland "feel" settings (hyprland.* -> modules/desktop/hyprland/hearth.nix): rounding, gaps, border, blur,
   # animations. Applied LIVE with `hyprctl keyword` (no reload needed), at session start and on each
-  # hyprland.* change. Lives here (not features/hyprland) because this file already has hearth on PATH.
+  # hyprland.* change. Lives here (not modules/desktop/hyprland) because this file already has hearth on PATH.
   hyprlandFeelApply = pkgs.writeShellScript "bonfire-hyprland-feel" ''
     export PATH=${lib.makeBinPath [ hearthPkg pkgs.jq pkgs.coreutils pkgs.hyprland ]}:$PATH
     export HEARTH_DIR="$HOME/.local/state/hearth"
@@ -255,12 +254,54 @@ let
   '';
 in
 {
+  /*
+    programs.bonfire itself (the upstream home-manager module) is imported by
+    this repo's flake.nix, not here: `imports` resolves before the module
+    arguments exist, so it cannot name userInputs.
+  */
   imports = [
-    inputs.feat-bonfire.homeModule
     ./compositor.nix
   ];
 
+  options.my.bonfire = {
+    enable = lib.mkEnableOption ''
+      Bonfire Space: a Waybar/Rofi/SwayNC desktop with wallpaper automation,
+      accent-colour theming and a dockbar. Needs my.hyprland.enable (it attaches
+      its keybinds to the Hyprland config). The system must also provide the
+      "hyprlock" PAM service (see README.md, "What the system must provide")
+    '';
+
+    configNames = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "waybar" "rofi" "swaync" "cava" "fastfetch" "gtk.css" "xdg-desktop-portal" ];
+      description = ''
+        Which of bonfire's ~/.config entries to manage.
+
+        NARROWED FROM UPSTREAM'S FULL SET on purpose. It also ships fish,
+        kitty, starship.toml and hypr configs, and every one of those is
+        already owned by another module here (or by the system flake's
+        features). Two modules writing the same path is a home-manager
+        collision, reported as an error rather than resolved by picking a
+        winner, so the shell takes only what nothing else claims.
+
+        `hypr` is the sharpest of those: bonfire ships a COMPLETE Hyprland
+        config, and modules/desktop/hyprland owns that file. Its keybinds are
+        contributed through ./compositor.nix instead.
+      '';
+    };
+  };
+
   config = lib.mkIf enabled {
+    assertions = [
+      {
+        assertion = config.my.hyprland.enable;
+        message = "my.bonfire needs my.hyprland.enable: its keybinds and layer rules are contributed to the Hyprland config.";
+      }
+    ];
+
+    # The shell keybinds and the main_setting.sh values (see ./hearth.nix).
+    my.settings.fragments = [ (import ./hearth.nix) ];
+
     programs.bonfire = {
       enable = true;
       inherit (cfg) configNames;
@@ -297,7 +338,7 @@ in
         declares for standalone use.
       */
       package =
-        (pkgs.callPackage "${inputs.feat-bonfire.inputs.bonfire}/nix/package.nix" {
+        (pkgs.callPackage "${userInputs.bonfire}/nix/package.nix" {
           /*
             The menus' file manager. Upstream's scripts hardcode `thunar`, and
             callPackage would happily satisfy that with the real Thunar -- a
@@ -404,7 +445,7 @@ in
                   $out/share/bonfire/config/waybar/module/workspace_module
 
                 # Notification bell: upstream wires it to swaync-client, but this host replaced swaync
-                # with the quickshell notif centre (features/flare) -- swaync-client is GONE, so
+                # with the quickshell notif centre (modules/desktop/flare) -- swaync-client is GONE, so
                 # exec-if failed (no count) and the click was a no-op. Point the click at the flare
                 # IPC toggle (same thing SUPER+N runs) and drop the swaync count subscription -> a plain
                 # bell that actually opens the centre. (A live count would need a flare IPC; later.)
@@ -437,7 +478,7 @@ in
                   --replace-fail '-f "$DESKTOP_MANAGER_BIN"' '-f "desktop_icons.py"'
 
                 # Replace the experimental, buggy upstream desktop_icons.py
-                # WHOLESALE with our reimplementation (features/bonfire/
+                # WHOLESALE with our reimplementation (modules/desktop/bonfire/
                 # desktop-icons.py). Upstream showed a generic document glyph for
                 # every file, never launched .desktop files, and kept a tiny
                 # window that expanded to fullscreen only during a drag -- each
@@ -538,7 +579,7 @@ in
 
         bonfire ships a COMPLETE Hyprland config -- monitors, input, layout,
         animations, rules, autostart, keybinds. Installing it would put a
-        second full config at ~/.config/hypr, which features/hyprland already
+        second full config at ~/.config/hypr, which modules/desktop/hyprland already
         owns, and undo the separation between compositor and shell. Only the
         shell half is taken; the keybinds it needs are contributed to whichever
         compositor is selected from ./compositor.nix.
@@ -671,15 +712,15 @@ in
           ExecStart = "${hyprlockBgGen}";
         };
       };
-      # swaync is REPLACED by the quickshell notif centre (features/flare) when that's on --
+      # swaync is REPLACED by the quickshell notif centre (modules/desktop/flare) when that's on --
       # two daemons can't both own org.freedesktop.Notifications. Gated so my.flare.enable=false
       # brings swaync straight back (the fallback if the quickshell centre misbehaves).
-      bonfire-notifications = lib.mkIf (!osConfig.my.flare.enable) (themed (
+      bonfire-notifications = lib.mkIf (!config.my.flare.enable) (themed (
         service "Bonfire Space notification centre" "${pkgs.swaynotificationcenter}/bin/swaync"
       ));
       bonfire-idle = service "Bonfire Space idle daemon" "${pkgs.hypridle}/bin/hypridle";
       # Gamma + kbd-backlight RESET on every session start -- the safety net for the gamma
-      # idle dim (features/bonfire dim path). The user has no gamma control, so if a crash
+      # idle dim (modules/desktop/bonfire dim path). The user has no gamma control, so if a crash
       # or freeze ever left a hyprsunset daemon alive (holding the dim ramp) or the keyboard
       # backlight dimmed, there would be no way to recover. Resetting at login guarantees a
       # clean slate: kill any stray hyprsunset (its ramp reverts to full) + kbd backlight up.
@@ -994,8 +1035,8 @@ in
             ${audioSinkMenu} ${pkgs.pavucontrol}/bin/pavucontrol
         '';
 
-        # Workspace button TEXT colour for the per-monitor/chess-notation scheme (features/hyprland,
-        # features/pyre): hardwired black on every button state, independent of the
+        # Workspace button TEXT colour for the per-monitor/chess-notation scheme (modules/desktop/hyprland,
+        # modules/desktop/pyre): hardwired black on every button state, independent of the
         # glow accent. Appended to style.css so it wins the cascade -- no upstream
         # anchor to drift, unlike substituteInPlace. (ext/workspaces renders as
         # #workspaces button in every layout.)
@@ -1104,9 +1145,9 @@ in
             ${lib.optionalString osConfig.my.hyprland.keystone.enable ''
               # Dock-SHAPE the control centre: size/place it to a pyre card's footprint so the
               # compositor keystone (extended to the "swaync-control-center" LAYER in
-              # features/hyprland/trapezoid.patch) warps it into the SAME trapezoid, and it occupies
+              # the keystone compositor patch (trapezoid.patch, now the fork's `keystone` branch)) warps it into the SAME trapezoid, and it occupies
               # the dock's slot -- the two are toggled mutually exclusive (SUPER+N parks the dock;
-              # showing the dock closes this). Values match features/pyre's live geom on the dell
+              # showing the dock closes this). Values match modules/desktop/pyre's live geom on the dell
               # (2400x1350 logical: DW 800, right HGAP 40, top barH+VGAP 104, bottom VGAP 48,
               # DOCK_H 1198); gated on keystone.enable so only the dell (where the dock lives) gets
               # them. A very different monitor would want these redone (they're static, unlike the
@@ -1119,7 +1160,7 @@ in
             ''}
             cat >> $out/style.css <<'EOF'
 
-            /* Appended by features/bonfire (nix): GTK4 selector fix for the
+            /* Appended by modules/desktop/bonfire (nix): GTK4 selector fix for the
                menubar menu buttons -- see the note in home.nix. */
             .widget-menubar > .menu-button-bar > .widget-menubar-container button {
                 min-width: 100px;
@@ -1302,7 +1343,7 @@ in
       The idle/lock configs, linked as INDIVIDUAL files into ~/.config/hypr.
 
       They live under src/common/config/hypr in the tree, but "hypr" must not
-      join configNames: features/hyprland owns that directory, and linking it
+      join configNames: modules/desktop/hyprland owns that directory, and linking it
       whole would fight over it. These three, though, belong to the SHELL --
       hypridle hard-exits without its config (the unit above would crash-loop),
       and lock.sh invokes hyprlock against both conf variants by literal path.
@@ -1340,7 +1381,7 @@ in
         # from the bonfire flake INPUT's source (a fetched path, no build,
         # byte-identical to what the package installs), drops each label block
         # by line, and writes the result straight to the store.
-        hyprlockSrcDir = "${inputs.feat-bonfire.inputs.bonfire}/src/common/config/hypr";
+        hyprlockSrcDir = "${userInputs.bonfire}/src/common/config/hypr";
         stripLockLabels =
           text:
           let
@@ -1366,7 +1407,7 @@ in
         # script can then use awk/`${ }`/`{ }` freely. Each script ALWAYS prints
         # non-empty text -- `general { text_trim = true }` collapses whitespace to
         # empty, which hyprlock renders as "Sample Text". These only DISPLAY;
-        # control is the locked media keybinds in features/hyprland (hyprlock has
+        # control is the locked media keybinds in modules/desktop/hyprland (hyprlock has
         # no clickable widgets).
         # AOD guard: when the AOD flag file exists (raised by the idle AOD stage, cleared
         # on any input -- see aodEnter/aodExit below), a lock label collapses to a single
@@ -1689,7 +1730,7 @@ in
 
           The listener is gated on `pidof hyprlock` with a SHORT (30s) timeout, so it
           is really "30s of idle AFTER the screen is LOCKED" -- which makes it a
-          MANUAL-LOCK TIMER too: hit SUPER+Escape (features/bonfire/compositor.nix)
+          MANUAL-LOCK TIMER too: hit SUPER+Escape (modules/desktop/bonfire/compositor.nix)
           and 30s later it dims + minimises, instead of sitting bright until the full
           idle sequence would have reached it. For the AUTO path the 150s lock trips
           the same gate, so AOD follows the auto-lock within condition_retry (10s).
@@ -1777,7 +1818,7 @@ in
           # (1c) Idle / auto-lock (loginctl lock-session -> logind Lock -> this lock_cmd) goes
           # through lock-warm.sh so the lock screen's music/battery/volume are refreshed ONCE
           # before hyprlock paints -- not the stale cache from the previous lock. SUPER+Escape
-          # does the same (features/bonfire compositor.nix); the panic gesture keeps plain
+          # does the same (modules/desktop/bonfire compositor.nix); the panic gesture keeps plain
           # lock.sh for an instant cover.
           substituteInPlace $out \
             --replace-fail 'lock_cmd = pidof hyprlock || ~/.local/bin/lock.sh' \

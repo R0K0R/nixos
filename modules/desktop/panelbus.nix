@@ -1,10 +1,13 @@
-{ lib, config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
+
 let
+  cfg = config.my.panelbus;
+
   # panelbus -- a broadcast-on-open mutual-exclusion bus for "special" windows (dock, pin, notif, ...).
   #
   # Each participating window declares a CLOSE command as a shell snippet in
   #   ~/.config/panelbus/handlers/<name>
-  # (dropped by that window's own feature, so features stay decoupled -- nobody hard-codes who else
+  # (dropped by that window's own module, so modules stay decoupled -- nobody hard-codes who else
   # exists). The OPEN motion of a window calls `panelbus open <name>`, which fires every OTHER handler.
   #
   # Each handler runs DETACHED (setsid -f) and TIME-CAPPED (timeout): a close that blocks instead of
@@ -45,10 +48,16 @@ in
       default = panelbus;
       defaultText = lib.literalExpression ''pkgs.writeShellScriptBin "panelbus" "..."'';
       description = ''
-        The panelbus CLI. Features that participate add this to the PATH of whatever context fires the
+        The panelbus CLI. Modules that participate add this to the PATH of whatever context fires the
         broadcast (a wrapper's makeBinPath, a service ExecStart) so `panelbus` resolves without relying
         on the login-time session PATH.'';
     };
-    users = import ../../lib/user-scope.nix { inherit lib config; };
+  };
+
+  config = lib.mkIf cfg.enable {
+    # Put `panelbus` on the user PATH for general/interactive use. Participating modules additionally
+    # reference config.my.panelbus.package directly in their own PATHs (dock wrapper, quickshell
+    # service) so the broadcast fires even in contexts that don't inherit the login session PATH.
+    home.packages = [ cfg.package ];
   };
 }

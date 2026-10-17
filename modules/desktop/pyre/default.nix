@@ -1,15 +1,14 @@
 { config, lib, pkgs, osConfig, ... }:
 
 let
-  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "pyre"; };
-  cfg = osConfig.my.pyre;
+  cfg = config.my.pyre;
   mod = osConfig.my.hyprland.modKey;
 
   # dock.sh is a plain file (no Nix-escaping headaches); this thin wrapper just puts
   # hyprctl + jq on its PATH. hyprctl comes from the RUNNING compositor's own
   # package so the IPC protocol always matches.
   dock = pkgs.writeShellScript "pyre" ''
-    export PATH=${lib.makeBinPath [ osConfig.programs.hyprland.package pkgs.jq pkgs.coreutils pkgs.swaynotificationcenter pkgs.quickshell osConfig.my.panelbus.package ]}''${PATH:+:$PATH}
+    export PATH=${lib.makeBinPath [ osConfig.programs.hyprland.package pkgs.jq pkgs.coreutils pkgs.swaynotificationcenter pkgs.quickshell config.my.panelbus.package ]}''${PATH:+:$PATH}
     exec ${pkgs.writeShellScript "pyre-impl" (builtins.readFile ./dock.sh)} "$@"
   '';
 
@@ -61,13 +60,13 @@ let
   '';
 
   # NOTE: per-monitor workspace management (pin/rename/evacuate) AND runtime monitor-scale capture
-  # moved to features/hyprland (their proper domain -- it now owns a monitor.layout_changed hook of
+  # moved to modules/desktop/hyprland (their proper domain -- it now owns a monitor.layout_changed hook of
   # its own; hl.on stacks and reload clears handlers, so it coexists with the dock hook below). This
   # feature's hook keeps only the dock relayout + wallpaper repaint.
 
   # The dock's own throwaway terminal: SUPER+SHIFT+T spawns a kitty under this
   # class, which the auto-route rule below catches so it opens straight into the
-  # pile (SUPER+T stays the normal, main-area terminal -- see features/hyprland).
+  # pile (SUPER+T stays the normal, main-area terminal -- see modules/desktop/hyprland).
   dockTermClass = "pyre-term";
 
   # One auto-route rule per docked app: open FLOATING, PINNED (shown on every workspace so
@@ -90,7 +89,7 @@ let
   # flat box -- it does NOT go through the keystone, so it would box the trapezoid; keep it
   # off. The SHADOW, by contrast, IS now warped: trapezoid.patch runs renderRoundedShadow
   # through the SAME keystone homography (a per-dock ENLARGED + OFFSET drop shadow, tuned by
-  # decoration:keystone_shadow_* in features/hyprland), so it follows the trapezoid and gives
+  # decoration:keystone_shadow_* in modules/desktop/hyprland), so it follows the trapezoid and gives
   # the pile a "floating" lift -- hence NO no_shadow here anymore. BLUR is likewise kept: the
   # frosted layer is drawn by renderTextureInternal (OpenGL.cpp), the same call the keystone
   # warps, so the frost follows the trapezoid too. That's what makes a docked glass window
@@ -112,14 +111,41 @@ let
   # handler to recognise a just-opened dock window by class (the rule no longer tags).
   dockClassSet = "{ " + lib.concatMapStringsSep ", " (c: ''["${c}"] = true'') (cfg.apps ++ [ dockTermClass ]) + " }";
 in
-lib.mkIf (osConfig.my.pyre.enable && inScope && osConfig.my.desktop.compositor == "hyprland") {
+{
+  options.my.pyre = {
+    enable = lib.mkEnableOption
+      "right-edge slide-out dock -- light apps park off-screen and cycle in one at a time (Hyprland only; needs my.hyprland.enable and my.panelbus.enable, and the keystone compositor for the 3D trapezoid)";
+    apps = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "sonora" ];
+      example = [ "sonora" "org.kde.dolphin" ];
+      description = ''
+        Window classes (bare regex bodies, each wrapped as ^(<x>)$) that AUTO-open
+        into the dock -- floated to the dock shape, parked off-screen, tagged
+        'dock', without grabbing focus. Only list classes that should ALWAYS live in
+        the dock; dual-use apps (a terminal, dolphin) are better pushed in on demand
+        with SUPER+ALT+D, so their main-area windows are left alone.
+      '';
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
+  assertions = [
+    {
+      assertion = config.my.hyprland.enable && config.my.panelbus.enable;
+      message = "my.pyre needs my.hyprland.enable (it is Hyprland window rules, binds and hooks) and my.panelbus.enable (mutual exclusion with the notification centre).";
+    }
+  ];
+
+  my.settings.fragments = [ (import ./hearth.nix) ];
+
   # Expose the dock on PATH as `pyre` so OTHER features can drive it without a store-path
-  # cross-reference -- features/bonfire's SUPER+N parks the dock (`pyre hide`) for the
+  # cross-reference -- modules/desktop/bonfire's SUPER+N parks the dock (`pyre hide`) for the
   # mutually-exclusive notification centre. The dock's own binds still use ${dock} directly; this is
   # just the cross-feature entry point.
   home.packages = [ (pkgs.writeShellScriptBin "pyre" ''exec ${dock} "$@"'') ];
 
-  # panelbus close handler (features/panelbus): how the dock gets closed when another special window
+  # panelbus close handler (modules/desktop/panelbus.nix): how the dock gets closed when another special window
   # opens. Absolute ${dock} so it runs regardless of the firing context's PATH; `hide` parks the pile.
   # (PiPs deliberately do NOT participate -- a keystone PiP can coexist with the dock/notif.)
   xdg.configFile."panelbus/handlers/pyre".text = "${dock} hide";
@@ -134,7 +160,7 @@ lib.mkIf (osConfig.my.pyre.enable && inScope && osConfig.my.desktop.compositor =
       -- windows are never disturbed; it only focuses the front, for typing.
       -- Geometry is computed live in dock.sh; the rule literals below must stay in
       -- sync with its front size/position. (The old column-width cycle on D was
-      -- removed in features/hyprland; dock windows are also pinned against dragging
+      -- removed in modules/desktop/hyprland; dock windows are also pinned against dragging
       -- there, see the mouse:272 bind.)
       ${routeRules}
       -- SUPER+D toggles the pile (show <-> park). SUPER+SHIFT+D toggles the
@@ -149,17 +175,17 @@ lib.mkIf (osConfig.my.pyre.enable && inScope && osConfig.my.desktop.compositor =
       -- verified-free key; P/SHIFT+P/ALT+P were play-pause/dpms/pin and V is DMS's clipboard.)
       hl.bind("${mod} + U", hl.dsp.exec_cmd("${dock} pip-toggle"))
       -- The 3-finger HORIZONTAL pile show/hide is now a CONTINUOUS compositor gesture (action
-      -- "dockpile" in features/hyprland's gesture list -> CDockPileTrackpadGesture), replacing the
+      -- "dockpile" in modules/desktop/hyprland's gesture list -> CDockPileTrackpadGesture), replacing the
       -- old one-shot Lua-function that only decided the verb on release. Its release command is wired
       -- below (dock_pile_exec). No more per-frame Lua, so the Lua-config-blackout risk is gone too.
-      -- 4-finger drag = the built-in MOVE gesture (registered in features/hyprland's gesture list),
+      -- 4-finger drag = the built-in MOVE gesture (registered in modules/desktop/hyprland's gesture list),
       -- made CONTINUOUS by trapezoid.patch's CMoveTrackpadGesture: a drag that starts on a pile card
       -- slides THAT card live under the finger and, on release, runs gestures:dock_swipe_exec below
       -- -> dock.sh gesture-move (l/r cycle the pile, none = spring back). A drag anywhere else moves
       -- the focused window normally. This replaced the old one-shot Lua-function 4-finger gesture.
       hl.config({ gestures = { dock_swipe_exec = "${dock} gesture-move", dock_pile_exec = "${dock} gesture-pile" } })
       -- SUPER+SHIFT+T: a terminal that opens straight into the dock (SUPER+T is
-      -- the normal terminal, in features/hyprland). The --class matches the
+      -- the normal terminal, in modules/desktop/hyprland). The --class matches the
       -- auto-route rule above, so it floats, size-locks, pins and joins the pile.
       -- No opacity override -- the terminal keeps its normal glass (kitty
       -- background_opacity 0.65). The cascade's per-position WINDOW opacity (1.0 on
@@ -168,7 +194,7 @@ lib.mkIf (osConfig.my.pyre.enable && inScope && osConfig.my.desktop.compositor =
       hl.bind("${mod} + SHIFT + T", hl.dsp.exec_cmd("kitty --class ${dockTermClass}"))
 
       -- SUPER + left/right GLOBALLY shift the pile (prev / next), no matter what's
-      -- focused -- the earlier focus-conditional proved unreliable. features/hyprland
+      -- focused -- the earlier focus-conditional proved unreliable. modules/desktop/hyprland
       -- bound these to movefocus and Hyprland APPENDS duplicate binds, so unbind those
       -- first (this fragment is mkAfter, so it runs after that bind), then bind the
       -- shift. The exec_cmd dispatcher is bound DIRECTLY (same shape as SUPER+D above,
@@ -264,4 +290,5 @@ lib.mkIf (osConfig.my.pyre.enable && inScope && osConfig.my.desktop.compositor =
         end)
       end
   '';
+};
 }

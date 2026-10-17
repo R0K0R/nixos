@@ -20,7 +20,7 @@ export HYPRLAND_INSTANCE_SIGNATURE="${HYPRLAND_INSTANCE_SIGNATURE:-$(ls "${XDG_R
 HC=hyprctl; J=jq
 STATE="${XDG_RUNTIME_DIR:-/run/user/1000}/pyre.front"   # remembers the front across hide
 
-# live dock.* settings from hearth (features/pyre/hearth.nix); read fresh each invocation, each
+# live dock.* settings from hearth (modules/desktop/pyre/hearth.nix); read fresh each invocation, each
 # falling back to its screen-scaled default (size/inset knobs use 0 = "auto" for exactly that).
 SET="$HOME/.local/state/hearth/settings.json"
 hs() { "$J" -r "$1 // empty" "$SET" 2>/dev/null; }
@@ -424,7 +424,7 @@ case "${1:-toggle}" in
     else
       park_all
     fi ;;
-  rehome)  # a workspace became active (hl.on workspace.active, features/pyre). The pile is
+  rehome)  # a workspace became active (hl.on workspace.active, modules/desktop/pyre). The pile is
            # PINNED, and Hyprland's pin follows the active workspace across ALL monitors -- so
            # switching a workspace on ANOTHER screen drags the dock off its home monitor ("flies
            # across screens"). If the pile is up and has drifted onto the wrong monitor, re-home it

@@ -1,4 +1,4 @@
-# hearth settings fragment for the side dock (features/pyre/dock.sh). dock.sh reads these live from
+# hearth settings fragment for the side dock (modules/desktop/pyre/dock.sh). dock.sh reads these live from
 # ~/.local/state/hearth/settings.json (jq) on each dock action; the size/inset knobs default to 0 =
 # "auto" so the screen-scaled default is kept until you set an explicit px. Add a knob here + a matching
 # `hs` read in dock.sh.

@@ -1,7 +1,7 @@
 # hearth settings for the bonfire shell: the keybinds (from keybinds.nix) + the shell's own
 # `~/bonfire-control/main_setting.sh` values (the "bjillion settings" the rofi menu used to edit). The
 # latter are materialised BACK into main_setting.sh by the bonfire-control-sync watcher
-# (features/bonfire/home.nix), so the ~8 scripts that `source` it stay untouched -- hearth is just the
+# (modules/desktop/bonfire/default.nix), so the ~8 scripts that `source` it stay untouched -- hearth is just the
 # new editor. Defaults mirror the shipped main_setting.sh.
 { lib }:
 let

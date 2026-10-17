@@ -7,10 +7,10 @@
 
   These are the SHELL binds from upstream's src/wm/hyprland/config/keybinding.lua
   only. Its window-management, focus, workspace and mouse binds are not
-  reproduced: features/hyprland already binds all of them, and that file is not
+  reproduced: modules/desktop/hyprland already binds all of them, and that file is not
   installed here.
 
-  The chords are DATA-DRIVEN from features/bonfire/keybinds.nix: baked here as the
+  The chords are DATA-DRIVEN from modules/desktop/bonfire/keybinds.nix: baked here as the
   kb() defaults and surfaced as `keybind.<action>` settings by hearth.nix, so they
   are editable in the hearth TUI and applied live by the watcher in home.nix.
 
@@ -20,10 +20,11 @@
 */
 
 let
-  inScope = import ../../lib/in-scope.nix { inherit osConfig config; feature = "bonfire"; };
-  cfg = osConfig.my.bonfire;
-  enabled = cfg.enable && inScope;
+  cfg = config.my.bonfire;
+  enabled = cfg.enable;
 
+  # osConfig is read only for genuine facts about the machine: which compositor it runs and the
+  # modifier it was built around. Whether bonfire is on is this home's own switch.
   compositor = osConfig.my.desktop.compositor;
   mod = osConfig.my.hyprland.modKey;
   bin = name: "${config.home.homeDirectory}/.local/bin/${name}";
@@ -46,8 +47,8 @@ let
   # SUPER+N notification-centre toggle, made MUTUALLY EXCLUSIVE with the pyre: opening the panel
   # parks the dock first, because both claim the right-edge slot and the keystone trapezoid shape
   # (the compositor keystones the "swaync-control-center" layer so the panel IS a dock-card shape --
-  # see features/hyprland/trapezoid.patch; geometry matched in features/bonfire home.nix). `pyre`
-  # is the dock's PATH wrapper (features/pyre); the guard makes this a plain toggle on a host with
+  # see the keystone compositor patch (trapezoid.patch, now the fork's `keystone` branch); geometry matched in modules/desktop/bonfire/default.nix). `pyre`
+  # is the dock's PATH wrapper (modules/desktop/pyre); the guard makes this a plain toggle on a host with
   # no dock. The reverse direction (showing the dock closes the panel) is in pyre's dock.sh.
   notifToggle = pkgs.writeShellScript "flare-toggle" ''
     export PATH=${lib.makeBinPath [ pkgs.swaynotificationcenter pkgs.coreutils ]}''${PATH:+:$PATH}
@@ -84,7 +85,7 @@ let
     [ -n "$pids" ] && kill -9 $pids 2>/dev/null || true
   '';
 
-  # --- data-driven shell keybinds (features/bonfire/keybinds.nix) ---
+  # --- data-driven shell keybinds (modules/desktop/bonfire/keybinds.nix) ---
   kbData = import ./keybinds.nix;
 
   # The exec command per action, run in the shell's wrapped env (store paths / ~/.local/bin scripts).
@@ -123,9 +124,9 @@ in
 {
   config = lib.mkIf (enabled && compositor == "hyprland") {
     wayland.windowManager.hyprland.extraConfig = lib.mkAfter ''
-      -- Shell keybinds: chords are DATA-DRIVEN from features/bonfire/keybinds.nix. kb(action) returns
+      -- Shell keybinds: chords are DATA-DRIVEN from modules/desktop/bonfire/keybinds.nix. kb(action) returns
       -- the chord -- the baked default in __kb below, overridden live by the watcher-written table
-      -- (features/bonfire/home.nix rewrites ~/.local/state/bonfire/keybinds.lua on a hearth `keybind.*`
+      -- (modules/desktop/bonfire/default.nix rewrites ~/.local/state/bonfire/keybinds.lua on a hearth `keybind.*`
       -- change, then runs `hyprctl reload`). Each hl.bind is pcall-wrapped so a bad chord typed in the
       -- settings UI logs + skips that one bind rather than failing the whole config -> a blank session.
       --
@@ -143,10 +144,10 @@ ${kbDefaultsLua}
       local function kb(a) return __kb[a] or "" end
 
 ${kbBindsLua}
-      ${lib.optionalString (!osConfig.my.flare.enable) ''pcall(function() hl.bind("${mod} + N", hl.dsp.exec_cmd("${notifToggle}")) end)''}
+      ${lib.optionalString (!config.my.flare.enable) ''pcall(function() hl.bind("${mod} + N", hl.dsp.exec_cmd("${notifToggle}")) end)''}
 
       -- Glassmorphism for the bar and the launcher, matching what
-      -- features/hyprland enables compositor-side. A layer surface has to opt
+      -- modules/desktop/hyprland enables compositor-side. A layer surface has to opt
       -- into blur; only windows get it automatically.
       hl.layer_rule({ match = { namespace = "^(waybar)$" }, blur = true, ignore_alpha = 0.05 })
       -- rofi is launched fullscreen + transparent (the bonfire-fullscreen-blur

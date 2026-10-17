@@ -2,7 +2,7 @@
 // Bonfire notification centre (quickshell) -- replaces swaync. A SIZED layer (namespace
 // "flare") that the compositor keystone warps into a dock-card trapezoid.
 //
-// DESIGN: matches the shell's monochrome vibe (features/bonfire). Pure white-on-near-black;
+// DESIGN: matches the shell's monochrome vibe (modules/desktop/bonfire). Pure white-on-near-black;
 // the accent is read live from ~/.local/state/glow/colors.css (the same token the whole
 // shell uses -- @accent_color, currently #ffffff). ACTIVE controls INVERT (accent bg, black text),
 // exactly like the waybar workspace chips. Font: DepartureMono Nerd Font, like the rest of the shell.
@@ -33,7 +33,7 @@ ShellRoot {
     property string powerProfile: "balanced"
     property bool recOn: false          // screen recording (wf-recorder) active?
 
-    // Mutual exclusion via the panelbus (features/panelbus): opening THIS centre broadcasts, which
+    // Mutual exclusion via the panelbus (modules/desktop/panelbus.nix): opening THIS centre broadcasts, which
     // closes the dock + any pins. Only on open (closing shouldn't reopen anything). run() detaches it.
     onPanelOpenChanged: { if (panelOpen) { run("panelbus open flare"); pWeather.running = true; } else if (btMenu.adapter) btMenu.adapter.discovering = false; }
 
@@ -48,7 +48,7 @@ ShellRoot {
     property string bgTileHi: root.hsGet("panel.colors.tile_hover", "#24ffffff") // hover (live)
     readonly property string invFg: "#000000"   // text/icon ON an active (accent) tile
 
-    // ----- hearth live settings (features/settings generates the schema; hearth materialises
+    // ----- hearth live settings (modules/desktop/settings.nix generates the schema; hearth materialises
     // ~/.local/state/hearth/settings.json + signals changes). Read the whole store into `hs` and
     // re-read on any `panel.*` change, so tweaks apply live (e.g. `hearth set panel.width 900`). -----
     property var hs: ({})
@@ -188,7 +188,7 @@ ShellRoot {
     Process { id: pRec;   command: ["sh","-c","pgrep -x wf-recorder >/dev/null"]; onExited: (code) => root.recOn = (code === 0) }
     function refresh() { pAccent.running = true; pWifi.running = true; pNight.running = true; pSleep.running = true; pProf.running = true; pRec.running = true; }
 
-    // ----- weather (runs BONFIRE_WEATHER_CMD -> linecast --json; see features/flare/home.nix) -----
+    // ----- weather (runs BONFIRE_WEATHER_CMD -> linecast --json; see modules/desktop/flare/default.nix) -----
     property var wx: null
     function wxDay(d) { return Qt.formatDate(new Date(d), "ddd"); }
     Process {
@@ -321,7 +321,7 @@ ShellRoot {
         return h > 0 ? (h + ":" + mm + ":" + xx) : (mm + ":" + xx);
     }
     // toast + a short chime. Both run even when the panel is closed (notify-send + pw-play are on the
-    // service PATH; BONFIRE_ALERT_SOUND is set in features/flare/home.nix). 2>/dev/null so a missing
+    // service PATH; BONFIRE_ALERT_SOUND is set in modules/desktop/flare/default.nix). 2>/dev/null so a missing
     // audio sink never swallows the toast. (title/body are literals here, so plain quoting is safe.)
     function timerAlert(title, body) {
         root.run("notify-send -a 'Bonfire Timer' '" + title + "' '" + body + "' ; pw-play \"$BONFIRE_ALERT_SOUND\" 2>/dev/null");
@@ -588,7 +588,7 @@ ShellRoot {
     PanelWindow {
         id: panel
         visible: root.panelOpen
-        // Renamed OFF "flare" so the compositor keystone (features/hyprland/trapezoid.patch,
+        // Renamed OFF "flare" so the compositor keystone (the keystone compositor patch (trapezoid.patch, now the fork's `keystone` branch),
         // which matches that prefix) NO LONGER warps this layer: the LAYER keystone mis-renders at a
         // fractional monitor scale (0.8 here), compressing the panel into the right ~45% with a dead
         // transparent left gutter (the "vertical bar"). Flat, full-width panel instead. To bring the

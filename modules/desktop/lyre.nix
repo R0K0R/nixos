@@ -1,10 +1,22 @@
-{ lib, pkgs, osConfig, inputs, ... }:
+{ config, lib, pkgs, userInputs, ... }:
 
 let
-  lyre = inputs.lyre.packages.${pkgs.system}.default;
+  cfg = config.my.lyre;
+  # Prebuilt from lyre's own flake (packages.<system>.default), built against its own
+  # nixos-unstable pin -> substitutes from cache. Source: ~/Documents/projects/lyre
+  # (the `lyre` flake input). Replaces EasyEffects + Timbre: one native PipeWire graph
+  # (per-app EQ -> lyre merge -> per-output EQ -> devices), driven over a CLI by the
+  # notif-centre Sound menu.
+  lyre = userInputs.lyre.packages.${pkgs.stdenv.hostPlatform.system}.default;
 in
 {
-  config = lib.mkIf (osConfig.my.lyre.enable or false) {
+  options.my.lyre.enable = lib.mkEnableOption "lyre -- headless PipeWire EQ + routing engine";
+
+  config = lib.mkIf cfg.enable {
+    # On PATH too (it used to ride environment.systemPackages): the notif-centre Sound menu and
+    # the user drive the engine through its CLI.
+    home.packages = [ lyre ];
+
     # The engine daemon: long-running (it HOSTS the filter-chain EQ modules -- a chain only
     # lives as long as the client that loaded it -- and reacts to apps/devices over a libpulse
     # event loop, exposing a unix-socket CLI). On start it builds the lyre null-sink, fans
