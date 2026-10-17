@@ -3,16 +3,19 @@
     "agenix": {
       "inputs": {
         "darwin": [
+          "system",
           "feat-agenix"
         ],
         "home-manager": [
+          "system",
           "feat-agenix"
         ],
         "nixpkgs": [
+          "system",
           "feat-agenix",
           "nixpkgs"
         ],
-        "systems": "systems"
+        "systems": "systems_2"
       },
       "locked": {
         "lastModified": 1770165109,
@@ -31,8 +34,8 @@
     "bonfire": {
       "inputs": {
         "nixpkgs": [
-          "feat-bonfire",
-          "nixpkgs"
+          "system",
+          "nixpkgs-upstream"
         ]
       },
       "locked": {
@@ -52,31 +55,60 @@
     "claude-code-bin": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-2199ZWBbDr3j8jk/umkrdQbTxi61f9hQXc7F95KOBng=",
+        "narHash": "sha256-Ny0spTzoBsY/+24GU/h8e6KY2Ko8FPHnCoq5XhG6yy0=",
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-code-releases/2.1.251/linux-x64/claude"
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.296/linux-x64/claude"
       },
       "original": {
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-code-releases/2.1.251/linux-x64/claude"
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.296/linux-x64/claude"
       }
     },
     "claude-desktop-bin": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-nxaTivY3d18ziV7Wnk3KFsJO0xNAr87WqGgm9yicm7Q=",
+        "narHash": "sha256-l72DSyLqKmfVNkA69tRXcdE7ayOaN9zrryk2WjDNzvY=",
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.40609.0_amd64.deb"
+        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_2.31226.1_amd64.deb"
       },
       "original": {
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_1.40609.0_amd64.deb"
+        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_2.31226.1_amd64.deb"
+      }
+    },
+    "claude-helper": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791276610,
+        "narHash": "sha256-CnoOE82vv6oYpX9p6cBQNAIAzaYcBVFqO4w0IQ4WFJk=",
+        "owner": "R0K0R",
+        "repo": "dms_claude_helper",
+        "rev": "96d5d145c8ccbad13b9e1e273800646d55561c0c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "repo": "dms_claude_helper",
+        "type": "github"
+      }
+    },
+    "claude-science-bin": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-LlU9hrLsypPg29REDiSdnkGRQp80BqkZgYoqDVkQHk4=",
+        "type": "file",
+        "url": "https://downloads.claude.ai/claude-science/0.1.60/linux-x64"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://downloads.claude.ai/claude-science/0.1.60/linux-x64"
       }
     },
     "dank-greeter": {
       "inputs": {
         "dank-qml-common": "dank-qml-common",
         "nixpkgs": [
+          "system",
           "feat-dms",
           "nixpkgs"
         ]
@@ -132,6 +164,7 @@
         "dank-qml-common": "dank-qml-common_2",
         "flake-compat": "flake-compat",
         "nixpkgs": [
+          "system",
           "feat-dms",
           "nixpkgs"
         ]
@@ -153,6 +186,7 @@
     "dms-plugin-registry": {
       "inputs": {
         "nixpkgs": [
+          "system",
           "feat-dms",
           "nixpkgs"
         ]
@@ -183,6 +217,22 @@
       },
       "original": {
         "owner": "sihooleebd",
+        "repo": "doom-emacs",
+        "type": "github"
+      }
+    },
+    "doom-private_2": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792076238,
+        "narHash": "sha256-lAPseSiaEjAWnO3P1icbXF+9Dc6s11sKpJO2ZbsLmjw=",
+        "owner": "R0K0R",
+        "repo": "doom-emacs",
+        "rev": "a4116c67970325b3521d4b5128ea8fd78656b26e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
         "repo": "doom-emacs",
         "type": "github"
       }
@@ -239,11 +289,11 @@
     "easyeffects-presets": {
       "flake": false,
       "locked": {
-        "lastModified": 1780142087,
-        "narHash": "sha256-JpQVWuEokBRu01xkGA22dPeV5Jo8Xzvfrg5oQ8RtIrI=",
+        "lastModified": 1790709287,
+        "narHash": "sha256-Nd4LOgiZyrrkXeWfpBfrEkZwJ+i/xVjg6EPNf/+sGjw=",
         "owner": "JackHack96",
         "repo": "EasyEffects-Presets",
-        "rev": "dd966e41ad9e44d4b11e19047f526ba718bbbe57",
+        "rev": "1ac92c9be57bdfccec3fb9820924f9a870a9d56f",
         "type": "github"
       },
       "original": {
@@ -255,10 +305,12 @@
     "emacs-overlay": {
       "inputs": {
         "nixpkgs": [
+          "system",
           "feat-emacs",
           "nix-doom-emacs-unstraightened"
         ],
         "nixpkgs-stable": [
+          "system",
           "feat-emacs",
           "nix-doom-emacs-unstraightened"
         ]
@@ -281,115 +333,151 @@
       "inputs": {
         "agenix": "agenix",
         "nixpkgs": [
+          "system",
           "nixpkgs"
         ]
       },
       "locked": {
-        "path": "./features/agenix",
+        "path": "./features/core/agenix",
         "type": "path"
       },
       "original": {
-        "path": "./features/agenix",
+        "path": "./features/core/agenix",
         "type": "path"
       },
-      "parent": []
-    },
-    "feat-bonfire": {
-      "inputs": {
-        "bonfire": "bonfire",
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "path": "./features/bonfire",
-        "type": "path"
-      },
-      "original": {
-        "path": "./features/bonfire",
-        "type": "path"
-      },
-      "parent": []
+      "parent": [
+        "system"
+      ]
     },
     "feat-claude-code": {
       "inputs": {
         "claude-code-bin": "claude-code-bin"
       },
       "locked": {
-        "path": "./features/claude-code",
+        "path": "./features/apps/claude-code",
         "type": "path"
       },
       "original": {
-        "path": "./features/claude-code",
+        "path": "./features/apps/claude-code",
         "type": "path"
       },
-      "parent": []
+      "parent": [
+        "system"
+      ]
     },
     "feat-claude-desktop": {
       "inputs": {
         "claude-desktop-bin": "claude-desktop-bin"
       },
       "locked": {
-        "path": "./features/claude-desktop",
+        "path": "./features/apps/claude-desktop",
         "type": "path"
       },
       "original": {
-        "path": "./features/claude-desktop",
+        "path": "./features/apps/claude-desktop",
         "type": "path"
       },
-      "parent": []
+      "parent": [
+        "system"
+      ]
+    },
+    "feat-claude-science": {
+      "inputs": {
+        "claude-science-bin": "claude-science-bin"
+      },
+      "locked": {
+        "path": "./features/apps/claude-science",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/apps/claude-science",
+        "type": "path"
+      },
+      "parent": [
+        "system"
+      ]
     },
     "feat-dms": {
       "inputs": {
+        "claude-helper": "claude-helper",
         "dank-greeter": "dank-greeter",
         "dms": "dms",
         "dms-plugin-registry": "dms-plugin-registry",
         "nixpkgs": [
+          "system",
           "nixpkgs"
-        ]
+        ],
+        "stopwatch": "stopwatch",
+        "vehicle-motion-cues": "vehicle-motion-cues"
       },
       "locked": {
-        "path": "./features/dms",
+        "path": "./features/session/dms",
         "type": "path"
       },
       "original": {
-        "path": "./features/dms",
+        "path": "./features/session/dms",
         "type": "path"
       },
-      "parent": []
+      "parent": [
+        "system"
+      ]
     },
     "feat-easyeffects": {
       "inputs": {
         "easyeffects-presets": "easyeffects-presets"
       },
       "locked": {
-        "path": "./features/easyeffects",
+        "path": "./features/apps/easyeffects",
         "type": "path"
       },
       "original": {
-        "path": "./features/easyeffects",
+        "path": "./features/apps/easyeffects",
         "type": "path"
       },
-      "parent": []
+      "parent": [
+        "system"
+      ]
     },
     "feat-emacs": {
       "inputs": {
-        "doom-private": "doom-private",
+        "doom-private": "doom-private_2",
         "nix-doom-emacs-unstraightened": "nix-doom-emacs-unstraightened",
         "nixpkgs": [
+          "system",
           "nixpkgs"
-        ],
-        "nixpkgs-emacs-webkit": "nixpkgs-emacs-webkit"
+        ]
       },
       "locked": {
-        "path": "./features/emacs",
+        "path": "./features/apps/emacs",
         "type": "path"
       },
       "original": {
-        "path": "./features/emacs",
+        "path": "./features/apps/emacs",
         "type": "path"
       },
-      "parent": []
+      "parent": [
+        "system"
+      ]
+    },
+    "feat-hakuspace": {
+      "inputs": {
+        "hakuspace": "hakuspace",
+        "nixpkgs": [
+          "system",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "path": "./features/session/hakuspace",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/session/hakuspace",
+        "type": "path"
+      },
+      "parent": [
+        "system"
+      ]
     },
     "feat-hop": {
       "inputs": {
@@ -397,45 +485,69 @@
         "rhwp-src": "rhwp-src"
       },
       "locked": {
-        "path": "./features/hop",
+        "path": "./features/apps/hop",
         "type": "path"
       },
       "original": {
-        "path": "./features/hop",
+        "path": "./features/apps/hop",
         "type": "path"
       },
-      "parent": []
+      "parent": [
+        "system"
+      ]
+    },
+    "feat-hyprland": {
+      "inputs": {
+        "hyprland-keystone": "hyprland-keystone",
+        "hyprland-nixos": "hyprland-nixos"
+      },
+      "locked": {
+        "path": "./features/session/hyprland",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/session/hyprland",
+        "type": "path"
+      },
+      "parent": [
+        "system"
+      ]
     },
     "feat-niri": {
       "inputs": {
         "niri": "niri",
         "nixpkgs": [
+          "system",
           "nixpkgs"
         ]
       },
       "locked": {
-        "path": "./features/niri",
+        "path": "./features/session/niri",
         "type": "path"
       },
       "original": {
-        "path": "./features/niri",
+        "path": "./features/session/niri",
         "type": "path"
       },
-      "parent": []
+      "parent": [
+        "system"
+      ]
     },
     "feat-samsung-galaxybook": {
       "inputs": {
         "samsung-galaxy-book-linux-fixes": "samsung-galaxy-book-linux-fixes"
       },
       "locked": {
-        "path": "./features/samsung-galaxybook",
+        "path": "./features/hardware/samsung-galaxybook",
         "type": "path"
       },
       "original": {
-        "path": "./features/samsung-galaxybook",
+        "path": "./features/hardware/samsung-galaxybook",
         "type": "path"
       },
-      "parent": []
+      "parent": [
+        "system"
+      ]
     },
     "flake-compat": {
       "flake": false,
@@ -455,7 +567,7 @@
     },
     "flake-utils": {
       "inputs": {
-        "systems": "systems_3"
+        "systems": "systems"
       },
       "locked": {
         "lastModified": 1731533236,
@@ -471,16 +583,39 @@
         "type": "github"
       }
     },
+    "hakuspace": {
+      "inputs": {
+        "nixpkgs": [
+          "system",
+          "feat-hakuspace",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1788290651,
+        "narHash": "sha256-6nwGQKpacM3L2QPFIaLOO04iGVTUsBYm6spsxE9IgVg=",
+        "owner": "R0K0R",
+        "repo": "hakuspace",
+        "rev": "719c43c265ea422da2bfb0cb497985b6b67a9f07",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "ref": "pr/nix-home-module",
+        "repo": "hakuspace",
+        "type": "github"
+      }
+    },
     "hearth": {
       "inputs": {
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1791978579,
-        "narHash": "sha256-/3nP8ZnLVgL3Rt2akHb7xIGsypSycO7+8HCtnp6AjtA=",
+        "lastModified": 1791978977,
+        "narHash": "sha256-06GKFFzZmqWYXh/ySEeXS+u03mSs1CYlPKHiQCKdpWc=",
         "owner": "sihooleebd",
         "repo": "hearth",
-        "rev": "5fedfac8ea1181edbeea1d2b9f289b9c9cbb9b9b",
+        "rev": "fb1e787ae17d9c3c91b47a7f8286dccf4cb44fe4",
         "type": "github"
       },
       "original": {
@@ -492,15 +627,16 @@
     "home-manager": {
       "inputs": {
         "nixpkgs": [
+          "system",
           "nixpkgs"
         ]
       },
       "locked": {
-        "lastModified": 1787540599,
-        "narHash": "sha256-MHwk52ty3NsLhq9a1IbIfBJZlCUJIdiUYFo52JLK9hY=",
+        "lastModified": 1791600313,
+        "narHash": "sha256-/2gb2WTztITD/JU1XUCg63vDsIfJGLr0LDsjSCTTJc8=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "03f4cd46bc1dd4f3a96da778d2ce9f7ce39dd450",
+        "rev": "427c74a88a93cc9f856c8bb99bf6b4a5187a6b33",
         "type": "github"
       },
       "original": {
@@ -526,6 +662,40 @@
         "type": "github"
       }
     },
+    "hyprland-keystone": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791978740,
+        "narHash": "sha256-gpjUEyJBYjv40WddehGQ3CaXa0NZ5IYYq0iKqU/ukis=",
+        "owner": "R0K0R",
+        "repo": "Hyprland",
+        "rev": "9448a8950569881188844e43923da354e7e0fe3a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "ref": "keystone",
+        "repo": "Hyprland",
+        "type": "github"
+      }
+    },
+    "hyprland-nixos": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791978740,
+        "narHash": "sha256-0yv3dE5OoP8bnLGaSUkniKLFH4ie7F307oJNnIOWbds=",
+        "owner": "R0K0R",
+        "repo": "Hyprland",
+        "rev": "23e6c87b80ad03a54799dd315e39e57a2dafb11d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "ref": "nixos",
+        "repo": "Hyprland",
+        "type": "github"
+      }
+    },
     "late-sh": {
       "inputs": {
         "flake-utils": "flake-utils",
@@ -533,11 +703,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1791269383,
-        "narHash": "sha256-D3/urvQNLg8NP4L3QM7q3DemfOXe088uSWyJJ1blKhk=",
+        "lastModified": 1792188186,
+        "narHash": "sha256-hs7xVrvDzFPR7tQp1qSdfKPLwx1JsXOS4wJSdSDOW+Y=",
         "owner": "mpiorowski",
         "repo": "late-sh",
-        "rev": "108ca48dbee513a075ebbf5588eeed5b559faf8f",
+        "rev": "be86758ade292bc4baf64bc41368e6ad99734ede",
         "type": "github"
       },
       "original": {
@@ -569,6 +739,7 @@
         "niri-stable": "niri-stable",
         "niri-unstable": "niri-unstable",
         "nixpkgs": [
+          "system",
           "feat-niri",
           "nixpkgs"
         ],
@@ -585,6 +756,7 @@
         "type": "path"
       },
       "parent": [
+        "system",
         "feat-niri"
       ]
     },
@@ -628,10 +800,11 @@
         "doomemacs-modules": "doomemacs-modules",
         "emacs-overlay": "emacs-overlay",
         "nixpkgs": [
+          "system",
           "feat-emacs",
           "nixpkgs"
         ],
-        "systems": "systems_2"
+        "systems": "systems_3"
       },
       "locked": {
         "lastModified": 1787482452,
@@ -663,22 +836,6 @@
         "type": "github"
       }
     },
-    "nixpkgs-emacs-webkit": {
-      "locked": {
-        "lastModified": 1688392541,
-        "narHash": "sha256-lHrKvEkCPTUO+7tPfjIcb7Trk6k31rz18vkyqmkeJfY=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "ea4c80b39be4c09702b0cb3b42eab59e2ba4f24b",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-22.11",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
     "nixpkgs-stable": {
       "locked": {
         "lastModified": 1782847189,
@@ -697,11 +854,11 @@
     },
     "nixpkgs-upstream": {
       "locked": {
-        "lastModified": 1787498568,
-        "narHash": "sha256-9i/VTdusq/+NM/tz+J1Re+ojkMB8MBf0QshnYfzHz30=",
+        "lastModified": 1791456040,
+        "narHash": "sha256-H83yz/do+hjOO0uujHyH8RgtIQP2v7Mw+cLwcZK/xKc=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "56c02bc00adcf003215cc4bd996d6efaf4cff188",
+        "rev": "e7439b6b14ad3cc35d05608ebca9bce01a25f5f8",
         "type": "github"
       },
       "original": {
@@ -745,22 +902,6 @@
     },
     "nixpkgs_4": {
       "locked": {
-        "lastModified": 1788178606,
-        "narHash": "sha256-J7KXtwDdkt+S/mLWJWqXnyeD8RBJR4n9lKXGfrscQDA=",
-        "owner": "R0K0R",
-        "repo": "nixpkgs",
-        "rev": "71e6f02e44c381d82a862956085b96cbe4ace3b9",
-        "type": "github"
-      },
-      "original": {
-        "owner": "R0K0R",
-        "ref": "combined-fundamental",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs_5": {
-      "locked": {
         "lastModified": 1790822859,
         "narHash": "sha256-69xHQhAeMAD2wDXO7T2pcOZIF9Sga2W+JkmY2a11Ops=",
         "owner": "NixOS",
@@ -771,6 +912,22 @@
       "original": {
         "owner": "NixOS",
         "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_5": {
+      "locked": {
+        "lastModified": 1791914020,
+        "narHash": "sha256-B/DJET58beKz3fNZgz9F+Ye3EGeiuUORkFQmtdsXw0I=",
+        "owner": "R0K0R",
+        "repo": "nixpkgs",
+        "rev": "00a171f2f72e004a3916df33904932e335dd7355",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "ref": "combined-fundamental",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -794,23 +951,13 @@
     },
     "root": {
       "inputs": {
-        "feat-agenix": "feat-agenix",
-        "feat-bonfire": "feat-bonfire",
-        "feat-claude-code": "feat-claude-code",
-        "feat-claude-desktop": "feat-claude-desktop",
-        "feat-dms": "feat-dms",
-        "feat-easyeffects": "feat-easyeffects",
-        "feat-emacs": "feat-emacs",
-        "feat-hop": "feat-hop",
-        "feat-niri": "feat-niri",
-        "feat-samsung-galaxybook": "feat-samsung-galaxybook",
+        "bonfire": "bonfire",
+        "doom-private": "doom-private",
         "hearth": "hearth",
-        "home-manager": "home-manager",
         "late-sh": "late-sh",
         "lyre": "lyre",
-        "nixpkgs": "nixpkgs_4",
-        "nixpkgs-upstream": "nixpkgs-upstream",
-        "sonora": "sonora"
+        "sonora": "sonora",
+        "system": "system"
       }
     },
     "rust-overlay": {
@@ -874,7 +1021,7 @@
     },
     "sonora": {
       "inputs": {
-        "nixpkgs": "nixpkgs_5",
+        "nixpkgs": "nixpkgs_4",
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
@@ -889,6 +1036,57 @@
         "owner": "sihooleebd",
         "ref": "feat/niche-fixes-and-features",
         "repo": "sononora",
+        "type": "github"
+      }
+    },
+    "stopwatch": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791275188,
+        "narHash": "sha256-72Kdi7kIjndtrkWvHXZbvFQBWejC7h5YmrB4et6+6ho=",
+        "owner": "R0K0R",
+        "repo": "dms_stopwatch_bar",
+        "rev": "8ce5aaa4d394d0ddbc61b5f97dd31a50a5692dd1",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "repo": "dms_stopwatch_bar",
+        "type": "github"
+      }
+    },
+    "system": {
+      "inputs": {
+        "feat-agenix": "feat-agenix",
+        "feat-claude-code": "feat-claude-code",
+        "feat-claude-desktop": "feat-claude-desktop",
+        "feat-claude-science": "feat-claude-science",
+        "feat-dms": "feat-dms",
+        "feat-easyeffects": "feat-easyeffects",
+        "feat-emacs": "feat-emacs",
+        "feat-hakuspace": "feat-hakuspace",
+        "feat-hop": "feat-hop",
+        "feat-hyprland": "feat-hyprland",
+        "feat-niri": "feat-niri",
+        "feat-samsung-galaxybook": "feat-samsung-galaxybook",
+        "home-manager": "home-manager",
+        "nixpkgs": "nixpkgs_5",
+        "nixpkgs-upstream": "nixpkgs-upstream",
+        "tuning-cache-galaxybook4-pro360": "tuning-cache-galaxybook4-pro360",
+        "tuning-cache-victus-15": "tuning-cache-victus-15"
+      },
+      "locked": {
+        "lastModified": 1792250417,
+        "narHash": "sha256-8JpZbFbAzHqSFqxqd6LrbkO3Uf25Tbtq+rJ6ao1nzcM=",
+        "owner": "R0K0R",
+        "repo": "nixos",
+        "rev": "1fbd5239f710f1ea4e0690e8202dae74db912841",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "ref": "multiuser",
+        "repo": "nixos",
         "type": "github"
       }
     },
@@ -934,6 +1132,50 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "tuning-cache-galaxybook4-pro360": {
+      "flake": false,
+      "locked": {
+        "path": "./tuning/runtime-cache/hosts/galaxybook4-pro360",
+        "type": "path"
+      },
+      "original": {
+        "path": "./tuning/runtime-cache/hosts/galaxybook4-pro360",
+        "type": "path"
+      },
+      "parent": [
+        "system"
+      ]
+    },
+    "tuning-cache-victus-15": {
+      "flake": false,
+      "locked": {
+        "path": "./tuning/runtime-cache/hosts/victus-15",
+        "type": "path"
+      },
+      "original": {
+        "path": "./tuning/runtime-cache/hosts/victus-15",
+        "type": "path"
+      },
+      "parent": [
+        "system"
+      ]
+    },
+    "vehicle-motion-cues": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790481860,
+        "narHash": "sha256-wK8hEbfRRFGvGW6O0yyAdVliY6qnlh1xeiPHxTCw5hc=",
+        "owner": "R0K0R",
+        "repo": "vehicle_motion_cues_dms",
+        "rev": "d293e095ac10c4e0e7be3d9e223e61b926ed8ffc",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "repo": "vehicle_motion_cues_dms",
         "type": "github"
       }
     },

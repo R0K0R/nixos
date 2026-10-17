@@ -1,5 +1,11 @@
 # Bonfire unified settings — design
 
+> **Layout note.** This document was written when the repo was a NixOS system flake. It is now a
+> standalone home-manager repo: `features/flare`, `features/pyre`, `features/hyprland` and
+> `features/bonfire` are `modules/desktop/{flare,pyre,hyprland,bonfire}`, and the schema is
+> assembled from `my.settings.fragments` (each module registers its own `hearth.nix`) rather than
+> a `features/*/hearth.nix` directory walk. The design below is otherwise unchanged.
+
 > **Status: design, not yet implemented.** This is the agreed blueprint for a single settings
 > system that replaces the scattered hardcoded values, inline `set` configs, and the upstream rofi
 > menus. Build order is in [§10](#10-migration-plan).

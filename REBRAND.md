@@ -1,5 +1,9 @@
 # Rebrand: Haku/hakuspace → bonfire 🔥
 
+> **Layout note.** Written while this repo was a NixOS system flake; it is now a standalone
+> home-manager repo (see README.md). `features/<x>` paths below are historical: the user-level
+> ones are `modules/{desktop,shell,editor,apps}/...`, the system-level ones moved to the system flake.
+
 > **Status: complete** (2026-10-14). The desktop is a campfire theme — every component an element of
 > the fire. The unmaintained `hakuspace` shell was **forked to `github:sihooleebd/bonfire`** and renamed
 > end to end; nothing points at `R0K0R/hakuspace` any more. All six phases below are done. Deploy with a

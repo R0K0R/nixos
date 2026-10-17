@@ -1,245 +1,154 @@
-# bonfire 🔥
+# bonfire 🔥 -- Benjamin's home
 
-Benjamin's NixOS configuration. The daily driver (`dell-latitude`) runs **bonfire**: a campfire-themed
-Hyprland desktop where every component is an element of the fire — the
-[`lyre`](https://github.com/sihooleebd/lyre) audio engine, the
-[`hearth`](https://github.com/sihooleebd/hearth) settings store, the `flare` notifications, the `pyre`
-dock, the `flint` launcher and the `glow` theme, all on the `bonfire` shell
+The home-manager configuration for the account `benjamin`, as a standalone repo built on the
+system flake's `homeLib`. It holds the **bonfire** desktop: a campfire-themed Hyprland session where
+every component is an element of the fire -- the [`lyre`](https://github.com/sihooleebd/lyre) audio
+engine, the [`hearth`](https://github.com/sihooleebd/hearth) settings store, the `flare`
+notifications, the `pyre` dock, the `flint` launcher and the `glow` theme, all on the `bonfire` shell
 ([sihooleebd/bonfire](https://github.com/sihooleebd/bonfire)).
 
-Three machines, one flake.
+It used to be a whole NixOS system flake (three hosts, a nixpkgs fork's tuning backend, the cross-build
+notes). The system half now lives in the admin's flake,
+[`github:R0K0R/nixos`](https://github.com/R0K0R/nixos) (the `multiuser` branch); this repo keeps only what
+lives under `$HOME`. It outputs
 
-| host | role |
+    homeConfigurations."benjamin@victus-15"
+    homeConfigurations."benjamin@dell-latitude"
+
+one per host that the system's `registry/hosts.nix` puts benjamin on, each made by
+`system.homeLib.<host>.mkHome`.
+
+| host | what he does there |
 |---|---|
-| `dell-latitude` | Dell Latitude — the daily-driver **bonfire** Hyprland desktop (the `flare` notif-centre + 3D trapezoid `pyre` dock, the `lyre` audio engine, the `hearth` settings store). Untuned: plain upstream nixpkgs, closure from cache. |
-| `galaxybook4-pro360` | Samsung Galaxy Book4 Pro 360 laptop. Meteor Lake, Hyprland desktop. |
-| `victus-15` | HP Victus 15. Ryzen znver3, headless, doubles as a remote builder. |
+| `dell-latitude` | the daily-driver bonfire desktop (everything in `hosts/dell-latitude.nix`) |
+| `victus-15` | HP Victus, headless remote builder; he has a login, no desktop (`hosts/victus-15.nix` is empty) |
 
-`galaxybook4-pro360` and `victus-15` run an intra-ISA pseudo-cross build against a [nixpkgs fork](https://github.com/R0K0R/nixpkgs/tree/combined-fundamental) — see [The tuning backend](#the-tuning-backend). `dell-latitude` sets `my.tuning.enable = false`, so it takes plain upstream nixpkgs and substitutes its whole closure from cache.nixos.org.
+`galaxybook4-pro360` is r0k0r's laptop; benjamin has no account there, so no home.
 
-## Philosophy
+## Two repos
 
-**Registration is not activation.** Every module under `features/` is imported on
-every host, always. `my.<feature>.enable` decides whether it does anything.
-`imports` is never a switch.
+| repo | who writes it | what it holds |
+|---|---|---|
+| `github:R0K0R/nixos` (system) | the admin; users can read it | hosts, hardware, the nix daemon, accounts (`registry/`), tuning, the package set, and every system service a home depends on |
+| this repo | benjamin | everything under `$HOME`: the desktop config, user services, user programs |
 
-Conflating the two is what the previous layout did, and every problem followed
-from it: the aggregator was all-or-nothing, so the headless host could not import
-it and hand-rolled its own drifting copies of locale/users/nix-settings; per-host
-logic leaked into shared modules as `hostName == "victus-15"` tests; per-host
-data leaked into shared files keyed by hostname.
+This repo pins **no nixpkgs and no home-manager**. Both come from the `system` input:
+`homeLib.<host>.pkgs` is the host's own package set, so a home built here rebuilds nothing the system
+already has. The only inputs here are programs this home alone consumes (`flake.nix` says why each
+one does or does not follow a nixpkgs): `bonfire`, `sonora`, `late-sh`, `lyre`, `hearth`, `doom-private`.
 
-**A feature is a directory, not a layer.** `features/dms/` owns DMS's NixOS side,
-its home-manager side, its settings, its plugins and its upstream inputs.
-Splitting by `nixos/` vs `home/` cuts every feature in half — Emacs used to span
-four files across two trees plus a host file.
-
-**A host file describes a machine.** If reading it does not tell you what the
-machine runs, the design failed. This is why dependencies are asserted rather
-than auto-enabled: a feature that silently switches on three others makes the
-host file a lie.
-
-**A host file is clonable.** Copy it, change the hostname, get a working machine.
-This is a test that runs, not an aspiration.
-
-**Features are giftable.** `features/samsung-galaxybook/` references exactly one
-external input and no other feature. Hand it to another Galaxy Book owner and it
-works.
-
-**The tuning backend is not a feature.** `tuning/` is machine-bound
-infrastructure, tied to this nixpkgs fork and to generated per-host data. It
-cannot be given away, which is precisely why it is kept separate.
-
-**Fail loud, never quiet.** A missing value and an unreadable value must never
-look alike. `or` defaults are how the first becomes the second.
-
-**Comments record what was ruled out.** The obvious alternative is what
-future-you will try again; say why it lost. Most long comments here are load-bearing.
+The `system` input points at the `multiuser` branch, because that is the branch that exports
+`homeLib`. Move it to the default branch once that is merged (`nix flake update system`).
 
 ## Layout
 
-```
-flake.nix          inputs, mkHost, and the feature walk
-hosts/<name>/
-  default.nix      one-liners: what this machine is and what it runs
-  hardware-configuration.nix   generated by nixos-generate-config
-features/<name>/
-  nixos.nix        declares options.my.<name>, body wrapped in mkIf
-  home.nix         home-manager half, gates on osConfig.my.<name>
-  packages.nix     { pkgs }: { system = [...]; user = [...]; home = [...]; }
-  README.md        for features meant to be handed to someone else
-tuning/            march, overlays, runtime-cache classifier
-```
+    flake.nix           inputs, and homeConfigurations."benjamin@<host>"
+    hosts/<host>.nix    per-host choices: which modules are on
+    modules/
+      desktop/          hyprland (his Lua config), bonfire, flare, pyre, panelbus,
+                        settings (hearth), lyre, tray applets, fcitx tray text
+      editor/           neovim (NvChad seed), Emacs (his own Doom config)
+      shell/            fastfetch greeting, zoxide + fzf, kitty look
+      apps/             KakaoTalk (Wine), Dolphin, the package list, Storytold suite,
+                        Chromium fractional-scale fix, Firefox portal preference
+    packages/           orbit, opendisplay-linux
+    age/authinfo.age    see "Secrets"
+    SETTINGS.md         the hearth settings design
+    REBRAND.md          the hakuspace -> bonfire rebrand record
 
-Features that own external inputs carry their own `flake.nix`, consumed by the
-root as a `path:` input named `feat-<name>`. The root then keeps only what is
-genuinely cross-cutting — `nixpkgs`, `nixpkgs-upstream`, `home-manager` — and
-`rm -r features/dms` takes DMS, its greeter, its plugin registry and their pins
-with it.
+Every module declares its own `options.my.<name>.enable` and does nothing until a host turns it on.
+There is no NixOS half to read the switch from any more, so the home module *is* the option.
+`osConfig` is read only for facts about the machine (which compositor it runs, its primary output and
+scale, the Hyprland modifier), never for a switch of ours. Inside modules, `inputs` is the SYSTEM
+flake's inputs (the system's feature halves need it); this repo's own inputs are `userInputs`.
 
-Two hazards live here, both hit during the extraction:
+The system flake's feature home halves (fish, kitty, cursor theme, qt theming, ...) are still included in
+this home by `mkHome`. Where he differs from them the difference is a small module here that layers on
+top (`shell/kitty.nix` overrides the kitty font and margin, `shell/fish.nix` adds zoxide and fzf,
+`editor/emacs.nix` swaps the Doom directory); where he does not, there is nothing here at all.
 
-**`follows` must chain through two levels.** The sub-flake declares its own
-`nixpkgs` so the wrapped input has something to follow, and the root points that
-at the fork. Miss either half and you get a second package set — its own glibc
-and systemd — not a cosmetic lock rename. Check with:
+## Rebuilding
 
-```sh
-nix eval --json .#nixosConfigurations.galaxybook4-pro360._module.args.inputs \
-  --apply 'i: builtins.mapAttrs (_: v: v.rev or null) i'
-```
+    home-manager switch --flake .#benjamin@dell-latitude
+    home-manager switch --flake .#benjamin@victus-15
 
-**Moving an input between flakes silently upgrades it.** There is no prior entry
-to reuse, so `nix flake lock` resolves it fresh at HEAD. During this refactor
-that bumped DMS from 2026-08-06 to 08-14 unnoticed. When relocating an input,
-pin it to the rev from the old lock (`nix flake lock ./features/<n>
---override-input <x> github:owner/repo/<rev>`), then `nix flake update
-feat-<n>` so the root re-reads it.
+`home-manager` is the system's CLI (the same home-manager as `homeLib`'s), installed on every host that
+has a standalone account. A system switch never touches this home, and a home switch never touches the
+system. `mkHome` defaults to `asSubmodule = false` for a standalone account: `home.packages` go into his own
+profile, `~/.nix-profile`.
 
-`flake.nix` finds features with a `readDir` walk, so there is no import list to
-maintain and no way to leave one out by accident. The corollary is that a file's
-mere presence activates it — **nothing may live under `features/` that is not a
-real module**. Four files were deleted during the refactor for exactly this
-reason; they had rotted unnoticed because the old hand-written list never
-referenced them, and one did not even parse.
+### First switch (once per host)
 
-## Adding a feature
+The system and the home move together, so do them in this order (the registry already marks his home as
+`standalone`, so a system switch no longer activates it):
 
-1. `mkdir features/<name>`
-2. `nixos.nix` — declare `options.my.<name>.enable`, wrap the body in
-   `lib.mkIf cfg.enable`
-3. `home.nix` if it has a user-side half — gate on `osConfig.my.<name>.enable`
-4. `packages.nix` if it installs anything, and have `nixos.nix` read it, so the
-   feature works for someone who does not use this repo's conventions
-5. `flake.nix` if it needs its own external input
-6. Enable it in a host file
+1. Switch the system first, so the `home-manager` CLI, the compositor (with keystone), the greeter, the
+   fonts, the PAM service and the portals described below exist. Until then the home's packages are
+   simply not on PATH.
+2. Then activate the home. If the CLI is not there yet, use the activation package:
 
-Options only for what actually varies. Most features have nothing but `enable`.
+       nix build --no-link --print-out-paths .#homeConfigurations.'"benjamin@dell-latitude"'.activationPackage
+       <that path>/activate
 
-## Adding a host
+3. From then on, `home-manager switch` as above.
 
-1. Copy an existing `hosts/<name>/default.nix`, change `networking.hostName`
-2. `nixos-generate-config` for `hardware-configuration.nix`
-3. Register it in `flake.nix`
-4. **Run `runtime-cache-refresh` before the first real build** — see below
+`doom-private` is a plain source input and Unstraightened (the system's) builds Doom from it with
+import-from-derivation, so the first evaluation of `dell-latitude` builds Doom's package list. Run it where a
+builder is reachable.
 
-## The Bonfire desktop
+## Tuning
 
-`dell-latitude` is the bespoke Hyprland desktop. The pieces, each a feature:
+Your package set is a home option, set in any module here (per host in `hosts/<host>.nix` is the natural
+place):
 
-- **`hyprland`** — the compositor. A source patch (`features/hyprland/trapezoid.patch`, gated by
-  `my.hyprland.keystone.enable`) adds a per-window perspective **keystone** so dock-tagged windows
-  render as 3D trapezoids.
-- **`bonfire`** — the shell: waybar, rofi, the theme/wallpaper/cava machinery — our fork + rebrand of
-  the unmaintained hakuspace ([sihooleebd/bonfire](https://github.com/sihooleebd/bonfire), see
-  [REBRAND.md](REBRAND.md)). A live accent flows from `~/.local/state/glow/colors.css` into every
-  consumer; `flint` is its launcher, `glow` its theme state.
-- **`flare`** — a quickshell notification centre (replaces swaync, `SUPER+N`): weather, clock, a
-  control grid, Wi-Fi/Bluetooth managers, and the Sound mixer.
-- **`pyre`** — the right-edge cascade dock (the keystone trapezoids), mutually exclusive with `flare`
-  via **`panelbus`**.
-- **`lyre`** — a headless two-stage per-app / per-output EQ + routing engine for PipeWire (replaces
-  EasyEffects); `flare`'s Sound menu is its UI and `lyre status` its terminal screen. External input.
-- **`hearth` + `settings`** — the unified settings system: `features/settings` generates a schema from
-  every feature's `hearth.nix` fragment; the [`hearth`](https://github.com/sihooleebd/hearth) engine
-  materialises one JSON store every component reads live, with a per-key change signal. Full design in
-  **[SETTINGS.md](SETTINGS.md)**.
+    my.tuning = { march = "system"; lto = "system"; o3 = "system"; };
 
-## The tuning backend
+`"system"` (the default) is the host's own set. `dell-latitude` is untuned (plain upstream nixpkgs, everything
+from cache.nixos.org) and `victus-15` is tuned; both are fine at the default. See the system flake's
+README for the levers.
 
-Both hosts declare `buildPlatform` *without* `gcc.arch` so it differs from
-`hostPlatform`. That makes the build an intra-ISA pseudo-cross rather than a
-native one, which is what `tuning/overlays/upstream-tools.nix` keys off: natively
-there is only one package set, so that overlay aliases *everything* to upstream
-and silently deletes the tuning. With the split, `pkgsBuildHost` is plain x86_64
-and byte-identical to upstream (build tools come from cache.nixos.org) while
-`pkgs` stays tuned.
+## What the system must provide
 
-```nix
-my.tuning = {
-  march = "meteorlake";        # or "znver3"; null for an untuned host
-  pseudoCross.enable = true;   # generic cross/build-load fixes
-  o3.enable = true;
-  lto.enable = true;
-  upstreamTools.enable = true;
-  qtPatches.enable = true;     # meteorlake-specific; victus-15 leaves this off
-};
-```
+Things the old flake did in a NixOS half or at host level, and a home cannot. This repo does not
+duplicate them; the system flake's `dell-latitude` host has to (an `assertion` in the modules catches the
+ones it can):
 
-O3 and LTO apply only to packages the **host-runtime classifier** believes run on
-this machine. It has three tiers: Tier 1 is the live system closure, Tier 2 a
-cached eval heuristic, Tier 3 a live recompute. Tiers 1 and 2 are generated files
-under `tuning/runtime-cache/`, refreshed by `runtime-cache-refresh` on each host.
+- **Hyprland, keystone, the session.** `my.desktop.compositor = "hyprland"`, `my.hyprland.keystone.enable = true`
+  (the 3D dock and its `decoration:keystone_*` options), uwsm, the session `.desktop`, `my.desktop.primaryOutput`
+  `= "eDP-1"` and `primaryOutputScale = "0.8"`.
+- **The system's own Hyprland home half must not apply to benjamin.** It is applied to every account on a
+  Hyprland host and writes a second, different Lua config and `hl.config` settings that would merge into (and
+  conflict with) `modules/desktop/hyprland`. The same goes for `qt-theming`, which should only repair DMS's
+  matugen output (his old copy was gated on `my.dms.enable`; he does not run DMS).
+- **Greeter and boot.** `tuigreet` and the bonfire plymouth theme.
+- **PAM.** `security.pam.services.hyprlock = { };` (`bonfire` locks with hyprlock; without a service of its
+  own it falls back to `su`'s stack, which is slow and spawns `xauth`).
+- **Portals and session plumbing.** The KDE `FileChooser` routing, polkit (with the pkexec wrapper), dconf and
+  the compiled GSettings schemas (the system's `session-services`).
+- **Fonts and locale.** Departure Mono system-wide, the `ko_KR.UTF-8` locale and the Korean fonts for
+  KakaoTalk, and the `/etc/hosts` ad blackhole for its banners.
+- **Emacs font.** `my.emacs.font = { family = "DepartureMono Nerd Font"; size = 16; }`: it is a system option
+  that the Emacs home half turns into `doom-machine-local.el`.
+- **Services and udev.** keyd (`capsHangul` + the Topre per-device map), thermald, fwupd, zram, usbmuxd and avahi
+  (opendisplay), `intel-media-driver`, OpenTabletDriver, Steam, the Brother DCP-T536DW printer and `brscan5`,
+  the keyboard backlight rule, syncthing, tailscale, NetworkManager, blueman (behind the tray applets), pipewire
+  (behind lyre), flatpak, waydroid, firefox, fcitx5.
+- **Packages the system installs for him that he replaced.** The system's `media` set installs kdenlive (he
+  uses FilmCraft from `modules/apps/storytold.nix`).
+- **Claude Desktop's flag.** `modules/apps/fractional-scale.nix` adds `--disable-features=WaylandFractionalScaleV1`
+  from outside (a shim and a user `.desktop` entry); an option on the system's claude-desktop package for extra
+  flags would replace that.
 
-## Gotchas
+## Secrets
 
-**`my.packages.extra` must be a literal.** Tier 3 reads it from the host file by
-raw import, without a module evaluation, so it cannot resolve `mkIf`/`mkMerge`.
-Wrapping the *leaf* fails loudly; wrapping the *parent* returned an empty anchor
-set silently until an explicit `_type` guard was added.
+`age/authinfo.age` (the Doom auth-source file) is encrypted to galaxybook's key only, so it cannot be decrypted
+on `dell-latitude`. It is kept for re-encryption and nothing here reads it. A user secret store like r0k0r's
+`secrets/` is not set up here; the account password is a system secret because the system creates the account.
 
-**Package collisions are silent on two of three targets.**
-`environment.systemPackages` and `users.users.<n>.packages` set
-`ignoreCollisions = true` — first in list order wins, with only a build-log
-warning. `home.packages` hard-errors. Identical derivations dedupe and cost
-nothing.
+## Verification
 
-**`my.claude-desktop.cowork` pulls 151 untuned packages** via qemu — its own
-glibc, systemd, gtk4 and pipewire, measured at 74% of every upstream-identical
-package in the system. It is opt-in and deliberately not implied by `enable`.
+Evaluation only, with builds disabled (`--option builders '' --option max-jobs 0 --option substituters
+https://cache.nixos.org`), against the system flake's working tree:
 
-**Seed the runtime cache before evaluating a new host.** Not because Tier 3 is
-slow — it isn't. Measured:
-
-| | |
-|---|---|
-| cold cache, IFD disabled (pure eval) | 12.8s |
-| warm Tier 2 copied from a sibling | 30s |
-| cold cache, IFD on, builder unreachable | >20 min, never completed |
-
-With no `tier{1,2}/<host>.nix`, `hasWarmCache` is false, so `upstream-tools`
-refuses to alias anything to upstream. The package set then differs from every
-existing host — a different Emacs, so a different `doom-intermediates`, so
-Unstraightened's import-from-derivation has to **build** it during eval. If a
-remote builder is down, that hangs in SSH `SYN-SENT` while `nix` sits at ~2% CPU
-blocked on the daemon socket. It looks like a slow evaluation and is not one.
-
-Copy a sibling host's tier2 file and change the `host` field: an identical
-package set means the IFD output is already in the store.
-
-**Diagnosing a "slow" eval.** Check CPU first. If `nix` is near-idle it is
-blocked on the network, not computing — `ps -o stat,%cpu,wchan -p <pid>` and
-`ss -tnp | grep :22`. `--option allow-import-from-derivation false` cleanly
-separates evaluation cost from build cost, and `--builders ''` keeps a dead
-builder out of the picture.
-
-**nixd needs IFD disabled.** Pointing it at `nixosConfigurations.<host>.options`
-otherwise lets nix-doom-emacs-unstraightened's import-from-derivation trigger a
-`doom-intermediates` build from the editor — once measured at 226 minutes. Run it
-with `allow-import-from-derivation = false`; you lose completion inside the Emacs
-feature and nothing else.
-
-**`nix.settings` merges across features.** The `nix-settings` feature sets
-substituters at `mkDefault` so `remote-builder`'s peer list wins where both are
-on.
-
-## Operations
-
-```sh
-nixos-rebuild-local          # build here
-nixos-rebuild-victus-15      # build on victus-15
-nixos-rebuild-yulee          # build on yulee
-runtime-cache-refresh        # after every switch, on the host that switched
-```
-
-The rebuild wrappers are **generated** from `my.remote-builder.client.peers` and
-this host's own name — the hand-written versions hardcoded
-`--flake ...#galaxybook4-pro360`, so a cloned host would have rebuilt the machine
-it was copied from.
-
-`runtime-cache-refresh` runs `git add` at the end, and that is load-bearing: a
-dirty tree's flake evaluation only sees files git knows about, so an untracked
-cache file is written, reported as written, and then silently ignored.
-
-Per-feature `update.sh` scripts bump pinned upstreams
-(`features/claude-code/update.sh`, `features/claude-desktop/update.sh`).
+    nix eval --raw .#homeConfigurations.'"benjamin@victus-15"'.activationPackage.drvPath \
+      --override-input system git+file:///path/to/the/system/checkout
