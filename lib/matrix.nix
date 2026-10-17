@@ -41,7 +41,8 @@
             is inert and tuning/heavy.nix warns; that is the point of the
             ccache-alone variant: it must still evaluate.
     ca      my.ca-derivations.enable; packages = "tuned" (+ stripRefChecks)
-            only together with march, since "tuned" asserts it. CA alone is
+            only together with march (on a host that has one), since "tuned"
+            asserts it. CA alone is
             therefore the daemon flag only.
 
   EMACS. features/apps/emacs builds Doom through nix-doom-emacs-unstraightened,
@@ -79,10 +80,14 @@ let
   };
 
   variantModule =
-    { levers, withEmacs }:
+    { levers, withEmacs, hostMarch }:
     let
       f = lib.mkForce;
       lv = levers;
+      # The march lever means "the host's own arch". A host that has none
+      # (untuned: dell-latitude) has nothing to turn on, so the tuned package
+      # policy -- which asserts a march'd host -- stays at "none" there.
+      marched = lv.march && hostMarch;
       offUnless = c: lib.mkIf (!c) (f false);
     in
     {
@@ -104,8 +109,8 @@ let
       };
       my.ca-derivations = {
         enable = f lv.ca;
-        packages = f (if lv.ca && lv.march then "tuned" else "none");
-        stripRefChecks = f (lv.ca && lv.march);
+        packages = f (if lv.ca && marched then "tuned" else "none");
+        stripRefChecks = f (lv.ca && marched);
       };
       my.emacs.enable = lib.mkIf (!withEmacs) (f false);
     };
@@ -119,7 +124,7 @@ let
           tuningRawOf hostName
         else
           { enable = v.levers.lto || v.levers.o3; march = null; };
-      extraModules = [ (variantModule { inherit (v) levers; inherit withEmacs; }) ];
+      extraModules = [ (variantModule { inherit (v) levers; inherit withEmacs; hostMarch = (tuningRawOf hostName).march != null; }) ];
     };
 
   matrixFor = withEmacs: lib.genAttrs hosts (h: lib.mapAttrs (_: mkVariant withEmacs h) variants);

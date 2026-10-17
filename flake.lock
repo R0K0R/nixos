@@ -749,6 +749,7 @@
         "home-manager": "home-manager",
         "nixpkgs": "nixpkgs",
         "nixpkgs-upstream": "nixpkgs-upstream",
+        "tuning-cache-dell-latitude": "tuning-cache-dell-latitude",
         "tuning-cache-galaxybook4-pro360": "tuning-cache-galaxybook4-pro360",
         "tuning-cache-victus-15": "tuning-cache-victus-15"
       }
@@ -815,6 +816,18 @@
         "repo": "default",
         "type": "github"
       }
+    },
+    "tuning-cache-dell-latitude": {
+      "flake": false,
+      "locked": {
+        "path": "./tuning/runtime-cache/hosts/dell-latitude",
+        "type": "path"
+      },
+      "original": {
+        "path": "./tuning/runtime-cache/hosts/dell-latitude",
+        "type": "path"
+      },
+      "parent": []
     },
     "tuning-cache-galaxybook4-pro360": {
       "flake": false,

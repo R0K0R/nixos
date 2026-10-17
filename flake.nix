@@ -61,6 +61,13 @@
       url = "path:./tuning/runtime-cache/hosts/victus-15";
       flake = false;
     };
+    # Untuned host (my.tuning.enable = false): nothing writes system tier files
+    # for it, so its directory holds only the users/ README until a user of
+    # that machine tunes a home of their own.
+    tuning-cache-dell-latitude = {
+      url = "path:./tuning/runtime-cache/hosts/dell-latitude";
+      flake = false;
+    };
 
     feat-agenix = {
       url = "path:./features/core/agenix";
@@ -382,12 +389,13 @@
 
       matrix = import ./lib/matrix.nix {
         inherit lib mkHostWith tuningRawOf;
-        hosts = [ "galaxybook4-pro360" "victus-15" ];
+        hosts = [ "galaxybook4-pro360" "victus-15" "dell-latitude" ];
       };
     in
     {
       nixosConfigurations.victus-15 = mkHost "victus-15";
       nixosConfigurations.galaxybook4-pro360 = mkHost "galaxybook4-pro360";
+      nixosConfigurations.dell-latitude = mkHost "dell-latitude";
 
       /*
         Exposed so a feature set can be consumed from outside this repo, and so
