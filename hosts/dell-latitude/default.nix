@@ -250,8 +250,7 @@
       enable = true;
       # Full turbo for bursts, calm fan under sustained load. Flip to
       # "performance" for max sustained clocks (louder) or "powersave" for
-      # coolest/quietest. This is also what the feature chooses by itself on
-      # the other hosts -- here it is a deliberate machine setting.
+      # coolest/quietest. Pinned at every boot; other hosts leave PPD alone.
       profile = "performance";
     };
     flatpak.enable = true;

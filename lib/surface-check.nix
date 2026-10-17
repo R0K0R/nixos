@@ -14,7 +14,7 @@
   them (buildInputs + propagatedBuildInputs, tuning/runtime-cache/lookup.nix):
     system side  the surface roots below, in the system's set
     user side    the home's home.packages, in the home's set
-  keyed by pname + version, identity = source + patches. Patches and
+  keyed by pname, identity = version + source + patches. Patches and
   sources that are files in the nixpkgs tree are compared by CONTENT (the
   fork and upstream are different trees with mostly identical files), fetched
   ones by their fixed output path.
@@ -62,11 +62,16 @@ let
     else
       toString x;
 
-  keyOf = p: "${p.pname or (lib.getName p)}-${p.version or ""}";
+  # Keyed by NAME only: two builds of one library in a process is the
+  # problem whether or not their versions agree, and a version difference is
+  # the worse case (the fork and nixpkgs-upstream can sit on different
+  # revisions). Version is part of the identity below.
+  keyOf = p: p.pname or (lib.getName p);
   idOf =
     p:
     let
       r = builtins.tryEval {
+        version = p.version or "";
         src = if p ? src && p.src != null then inputId p.src else "";
         patches = map inputId (lib.toList (p.patches or [ ]));
       };
@@ -115,7 +120,7 @@ in
   /*
     check { osConfig, homePackages } -> { conflicts, unchecked, roots }
       conflicts  [ { library, group, root, system, user } ]: same
-                 pname+version, different source/patches; root = the system
+                 pname, different version/source/patches; root = the system
                  item (of that surface group) that reaches it
       unchecked  PAM module paths whose package could not be identified
   */
@@ -226,6 +231,7 @@ in
         in
         "  ${l}\n"
         + lib.concatMapStrings (x: "      reached through ${x.group}: ${x.root}\n") cs
+        + lib.optionalString (s.version != u.version) "      different VERSION: system ${s.version}, yours ${u.version}\n"
         + lib.optionalString (s.src != u.src) "      different source: system ${s.src}, yours ${u.src}\n"
         + lib.optionalString (onlySys != [ ]) "      ${toString (builtins.length onlySys)} patch(es) only in the system's build: ${lib.concatStringsSep ", " onlySys}\n"
         + lib.optionalString (onlyUser != [ ]) "      ${toString (builtins.length onlyUser)} patch(es) only in yours: ${lib.concatStringsSep ", " onlyUser}\n";

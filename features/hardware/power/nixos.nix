@@ -13,11 +13,14 @@ let
     balanced = "balanced";
     performance = "performance";
   }.${cfg.profile};
+  # null = leave power-profiles-daemon alone (it keeps the user's last choice
+  # across reboots) and keep this module's old powersave bias for the rest.
+  bias = if cfg.profile == null then "powersave" else cfg.profile;
 
   # scx_bpfland primary domain: "powersave" packs work onto the most efficient CPUs (lowest power,
   # a touch more latency); "performance" spreads across all cores (snappier, higher throughput).
   schedArgs =
-    if cfg.profile == "powersave"
+    if bias == "powersave"
     then [ "--primary-domain" "powersave" ]
     else [ "--primary-domain" "performance" ];
 
@@ -34,19 +37,21 @@ in
     enable = lib.mkEnableOption "laptop power management (sched_ext scheduler + governor + power profile)";
 
     profile = lib.mkOption {
-      type = lib.types.enum [ "powersave" "balanced" "performance" ];
-      # "powersave" because that is what this option's absence meant before it
-      # existed: the old module hard-wired scx --primary-domain powersave,
-      # powertop auto-tune and an EPP=power udev rule, all of which are the
-      # powersave row below. A host that wants another dial says so.
-      default = "powersave";
+      type = lib.types.nullOr (lib.types.enum [ "powersave" "balanced" "performance" ]);
+      # null: power-profiles-daemon is left alone -- it keeps the user's last
+      # choice (powerprofilesctl / a bar toggle) across reboots, and pinning
+      # a profile at every boot would override that. The scheduler and
+      # powertop keep this module's old powersave bias. A host that wants a
+      # fixed dial says so.
+      default = null;
       description = ''
         Overall CPU/thermal bias. The dominant "how hot / how loud" lever is EPP + the ACPI
         platform profile, both owned by power-profiles-daemon; this option applies the matching PPD
         profile at boot and sets the sched_ext domain + powertop auto-tune to match. A runtime
         `powerprofilesctl set <...>` (or a bar toggle) still overrides it until the next boot.
 
-          powersave   - (default) coolest/quietest, most throttled: PPD power-saver, scx packs onto efficient
+          null        - (default) PPD untouched; scx and powertop as for powersave.
+          powersave   - coolest/quietest, most throttled: PPD power-saver, scx packs onto efficient
                         cores, powertop auto-tune on (aggressive device power gating).
           balanced    - snappy but quiet: full turbo for short bursts, calm fan under sustained
                         load. PPD balanced, scx spreads across all cores.
@@ -85,12 +90,12 @@ in
       cpuFreqGovernor = "powersave";
       # Aggressive per-device power gating (USB autosuspend, PCIe ASPM, ...) only when saving power;
       # off otherwise, since it trades responsiveness/peripheral latency for idle watts.
-      powertop.enable = cfg.profile == "powersave";
+      powertop.enable = bias == "powersave";
     };
 
     # Pin power-profiles-daemon to the chosen profile at boot (it does not persist across reboots).
     # Guarded on PPD being enabled so this module stays usable on a host without it.
-    systemd.services.my-power-profile = lib.mkIf config.services.power-profiles-daemon.enable {
+    systemd.services.my-power-profile = lib.mkIf (cfg.profile != null && config.services.power-profiles-daemon.enable) {
       description = "Apply my.power profile (${cfg.profile}) to power-profiles-daemon";
       wantedBy = [ "multi-user.target" ];
       after = [ "power-profiles-daemon.service" ];
