@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=bonfire
+Description=bonfire campfire boot splash
+ModuleName=script
+
+[script]
+ImageDir=@themedir@
+ScriptFile=@themedir@/bonfire.script
