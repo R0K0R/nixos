@@ -384,6 +384,9 @@
       evalTests.user-types = import ./tests/user-types.nix {
         inherit lib mkHostWith mkHomeLib;
       };
+      evalTests.guest-overlay = import ./tests/guest-overlay.nix {
+        inherit lib mkHostWith mkHomeLib;
+      };
 
       /*
         `nix flake check` as the one-command gate. Forcing each host's toplevel

@@ -2,7 +2,8 @@
   The registry's nix axis, as far as the daemon can enforce it per user (the
   full argument is in lib/registry.nix's header). Two lists exist:
 
-    allowed-users   who may connect at all. nix = "none" is left out.
+    allowed-users   who may connect at all. nix = "none" and "overlay" (a store
+                    of their own, features/nix/guest-overlay) are left out.
     trusted-users   who may pass privileged settings. WRITTEN from the
                     registry: every account with nix = "admin", plus
                     my.registry.nix.extraTrustedUsers. NixOS adds root. Host
@@ -30,9 +31,11 @@
 
 let
   users = config.my.users;
-  excluded = lib.attrNames (lib.filterAttrs (_: u: u.nix == "none") users);
+  # "overlay" users have a store of their own (features/nix/guest-overlay) and
+  # no business on the shared daemon.
+  excluded = lib.attrNames (lib.filterAttrs (_: u: u.nix == "none" || u.nix == "overlay") users);
   admins = lib.attrNames (lib.filterAttrs (_: u: u.nix == "admin") users);
-  untrustedish = lib.filterAttrs (_: u: u.nix == "none" || u.nix == "untrusted") users;
+  untrustedish = lib.filterAttrs (_: u: lib.elem u.nix [ "none" "overlay" "untrusted" ]) users;
 
   trusted = config.nix.settings.trusted-users or [ ];
   groupsOf = n: [ config.users.users.${n}.group ] ++ config.users.users.${n}.extraGroups;
@@ -70,7 +73,7 @@ in
 
     nix.settings.allowed-users = lib.mkIf (excluded != [ ]) (
       [ "root" ]
-      ++ lib.attrNames (lib.filterAttrs (_: u: u.nix != "none") users)
+      ++ lib.attrNames (lib.filterAttrs (_: u: u.nix != "none" && u.nix != "overlay") users)
       ++ config.my.registry.nix.extraAllowedUsers
     );
 

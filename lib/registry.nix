@@ -22,10 +22,11 @@
   AXES AND THEIR MACHINERY. home = "tmpfs", nix = "none" / "untrusted", kiosk
   sessions and with them the handover and untrusted types are implemented
   (features/core/users: tmpfs-home.nix, kiosk.nix, nix-access.nix).
-  home = "impermanent" and nix = "overlay" are validated here (so the data
-  format is settled and contradictions are caught now) but `materialize`
-  refuses them with "not implemented yet": they need the impermanence and
-  guest-overlay features, which do not exist. The refusal is what stops a host
+  home = "impermanent" is validated here (so the data format is settled and
+  contradictions are caught now) but `materialize` refuses it with "not
+  implemented yet": it needs the impermanence feature, which does not exist.
+  nix = "overlay" is features/nix/guest-overlay, accepted on a host whose
+  registry facts declare it. The refusal is what stops a host
   from silently getting a persistent home while the registry says otherwise.
   `grants` become groups through `grantGroups` below.
 
@@ -183,10 +184,11 @@ let
         profile write; with no daemon access it fails at first login.
       nix = overlay, host without guest-overlay
         there is no overlay store on that host to put the user in.
-      builders, nix not admin
+      builders, nix neither admin nor overlay
         dispatching to remote builders needs trusted-user rights (--builders,
-        substituters); an untrusted/overlay/none user asking for it is a request
-        the daemon will silently refuse.
+        substituters) on the shared daemon; an untrusted/none user asking for it
+        is a request the daemon will silently refuse. An overlay user owns a
+        store of their own and may name any builders there.
   */
   contradictions =
     where: hostFeatures: e:
@@ -198,10 +200,10 @@ let
       throw ''
         registry: ${where}: nix = "overlay" but the host does not declare the guest-overlay
         feature in registry/hosts.nix (features.<host>."guest-overlay").''
-    else if e.builders && e.nix != "admin" then
+    else if e.builders && !(elem e.nix [ "admin" "overlay" ]) then
       throw ''
         registry: ${where}: builders = true needs nix = "admin" (trusted-user rights to
-        dispatch builds), but nix = "${e.nix}".''
+        dispatch builds) or "overlay" (their own store), but nix = "${e.nix}".''
     else
       e;
 
@@ -378,18 +380,25 @@ in
           let
             e = effective.${hn}.${n};
             daemon = elem e.nix [ "untrusted" "admin" ];
+            own = e.nix == "overlay";
           in
           {
             access = e.nix;
             inherit daemon;
             trusted = e.nix == "admin";
+            # "shared": the system's store via the daemon. "own": a private
+            # overlay store (features/nix/guest-overlay), opened directly.
+            store = if own then "own" else if daemon then "shared" else "none";
             builds = {
-              local = daemon && (f.localBuilds or true);
-              # The daemon's builders, dispatched for anyone it accepts.
+              # An overlay guest's default max-jobs follows the host policy too.
+              local = (daemon || own) && (f.localBuilds or true);
+              # The daemon's builders, dispatched for anyone it accepts. An
+              # overlay guest has none but their own.
               remote = daemon && (f.builderClient or false);
             };
-            # May name builders/substituters of its own (trusted-user rights).
-            ownBuilders = e.builders;
+            # May name builders/substituters of its own: trusted-user rights on
+            # the shared daemon, or simply owning the store.
+            ownBuilders = e.builders || own;
           }
         )
       ) hosts.hosts;
@@ -505,8 +514,11 @@ in
             in
             if e.home == "impermanent" then
               notYet where "home = \"impermanent\" (needs the impermanence feature)"
-            else if e.nix == "overlay" then
-              notYet where "nix = \"overlay\" (needs the guest-overlay feature)"
+            else if e.nix == "overlay" && e.session == "home-manager" && (u.homeActivation or "system") != "standalone" then
+              throw ''
+                registry: ${where}: nix = "overlay" with a home-manager session needs
+                homeActivation = "standalone": the system cannot activate a home that lives
+                in the guest's own store.''
             else if sessionKind e.session == "kiosk" && !(pkgs ? ${e.session.kiosk}) then
               throw "registry: ${where}: session.kiosk = \"${e.session.kiosk}\" is not a package attribute of this host's pkgs"
             else if (u.homeActivation or "system") == "standalone" && e.session != "home-manager" then

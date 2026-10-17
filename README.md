@@ -313,7 +313,8 @@ piece gated on some account using it, so both real hosts are unchanged:
 | `nix = none` | `nix-access.nix`: left out of `nix.settings.allowed-users`. The list is only written on a host that has such a user; elsewhere it stays at its default `*`, so nix.conf is unchanged. `my.registry.nix.extraAllowedUsers` for service accounts. |
 | `nix = untrusted` | asserted absent from `trusted-users` (by name, `*` or `@group`). |
 | `nix = admin` | `nix-access.nix`: `trusted-users` is derived -- exactly the host's `nix = admin` accounts, plus root and `my.registry.nix.extraTrustedUsers` (non-people only). Host files no longer list trusted users. No preset uses it: people are untrusted, admins act through sudo. Remote builds reach a NixOS peer as its trusted `nix-ssh` account (`my.remote-builder.server`, upstream `nix.sshServe`: forced `nix-daemon --stdio`, builder key only); the wrappers that pin builders run their nix as root. |
-| `home = impermanent`, `nix = overlay` | refused, "not implemented yet" (need impermanence / guest-overlay). |
+| `nix = overlay` | `features/nix/guest-overlay`: a private store per guest -- OverlayFS of a frozen read-only btrfs snapshot of `/nix` (lower) and the guest's own upper layer, mounted per guest and bound over `/nix/store` in their sessions by `pam_namespace` (with their own `/etc/nix/nix.conf`: `local-overlay://`, opened directly as its owner). Every setting is theirs, own builders and substituters included, and nothing they build or fetch is visible outside their sessions. Refused by the shared daemon (allowed-users). Needs `homeActivation = "standalone"` with a home-manager session. Lever `my.guest-overlay.wrappers`: `hidden` (default; no setuid in guest namespaces, so no sudo/ping/lock-screen password check) or `shared`. |
+| `home = impermanent` | refused, "not implemented yet" (needs impermanence). |
 
 **What Nix enforces per user, honestly.** The daemon has two per-user lists,
 allowed-users and trusted-users. `max-jobs` and the builders in
@@ -369,9 +370,9 @@ refused.
 | heavy (mold + ccache over the tuned set) | `my.tuning.heavy` | -- | exists |
 | ccache | `my.ccache` (features/nix/ccache) | client half; `builder` half on NixOS builders | exists; to be split out of tuning's reach as its own optional feature |
 | content-addressed derivations | `my.ca-derivations` (features/nix/ca-derivations; the "tuned" package policy is applied by tuning/ca.nix and needs march) | ca-derivations live on the evaluating daemon and every builder | exists |
-| btrfs-layout | -- | -- | **planned** |
+| btrfs-layout (`/nix` its own subvolume) | `my.btrfs-layout` (features/core/btrfs-layout) | -- | exists; on for victus-15 (already a subvolume, `nix`); galaxybook needs the offline migration in the feature's header first |
 | impermanence | -- | btrfs-layout | **planned** |
-| guest-overlay (per-guest overlay stores) | -- | btrfs-layout | **planned**, after testing the experimental Nix pieces |
+| guest-overlay (per-guest overlay stores) | `my.guest-overlay` (features/nix/guest-overlay) + registry fact `features.<host>."guest-overlay"` | btrfs-layout | exists, off everywhere; eval-tested only (`tests/guest-overlay-eval.sh`), never run |
 | luks (TPM2 unlock, no PIN) | -- | -- | **planned** |
 
 All levers default to off, and all off is plain upstream nixpkgs.

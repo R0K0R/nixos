@@ -173,7 +173,7 @@ in
             };
 
             nix = lib.mkOption {
-              type = lib.types.nullOr (lib.types.enum [ "none" "untrusted" "admin" ]);
+              type = lib.types.nullOr (lib.types.enum [ "none" "overlay" "untrusted" "admin" ]);
               default = null;
               description = ''
                 The registry's nix axis (nix-access.nix). "none": left out of

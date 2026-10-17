@@ -275,6 +275,29 @@ deliberate system change.
    change; no package changes. Deployment order: victus-15, then per host
    activate the home first, then switch the system (home repo README).
 
+10. **guest-overlay** (`features/nix/guest-overlay`, `features/core/btrfs-layout`).
+    Per guest (registry nix = "overlay"): lower = read-only btrfs snapshot of
+    /nix taken at boot and after each activation, made consistent first (WAL
+    checkpointed into the copy, unregistered store entries removed), published
+    as /nix/.guest-lower/current, pruned when no mounted guest uses it; upper,
+    work and state on the guest's own subvolume /var/lib/nix-guests/<user>
+    (optional qgroup quota); nix-guest-overlay-<user>.service mounts
+    /var/lib/nix-guests/.merged/<user> before logins and rebases (drop upper
+    copies the lower now has, reflink copy-up of what the lower lost) only when
+    no process of the guest is alive -- on boot and on user@<uid> stop.
+    pam_namespace (no init script: it would run as root after the bind, from the
+    guest's view) binds the merged store over /nix/store and a real-file
+    /etc/nix over /etc/nix in login, su, systemd-user, sshd, greetd, sudo
+    sessions; the guest's nix.conf opens local-overlay:// directly. The merged
+    root is root:<group> 1775 so lower objects cannot be renamed or replaced;
+    lever `wrappers` (hidden default | shared) decides /run/wrappers in guest
+    namespaces. Shared daemon: guests excluded from allowed-users. Registry:
+    the host fact features.<host>."guest-overlay" must equal the switch;
+    overlay + home-manager needs homeActivation = standalone; overlay users may
+    have builders. victus-15 now declares its existing /nix subvolume through
+    btrfs-layout (toplevel unchanged). Eval-tested (tests/guest-overlay.nix),
+    never run.
+
 ### Next
 
 6. **hm-switch** (features/core/epoch, off): turn on with my.epoch once the
@@ -284,8 +307,14 @@ deliberate system change.
    impermanence, each with `_meta` requires.
 9. ~~**handover and untrusted types**~~: done (see "Done" above); left: kiosk
    session pinning, handover login credentials.
-10. **guest-overlay**, only after testing the experimental pieces:
-    `local-overlay-store` on frozen btrfs snapshots, `read-only-local-store`,
-    and the build hook between overlays.
-11. **nixosTest VM tests on victus** for the guest paths.
+10. ~~**guest-overlay**~~: implemented (see 10 above), not yet run. First run
+    on victus-15 (btrfs-layout already true there): enable it plus a test
+    guest, then check, in this order: the snapshot (`nix-guest-lower`), the
+    mount, a guest login (`findmnt /nix/store` in the session), `nix store
+    info`, a substitution, a build on a builder of the guest's own, GC in
+    the guest store, a system switch during a session (the session keeps its
+    lower; logout -> rebase), copy-up after an admin GC.
+11. **nixosTest VM tests on victus** for the guest paths: needs a VM whose
+    /nix is a btrfs subvolume (not the host-shared store the test driver
+    mounts by default).
 12. **Eval matrix**: all optional pieces off, all on, and each alone.
