@@ -8,5 +8,4 @@
   # with sudo, stated as an override rather than by calling him an admin --
   # the type is what people read, and he is a member of this machine.
   overrides.grants = [ "sudo" "network" ];
-  groups = [ "networkmanager" "wheel" ];
 }

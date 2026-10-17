@@ -191,6 +191,9 @@
       };
     };
 
+    # Record each account's deployed type (/var/lib/nixos-users/<user>.type)
+    # and refuse a dangerous move away from it without acceptTypeChange.
+    registry.recordTypes.enable = true;
     nix-settings = {
       enable = true;
       substituters = [

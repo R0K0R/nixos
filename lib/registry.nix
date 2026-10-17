@@ -27,7 +27,7 @@
   refuses them with "not implemented yet": they need the impermanence and
   guest-overlay features, which do not exist. The refusal is what stops a host
   from silently getting a persistent home while the registry says otherwise.
-  `grants` beyond sudo <-> wheel are data only; see registry/types.nix.
+  `grants` become groups through `grantGroups` below.
 
   WHAT NIX CAN AND CANNOT ENFORCE PER USER. The daemon knows exactly two
   per-user lists: allowed-users (may connect at all) and trusted-users (may
@@ -88,6 +88,22 @@ let
     # private upper store, an untrusted one to the shared daemon.
     nix = [ "none" "overlay" "untrusted" "admin" ];
     grants = [ "sudo" "network" "media" "serial" "input" ];
+  };
+
+  /*
+    What each grant IS on a NixOS host. An account's extraGroups are exactly
+    these, in axisValues.grants order -- nothing else names groups for people
+    (features may still add accounts to their own groups, e.g. input for an
+    input daemon). Before this, a user without a hand-written group list got
+    my.users' default, which includes wheel: sudo for anyone, a handover
+    guest included.
+  */
+  grantGroups = {
+    sudo = [ "wheel" ];
+    network = [ "networkmanager" ];
+    media = [ "video" "audio" ];
+    serial = [ "dialout" ];
+    input = [ "input" ];
   };
   axes = [ "home" "nix" "session" "builders" "grants" ];
 
@@ -485,7 +501,7 @@ in
               u = users.${n};
               e = effective.${hn}.${n};
               where = "user ${n} on host ${hn}";
-              groups = h.groups.${n} or u.groups or null;
+              groups = lib.concatMap (g: grantGroups.${g}) (lib.filter (g: elem g e.grants) axisValues.grants);
             in
             if e.home == "impermanent" then
               notYet where "home = \"impermanent\" (needs the impermanence feature)"
@@ -493,10 +509,11 @@ in
               notYet where "nix = \"overlay\" (needs the guest-overlay feature)"
             else if sessionKind e.session == "kiosk" && !(pkgs ? ${e.session.kiosk}) then
               throw "registry: ${where}: session.kiosk = \"${e.session.kiosk}\" is not a package attribute of this host's pkgs"
-            else if groups != null && (elem "wheel" groups != elem "sudo" e.grants) then
+            else if u ? groups || h ? groups then
               throw ''
-                registry: ${where}: groups ${if elem "wheel" groups then "include" else "omit"} wheel but grants
-                ${if elem "sudo" e.grants then "include" else "omit"} "sudo". wheel IS sudo here; make them agree.''
+                registry: ${where}: `groups` is gone -- groups are derived from grants
+                (lib/registry.nix grantGroups). Say grants (overrides.grants in the user file,
+                narrow.<user>.grants in hosts.nix) instead.''
             else
               {
                 inherit (u) uid;
@@ -522,9 +539,10 @@ in
               // lib.optionalAttrs (sessionKind e.session == "kiosk") { kiosk = pkgs.${e.session.kiosk}; }
               // lib.optionalAttrs (u ? description) { inherit (u) description; }
               // lib.optionalAttrs (u ? passwordSecret) { inherit (u) passwordSecret; }
+              // lib.optionalAttrs (u ? sshKeys) { inherit (u) sshKeys; }
               // lib.optionalAttrs (u ? stateVersion) { inherit (u) stateVersion; }
               // lib.optionalAttrs (u ? shell) { shell = pkgs.${u.shell}; }
-              // lib.optionalAttrs (groups != null) { extraGroups = groups; }
+              // { extraGroups = groups; }
           )
         );
     in

@@ -7,12 +7,13 @@ in
   options.my.ssh = {
     enable = lib.mkEnableOption "the user's SSH client config (home half only -- see home.nix)";
 
-    builderKeyFile = lib.mkOption {
+    identityFile = lib.mkOption {
       type = lib.types.str;
-      default = "/etc/nix/remote-builder/ssh_key";
+      default = "~/.ssh/id_ed25519";
       description = ''
-        Default identity for the hosts below. Read from outside the store at
-        connect time; the remote-builder feature is what installs it.
+        Default identity for the hosts below: the person's OWN key, whose
+        public half is in registry/users/<name>.nix sshKeys. Not the builder
+        key -- that one is root-only (features/nix/remote-builder).
       '';
     };
 
@@ -22,7 +23,7 @@ in
       example = lib.literalExpression ''{ yulee = { }; note10 = { Port = 8022; }; }'';
       description = ''
         Per-host ssh_config blocks, keyed by Host pattern. `IdentityFile`
-        defaults to builderKeyFile and can be overridden per entry.
+        defaults to identityFile and can be overridden per entry.
 
         An option rather than a constant because these name specific machines on
         one person's network -- a cloned host must not inherit them. They were

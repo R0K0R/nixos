@@ -15,7 +15,7 @@ lib.mkIf (cfg.enable && inScope) {
     enableDefaultConfig = false;
 
     settings =
-      lib.mapAttrs (_: opts: { IdentityFile = cfg.builderKeyFile; } // opts) cfg.hosts
+      lib.mapAttrs (_: opts: { IdentityFile = cfg.identityFile; } // opts) cfg.hosts
       // {
         "*" = {
           ForwardAgent = false;

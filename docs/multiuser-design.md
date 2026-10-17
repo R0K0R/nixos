@@ -250,15 +250,20 @@ deliberate system change.
    builder key only); a peer's `daemonUser` names it for /etc/nix/machines
    and the ssh-ng substituter, `sshUser` stays the person's login for the
    wrappers' untrusted steps. Wrappers that pin builders re-exec under sudo
-   (or sudo just the copy-back and build). OPEN: the builder key is the trust
-   credential now, and it is still readable by r0k0r on galaxybook (agenix
-   owner r0k0r, for interactive `ssh victus-15`) -- making it root-only
-   needs his personal key for interactive ssh first.
+   (or sudo just the copy-back and build).
+8. **Builder key root-only, grants -> groups, type record on.** The builder
+   key is the trust credential on a peer, so its agenix secret is root
+   0400 and the peers' ssh_config blocks give it (and the /run control
+   socket) to `localuser root` only. People use their own keys: registry
+   `sshKeys` -> openssh.authorizedKeys, `my.ssh.identityFile` =
+   `~/.ssh/id_ed25519` (r0k0r's was generated 2026-10-17 and appended by hand
+   to victus-15 and yulee; note10 was offline). extraGroups are derived from
+   grants (`grantGroups`); `groups` keys are refused -- which also fixes
+   accounts without a list getting my.users' default, wheel included.
+   `my.registry.recordTypes` is on for both hosts.
 
 ### Next
 
-5. **Wire the nix axis** (rest of it): grants to groups; turn on
-   `my.registry.recordTypes` per host (one cheap rebuild each).
 6. **Cutover to standalone home-manager**: the system stops integrating
    home-manager for `session = home-manager` users; home repos switch to
    `asSubmodule = false`; `hm-switch` wrapper.

@@ -21,8 +21,10 @@
               daemon dispatches for everyone it accepts. lib/registry.nix's
               header and `nixFacts` say what actually happens.
     grants    subset of [ sudo network media serial input ] -- capabilities a
-              host turns into its own groups. Only "sudo" <-> wheel is checked
-              against the host's group list today.
+              host turns into groups (lib/registry.nix grantGroups: sudo =
+              wheel, network = networkmanager, media = video + audio,
+              serial = dialout, input = input). Nothing else gives a person
+              a group (features may add accounts to their own).
 
   `rank` orders the types for transitions: moving a deployed user to a type
   of lower rank is a demotion, refused at switch time (when
@@ -44,9 +46,6 @@
   asserted absent from it. No preset is nix = "admin" any more: today
   trusted-users is root (plus nix-ssh on a builder). A person who needs
   trust says overrides.nix = "admin" in his file (admin type only).
-
-  TODO (grants): data only beyond sudo <-> wheel; groups still come from
-  registry/hosts.nix `groups` / the user file's `groups`.
 */
 {
   # Admin through sudo, not through the daemon: untrusted like everyone else

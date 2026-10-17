@@ -8,16 +8,13 @@
              there is no enable, same as my.users.
     primary  the account features default to (my.<feature>.users). Per host,
              because "whose machine is this" is a property of the machine.
-    groups   <user> -> concrete groups ON THIS HOST, replacing the user file's
-             `groups`. The list is written out in full and in the order it
-             always had: a definition replaces my.users' default (listing only
-             "dialout" would silently drop wheel and sudo with it), and
-             reordering would rewrite users-groups.json.
     narrow   <user> -> axes to narrow on this host (never widen): builders
              true -> false, grants to a subset, nix to a lower rank. Plus
              `localBuilds = false`, accepted only where the host builds
              nothing locally anyway (Nix has no per-user max-jobs; see
-             lib/registry.nix). Unused today.
+             lib/registry.nix). Groups follow grants (lib/registry.nix
+             grantGroups), so narrowing grants is how a host takes a group
+             away.
 
   features.<host>
     Facts, not switches: what is TRUE of each machine, readable from anywhere.
@@ -36,8 +33,6 @@
     galaxybook4-pro360 = {
       users = [ "r0k0r" ];
       primary = "r0k0r";
-      # dialout is for arduino-cli/arduino-ide (/dev/ttyACM*, /dev/ttyUSB*).
-      groups.r0k0r = [ "wheel" "networkmanager" "video" "audio" "dialout" ];
     };
 
     victus-15 = {
@@ -46,7 +41,8 @@
       # explicitly.
       users = [ "r0k0r" "benjamin" ];
       primary = "r0k0r";
-      groups.r0k0r = [ "networkmanager" "wheel" ];
+      # Headless builder: no media, no serial devices.
+      narrow.r0k0r.grants = [ "sudo" "network" ];
     };
   };
 

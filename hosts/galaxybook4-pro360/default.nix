@@ -184,7 +184,7 @@ in
       cost capped the whole tunnel near 90KB/s. Dropping the last two removes
       the slow part and the two flaky parts at once.
 
-      Same identity my.ssh.builderKeyFile uses, spelled out rather than shared,
+      The builder identity (globaltun runs as root), spelled out rather than shared,
       so the feature stays giftable. NOTE this file is a leftover: with
       remote-builder.client.sshKeySecret set, nothing installs it any more.
     */
@@ -264,6 +264,9 @@ in
     opencode.enable = true;
     direnv.enable = true;
     nix-settings.enable = true;
+    # Record each account's deployed type (/var/lib/nixos-users/<user>.type)
+    # and refuse a dangerous move away from it without acceptTypeChange.
+    registry.recordTypes.enable = true;
     emacs.enable = true;
     # Package sets, each owning its own list (features/<name>/packages.nix).
     base.enable = true;

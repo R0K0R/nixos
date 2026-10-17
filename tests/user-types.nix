@@ -151,6 +151,12 @@ in
     lib.any (a: !a.assertion && lib.hasInfix "my.users.visitor " a.message) trustedByHand.config.assertions
   ) (toString trustedByHand.config.nix.settings.trusted-users);
 
+  # -- groups (from grants) ---------------------------------------------
+  groups = expect "groups follow grants: r0k0r admin+serial, guest and visitor none" (
+    lib.mapAttrs (_: u: u.extraGroups) (lib.getAttrs [ "guest" "visitor" ] c.users.users) == { guest = [ ]; visitor = [ ]; }
+    && lib.all (g: lib.elem g c.users.users.r0k0r.extraGroups) [ "wheel" "networkmanager" "video" "audio" "dialout" ]
+  ) (builtins.toJSON (lib.mapAttrs (_: u: u.extraGroups) (lib.getAttrs [ "r0k0r" "guest" "visitor" ] c.users.users)));
+
   # -- uids --------------------------------------------------------------
   uids = expect "every registry account has its registry uid" (
     lib.mapAttrs (_: u: u.uid) (lib.getAttrs [ "r0k0r" "guest" "visitor" ] c.users.users)
@@ -182,9 +188,9 @@ in
   activationSnippet = expect "activation records after users" (
     c.system.activationScripts.nixos-user-types.deps == [ "users" ]
   ) "deps users";
-  realHostNoRecord = expect "real gb4 has no type record" (
-    !(off.config.system.preSwitchChecks ? nixos-user-types) && !(off.config.system.activationScripts ? nixos-user-types)
-  ) "absent";
+  realHostRecord = expect "real gb4 records types" (
+    off.config.system.preSwitchChecks ? nixos-user-types && off.config.system.activationScripts ? nixos-user-types
+  ) "present";
 
   # The generated shell, whole, for reading and for running by hand against
   # a scratch directory (tests/user-types-eval.sh --scripts prints them).
@@ -232,6 +238,12 @@ in
           host
           on.pkgs
         ).visitor
+    );
+    # Groups are derived; a hand-written list is refused, not merged.
+    handGroups = mustFail "groups in a user file" (
+      lib.attrNames
+        ((regWith (r: r // { users = r.users // { visitor = r.users.visitor // { groups = [ "wheel" ]; }; }; })).materialize host on.pkgs)
+        .visitor
     );
     tmpfsSize = mustFail "tmpfsSize = 2 gigs" (
       (regWith (r: r // { users = r.users // { guest = r.users.guest // { tmpfsSize = "2 gigs"; }; }; })).check

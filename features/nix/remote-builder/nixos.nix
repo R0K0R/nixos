@@ -172,12 +172,11 @@ in
         otherwise "/etc/nix/remote-builder/ssh_key"
       '';
       description = ''
-        Private key used to reach every peer. Read at connect time from
-        outside the store, by the nix-daemon (as root) and by the user's own
-        ssh client -- so every consumer must agree on it. peer-*.nix and
-        my.ssh.builderKeyFile both derive from this rather than repeating the
-        literal, which they used to and which would have split the daemon and
-        interactive ssh onto different keys the moment this moved.
+        Private key the DAEMON (root) uses to reach every peer: in
+        /etc/nix/machines and in peer-*.nix's root-only ssh_config match.
+        Read at connect time from outside the store. Root-only: on a NixOS
+        peer it logs in as the trusted nix-ssh account. People ssh with
+        their own keys (my.ssh.identityFile, registry sshKeys).
       '';
     };
 
@@ -244,32 +243,29 @@ in
   (lib.mkIf cfg.enable {
     nix.distributedBuilds = true;
 
-    # Make the builder SSH key readable by r0k0r so `ssh <peer>` works
-    # interactively without a separate key. Group must be `users` -- there is no
-    # `r0k0r` group, and systemd-tmpfiles skips the whole line on an
-    # unresolvable group ("Failed to resolve group 'r0k0r'"), silently leaving
-    # the key root-owned.
-    # Only for the hand-installed key: agenix sets owner/group/mode itself, and
-    # a `z` rule against /run/agenix would either race the activation script or
-    # fail outright on a path that does not exist yet.
+    /*
+      ROOT-ONLY. This key is what a NixOS peer trusts (its nix-ssh account,
+      my.remote-builder.server), so whoever can read it is a trusted user
+      there. It used to be readable by r0k0r for interactive `ssh <peer>`;
+      people now ssh with their own keys (registry/users/<name>.nix sshKeys).
+      Only for the hand-installed key: agenix sets owner/group/mode itself, and
+      a `z` rule against /run/agenix would either race the activation script or
+      fail outright on a path that does not exist yet.
+    */
     systemd.tmpfiles.rules = lib.optionals (cfg.sshKeySecret == null) [
-      "z ${cfg.sshKey} 0600 ${config.my.internal.primaryUser} users -"
+      "z ${cfg.sshKey} 0400 root root -"
     ];
 
     age.secrets = lib.mkIf (cfg.sshKeySecret != null) {
       "remote-builder-ssh-key" = {
         file = cfg.sshKeySecret;
-        # Same ownership the tmpfiles rule established: readable by r0k0r for
-        # interactive `ssh <peer>`, and by root (the nix-daemon) via privilege.
-        # ssh refuses a private key with group/other bits set, hence 0600.
-        owner = config.my.internal.primaryUser;
-        group = "users";
-        mode = "0600";
+        # Root-only, see the tmpfiles rule above.
+        owner = "root";
+        group = "root";
+        mode = "0400";
       };
     };
 
-    # One key, one source of truth -- see the sshKey description.
-    my.ssh.builderKeyFile = lib.mkDefault cfg.sshKey;
 
     my.internal.features."remote-builder.agenix" = {
       requires = [ "agenix" ];

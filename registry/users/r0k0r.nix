@@ -16,6 +16,11 @@
   # -- and on galaxybook that file did not even exist (mutableUsers = true meant
   # the live shadow entry carried the password and the gap went unnoticed).
   passwordSecret = ../../age/hashed-password-r0k0r.age;
-  # Groups are per host (registry/hosts.nix): dialout, video and audio are
-  # galaxybook's, for its arduino and media use.
+  # Public keys that may log in as him, on every NixOS host he lives on
+  # (users.users.<n>.openssh.authorizedKeys). His own key, never the builder
+  # key: that one is root's.
+  sshKeys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFwL82rZ5NXi7aCit68eSSmeHjmZQlHu/PYK5e0f6Ysx r0k0r@galaxybook4-pro360" ];
+  # serial (dialout) for arduino-cli/arduino-ide (/dev/ttyACM*, /dev/ttyUSB*).
+  # victus-15 narrows this to sudo + network (registry/hosts.nix).
+  overrides.grants = [ "sudo" "network" "media" "serial" ];
 }

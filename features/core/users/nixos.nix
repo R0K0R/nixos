@@ -147,6 +147,12 @@ in
               '';
             };
 
+            sshKeys = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = "Public keys allowed to log in as this account (openssh.authorizedKeys.keys).";
+            };
+
             hashedPasswordFile = lib.mkOption {
               type = lib.types.nullOr lib.types.str;
               default = null;
@@ -302,6 +308,7 @@ in
             hashedPasswordFile = "/run/agenix/hashed-password-${username}";
           }
           // lib.optionalAttrs (u.shell != null) { inherit (u) shell; }
+          // lib.optionalAttrs (u.sshKeys != [ ]) { openssh.authorizedKeys.keys = u.sshKeys; }
           # tmpfs-home.nix owns the directory: it is a mountpoint, and the
           # users script must not create (and chown) a persistent one under it.
           // lib.optionalAttrs (u.tmpfsHome != null) { createHome = false; }

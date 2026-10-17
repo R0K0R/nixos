@@ -252,7 +252,8 @@ shows what each user ends up with on each host.
 
 **`registry/users/<name>.nix`** -- one file per person: `uid`, `type`, `shell`
 (a package *attribute name*, resolved by the host's own pkgs), `passwordSecret`,
-optional `overrides` and `groups`; `tmpfsSize` (default `"2G"`) for a tmpfs
+`sshKeys` (public keys that may log in as them; never the builder key, which is
+root-only), optional `overrides` and `groups`; `tmpfsSize` (default `"2G"`) for a tmpfs
 home; `acceptTypeChange = "<old>-><new>"` to consent to one dangerous type
 change (below).
 
@@ -325,9 +326,8 @@ anywhere else it is refused rather than recorded as a promise nothing keeps.
 `registry/hosts.nix` are asserted against `nix.settings.max-jobs` and
 `nix.distributedBuilds`.
 
-**Deployed type.** With `my.registry.recordTypes.enable` (default **off**:
-it adds a pre-switch check and an activation snippet, i.e. changes the
-toplevel), activation records each account as `<type> <home> <nix>` in
+**Deployed type.** With `my.registry.recordTypes.enable` (on for both
+hosts; the option defaults to off), activation records each account as `<type> <home> <nix>` in
 `/var/lib/nixos-users/<user>.type`, and a pre-switch check refuses (for
 switch, boot and test, before anything changes) a move away from the
 recorded line that is dangerous -- home leaving persistent (or going to
@@ -339,7 +339,15 @@ inert once the new type is recorded. The rule lives once, in
 of admissible predecessors the registry enumerates.
 
 `uid` is pinned in `users.users` for every account (checked against the live
-uids before it was turned on). `grants` beyond sudo <-> wheel are data only.
+uids before it was turned on). **Groups come from grants** and nowhere else:
+`lib/registry.nix` `grantGroups` maps sudo -> wheel, network ->
+networkmanager, media -> video + audio, serial -> dialout, input -> input,
+in that order; a host takes a group away with `narrow.<user>.grants`, and a
+`groups` key in registry data is refused. (Features may still add accounts
+to their own groups.) **ssh:** a person logs in with their own key
+(`sshKeys` in their file, `my.ssh.identityFile` on the client); the builder
+key is root-only, because on a NixOS peer it logs in as the trusted
+`nix-ssh`.
 
 `tests/user-types-eval.sh` evaluates a synthetic galaxybook with a handover
 and an untrusted user and the type record on, with builds disabled, and
