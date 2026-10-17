@@ -3,11 +3,16 @@
   full argument is in lib/registry.nix's header). Two lists exist:
 
     allowed-users   who may connect at all. nix = "none" is left out.
-    trusted-users   who may pass privileged settings. nix = "none" and
-                    "untrusted" must not be in it -- asserted, not written,
-                    because trusted-users is still set per host
-                    (my.nix-settings.trustedUsers) and deriving it from the
-                    registry is a later, separate step.
+    trusted-users   who may pass privileged settings. WRITTEN from the
+                    registry: every account with nix = "admin", plus
+                    my.registry.nix.extraTrustedUsers. NixOS adds root. Host
+                    files no longer name people here. nix = "none" and
+                    "untrusted" are still asserted absent, because an extra
+                    entry (a name, "*", an @group) could trust one anyway.
+
+  Making an admin untrusted is a registry edit (type, or a narrow on one
+  host), not a host-file edit -- which is the point: the type is what people
+  read, so it is what decides.
 
   ALLOWED-USERS IS ONLY WRITTEN WHEN SOMEONE IS EXCLUDED. Its NixOS default
   is [ "*" ], and replacing that with an explicit list on every host would
@@ -26,6 +31,7 @@
 let
   users = config.my.users;
   excluded = lib.attrNames (lib.filterAttrs (_: u: u.nix == "none") users);
+  admins = lib.attrNames (lib.filterAttrs (_: u: u.nix == "admin") users);
   untrustedish = lib.filterAttrs (_: u: u.nix == "none" || u.nix == "untrusted") users;
 
   trusted = config.nix.settings.trusted-users or [ ];
@@ -37,6 +43,17 @@ let
     ++ lib.filter (g: lib.elem "@${g}" trusted) (groupsOf n);
 in
 {
+  options.my.registry.nix.extraTrustedUsers = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    example = [ "@nixbuilders" ];
+    description = ''
+      trusted-users entries that are not registry people (service accounts,
+      groups). Registry users get trust from nix = "admin" only; naming a
+      non-admin one here fails the nix-access assertion.
+    '';
+  };
+
   options.my.registry.nix.extraAllowedUsers = lib.mkOption {
     type = lib.types.listOf lib.types.str;
     default = [ ];
@@ -49,6 +66,8 @@ in
   };
 
   config = {
+    nix.settings.trusted-users = admins ++ config.my.registry.nix.extraTrustedUsers;
+
     nix.settings.allowed-users = lib.mkIf (excluded != [ ]) (
       [ "root" ]
       ++ lib.attrNames (lib.filterAttrs (_: u: u.nix != "none") users)

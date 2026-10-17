@@ -202,7 +202,8 @@ wanted:
 
 ### Done on the `multiuser` branch
 
-All of these leave both hosts' toplevels byte-identical.
+Items 1-5 leave both hosts' toplevels byte-identical; item 6 is the first
+deliberate system change.
 
 1. **Registry data + validation.** `registry/users/`, `registry/types.nix`,
    `registry/hosts.nix`, `lib/registry.nix` (preset merge, override policy,
@@ -231,12 +232,20 @@ All of these leave both hosts' toplevels byte-identical.
    to the kiosk session (greeter), a passwordless/autologin handover login,
    logind's 10 s UserStopDelaySec window, impermanent homes and overlay
    stores.
+6. **trusted-users and uids from the registry.** `trusted-users` is
+   derived in `nix-access.nix`: the host's `nix = admin` accounts plus
+   `my.registry.nix.extraTrustedUsers` (non-people); `my.nix-settings.
+   trustedUsers` and the host files' lists are gone. Every account's uid is
+   pinned from its registry file (live uids checked first: r0k0r 1000,
+   benjamin 1001). Effect on the hosts: `nix.conf` unchanged
+   (`trusted-users = root r0k0r` as before); `users-groups.json` gains the
+   uids, and home-manager's activation gains its `checkStringEq UID` line
+   -- 18 changed derivations on galaxybook, 24 on victus, all activation
+   and etc glue, no packages.
 
 ### Next
 
-5. **Wire the nix axis** (rest of it): `trusted-users` from the registry
-   (`none`/`allowed-users` and the not-trusted assertion are done); pass `uid`
-   to `users.users` for existing accounts; grants to groups; turn on
+5. **Wire the nix axis** (rest of it): grants to groups; turn on
    `my.registry.recordTypes` per host (one cheap rebuild each).
 6. **Cutover to standalone home-manager**: the system stops integrating
    home-manager for `session = home-manager` users; home repos switch to

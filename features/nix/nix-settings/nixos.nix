@@ -29,12 +29,6 @@ in
       description = "Public keys for `substituters`.";
     };
 
-    trustedUsers = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ ];
-      description = "Users allowed to pass privileged nix options (substituters, builders, …).";
-    };
-
     secretKeyFiles = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
@@ -105,7 +99,7 @@ in
     # peer stores) wins where both are enabled, rather than conflicting.
     nix.settings.substituters = lib.mkDefault cfg.substituters;
     nix.settings.trusted-public-keys = lib.mkDefault cfg.trustedPublicKeys;
-    nix.settings.trusted-users = lib.mkIf (cfg.trustedUsers != [ ]) cfg.trustedUsers;
+    # trusted-users comes from the registry (features/core/users/nix-access.nix).
     /*
       Same shape as features/openvpn's profileSecret: the age.secrets entry is
       declared only when the option is set, because a declared entry on a host

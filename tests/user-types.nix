@@ -61,6 +61,18 @@ let
   };
   off = mkHostWith { hostName = host; };
 
+  # visitor trusted by hand, past the registry: the nix-access assertion
+  # must catch it. Only config.assertions is forced, not the toplevel.
+  trustedByHand = mkHostWith {
+    hostName = host;
+    extraModules = [
+      {
+        my.registry.extend = extend;
+        my.registry.nix.extraTrustedUsers = [ "visitor" ];
+      }
+    ];
+  };
+
   c = on.config;
   reg = c.my.registry.loaded;
   facts = (mkHomeLib host on).facts;
@@ -132,7 +144,18 @@ in
   nixConf = expect "nix.conf differs from the real host's" (
     c.environment.etc."nix/nix.conf".source.drvPath != off.config.environment.etc."nix/nix.conf".source.drvPath
   ) c.environment.etc."nix/nix.conf".source.drvPath;
-  trustedUsers = expect "visitor not trusted" (!(lib.elem "visitor" c.nix.settings.trusted-users)) (toString c.nix.settings.trusted-users);
+  trustedUsers = expect "trusted-users = root + the nix = admin accounts" (c.nix.settings.trusted-users == [ "root" "r0k0r" ]) (
+    toString c.nix.settings.trusted-users
+  );
+  trustedByHandCaught = expect "extraTrustedUsers naming visitor fails an assertion" (
+    lib.any (a: !a.assertion && lib.hasInfix "my.users.visitor " a.message) trustedByHand.config.assertions
+  ) (toString trustedByHand.config.nix.settings.trusted-users);
+
+  # -- uids --------------------------------------------------------------
+  uids = expect "every registry account has its registry uid" (
+    lib.mapAttrs (_: u: u.uid) (lib.getAttrs [ "r0k0r" "guest" "visitor" ] c.users.users)
+    == { r0k0r = 1000; guest = 1900; visitor = 1901; }
+  ) (builtins.toJSON (lib.mapAttrs (_: u: u.uid) (lib.getAttrs [ "r0k0r" "guest" "visitor" ] c.users.users)));
 
   # -- homeLib facts -----------------------------------------------------
   factsVisitor =

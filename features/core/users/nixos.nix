@@ -172,9 +172,9 @@ in
               description = ''
                 The registry's nix axis (nix-access.nix). "none": left out of
                 nix.settings.allowed-users. "untrusted": asserted absent from
-                trusted-users. "admin": nothing yet -- trusted-users is still
-                set per host. null (an account not from the registry): no
-                checks.
+                trusted-users. "admin": in trusted-users (derived, not
+                per host). null (an account not from the registry): no
+                trust, no checks.
               '';
             };
 

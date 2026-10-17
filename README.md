@@ -307,7 +307,7 @@ piece gated on some account using it, so both real hosts are unchanged:
 | `session = { kiosk = "<pkg>"; }` | `kiosk.nix`: a "Kiosk (<prog>)" wayland-session running `cage -s -- <pkg>` from the system pkgs (handover: firefox). Not enforced that the kiosk user *picks* it; that is the greeter's choice. |
 | `nix = none` | `nix-access.nix`: left out of `nix.settings.allowed-users`. The list is only written on a host that has such a user; elsewhere it stays at its default `*`, so nix.conf is unchanged. `my.registry.nix.extraAllowedUsers` for service accounts. |
 | `nix = untrusted` | asserted absent from `trusted-users` (by name, `*` or `@group`). |
-| `nix = admin` | nothing yet: `trusted-users` is still per host (`my.nix-settings.trustedUsers`). |
+| `nix = admin` | `nix-access.nix`: `trusted-users` is derived -- exactly the host's `nix = admin` accounts, plus root and `my.registry.nix.extraTrustedUsers` (non-people only). Host files no longer list trusted users. |
 | `home = impermanent`, `nix = overlay` | refused, "not implemented yet" (need impermanence / guest-overlay). |
 
 **What Nix enforces per user, honestly.** The daemon has two per-user lists,
@@ -338,9 +338,8 @@ inert once the new type is recorded. The rule lives once, in
 `lib/registry.nix` `transition`; the shell only checks membership in the list
 of admissible predecessors the registry enumerates.
 
-`uid` is passed to `users.users` only for tmpfs users (new accounts); for the
-existing ones it is recorded but not passed yet (it would rewrite
-users-groups.json). `grants` beyond sudo <-> wheel are data only.
+`uid` is pinned in `users.users` for every account (checked against the live
+uids before it was turned on). `grants` beyond sudo <-> wheel are data only.
 
 `tests/user-types-eval.sh` evaluates a synthetic galaxybook with a handover
 and an untrusted user and the type record on, with builds disabled, and

@@ -40,6 +40,9 @@
                        builds, with the HOST's max-jobs and, on a builder
                        client, the host's remote builders -- the daemon
                        dispatches for him, he just cannot pick them.
+    nix = "admin"      trusted-users is DERIVED from it (nix-access.nix):
+                       exactly the host's nix = "admin" accounts, plus
+                       root (NixOS) and my.registry.nix.extraTrustedUsers.
     builders = false   enforceable only as "cannot name builders of his own"
                        (that needs trust). It does NOT keep his builds off the
                        daemon's builders; `nixFacts` says where they go.
@@ -463,12 +466,12 @@ in
         axes that already have machinery are allowed through; everything else
         is refused here rather than approximated.
 
-        `uid` is NOT passed on yet. Both hosts' accounts were created without a
-        pinned uid, and pinning one now changes users-groups.json -- a system
-        change this refactor is not allowed to make. The registry uids match
-        the live ones (r0k0r 1000 on both, benjamin 1001 on victus-15, checked
-        2026-10-17), so turning it on later is a no-op on disk.
-        TODO: pass uid through, accepting that one cheap rebuild.
+        `uid` is pinned for every account. Both hosts' accounts were created
+        unpinned; the registry uids were checked against the live ones (r0k0r
+        1000 on both, benjamin 1001 on victus-15, 2026-10-17) before turning
+        this on, so the first switch only rewrites users-groups.json -- no
+        file on disk changes owner. A NEW user's uid comes from his file, never
+        from declaration order.
       */
       materialize =
         hn: pkgs:
@@ -496,6 +499,7 @@ in
                 ${if elem "sudo" e.grants then "include" else "omit"} "sudo". wheel IS sudo here; make them agree.''
             else
               {
+                inherit (u) uid;
                 primary = n == h.primary;
                 home = e.session == "home-manager";
                 # Consumed only by assertions, mkIf-gated settings and the
@@ -514,14 +518,7 @@ in
                     inherit accept;
                   };
               }
-              # A tmpfs home is mounted by uid (user@<uid>.service, the mount's
-              # uid= option), so its uid is pinned -- unlike the persistent
-              # users' (see above), pinning a NEW account's uid changes nothing
-              # that already exists.
-              // lib.optionalAttrs (e.home == "tmpfs") {
-                inherit (u) uid;
-                tmpfsHome.size = u.tmpfsSize or "2G";
-              }
+              // lib.optionalAttrs (e.home == "tmpfs") { tmpfsHome.size = u.tmpfsSize or "2G"; }
               // lib.optionalAttrs (sessionKind e.session == "kiosk") { kiosk = pkgs.${e.session.kiosk}; }
               // lib.optionalAttrs (u ? description) { inherit (u) description; }
               // lib.optionalAttrs (u ? passwordSecret) { inherit (u) passwordSecret; }

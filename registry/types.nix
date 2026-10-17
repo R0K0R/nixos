@@ -38,14 +38,11 @@
   an error, not a silent no-op: a "member" whose file says nix = admin is an
   admin with a misleading label, and the label is what people read.
 
-  NIX TRUST, HALF WIRED. nix = "none" drives allowed-users, and every user
-  whose nix is not "admin" is asserted to be absent from trusted-users. The
-  other direction is NOT wired: trusted-users is still written per host
-  (my.nix-settings.trustedUsers = [ "r0k0r" ] on both hosts), which happens
-  to match today's registry exactly
-  (r0k0r admin, benjamin member = untrusted). Deriving trusted-users from here
-  is a system change and a workflow change (the user plans to make himself
-  untrusted too, with a standalone home repo), so it is left for that step.
+  NIX TRUST. nix = "none" drives allowed-users; trusted-users is exactly the
+  host's nix = "admin" accounts (plus root and
+  my.registry.nix.extraTrustedUsers), and every other registry user is
+  asserted absent from it. Making someone untrusted is changing his type
+  here, not editing a host file.
 
   TODO (grants): data only beyond sudo <-> wheel; groups still come from
   registry/hosts.nix `groups` / the user file's `groups`.
