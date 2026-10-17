@@ -228,9 +228,9 @@ choice equal to the host's returns the host's `pkgs` value itself.
 - Still ONE pin: the fork is upstream plus patches at the same revision, so
   every library is the same version as the system's; mixing with in-process
   system code relies on the loader reusing an already-loaded soname. The
-  known risk is fork patches that change an ABI (qtPatches): a system Qt
-  plugin built against patched qtbase inside a user's upstream Qt. Accepted
-  for now.
+  risk is fork patches that change an ABI (qtPatches): a system Qt plugin
+  built against patched qtbase inside a user's upstream Qt. That is CHECKED,
+  not accepted -- see [Surface compatibility](#surface-compatibility).
 - Singleton services (daemon, dbus, polkit, logind, greetd, portals, the
   compositor) always run from the system's set; users talk to them over
   protocols. In-process plugins of a system service (Hyprland plugins) must
@@ -241,6 +241,66 @@ choice equal to the host's returns the host's `pkgs` value itself.
 - One extra full evaluation of the host per distinct choice.
 - Integrated homes (`homeActivation = "system"`) follow the system; per-user
   tuning is for standalone homes.
+
+### Per-package levers, on both sides
+
+Which packages o3 and lto may touch is no longer a list inside
+`tuning/overlays/o3.nix` / `gentoo-lto.nix`: it becomes options, on the system
+AND in homes.
+
+```nix
+# host file -- the system's set; defaults are today's lists
+my.tuning.o3.candidates  = [ ... ];      my.tuning.lto.candidates = [ ... ];
+my.tuning.o3.exclude     = [ ];          my.tuning.lto.exclude    = [ ];
+
+# a user's home -- that user's set only
+my.tuning.packages.lto = [ "foldpen" ];  my.tuning.packages.o3 = [ ];
+my.tuning.exclude.lto  = [ ];            my.tuning.exclude.o3  = [ ];
+```
+
+- System candidates are still gated by the classifier (tuned only where
+  host-runtime), as today; `exclude` is for a package a lever breaks.
+- A user's `packages` are added inside THEIR set only (their variant is its
+  own fixpoint), so tuning a library there rebuilds its dependents for them,
+  not for anyone else. An explicitly listed name BYPASSES the classifier --
+  the user asked for it -- and under march is also exempt from upstream
+  substitution. Evidence (below) stays shared; per-package choices do not.
+- Like `my.tuning` itself, these must be literals that do not read `pkgs`.
+- Without a lever a user can still write their own derivation, override a
+  package, or take one from `inputs.nixpkgs-upstream` -- the levers add the
+  system's exact treatment (flags, per-package exceptions, rebuilt
+  dependents), not a capability nobody had.
+
+### Surface compatibility
+
+Computed, not hand-curated, and enforced at evaluation: a home whose package
+set cannot safely load the system's in-process code FAILS to evaluate.
+
+1. The surface is what `lib/epoch.nix` already computes: system derivations
+   reachable through the session environment (plugin paths: Qt, GTK, GIO, IM
+   modules), the graphics driver, PAM, NSS and the locale, adjusted by
+   `my.epoch.extraSurface` / `ignoreSurface`.
+2. For every library in the closure of every surface derivation, the same
+   package in the user's set is looked up and its ABI identity compared:
+   pname, version, source, and patch list. Build flags (march, -O3, LTO,
+   anything in NIX_CFLAGS_*) are NOT part of it. With one pin only the fork's
+   own patches can differ (qtPatches on qtbase, ...), so this flags exactly
+   those and nothing else.
+3. Any mismatch fails `mkHome` with an ELABORATE message, not a one-liner:
+   which surface item (e.g. the fcitx5 Qt IM module in the system profile),
+   which library differs between the system's and the user's set and how
+   (which patches), why that matters (the system's build is loaded into the
+   user's processes, which already have their own copy of that library; the
+   loader reuses theirs, the plugin was compiled against the other one's ABI
+   -> crashes or silent corruption, typically at first use of that plugin),
+   and what the user can do: set the lever that causes it back to "system"
+   (named), or choose the march the host has (the fork carries the patch), or
+   exclude that package from their per-package lists.
+4. The locker is not special-cased: if it comes from the user's set, the PAM
+   modules it loads are surface like any other and go through the same check.
+   Singleton SERVICES (daemon, dbus, polkit, logind, greetd, portals,
+   compositor and its plugins) always run from the system's set and are not
+   checked -- users reach them over protocols.
 
 ### Every user feeds the classifier
 
@@ -442,7 +502,10 @@ deliberate system change.
     mounts by default).
 12. **Eval matrix**: all optional pieces off, all on, and each alone.
 13. **Per-user tuning** (see that section): the home option `my.tuning` and
-    `mkHome`'s `_module.args.pkgs`; `/var/lib/tuning-cache/<host>/` with
+    `mkHome`'s `_module.args.pkgs`; candidate lists as system options
+    (`my.tuning.{o3,lto}.{candidates,exclude}`) and home options
+    (`my.tuning.{packages,exclude}.{o3,lto}`); the surface compatibility check
+    with its explanatory failure; `/var/lib/tuning-cache/<host>/` with
     per-user files, `tuning-refresh` (closure + evaluation, run as the user),
     lookup.nix reading the per-host locked inputs, the gather/relock/
     distribute script; the current tier1/tier2 files become the hosts'
