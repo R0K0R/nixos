@@ -31,25 +31,12 @@ JUMPS=${GT_JUMPS:-${GT_JUMP:-}}
 disarm(){ systemctl stop "$UNIT.timer" 2>/dev/null
           systemctl reset-failed "$UNIT.timer" "$UNIT.service" 2>/dev/null; }
 
-JUMP_LIST=()
-for _j in ${JUMPS//,/ }; do JUMP_LIST+=("$_j"); done
-NJUMPS=${#JUMP_LIST[@]}
-# The hop that must reach the gateway is the LAST one, and it is reached
-# through the ones before it. Rather than rebuild that chain here, borrow the
-# one globaltun.sh generates -- its Host blocks already carry the key and the
-# ProxyJump links, so a bare `-F cfg gt-hop-N` walks the whole path.
-SSHCFG=$("$GT" ssh-config 2>/dev/null || true)
-
-# Probe the gateway from wherever the carrier actually originates: locally when
-# dialling direct, otherwise from the last jump, which is what has to reach it.
-probe_once(){
-  if [ "$NJUMPS" -gt 0 ] && [ -n "$SSHCFG" ]; then
-    timeout 40 ssh -F "$SSHCFG" -o BatchMode=yes "gt-hop-$NJUMPS" \
-      "timeout 20 bash -c 'exec 3<>/dev/tcp/$GW_HOST/$GW_PORT'" >/dev/null 2>&1
-  else
-    timeout 20 bash -c "exec 3<>/dev/tcp/$GW_HOST/$GW_PORT" >/dev/null 2>&1
-  fi
-}
+# Probe the gateway the way `up` will reach it: through every hop, of every
+# kind, with each hop's own credentials. `globaltun probe` does exactly that
+# and touches no route, so this preflight can never be what strands the host.
+# (It used to re-implement the chain with `ssh -F cfg gt-hop-N`, which cannot
+# answer a password hop and knows nothing of proxy hops.)
+probe_once(){ "$GT" probe >/dev/null 2>&1; }
 
 echo "== preflight: $PROBES probes to $GW_HOST:$GW_PORT${JUMPS:+ (via $JUMPS)}"
 ok=0

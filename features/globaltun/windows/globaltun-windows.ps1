@@ -59,6 +59,14 @@ $RPort     = if ($cfg['GT_RPORT'])      { $cfg['GT_RPORT'] }      else { '8022' 
 # directly. GT_JUMP (singular) is still read for older globaltun.env files.
 $JumpsRaw  = if ($cfg['GT_JUMPS']) { $cfg['GT_JUMPS'] } else { $cfg['GT_JUMP'] }
 $Jumps     = @($JumpsRaw -split '[,\s]+' | Where-Object { $_ -and $_ -ne '-' })
+# Proxy hops and per-hop credentials exist in globaltun.sh only. Refuse them by
+# name rather than write `HostName socks5` and fail two hops later.
+foreach ($j in $Jumps) {
+  if ($j -match '://|=') {
+    Write-Error ("hop '$j': proxy hops and per-hop credentials are not supported by " +
+                 "the Windows client yet -- only [user@]host[:port], authenticated with GT_KEY.")
+  }
+}
 $LPort     = if ($cfg['GT_LPORT'])      { $cfg['GT_LPORT'] }      else { '11080' }
 $LocalPort = if ($cfg['GT_LOCAL_PORT']) { $cfg['GT_LOCAL_PORT'] } else { '1081' }
 $SingBox   = if ($cfg['GT_SINGBOX'])    { $cfg['GT_SINGBOX'] }    else { Join-Path $Here 'sing-box.exe' }

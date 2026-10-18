@@ -214,11 +214,17 @@ in
       # the current assignment across hosts.
       remoteSocksPort = 1080;
       remotePort = 22;
+      # victus-15 and yulee are both on this LAN, and they are the peers that
+      # matter; without this they relayed through a DERP server in Singapore.
+      # victus-15 needs no matching switch -- its keepDirect already holds the
+      # LAN prefix in `main`.
+      tailscaleDirect = true;
 
       /*
         `sudo globaltun share` hosts an AP on this machine's own card and routes
         its clients through the tunnel. The AP is a second vif on wlo1 and must
-        follow its channel, so it drops whenever wlo1 roams.
+        follow its channel; share's watcher moves it along when wlo1 switches
+        channel or roams.
 
         The passphrase lives outside the store, in a root-only file:
           printf '%s' 'the-passphrase' | sudo tee /etc/globaltun-psk
