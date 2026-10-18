@@ -22,9 +22,9 @@
   AXES AND THEIR MACHINERY. home = "tmpfs", nix = "none" / "untrusted", kiosk
   sessions and with them the handover and untrusted types are implemented
   (features/core/users: tmpfs-home.nix, kiosk.nix, nix-access.nix).
-  home = "impermanent" is validated here (so the data format is settled and
-  contradictions are caught now) but `materialize` refuses it with "not
-  implemented yet": it needs the impermanence feature, which does not exist.
+  home = "impermanent" is features/core/impermanence: the home is wiped with
+  the root at every boot and rebuilt from the user's own persist list merged
+  with the features' (accepted on a host whose facts declare impermanence).
   nix = "overlay" is features/nix/guest-overlay, accepted on a host whose
   registry facts declare it. The refusal is what stops a host
   from silently getting a persistent home while the registry says otherwise.
@@ -196,6 +196,10 @@ let
       throw ''
         registry: ${where}: session = "home-manager" needs nix access, but nix = "none".
         Give the user nix = "untrusted" (or "overlay"), or session = "system-default".''
+    else if e.home == "impermanent" && !(hostFeatures.impermanence or false) then
+      throw ''
+        registry: ${where}: home = "impermanent" but the host does not declare the impermanence
+        feature in registry/hosts.nix (features.<host>.impermanence).''
     else if e.nix == "overlay" && !(hostFeatures."guest-overlay" or false) then
       throw ''
         registry: ${where}: nix = "overlay" but the host does not declare the guest-overlay
@@ -514,9 +518,7 @@ in
               where = "user ${n} on host ${hn}";
               groups = lib.concatMap (g: grantGroups.${g}) (lib.filter (g: elem g e.grants) axisValues.grants);
             in
-            if e.home == "impermanent" then
-              notYet where "home = \"impermanent\" (needs the impermanence feature)"
-            else if e.nix == "overlay" && e.session == "home-manager" && (u.homeActivation or "system") != "standalone" then
+            if e.nix == "overlay" && e.session == "home-manager" && (u.homeActivation or "system") != "standalone" then
               throw ''
                 registry: ${where}: nix = "overlay" with a home-manager session needs
                 homeActivation = "standalone": the system cannot activate a home that lives
@@ -554,6 +556,7 @@ in
                   };
               }
               // lib.optionalAttrs (e.home == "tmpfs") { tmpfsHome.size = u.tmpfsSize or "2G"; }
+              // lib.optionalAttrs (e.home == "impermanent") { impermanentHome = true; }
               // lib.optionalAttrs (sessionKind e.session == "kiosk") { kiosk = pkgs.${e.session.kiosk}; }
               // lib.optionalAttrs (u ? description) { inherit (u) description; }
               # A host that keeps an account's password local (hosts.nix

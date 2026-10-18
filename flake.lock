@@ -444,6 +444,23 @@
       },
       "parent": []
     },
+    "feat-impermanence": {
+      "inputs": {
+        "impermanence": "impermanence",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "path": "./features/core/impermanence",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/core/impermanence",
+        "type": "path"
+      },
+      "parent": []
+    },
     "feat-niri": {
       "inputs": {
         "niri": "niri",
@@ -581,6 +598,30 @@
         "owner": "R0K0R",
         "ref": "nixos",
         "repo": "Hyprland",
+        "type": "github"
+      }
+    },
+    "impermanence": {
+      "inputs": {
+        "home-manager": [
+          "feat-impermanence"
+        ],
+        "nixpkgs": [
+          "feat-impermanence",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1769548169,
+        "narHash": "sha256-03+JxvzmfwRu+5JafM0DLbxgHttOQZkUtDWBmeUkN8Y=",
+        "owner": "nix-community",
+        "repo": "impermanence",
+        "rev": "7b1d382faf603b6d264f58627330f9faa5cba149",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "impermanence",
         "type": "github"
       }
     },
@@ -744,6 +785,7 @@
         "feat-hakuspace": "feat-hakuspace",
         "feat-hop": "feat-hop",
         "feat-hyprland": "feat-hyprland",
+        "feat-impermanence": "feat-impermanence",
         "feat-niri": "feat-niri",
         "feat-samsung-galaxybook": "feat-samsung-galaxybook",
         "home-manager": "home-manager",

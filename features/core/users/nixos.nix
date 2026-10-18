@@ -184,6 +184,17 @@ in
               '';
             };
 
+            impermanentHome = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                The home is wiped with the ephemeral root at every boot and rebuilt
+                from what this user persists (features/core/impermanence: the user's
+                own my.persist list merged with the features' my.state.user). From
+                the registry's home = "impermanent". Needs my.impermanence.
+              '';
+            };
+
             tmpfsHome = lib.mkOption {
               type = lib.types.nullOr (
                 lib.types.submodule {

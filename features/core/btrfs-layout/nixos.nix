@@ -58,6 +58,65 @@ in
       example = [ "compress=zstd" ];
       description = "Mount options after subvol=. (NixOS already mounts /nix in the initrd.)";
     };
+
+    /*
+      THE REST OF THE LAYOUT, each part off unless set: what an ephemeral root
+      (features/core/impermanence) needs around it. victus-15 uses only the
+      /nix part above. The galaxybook layout planned for impermanence
+      (~/.cache/home-classify/HANDOFF.md §5.6; docs/impermanence-migration.md):
+
+        @root        /             rolled back to @root-blank at every boot
+        @root-blank                the empty snapshot @root is reset to
+        @nix         /nix
+        @persist     /persist      what survives (system and per-user)
+        @swap        /swap         the swapfile (nodatacow, never snapshotted)
+        @windows-backup  <home>/Backups/windows   (extraMounts)
+    */
+    rootSubvolume = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "@root";
+      description = "Subvolume mounted at / (null: / stays as hardware-configuration.nix says).";
+    };
+
+    persist = {
+      enable = lib.mkEnableOption "the @persist subvolume, mounted in the initrd (impermanence's persistRoot)";
+      subvolume = lib.mkOption {
+        type = lib.types.str;
+        default = "@persist";
+        description = "Subvolume holding everything that survives an ephemeral root.";
+      };
+      mountPoint = lib.mkOption {
+        type = lib.types.str;
+        default = "/persist";
+        description = "Where it is mounted.";
+      };
+    };
+
+    swap = {
+      enable = lib.mkEnableOption "the @swap subvolume at /swap, home of the swapfile (my.swapfile.path)";
+      subvolume = lib.mkOption {
+        type = lib.types.str;
+        default = "@swap";
+        description = "Subvolume for the swapfile: its own, so no root snapshot or rollback ever holds it.";
+      };
+    };
+
+    extraMounts = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options.subvolume = lib.mkOption {
+            type = lib.types.str;
+            description = "Subvolume mounted here.";
+          };
+        }
+      );
+      default = { };
+      example = lib.literalExpression ''
+        { "''${config.users.users.<primary>.home}/Backups/windows".subvolume = "@windows-backup"; }
+      '';
+      description = "Further subvolumes, by mount point -- data kept whole and outside every snapshot.";
+    };
   };
 
   config = lib.mkMerge [
@@ -69,11 +128,40 @@ in
           message = "my.btrfs-layout: / must be btrfs (and my.btrfs-layout.device set) -- the subvolume lives on the same filesystem.";
         }
       ];
-      fileSystems."/nix" = {
-        inherit (cfg) device;
-        fsType = "btrfs";
-        options = [ "subvol=${cfg.nixSubvolume}" ] ++ cfg.extraOptions;
-      };
+      fileSystems =
+        {
+          "/nix" = {
+            inherit (cfg) device;
+            fsType = "btrfs";
+            options = [ "subvol=${cfg.nixSubvolume}" ] ++ cfg.extraOptions;
+          };
+        }
+        // lib.optionalAttrs (cfg.rootSubvolume != null) {
+          "/".options = [ "subvol=${cfg.rootSubvolume}" ] ++ cfg.extraOptions;
+        }
+        // lib.optionalAttrs cfg.persist.enable {
+          ${cfg.persist.mountPoint} = {
+            inherit (cfg) device;
+            fsType = "btrfs";
+            options = [ "subvol=${cfg.persist.subvolume}" ] ++ cfg.extraOptions;
+            # Bind mounts from it are set up before stage 2 (impermanence).
+            neededForBoot = true;
+          };
+        }
+        // lib.optionalAttrs cfg.swap.enable {
+          "/swap" = {
+            inherit (cfg) device;
+            fsType = "btrfs";
+            # No compression on the swap subvolume: btrfs refuses swapfiles on
+            # compressed or CoW extents (mkswapfile sets nodatacow itself).
+            options = [ "subvol=${cfg.swap.subvolume}" "noatime" ];
+          };
+        }
+        // lib.mapAttrs (_: m: {
+          inherit (cfg) device;
+          fsType = "btrfs";
+          options = [ "subvol=${m.subvolume}" ] ++ cfg.extraOptions;
+        }) cfg.extraMounts;
     })
   ];
 }

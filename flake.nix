@@ -84,6 +84,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    feat-impermanence = {
+      url = "path:./features/core/impermanence";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     feat-emacs = {
       url = "path:./features/apps/emacs";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -474,6 +479,9 @@
       evalTests.user-tuning = import ./tests/user-tuning.nix {
         inherit lib inputs mkHostWith;
         inherit (self) nixosConfigurations homeLib;
+      };
+      evalTests.impermanence = import ./tests/impermanence.nix {
+        inherit lib mkHostWith mkHomeLib;
       };
       evalTests.guest-overlay = import ./tests/guest-overlay.nix {
         inherit lib mkHostWith mkHomeLib;

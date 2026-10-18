@@ -83,6 +83,11 @@ in
     (lib.mkIf cfg.enable {
     age.identityPaths = cfg.identityPaths;
 
+    # The root of trust survives an ephemeral root (features/core/impermanence):
+    # without it, every secret is gone after the first reboot. Plain data;
+    # nothing reads it on a host without impermanence.
+    my.state.system.secret.files = cfg.identityPaths;
+
     environment.systemPackages = [
       # `agenix -e age/<name>.age` to create/edit a secret; reads secrets.nix
       # at the repo root for the recipient list.

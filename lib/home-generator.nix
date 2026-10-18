@@ -43,6 +43,7 @@ let
   sharedModules = homeModules ++ [
     inputs.feat-emacs.homeModule
     ./home-tuning.nix
+    ./home-persist.nix
   ];
   extraSpecialArgs = { inherit inputs hostName; };
 
