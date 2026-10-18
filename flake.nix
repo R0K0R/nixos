@@ -12,6 +12,16 @@
     # --override-input nixpkgs path:/home/r0k0r/nixpkgs-patch.
     # Used for nix.nixPath and nix.registry so that nix-shell / nix run
     # evaluate against unpatched nixpkgs and hit the Hydra binary cache.
+    #
+    # LOCK IT TO THE FORK'S UPSTREAM BASE, not to whatever nixos-unstable is
+    # now: tuning/overlays/upstream-tools.nix swaps fork packages for these
+    # builds on the premise that both trees are the same revision, and an
+    # untuned set (dell-latitude, a home with my.tuning off) is built from it.
+    # After rebasing the fork: find its base (the newest non-fork commit of
+    # combined-fundamental) and run
+    #   nix flake lock --override-input nixpkgs-upstream github:NixOS/nixpkgs/<base>
+    # 530051b bumped the fork and left this at e7439b6, three days older; fixed
+    # 2026-10-18 (fork 00a171f = upstream 7fd4004d + fork commits).
     nixpkgs-upstream.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     /*
