@@ -72,7 +72,52 @@ chain is just a longer list:
   jumps = [ "user@jump.example" "admin@10.0.0.9:2222" ];
 ```
 
-`sudo globaltun {up|down|status|verify|reload|reicmp|is-up|ssh-config}`.
+### Hop kinds and credentials
+
+A string is an ssh hop using `sshKey`. An attrset can make a hop a proxy, or give
+it credentials of its own:
+
+```nix
+  jumps = [
+    { kind = "http"; host = "me@proxy.corp:3128"; passwordFile = "/run/agenix/proxy-pw"; }
+    "user@jump.example"                                   # ssh, top-level sshKey
+    { host = "admin@10.0.0.9:2222"; passwordFile = "/run/agenix/jump-pw"; }
+    { kind = "socks5"; host = "127.0.0.1:9050"; }         # Tor -- on 10.0.0.9's localhost
+  ];
+```
+
+Every hop's address is read **from the previous hop's side**: that last
+`127.0.0.1:9050` is the Tor on `10.0.0.9`, not on this machine. Kinds mix freely —
+a corporate HTTP proxy in front of everything, a SOCKS proxy only the last jump can
+see. Every hop must carry a TCP stream, since that is what ssh rides, so UDP-only
+transports (WireGuard, QUIC proxies) cannot be hops.
+
+Standalone, the same thing is one string per hop in `GT_JUMPS`:
+
+```
+[user@]host[:port][=key|=key:FILE|=password:FILE]          ssh
+socks5://[user@]host:port[=password:FILE]                  SOCKS5 (target resolved on the proxy)
+http://[user@]host:port[=password:FILE]                    HTTP CONNECT
+```
+
+`FILE` is always a path to the secret, never the secret — tokens show up in `ps`.
+
+How it works: every hop is reached through a `ProxyCommand` this script writes,
+one per `Host` block, instead of `ProxyJump`. Under `ProxyJump` the ssh that
+authenticates to a hop is spawned *inside* ssh, where nothing can hand it a
+password or put a proxy in front of it. A password hop answers through
+`SSH_ASKPASS` with `SSH_ASKPASS_REQUIRE=force` (OpenSSH 8.4+; no `sshpass`), via a
+helper that answers *only* password prompts — a yes/no gets a refusal, never the
+password. Proxy handshakes are `gtconnect.py`, stdlib-only, since python3 is already
+a local dependency and netcat's proxy flags differ between flavours.
+
+`sudo globaltun probe` walks the whole chain to the gateway's sshd banner without
+creating a tun or touching a route. `globaltun hop N [cmd]` opens a session on one
+ssh hop through the ones before it — `hop 2 true` failing while `hop 1 true` works
+puts the fault between the two. Proxy hops and per-hop credentials are Linux-only
+for now; the Termux and Windows clients refuse them by name.
+
+`sudo globaltun {up|down|status|verify|reload|reicmp|is-up|ssh-config|hop|probe}`.
 `verify` exercises TCP, DNS, UDP, ICMP and reports the egress address.
 
 The same scripts run standalone on a host that is not managed by this flake:
@@ -182,10 +227,9 @@ On the phone, in Termux (`pkg install openssh python`):
 
 ```sh
 mkdir -p ~/globaltun && cd ~/globaltun
-# from this repo: android/globaltun-termux.sh, android/globaltun.env.example,
+# from this repo: android/globaltun-termux.sh, android/globaltun.env,
 #                 android/sing-box-android.json, rsocks.py, gtlocal.py,
 #                 and optionally gtrelay-linux-{amd64,arm64}
-cp globaltun.env.example globaltun.env && $EDITOR globaltun.env
 ssh-keygen -t ed25519 -f ~/.ssh/globaltun -N ""      # add the .pub to both hops
 ./globaltun-termux.sh up
 ```
@@ -199,10 +243,11 @@ them past a count of 32, which looks exactly like the carrier vanishing on its
 own: `up` succeeds, starts the relay on the gateway, and the master is gone by
 the time anything uses it. `termux-wake-lock` before `up` helps; the real fix is
 `adb shell settings put global settings_enable_monitor_phantom_procs false`.
-`globaltun.env` is the only file you edit; the script refuses to run without it
-and prints the copy command. Give the phone its own `remoteSocksPort` like any
-other client, and keep `GT_LOCAL_PORT` equal to the `server_port` of the app
-config's socks outbound.
+`globaltun.env` ships ready to use, pointed at the same gateway as
+galaxybook4-pro360, and it is the only file to edit for a different one; the
+script refuses to run without it beside it. A second phone needs its own
+`GT_REMOTE_SOCKS_PORT` like any other client, and `GT_LOCAL_PORT` stays equal to
+the `server_port` of the app config's socks outbound.
 
 ## Sharing the tunnel over Wi-Fi
 
@@ -259,9 +304,14 @@ Recovering a machine already in that state, in this order so the uplink never
 drops: bring the upstream profile up on the station interface *first*, then set
 the AP interface unmanaged.
 
-`#channels <= 1` means the AP sits on the station's *current* channel, read when
-`share` runs — so it drops whenever the upstream roams, and `share` must be run
-again. `passwordFile` is a runtime path, never the passphrase, so the shared
+`#channels <= 1` means the AP sits on the station's *current* channel and has
+to move with it. `share` starts a watcher (`iw event`) that does that: on the
+upstream's channel switch announcement it switches the AP too (`hostapd_cli
+chan_switch`), and after a roam or a disconnect it stops the AP until the
+station has rejoined, then restarts it on the new channel. Without it an AP left
+behind blocked the station's switch — the kernel disconnects it (err=-16) — and
+then kept it from rejoining anywhere else: victus-15 lost the network for half
+an hour that way. Its log is `/run/globaltun-share-watch.log`. `passwordFile` is a runtime path, never the passphrase, so the shared
 secret stays out of the store.
 
 ## Windows clients

@@ -191,7 +191,13 @@ lib.mkIf osConfig.my.dms.enable {
       # Markdown -> HTML for replies with LaTeX, so the formula images can be
       # sized and stay sharp at scale 1.5. By store path, same as
       # vehicleMotionCues' rotateCommand: no PATH entry for one plugin's tool.
-      settings.cmarkCommand = "${pkgs.cmark-gfm}/bin/cmark-gfm";
+      settings = {
+        cmarkCommand = "${pkgs.cmark-gfm}/bin/cmark-gfm";
+        # Every tool, no permission checks -- same as the terminal sessions.
+        # Its input includes screenshots of whatever is on screen, so text
+        # there can try to steer it; "restricted" limits it to replying.
+        permissionMode = "bypass";
+      };
     };
 
     /*

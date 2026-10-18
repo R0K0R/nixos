@@ -50,6 +50,14 @@ def read_frame(s):
     port, ln = struct.unpack("!HH", readn(s, 4))
     return host, port, readn(s, ln)
 
+class Refused(OSError):
+    """The relay answered the CONNECT with a SOCKS error. 2 ("not allowed")
+    means this gateway cannot open unprivileged ICMP sockets at all -- a
+    property of the box, so retrying fast is pointless."""
+    def __init__(self, code):
+        super().__init__("socks reply %d" % code)
+        self.code = code
+
 def open_mux():
     r = socket.create_connection(REMOTE, 20)
     r.sendall(b"\x05\x01\x00")
@@ -57,7 +65,9 @@ def open_mux():
     hb = MAGIC.encode()
     r.sendall(b"\x05\x01\x00\x03" + bytes([len(hb)]) + hb + struct.pack("!H", 1))
     rep = readn(r, 4)
-    if rep[1] != 0: raise OSError("socks reply %d" % rep[1])
+    if rep[1] != 0:
+        r.close()
+        raise Refused(rep[1])
     a = rep[3]
     readn(r, 4 if a == 1 else (16 if a == 4 else readn(r, 1)[0])); readn(r, 2)
     r.settimeout(None)
@@ -77,12 +87,36 @@ def main():
     lock = threading.Lock()
     mux = [None]
 
+    # Exponential backoff, 3s doubling to BACKOFF_MAX, reset once a mux has
+    # stayed up long enough to count as working. Without it, a gateway that
+    # accepts the CONNECT and then drops the stream drove a reconnect loop of
+    # ~60/s for days: every iteration an ssh channel open on the carrier that
+    # all other traffic shares, and ~1.2GB of this log.
+    BACKOFF_MIN, BACKOFF_MAX, STABLE = 3, 600, 60
+    st = {"wait": BACKOFF_MIN, "up_at": 0.0}
+
+    def fail(msg):
+        print(f"gticmp: {msg}; retrying in {st['wait']}s", flush=True)
+        time.sleep(st["wait"])
+        st["wait"] = min(st["wait"] * 2, BACKOFF_MAX)
+
     def connect():
         while True:
             try:
-                mux[0] = open_mux(); print("gticmp: mux up", flush=True); return
+                mux[0] = open_mux()
+            except Refused as e:
+                if e.code == 2:
+                    fail("gateway refuses ICMP -- unprivileged ping sockets are off there "
+                         "(sysctl net.ipv4.ping_group_range on the gateway)")
+                else:
+                    fail(f"mux refused: {e}")
+                continue
             except Exception as e:
-                print("gticmp: mux connect failed:", e, flush=True); time.sleep(3)
+                fail(f"mux connect failed: {e}")
+                continue
+            st["up_at"] = time.monotonic()
+            print("gticmp: mux up", flush=True)
+            return
     connect()
 
     def down():                    # replies from the phone -> ICMP echo replies on the tun
@@ -90,9 +124,16 @@ def main():
             try:
                 peer, _p, msg = read_frame(mux[0])
             except Exception:
-                print("gticmp: mux lost, reconnecting", flush=True)
                 try: mux[0].close()
                 except Exception: pass
+                lived = time.monotonic() - st["up_at"]
+                if lived >= STABLE:
+                    st["wait"] = BACKOFF_MIN          # it worked; a fresh drop
+                    print(f"gticmp: mux lost after {lived:.0f}s, reconnecting", flush=True)
+                else:
+                    # Dropped right after coming up: the same failure as a
+                    # refused connect, wearing a success reply.
+                    fail(f"mux dropped {lived:.1f}s after coming up")
                 connect(); continue
             try:
                 if len(msg) < 8:

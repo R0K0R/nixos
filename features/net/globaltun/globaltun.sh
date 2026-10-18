@@ -32,8 +32,16 @@ RHOST=${GT_RHOST:?set GT_RHOST, e.g. root@gateway}
 KEY=${GT_KEY:?set GT_KEY, path to the ssh private key}
 RPORT=${GT_RPORT:-2022}
 
-# Jump hosts, in order, nearest first: this machine -> jumps[0] -> jumps[1]
-# -> ... -> gateway. Space- or comma-separated, each `[user@]host[:port]`.
+# Hops, in order, nearest first: this machine -> hops[0] -> hops[1] -> ... ->
+# gateway. Space- or comma-separated. Each token is one of
+#
+#   [user@]host[:port][=AUTH]                 an ssh jump
+#   socks5://[user@]host:port[=password:FILE] a SOCKS5 proxy (Tor: 127.0.0.1:9050)
+#   http://[user@]host:port[=password:FILE]   an HTTP CONNECT proxy
+#
+# where an ssh jump's AUTH is `key` (the default: GT_KEY), `key:FILE` (a key
+# of its own), or `password:FILE`. FILE is always a path to the secret, never
+# the secret: tokens end up in ps output and in the generated ssh config.
 #
 # An EMPTY list is a first-class case, not a degenerate one: a machine that
 # already holds the link to the gateway reaches it directly, and the gateway
@@ -47,18 +55,62 @@ JUMP_LIST=()
 # Unquoted on purpose: word splitting IS the parse.
 for _j in ${JUMPS//,/ }; do JUMP_LIST+=("$_j"); done
 
+# Parse every hop up front, so a malformed one fails here, by name, instead of
+# as an opaque ssh error two hops into the chain.
+H_KIND=() H_USER=() H_HOST=() H_PORT=() H_AUTH=() H_SECRET=()
+parse_hop(){
+  local tok=$1 spec auth="" kind=ssh user="" host port="" method="" secret=""
+  spec=${tok%%=*}
+  [ "$spec" != "$tok" ] && auth=${tok#*=}
+  case $spec in
+    socks5://*) kind=socks5; spec=${spec#socks5://} ;;
+    http://*)   kind=http;   spec=${spec#http://} ;;
+    *://*)      echo "hop '$tok': unknown scheme (ssh, socks5://, http://)" >&2; return 1 ;;
+  esac
+  case $spec in *@*) user=${spec%%@*}; spec=${spec#*@} ;; esac
+  host=${spec%%:*}
+  [ "$host" != "$spec" ] && port=${spec#*:}
+  [ -n "$host" ] || { echo "hop '$tok': no host" >&2; return 1; }
+  case $kind in
+    ssh) port=${port:-22} ;;
+    *)   [ -n "$port" ] || { echo "hop '$tok': a proxy needs an explicit port" >&2; return 1; } ;;
+  esac
+  case $port in *[!0-9]*) echo "hop '$tok': bad port '$port'" >&2; return 1 ;; esac
+
+  if [ -n "$auth" ]; then method=${auth%%:*}; [ "$method" != "$auth" ] && secret=${auth#*:}; fi
+  case $kind:$method in
+    ssh:|ssh:key)  method=key; secret=${secret:-$KEY} ;;
+    ssh:password|socks5:password|http:password)
+      [ -n "$secret" ] || { echo "hop '$tok': password needs a file, password:/path" >&2; return 1; } ;;
+    socks5:|http:) method="" ;;
+    *) echo "hop '$tok': auth '$method' is not valid for a $kind hop" >&2; return 1 ;;
+  esac
+  if [ "$method" = password ]; then
+    [ "$kind" = ssh ] || [ -n "$user" ] \
+      || { echo "hop '$tok': proxy password auth needs user@" >&2; return 1; }
+    [ -r "$secret" ] || { echo "hop '$tok': cannot read password file $secret" >&2; return 1; }
+    # Warn, the way ssh refuses a key with loose permissions -- but only warn:
+    # this runs as root, and refusing would strand a tunnel over a mode bit.
+    case $(stat -c %a "$secret" 2>/dev/null) in
+      *[1-7][0-7]|*[1-7]) echo "warning: $secret is readable by group/others" >&2 ;;
+    esac
+  fi
+  H_KIND+=("$kind") H_USER+=("$user") H_HOST+=("$host") H_PORT+=("$port")
+  H_AUTH+=("$method") H_SECRET+=("$secret")
+}
+for _j in "${JUMP_LIST[@]}"; do parse_hop "$_j" || exit 1; done
+
 # The host whose route must NOT be swallowed by the tun it carries -- i.e. the
-# one THIS machine opens a socket to, which is the first jump if there is one
-# and the gateway itself if there is not. Strips both `user@` and `:port`.
-if [ ${#JUMP_LIST[@]} -gt 0 ]; then CARRIER=${JUMP_LIST[0]}
-else                               CARRIER=$RHOST
+# one THIS machine opens a socket to: the first hop, whatever kind it is, or
+# the gateway itself if there are none.
+if [ ${#H_HOST[@]} -gt 0 ]; then CARRIER=${H_HOST[0]}
+else CARRIER=${RHOST##*@}; CARRIER=${CARRIER%%:*}
 fi
-CARRIER=${CARRIER##*@}
-CARRIER=${CARRIER%%:*}
 
 # Component paths. Set by the NixOS wrapper to store paths; fall back to files
 # beside this script so a checkout still runs standalone.
 : "${GT_RSOCKS:=$HERE/rsocks.py}"
+: "${GT_GTCONNECT:=$HERE/gtconnect.py}"
 # Static, dependency-free relay binaries, one per architecture. See
 # start_remote_relay: these are what make the gateway prerequisite-free.
 : "${GT_RELAY_DIR:=$HERE}"
@@ -100,17 +152,23 @@ SSHOPTS=(-i "$KEY" -p "$RPORT"
          -o ExitOnForwardFailure=yes
          -o ControlPersist=10m)
 
-# The key must be handed to every jump hop EXPLICITLY. ssh(1) applies
+# Every hop's credentials have to be handed to it EXPLICITLY. ssh(1) applies
 # command-line options to the DESTINATION only, so under a plain `-J` list each
 # jump silently falls back to password auth on every connection -- which parks
 # unauthenticated slots on its sshd until MaxStartups starts dropping new
 # connections outright, a failure that looks exactly like a network outage.
 #
-# One nested ProxyCommand per hop would also work, but each level has to be
-# quoted inside the one outside it, so the escaping grows exponentially in the
-# number of hops and %h:%p silently rebinds to the wrong ssh at every level. A
-# generated config says the same thing once per hop, flatly, and chains the
-# hops with ProxyJump between names we control.
+# The chain is ProxyCommand per hop, not ProxyJump, and that is what makes the
+# other auth methods and hop kinds possible at all. Under ProxyJump the ssh
+# that authenticates to a hop is spawned INSIDE ssh, where nothing can reach
+# it: no way to hand it a password, and no way to put a proxy in front of it.
+# With ProxyCommand, the process that reaches each hop is one this script
+# wrote, so a password hop gets its askpass and a proxy hop gets gtconnect.
+#
+# This does not bring back the nested-quoting problem that one inline
+# ProxyCommand per hop would have: each hop's command lives in its OWN Host
+# block, and refers to the hop before it by name, so nothing is quoted inside
+# anything -- with one exception, gtconnect's --via, which is a single level.
 : "${GT_SSHCFG:=}"
 if [ -z "$GT_SSHCFG" ]; then
   # /run is the right place -- cleared on boot, so a stale chain cannot
@@ -119,44 +177,101 @@ if [ -z "$GT_SSHCFG" ]; then
   else                 GT_SSHCFG=${TMPDIR:-/tmp}/globaltun-$(id -u).ssh_config
   fi
 fi
+ASKPASS=$GT_SSHCFG.askpass
+# Absolute, because ProxyCommand runs under whatever shell ssh picks and with
+# whatever PATH that shell builds; resolving once here pins the exact binaries
+# this script was started with.
+SSH_BIN=$(command -v ssh)
+PY_BIN=$(command -v python3 || true)
+
+# How the process that reaches ssh hop $1 must be started, as a prefix. A
+# password hop answers its prompt through SSH_ASKPASS, forced on so it needs no
+# tty and no DISPLAY (OpenSSH 8.4+). The FILE travels in the environment, never
+# the password.
+hop_env(){
+  [ "${H_AUTH[$1]}" = password ] || return 0
+  printf 'env GT_PASSFILE=%s SSH_ASKPASS=%s SSH_ASKPASS_REQUIRE=force ' "${H_SECRET[$1]}" "$ASKPASS"
+}
+
+ssh_via_hop(){   # ssh_via_hop INDEX TARGET -> a command whose stdio is a stream to TARGET
+  echo "$(hop_env "$1")$SSH_BIN -F $GT_SSHCFG -W $2 gt-hop-$(($1 + 1))"
+}
+
+# The command whose stdio is a stream to TARGET, through hops [0, $2). Empty
+# when there are no hops before it -- ssh then dials directly.
+reach_cmd(){
+  local target=$1 end=$2 last s k args=""
+  [ "$end" -gt 0 ] || return 0
+  last=$((end - 1))
+  if [ "${H_KIND[$last]}" = ssh ]; then
+    ssh_via_hop "$last" "$target"; return
+  fi
+  # A run of proxies ending at $last. gtconnect walks the whole run in one
+  # process; the run's first proxy is dialed directly, or through the ssh hop
+  # just before the run when there is one.
+  s=$last
+  while [ "$s" -gt 0 ] && [ "${H_KIND[$((s - 1))]}" != ssh ]; do s=$((s - 1)); done
+  [ -n "$PY_BIN" ] || { echo "proxy hops need python3" >&2; return 1; }
+  [ "$s" -gt 0 ] && args="--via '$(ssh_via_hop $((s - 1)) "${H_HOST[$s]}:${H_PORT[$s]}")'"
+  for k in $(seq "$s" "$last"); do
+    args="$args --proxy ${H_KIND[$k]} ${H_HOST[$k]} ${H_PORT[$k]} ${H_USER[$k]:--} ${H_SECRET[$k]:--}"
+  done
+  echo "$PY_BIN $GT_GTCONNECT $args --target $target"
+}
 
 write_ssh_config(){
-  local i=0 prev="" name entry h u p
+  local i n pc
   umask 077
   : > "$GT_SSHCFG"
-  for entry in "${JUMP_LIST[@]}"; do
-    i=$((i + 1)); name=gt-hop-$i
-    u=""; h=$entry; p=22
-    case $h in *@*) u=${h%%@*}; h=${h#*@} ;; esac
-    case $h in *:*) p=${h##*:};  h=${h%%:*} ;; esac
+  for i in "${!H_KIND[@]}"; do
+    [ "${H_KIND[$i]}" = ssh ] || continue   # proxies are folded into the next ProxyCommand
+    n=$((i + 1))
+    pc=$(reach_cmd "%h:%p" "$i") || return 1
     {
-      echo "Host $name"
-      echo "  HostName $h"
-      [ -n "$u" ] && echo "  User $u"
-      echo "  Port $p"
-      echo "  IdentityFile $KEY"
-      # Without IdentitiesOnly, a loaded agent is offered first and a hop that
-      # rejects those keys can exhaust MaxAuthTries before ours is ever tried.
-      echo "  IdentitiesOnly yes"
+      echo "Host gt-hop-$n"
+      echo "  HostName ${H_HOST[$i]}"
+      [ -n "${H_USER[$i]}" ] && echo "  User ${H_USER[$i]}"
+      echo "  Port ${H_PORT[$i]}"
+      if [ "${H_AUTH[$i]}" = password ]; then
+        # Password only. Offering keys first would spend MaxAuthTries on keys
+        # this hop does not take, and one prompt means a wrong password fails
+        # in one round trip instead of looping on the askpass.
+        echo "  PubkeyAuthentication no"
+        echo "  PreferredAuthentications keyboard-interactive,password"
+        echo "  NumberOfPasswordPrompts 1"
+      else
+        echo "  IdentityFile ${H_SECRET[$i]}"
+        # Without IdentitiesOnly, a loaded agent is offered first and a hop that
+        # rejects those keys can exhaust MaxAuthTries before ours is ever tried.
+        echo "  IdentitiesOnly yes"
+      fi
       echo "  StrictHostKeyChecking accept-new"
       echo "  ConnectTimeout $JUMP_TIMEOUT"
       echo "  ServerAliveInterval 30"
       echo "  ServerAliveCountMax 10"
-      # Chain: hop N is reached through hop N-1. Absent on the first hop,
-      # which this machine dials directly.
-      [ -n "$prev" ] && echo "  ProxyJump $prev"
+      [ -n "$pc" ] && echo "  ProxyCommand $pc"
     } >> "$GT_SSHCFG"
-    prev=$name
   done
-  LAST_HOP=$prev
+
+  # Answers ONLY a password prompt. Anything else ssh might ask -- a changed
+  # host key, a yes/no -- gets a refusal rather than the password, so a prompt
+  # we did not anticipate can never leak it.
+  if printf '%s\n' "${H_AUTH[@]}" | grep -qx password; then
+    cat > "$ASKPASS" <<'EOF'
+#!/bin/sh
+case $1 in *assword*) exec cat "$GT_PASSFILE" ;; esac
+exit 1
+EOF
+    chmod 700 "$ASKPASS"
+  fi
 }
 
-LAST_HOP=""
-if [ ${#JUMP_LIST[@]} -gt 0 ]; then
+if [ ${#H_KIND[@]} -gt 0 ]; then
   write_ssh_config || { echo "cannot write $GT_SSHCFG" >&2; exit 1; }
+  _pc=$(reach_cmd "%h:%p" ${#H_KIND[@]}) || exit 1
   # -F makes ssh read ONLY this file (plus the system one). Everything the
   # destination needs is already on the command line above, so nothing is lost.
-  SSHOPTS+=(-F "$GT_SSHCFG" -o ProxyJump="$LAST_HOP")
+  SSHOPTS+=(-F "$GT_SSHCFG" -o "ProxyCommand=$_pc")
 fi
 
 gw(){  ip route show default | awk '{print $3; exit}'; }
@@ -198,15 +313,45 @@ pin_prefix(){
 # that tailscale then needs the physical uplink: during an outage only LAN
 # peers stay reachable, where riding the tun would have kept the whole tailnet
 # (slowly). Which is right depends on the host, hence the switch.
+#
+# Measured on galaxybook, 2026-10-08: without this, a peer on the SAME /21
+# relayed via DERP "sin" (Singapore) and had moved 9.6GB that way. With it, the
+# same peer went `direct 172.20.1.7:41641` at 3-6ms. netcheck still reports
+# `UDP: false` afterwards, because the physical network has no uplink at all
+# and no STUN server is reachable -- on-LAN peers need only local endpoint
+# discovery, so that is not a failure of the bypass.
 tailscale_bypass(){
   [ "${GT_TAILSCALE_DIRECT:-0}" = 1 ] || return 0
   local g d
   g=$(gw); d=$(dev)
   [ -n "$g" ] && [ -n "$d" ] || { echo "no default route; skipping tailscale bypass" >&2; return 0; }
-  ip route replace default via "$g" dev "$d" table $TS_TABLE
+  # `onlink` as a fallback for the same reason pin_prefix needs it: with
+  # NetworkManager's noprefixroute the interface has no connected route, so the
+  # kernel rejects a route via that gateway with "Nexthop has invalid gateway"
+  # even though its own default route uses it.
+  #
+  # Tolerant, because this runs inside `up` under set -e: a failure here must
+  # cost tailscale its direct paths, not abort the tunnel half-built.
+  #
+  # The LAN only, not a default route. A default here took ALL of tailscaled's
+  # marked traffic off the tun -- the control plane and DERP too -- so on a
+  # network that blocks direct internet (the reason for the tunnel) `tailscale
+  # login` hung on controlplane.tailscale.com:443 forever (2026-10-10). Anything
+  # off the LAN falls through to rule 5210 and rides the tun; LAN peers, the
+  # point of this switch, stay direct.
+  local lan
+  lan=$(ip -o -4 route show dev "$d" scope link | awk '{print $1; exit}')
+  [ -n "$lan" ] || { echo "no LAN prefix on $d; skipping tailscale bypass" >&2; return 0; }
+  if ! ip route replace "$lan" dev "$d" table $TS_TABLE 2>/dev/null; then
+    echo "could not install the tailscale bypass route; peers will relay via DERP" >&2
+    return 0
+  fi
   ip rule del priority $TS_PRIO 2>/dev/null || true
-  ip rule add fwmark 0x80000/0xff0000 lookup $TS_TABLE priority $TS_PRIO
-  echo "tailscale underlay kept on $d (table $TS_TABLE, prio $TS_PRIO)"
+  if ip rule add fwmark 0x80000/0xff0000 lookup $TS_TABLE priority $TS_PRIO 2>/dev/null; then
+    echo "tailscale underlay kept on $d (table $TS_TABLE, prio $TS_PRIO)"
+  else
+    echo "could not install the tailscale bypass rule; peers will relay via DERP" >&2
+  fi
 }
 
 pin_carrier(){
@@ -247,7 +392,7 @@ master(){   # key auth on both hops; no password prompts
   err=$(mktemp)
   for t in ${GT_TIMEOUTS:-300 600 900}; do
     n=$((n+1))
-    echo "master attempt $n (ConnectTimeout=${t}s; proot login is slow)..." >&2
+    echo "master attempt $n (ConnectTimeout=${t}s)..." >&2
     # -f backgrounds after auth and takes stderr with it, so the real reason --
     # e.g. "connect failed: No route to host" from the jump host when its VPN to
     # the gateway is re-establishing -- never reaches the terminal. Capture it,
@@ -445,11 +590,23 @@ freeze_tz(){
   # Already stopped: do NOT leave a marker, or `down` would start a service the
   # person had deliberately turned off.
   systemctl is-active --quiet "$TZUNIT" || return 0
+  # Marker FIRST: under the NixOS module it is also the unit's start
+  # condition, so writing it before the stop leaves no window in which
+  # something could start the unit again.
+  : > "$TZFREEZE"
   if systemctl stop "$TZUNIT" 2>/dev/null; then
-    : > "$TZFREEZE"
     echo "timezone frozen at $(current_tz) -- $TZUNIT stopped (egress geolocation is not where you are)"
   else
     echo "could not stop $TZUNIT; the clock may follow the gateway's apparent location" >&2
+  fi
+  # Freezing preserves whatever is there, including a fix that was ALREADY
+  # poisoned -- by a previous tunnel, or by a rebuild that restarted the unit
+  # under one. A zone other than home is either a real trip or exactly that,
+  # and only the person at the keyboard knows which, so say so and leave it.
+  local tz; tz=$(current_tz)
+  if [ -n "${GT_TZ_HOME:-}" ] && [ "$tz" != "$GT_TZ_HOME" ]; then
+    echo "  note: frozen at $tz, not your configured $GT_TZ_HOME. If you have not" >&2
+    echo "  travelled, this came from a tunnelled fix: timedatectl set-timezone $GT_TZ_HOME" >&2
   fi
 }
 
@@ -542,7 +699,11 @@ up(){
     echo "--- starting icmp relay"
     start_gticmp || echo "(icmp relay unavailable -- tcp/udp unaffected)"
   fi
-  echo "up -- TCP + UDP (udp-over-tcp); tailscale underlay rides the tun, peers stay on tailscale0"
+  if [ "${GT_TAILSCALE_DIRECT:-0}" = 1 ]; then
+    echo "up -- TCP + UDP (udp-over-tcp); tailscale underlay on the physical link, LAN peers direct"
+  else
+    echo "up -- TCP + UDP (udp-over-tcp); tailscale underlay rides the tun, peers stay on tailscale0"
+  fi
 }
 
 down(){
@@ -625,12 +786,20 @@ verify(){
 #     wpa_supplicant to flip a *managed* interface, which the same limit
 #     forbids; hand it a ready-made AP vif and the supplicant will not grab it.
 #     hostapd directly is the only route.
-#   * #channels <= 1 means the AP must sit on the STA's CURRENT channel, so it
-#     is read at start. If the station roams, the AP drops and this needs
-#     re-running.
+#   * #channels <= 1 means the AP must sit on the STA's CURRENT channel -- and
+#     must MOVE with it. The upstream network moves its clients by channel
+#     switch announcement (CSA), here every 5-10 minutes. A station whose AP
+#     stays put cannot finalize the switch ("channel context reservation cannot
+#     be finalized because some interfaces aren't switching", err=-16) and is
+#     disconnected; while hostapd holds the old channel it can rejoin only an
+#     upstream AP on that same channel. On 2026-10-10 that took victus-15 off the
+#     network for half an hour, tunnel and all. share_watch follows the station.
 SHARE_CONF=/run/globaltun-ap.conf
 SHARE_PID=/run/globaltun-hostapd.pid
 SHARE_DNS_PID=/run/globaltun-dnsmasq.pid
+SHARE_WATCH_PID=/run/globaltun-share-watch.pid
+SHARE_WATCH_LOG=/run/globaltun-share-watch.log
+SHARE_CTRL=/run/globaltun-hostapd
 
 # Regulatory flags for one frequency, from the card's own table. Prints the
 # blocking reason and exits 0 when the channel cannot host an AP; exits 1 when
@@ -667,6 +836,37 @@ suggest_channels(){
       done | sort -u -k2 -n | head -8
 }
 
+# hostapd's config for channel $1 with passphrase $2 -- written at `share` and
+# again whenever share_watch has to restart the AP on a new channel.
+share_conf(){
+  local ch=$1 psk=$2 hwmode vht
+  # hw_mode follows the channel. It was hardcoded to `a`, which fails on any
+  # 2.4GHz channel with "Configured channel (11) ... not found from the channel
+  # list of the current mode (2) IEEE 802.11a" -- the same shape of error as a
+  # DFS rejection, from a completely different cause. VHT is 5GHz-only, so it
+  # has to follow too.
+  if [ "$ch" -le 14 ]; then hwmode=g; vht=0; else hwmode=a; vht=1; fi
+
+  ( umask 077; cat > "$SHARE_CONF" <<CONF
+interface=$GT_SHARE_AP
+driver=nl80211
+ssid=$GT_SHARE_SSID
+country_code=$GT_SHARE_COUNTRY
+hw_mode=$hwmode
+channel=$ch
+ieee80211n=1
+ieee80211ac=$vht
+wmm_enabled=1
+auth_algs=1
+wpa=2
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+wpa_passphrase=$psk
+ctrl_interface=$SHARE_CTRL
+CONF
+  )
+}
+
 share_up(){
   need_root
   [ "${GT_SHARE:-0}" = 1 ] || { echo "sharing is not enabled (my.globaltun.share.enable)" >&2; exit 1; }
@@ -688,7 +888,7 @@ share_up(){
   fi
   ip link set "$GT_SHARE_AP" up
 
-  local freq hwmode vht reason
+  local freq reason
   ch=$(iw dev "$GT_SHARE_STA" info | awk '/channel/{print $2}')
   freq=$(iw dev "$GT_SHARE_STA" info | sed -n 's/.*channel [0-9]* (\([0-9]*\) MHz.*/\1/p')
   [ -n "$ch" ] || { echo "$GT_SHARE_STA is not associated; the AP needs its channel" >&2; exit 1; }
@@ -717,30 +917,7 @@ share_up(){
     exit 1
   fi
 
-  # hw_mode follows the channel. It was hardcoded to `a`, which fails on any
-  # 2.4GHz channel with "Configured channel (11) ... not found from the channel
-  # list of the current mode (2) IEEE 802.11a" -- the same shape of error as a
-  # DFS rejection, from a completely different cause. VHT is 5GHz-only, so it
-  # has to follow too.
-  if [ "$ch" -le 14 ]; then hwmode=g; vht=0; else hwmode=a; vht=1; fi
-
-  ( umask 077; cat > "$SHARE_CONF" <<CONF
-interface=$GT_SHARE_AP
-driver=nl80211
-ssid=$GT_SHARE_SSID
-country_code=$GT_SHARE_COUNTRY
-hw_mode=$hwmode
-channel=$ch
-ieee80211n=1
-ieee80211ac=$vht
-wmm_enabled=1
-auth_algs=1
-wpa=2
-wpa_key_mgmt=WPA-PSK
-rsn_pairwise=CCMP
-wpa_passphrase=$psk
-CONF
-  )
+  share_conf "$ch" "$psk"
 
   ip addr replace "$GT_SHARE_ADDR" dev "$GT_SHARE_AP"
 
@@ -761,11 +938,98 @@ CONF
           --dhcp-range="$GT_SHARE_DHCP" \
           --dhcp-option=3,"${GT_SHARE_ADDR%%/*}" --dhcp-option=6,"$GT_DNS" \
           --no-resolv --no-hosts --pid-file="$SHARE_DNS_PID"
+  share_watch_start
   echo "sharing on $GT_SHARE_SSID, channel $ch (following $GT_SHARE_STA), clients get $GT_SHARE_DHCP"
+}
+
+# --- keeping the AP on the station's channel ---------------------------------
+# Kernel nl80211 events via `iw event`, not wpa_supplicant: NetworkManager runs
+# the supplicant on D-Bus only, with no control socket for wpa_cli to read.
+#
+#   channel switch started (freq=F)  the upstream AP announced a CSA. Ask hostapd
+#                                    to switch too (its own CSA to its clients),
+#                                    so both interfaces leave together and the
+#                                    station's reservation can be finalized.
+#   disconnected                     a roam, or a switch that failed anyway. If
+#                                    the station has not rejoined within a few
+#                                    seconds, stop hostapd: holding the channel
+#                                    is what keeps it from rejoining elsewhere.
+#   connected / roamed               restart the AP on the station's channel if
+#                                    it stopped or ended up on another one.
+share_log(){ echo "$(date '+%F %T') $*"; }
+share_ap_running(){ [ -f "$SHARE_PID" ] && kill -0 "$(cat "$SHARE_PID")" 2>/dev/null; }
+share_ap_stop(){
+  share_ap_running && kill "$(cat "$SHARE_PID")" 2>/dev/null
+  rm -f "$SHARE_PID"
+}
+# Restart the AP on whatever channel the station is on now; a station that is
+# not associated, or sits on restricted spectrum, leaves it stopped.
+share_ap_follow(){
+  local ch freq ap_ch psk reason
+  ch=$(iw dev "$GT_SHARE_STA" info 2>/dev/null | awk '/channel/{print $2}')
+  freq=$(iw dev "$GT_SHARE_STA" info 2>/dev/null | sed -n 's/.*channel [0-9]* (\([0-9]*\) MHz.*/\1/p')
+  [ -n "$ch" ] || { share_ap_stop; share_log "station not associated; AP stopped until it is"; return; }
+  ap_ch=$(iw dev "$GT_SHARE_AP" info 2>/dev/null | awk '/channel/{print $2}')
+  share_ap_running && [ "$ap_ch" = "$ch" ] && return
+  if reason=$(chan_restricted "$freq"); then
+    share_ap_stop; share_log "station on channel $ch ($reason); AP stays down"; return
+  fi
+  psk=$(cat "$GT_SHARE_PSK_FILE" 2>/dev/null) || { share_log "cannot read $GT_SHARE_PSK_FILE"; return; }
+  share_ap_stop
+  share_conf "$ch" "$psk"
+  if hostapd -B -P "$SHARE_PID" "$SHARE_CONF" >/dev/null; then
+    share_log "AP restarted on channel $ch, following $GT_SHARE_STA"
+  else
+    share_log "hostapd failed to start on channel $ch"
+  fi
+}
+share_watch(){
+  local line freq pending=""
+  share_log "watching $GT_SHARE_STA for channel switches and roams"
+  iw event | while IFS= read -r line; do
+    case $line in "$GT_SHARE_STA "*|"$GT_SHARE_STA:"*) ;; *) continue ;; esac
+    case $line in
+      *"channel switch started"*)
+        # the first standalone freq= -- not center_freq1=, which a greedy match caught
+        freq=$(printf '%s\n' "$line" | grep -oE '(^|[ (])freq=[0-9]+' | head -n1 | grep -oE '[0-9]+$')
+        [ -n "$freq" ] || { share_log "CSA without a frequency: $line"; continue; }
+        if share_ap_running && hostapd_cli -p "$SHARE_CTRL" -i "$GT_SHARE_AP" chan_switch 1 "$freq" ht >/dev/null 2>&1; then
+          share_log "upstream switching to $freq MHz; AP switching with it"
+        else
+          # Cannot follow in place: get out of the way so the station can switch.
+          share_ap_stop
+          share_log "upstream switching to $freq MHz; AP could not switch, stopped until the station settles"
+        fi ;;
+      *disconnected*)
+        # A failed switch or a roam. Give the supplicant a moment on its own
+        # first -- it often rejoins on the same channel -- then clear the way.
+        ( sleep 4
+          iw dev "$GT_SHARE_STA" link 2>/dev/null | grep -q '^Connected' && exit 0
+          share_ap_stop
+          share_log "station still disconnected; AP stopped so it can rejoin on any channel" ) & ;;
+      *connected*|*roamed*|*"channel switch"*)
+        # joined or roamed (maybe elsewhere), or a switch finished: put the AP
+        # where the station is. (Formats: iw event.c -- "connected to <bssid>",
+        # "roamed to <bssid>", "channel switch (count=N) freq=F ...".)
+        sleep 1; share_ap_follow ;;
+    esac
+  done
+}
+share_watch_start(){
+  [ -f "$SHARE_WATCH_PID" ] && kill "$(cat "$SHARE_WATCH_PID")" 2>/dev/null
+  setsid "$0" share-watch </dev/null >>"$SHARE_WATCH_LOG" 2>&1 &
+  echo $! > "$SHARE_WATCH_PID"
+}
+share_watch_stop(){
+  # setsid made the watcher a process-group leader; take its `iw event` and
+  # any pending timer with it
+  [ -f "$SHARE_WATCH_PID" ] && kill -- -"$(cat "$SHARE_WATCH_PID")" 2>/dev/null
+  rm -f "$SHARE_WATCH_PID"
 }
 
 share_down(){
   need_root
+  share_watch_stop
   [ -f "$SHARE_DNS_PID" ] && { kill "$(cat "$SHARE_DNS_PID")" 2>/dev/null || true; rm -f "$SHARE_DNS_PID"; }
   [ -f "$SHARE_PID" ]     && { kill "$(cat "$SHARE_PID")" 2>/dev/null || true; rm -f "$SHARE_PID"; }
   rm -f "$SHARE_CONF"
@@ -806,6 +1070,64 @@ status(){
   echo "--- log tail";   tail -5 "$LOG" 2>/dev/null
 }
 
+# `hop N [cmd...]`: an ssh session on hop N (1-based, as in gt-hop-N), through
+# every hop before it and with its own credentials. For debugging a chain one
+# link at a time: `globaltun hop 2 true` failing while `hop 1 true` works puts
+# the fault between the two.
+hop_ssh(){
+  local n=${1:-} i
+  case $n in ''|*[!0-9]*) echo "usage: hop N [cmd...]" >&2; exit 2 ;; esac
+  shift; i=$((n - 1))
+  [ "$i" -ge 0 ] && [ "$i" -lt ${#H_KIND[@]} ] || { echo "no hop $n (have ${#H_KIND[@]})" >&2; exit 2; }
+  [ "${H_KIND[$i]}" = ssh ] || { echo "hop $n is a ${H_KIND[$i]} proxy, not an ssh host" >&2; exit 2; }
+  local pre=()
+  [ "${H_AUTH[$i]}" = password ] && pre=(env "GT_PASSFILE=${H_SECRET[$i]}" "SSH_ASKPASS=$ASKPASS" SSH_ASKPASS_REQUIRE=force)
+  exec "${pre[@]}" "$SSH_BIN" -F "$GT_SSHCFG" "gt-hop-$n" "$@"
+}
+
+# Walk the whole chain to the gateway and read its sshd banner. Exercises every
+# hop, of every kind, with the credentials `up` will use -- without creating a
+# tun or touching a route, so it is safe to run on a host that is mid-outage.
+probe(){
+  local th=${RHOST##*@} cmd out err pid
+  cmd=$(reach_cmd "$th:$RPORT" ${#H_KIND[@]}) || exit 1
+  local fifo
+  out=$(mktemp); err=$(mktemp); fifo=$(mktemp -u)
+  if [ -z "$cmd" ]; then
+    timeout 30 bash -c "exec 3<>/dev/tcp/$th/$RPORT && head -c 4 <&3" >"$out" 2>"$err" &
+    pid=$!
+  else
+    # stdin must stay OPEN: on EOF, ssh -W tears the channel down before the
+    # banner arrives. Held by a fifo this function owns and closes, not by a
+    # `<(sleep N)`: a process substitution inherits the caller's stderr, so
+    # anything capturing probe's output -- `$(globaltun probe)`, a pipe --
+    # waited the full N seconds after the answer was already in. Measured: 90s.
+    mkfifo -m 600 "$fifo"
+    bash -c "exec $cmd" <"$fifo" >"$out" 2>"$err" &
+    pid=$!
+    exec 7>"$fifo"
+  fi
+  for _ in $(seq 360); do
+    [ "$(head -c 4 "$out")" = SSH- ] && break
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.25
+  done
+  # Both tolerated: on a FAILED chain the process is already gone, and under
+  # set -e a failing `kill` would end the script right here -- silently, one
+  # line before it prints the error it captured, which is the only part of a
+  # failure anyone needs.
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  if [ -p "$fifo" ]; then exec 7>&-; rm -f "$fifo"; fi
+  if [ "$(head -c 4 "$out")" = SSH- ]; then
+    echo "gateway $th:$RPORT reachable through ${#H_KIND[@]} hop(s): $(head -1 "$out" | tr -d '\r')"
+    rm -f "$out" "$err"; return 0
+  fi
+  echo "gateway $th:$RPORT NOT reachable through ${#H_KIND[@]} hop(s)." >&2
+  [ -s "$err" ] && sed 's/^/  /' "$err" >&2
+  rm -f "$out" "$err"; return 1
+}
+
 case "${1:-}" in
   up)      up ;;
   down)    down ;;
@@ -817,9 +1139,12 @@ case "${1:-}" in
   share)      share_up ;;
   unshare)    share_down ;;
   share-status) share_status ;;
+  share-watch)  need_root; share_watch ;;
   # Prints the path to the generated hop chain, or nothing when there are no
-  # jumps. Anything that must reach a hop on its own can use it with
-  # `ssh -F <path> gt-hop-N` instead of rebuilding the chain.
-  ssh-config) [ ${#JUMP_LIST[@]} -gt 0 ] && echo "$GT_SSHCFG" || true ;;
-  *) echo "usage: $0 {up|down|status|verify|reload|reicmp|is-up|share|unshare|share-status|ssh-config}" >&2; exit 2 ;;
+  # hops. Reading it explains the chain; for USING it, prefer `hop`, which also
+  # supplies a password hop's askpass that a bare `ssh -F` would lack.
+  ssh-config) [ ${#H_KIND[@]} -gt 0 ] && echo "$GT_SSHCFG" || true ;;
+  hop)     shift; hop_ssh "$@" ;;
+  probe)   probe ;;
+  *) echo "usage: $0 {up|down|status|verify|reload|reicmp|is-up|share|unshare|share-status|ssh-config|hop N [cmd]|probe}" >&2; exit 2 ;;
 esac

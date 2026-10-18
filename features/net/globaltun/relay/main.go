@@ -22,6 +22,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -91,12 +92,7 @@ func readFrame(c net.Conn) (net.IP, int, []byte, error) {
 
 // One TCP stream <-> one unconnected UDP socket doing real sendto/recvfrom, so
 // the peer sees datagrams from this box and replies to it directly.
-func udpMux(c net.Conn) {
-	u, err := net.ListenUDP("udp4", nil)
-	if err != nil {
-		c.Close()
-		return
-	}
+func udpMux(c net.Conn, u *net.UDPConn) {
 	var once sync.Once
 	shut := func() { once.Do(func() { u.Close(); c.Close() }) }
 	defer shut()
@@ -144,13 +140,7 @@ func icmpPacketConn() (net.PacketConn, error) {
 	return net.FilePacketConn(f)
 }
 
-func icmpMux(c net.Conn) {
-	u, err := icmpPacketConn()
-	if err != nil {
-		fmt.Println("icmp socket failed:", err)
-		c.Close()
-		return
-	}
+func icmpMux(c net.Conn, u net.PacketConn) {
 	var once sync.Once
 	shut := func() { once.Do(func() { u.Close(); c.Close() }) }
 	defer shut()
@@ -191,6 +181,17 @@ func pipe(a, b net.Conn) {
 	go func() { defer shut(); io.Copy(a, b) }()
 	defer shut()
 	io.Copy(b, a)
+}
+
+var udpFails, icmpFails atomic.Uint64
+
+// The first failure, then every 1000th with a count: a persistent cause gets
+// one readable line, and a client that never stops retrying cannot fill the
+// gateway's /tmp with copies of it.
+func logLimited(n *atomic.Uint64, msg string, err error) {
+	if k := n.Add(1); k == 1 || k%1000 == 0 {
+		fmt.Println(msg, err, fmt.Sprintf("(failure #%d)", k))
+	}
 }
 
 func reply(c net.Conn, code byte) {
@@ -257,14 +258,37 @@ func handle(c net.Conn) {
 
 	// The mux targets are answered before any dial: they name a mode, not a
 	// destination, and .arpa guarantees they can never resolve to a real host.
-	if port == muxPort && (host == muxHost || host == icmpHost) {
+	//
+	// The socket is opened BEFORE the reply. Answering success first and
+	// failing after is indistinguishable, to the client, from a mux that came
+	// up and dropped -- so it reconnects at once, and since every reconnect
+	// "succeeds" no backoff ever fires. Measured: on a gateway with
+	// ping_group_range = "1 0", that was ~60 ssh channel opens per second on
+	// the shared carrier for five days, and ~1GB of this log.
+	if port == muxPort && host == muxHost {
+		u, err := net.ListenUDP("udp4", nil)
+		if err != nil {
+			logLimited(&udpFails, "udp socket failed:", err)
+			reply(c, 1)
+			return
+		}
 		reply(c, 0)
 		c.SetDeadline(time.Time{})
-		if host == muxHost {
-			udpMux(c)
-		} else {
-			icmpMux(c)
+		udpMux(c, u)
+		return
+	}
+	if port == muxPort && host == icmpHost {
+		u, err := icmpPacketConn()
+		if err != nil {
+			// 2 = "not allowed": a property of this gateway, not a glitch,
+			// and the client treats it as such.
+			logLimited(&icmpFails, "icmp socket failed (net.ipv4.ping_group_range excludes this user?):", err)
+			reply(c, 2)
+			return
 		}
+		reply(c, 0)
+		c.SetDeadline(time.Time{})
+		icmpMux(c, u)
 		return
 	}
 

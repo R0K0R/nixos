@@ -32,9 +32,8 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 if [ -f "$HERE/globaltun.env" ]; then
   . "$HERE/globaltun.env"
-elif [ -f "$HERE/globaltun.env.example" ]; then
-  echo "no globaltun.env beside $0 -- start from the template:" >&2
-  echo "  cp $HERE/globaltun.env.example $HERE/globaltun.env && \$EDITOR $HERE/globaltun.env" >&2
+else
+  echo "no globaltun.env beside $0 -- copy android/globaltun.env from the repo with it" >&2
   exit 1
 fi
 
@@ -50,6 +49,17 @@ JUMP_TIMEOUT=${GT_JUMP_TIMEOUT:-120}
 [ "$JUMPS" = "-" ] && JUMPS=""
 JUMP_LIST=()
 for _j in ${JUMPS//,/ }; do JUMP_LIST+=("$_j"); done
+# Proxy hops and per-hop credentials exist in globaltun.sh only. Refuse them
+# here by name: this client's chain writer would otherwise turn
+# `socks5://host:port` into `HostName socks5` and fail two hops later as an
+# ssh error that points nowhere near the cause.
+for _j in "${JUMP_LIST[@]}"; do
+  case $_j in *://*|*=*)
+    echo "hop '$_j': proxy hops and per-hop credentials are not supported by the" >&2
+    echo "Termux client yet -- only [user@]host[:port], authenticated with GT_KEY." >&2
+    exit 1 ;;
+  esac
+done
 RPORT_SS=${GT_REMOTE_SOCKS_PORT:?set GT_REMOTE_SOCKS_PORT -- must be unique per client}
 LPORT=${GT_LPORT:-11080}
 LOCAL_PORT=${GT_LOCAL_PORT:-1081}

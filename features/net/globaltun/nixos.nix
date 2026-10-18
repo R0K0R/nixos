@@ -135,15 +135,89 @@ let
     meta.description = "static SOCKS5/UDP/ICMP relay pushed to a globaltun gateway";
   };
 
+  /*
+    A hop is either the plain string form -- what globaltun.sh parses, and what
+    a standalone globaltun.env writes -- or an attrset that renders to it. The
+    attrset exists so a password FILE and a hop kind are fields with types and
+    assertions, rather than syntax someone has to get right inside a string.
+  */
+  hopType = lib.types.submodule {
+    options = {
+      host = lib.mkOption {
+        type = lib.types.str;
+        example = "admin@10.0.0.9:2222";
+        description = "`[user@]host[:port]`. A proxy hop needs the port.";
+      };
+      kind = lib.mkOption {
+        type = lib.types.enum [ "ssh" "socks5" "http" ];
+        default = "ssh";
+        description = ''
+          `ssh` is a jump host. `socks5` and `http` are proxies that open the
+          next connection on our behalf -- SOCKS5 (with the target resolved on
+          the proxy, socks5h-style) or HTTP CONNECT. Tor is a `socks5` hop on
+          127.0.0.1:9050.
+        '';
+      };
+      passwordFile = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "/run/agenix/jump-password";
+        description = ''
+          File holding this hop's password, read at runtime. For an ssh hop it
+          replaces key auth; for a proxy it is the proxy's own credential and
+          needs a `user@` in `host`. A STRING, never a path literal, for the
+          same reason as `sshKey`: a path literal would copy the secret into
+          the world-readable store.
+        '';
+      };
+      sshKey = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "A key of this hop's own, instead of the top-level `sshKey`. ssh hops only.";
+      };
+    };
+  };
+
+  renderHop = h:
+    if builtins.isString h then h
+    else (lib.optionalString (h.kind != "ssh") "${h.kind}://") + h.host
+      + (if h.passwordFile != null then "=password:${h.passwordFile}"
+         else if h.sshKey != null then "=key:${h.sshKey}"
+         else "");
+
+  # Hops travel as one space-separated variable, so these characters would
+  # silently split or re-parse a hop into something else.
+  badHopChars = v: v != null && builtins.match ".*[[:space:],=].*" v != null;
+
+  hopAssertions = lib.concatMap (h: lib.optionals (!builtins.isString h) [
+    {
+      assertion = h.passwordFile == null || h.sshKey == null;
+      message = "my.globaltun.jumps: hop ${h.host} sets both passwordFile and sshKey; pick one.";
+    }
+    {
+      assertion = h.kind == "ssh" || h.sshKey == null;
+      message = "my.globaltun.jumps: hop ${h.host} is a ${h.kind} proxy; sshKey applies to ssh hops only.";
+    }
+    {
+      assertion = h.kind == "ssh" || h.passwordFile == null || lib.hasInfix "@" h.host;
+      message = "my.globaltun.jumps: proxy hop ${h.host} has a passwordFile but no user@ to go with it.";
+    }
+    {
+      assertion = !(badHopChars h.host || badHopChars h.passwordFile || badHopChars h.sshKey);
+      message = "my.globaltun.jumps: hop ${h.host} contains whitespace, ',' or '=', which would split it.";
+    }
+  ]) cfg.jumps;
+
   runtimeDeps = with pkgs; [
     openssh iproute2 iptables nftables python3 sing-box
     coreutils gnugrep gnused gawk procps iputils curl
-    iw hostapd dnsmasq
+    iw hostapd dnsmasq util-linux
   ];
 
   globaltun = pkgs.writeShellScriptBin "globaltun" (''
     export PATH=${lib.makeBinPath runtimeDeps}:$PATH
-    export GT_JUMPS=${lib.escapeShellArg (lib.concatStringsSep " " cfg.jumps)}
+    export GT_JUMPS=${lib.escapeShellArg (lib.concatMapStringsSep " " renderHop cfg.jumps)}
+    export GT_GTCONNECT=${./gtconnect.py}
     export GT_RHOST=${lib.escapeShellArg cfg.remote}
     export GT_RPORT=${toString cfg.remotePort}
     export GT_JUMP_TIMEOUT=${toString cfg.jumpConnectTimeout}
@@ -151,6 +225,11 @@ let
     export GT_KEEP_DIRECT=${lib.escapeShellArg (lib.concatStringsSep " " cfg.keepDirect)}
     export GT_KEY=${lib.escapeShellArg cfg.sshKey}
     export GT_ICMP=${if cfg.icmp.enable then "1" else "0"}
+    export GT_TAILSCALE_DIRECT=${if cfg.tailscaleDirect then "1" else "0"}
+    # Only to WARN on `up` when the zone being frozen is not this one -- never
+    # to set it. A different zone is either a real trip or a poisoned fix, and
+    # only the person at the keyboard knows which.
+    export GT_TZ_HOME=${lib.escapeShellArg (config.my.locale.timeZone or "")}
     export GT_RELAY_DIR=${gtrelay}/bin
     export GT_RSOCKS=${./rsocks.py}
     export GT_GTLOCAL=${./gtlocal.py}
@@ -252,23 +331,40 @@ in
     '';
 
     jumps = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
+      type = lib.types.listOf (lib.types.either lib.types.str hopType);
       default = [ ];
-      example = [ "user@192.0.2.1" "admin@10.0.0.9:2222" ];
+      example = lib.literalExpression ''
+        [
+          "user@192.0.2.1"                                     # ssh, sshKey
+          { host = "admin@10.0.0.9:2222"; passwordFile = "/run/agenix/jump-pw"; }
+          { kind = "http"; host = "proxyuser@proxy.corp:3128"; passwordFile = "/run/agenix/proxy-pw"; }
+          { kind = "socks5"; host = "127.0.0.1:9050"; }        # Tor
+        ]
+      '';
       description = ''
-        SSH hops between this machine and `remote`, nearest first: this machine
-        reaches `jumps` head-first and the last one reaches the gateway. Each
-        entry is `[user@]host[:port]`.
+        Hops between this machine and `remote`, nearest first: this machine
+        reaches `jumps` head-first and the last one reaches the gateway. A
+        plain string is an ssh hop, `[user@]host[:port]`, using `sshKey`; an
+        attrset (see the example) can make a hop a SOCKS5 or HTTP CONNECT proxy
+        and give any hop its own credentials.
+
+        Kinds mix freely: a proxy can come first (a corporate HTTP proxy in
+        front of everything), last (a SOCKS proxy that only the final jump can
+        reach), or between ssh hops. Every hop must carry a TCP stream -- that
+        is what ssh rides -- so UDP-only transports cannot be hops.
 
         Empty -- the default -- means this machine dials the gateway itself.
         That is a normal configuration, not a degenerate one: it is what you
         want whenever the gateway is directly reachable, including the case
         where the gateway is simply a machine that has internet.
 
-        Every hop is given `sshKey` through a generated ssh config rather than
-        `-J`, because ssh(1) applies command-line options to the DESTINATION
-        only: under a bare `-J` list each hop falls back to password auth. See
-        `sshKey` for why that is worse than it sounds.
+        Every hop gets its credentials through a generated ssh config, one
+        ProxyCommand per hop, rather than `-J`: ssh(1) applies command-line
+        options to the DESTINATION only, so under a bare `-J` list each hop
+        falls back to an interactive password prompt nothing can answer. See
+        `sshKey` for why that is worse than it sounds. `sudo globaltun probe`
+        walks the whole chain without creating a tun, and `globaltun hop N`
+        opens a shell on one hop through the ones before it.
       '';
     };
 
@@ -309,8 +405,9 @@ in
       type = lib.types.str;
       example = "/run/agenix/globaltun-key";
       description = ''
-        Private key authenticating to EVERY hop and to the gateway, read at
-        runtime from outside the store.
+        Private key authenticating to the gateway and to every ssh hop that
+        does not set credentials of its own, read at runtime from outside the
+        store.
 
         Each hop gets it through a generated ssh config -- one `Host` block per
         jump, chained with ProxyJump -- rather than through `-J`, because
@@ -357,6 +454,33 @@ in
         there lists what is actually running. On a proot gateway `ss` is blind
         (Android blocks netlink for apps), so `pgrep` is the only honest check
         and the pidfiles in /tmp are the next best.
+      '';
+    };
+
+    tailscaleDirect = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Keep tailscale's WireGuard underlay on the physical link instead of
+        letting it ride the tunnel.
+
+        Tailscale marks its own traffic 0x80000 and its rule at priority 5210
+        sends that to `main`, where globaltun's `0.0.0.0/1` beats the default --
+        so without this the underlay goes through the tunnel, STUN reports the
+        GATEWAY's public address, and no peer can reach it. Two machines on one
+        LAN then relay to each other through a DERP server on another
+        continent: measured here as `relay "sin"` with 9.6GB moved that way,
+        versus `direct` at 3-6ms once the bypass is on.
+
+        Only the LAN prefix is bypassed: the control plane, DERP and off-LAN
+        peers still ride the tun (a default route here once sent login to
+        controlplane.tailscale.com straight out of a network that blocks it, and
+        `tailscale login` hung). Default false all the same; turn it on where
+        the peers that matter are on the same LAN.
+
+        A host whose `keepDirect` already covers its LAN gets the on-LAN half
+        of this for free -- that prefix sits in `main` and outranks
+        `0.0.0.0/1` -- so the switch may not be needed on both ends of a pair.
       '';
     };
 
@@ -494,8 +618,8 @@ in
           The interface that stays connected upstream. The AP is created as a
           second virtual interface on the same radio and MUST use this one's
           current channel -- the phy allows `#channels <= 1` -- so the channel
-          is read when `share` runs. If this roams, the AP drops and `share`
-          has to be run again.
+          is read when `share` runs, and `share`'s watcher moves the AP along
+          when this one switches channel or roams.
         '';
       };
 
@@ -567,6 +691,30 @@ in
     */
     environment.systemPackages = [ globaltun ] ++ lib.optional cfg.auto.enable autoScript;
 
+    /*
+      While the tunnel is up, automatic-timezoned must not be able to START,
+      not merely be stopped.
+
+      `up` stops it because a full tunnel makes geolocation resolve the
+      gateway's egress (a Cloudflare address one database places in Gabon).
+      But stopping is undone by anything that starts units: measured, a
+      `nixos-rebuild switch` started it 9 seconds after activation with the
+      tunnel still up, it set Africa/Libreville 10 seconds later, and the next
+      `up` then froze that poisoned value in place.
+
+      So the marker `up` writes becomes a start condition. A condition is
+      checked on EVERY start job -- switch-to-configuration, a manual
+      `systemctl start`, boot -- and /run is cleared on reboot, which is the
+      tunnel's own lifetime. A drop-in condition rather than `systemctl mask
+      --runtime`, because a runtime mask lives in /run/systemd/system, which
+      ranks BELOW /etc/systemd/system where NixOS puts this unit, so the mask
+      would be silently shadowed.
+    */
+    systemd.services.automatic-timezoned =
+      lib.mkIf config.services.automatic-timezoned.enable {
+        unitConfig.ConditionPathExists = "!/run/globaltun.tzfreeze";
+      };
+
     assertions = [
       {
         assertion = !cfg.share.enable || cfg.share.passwordFile != "";
@@ -588,7 +736,7 @@ in
         assertion = !cfg.auto.enable || config.networking.networkmanager.enable;
         message = "my.globaltun.auto.enable requires networking.networkmanager.enable (the SSID is read with nmcli)";
       }
-    ];
+    ] ++ hopAssertions;
 
     systemd.services.globaltun-auto = lib.mkIf cfg.auto.enable {
       description = "Decide whether the globaltun tunnel should be up";

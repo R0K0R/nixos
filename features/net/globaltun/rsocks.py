@@ -133,6 +133,14 @@ def handle(c):
             c.sendall(b"\x05\x00\x00\x01" + b"\x00" * 6)
             udp_mux(c); return
         if host == ICMP_HOST and port == MUX_PORT:    # ICMP echo tunnel
+            # Probe BEFORE answering: success-then-close looks to the client
+            # like a dropped mux, and it reconnects without backoff. See
+            # relay/main.go. 2 = "not allowed by ruleset".
+            try:
+                socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_ICMP).close()
+            except OSError as e:
+                print("icmp socket failed:", e, flush=True)
+                c.sendall(b"\x05\x02\x00\x01" + b"\x00" * 6); return
             c.sendall(b"\x05\x00\x00\x01" + b"\x00" * 6)
             icmp_mux(c); return
         try:
