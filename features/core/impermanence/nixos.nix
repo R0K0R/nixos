@@ -80,12 +80,11 @@ let
     ".local/state/nix"
     ".local/state/home-manager"
   ];
-  userData = pkgs.writeText "impermanence-user-state.json" (
-    builtins.toJSON {
-      directories = alwaysUser ++ pick "user" "directories";
-      files = pick "user" "files";
-    }
-  );
+  userState = {
+    directories = alwaysUser ++ pick "user" "directories";
+    files = pick "user" "files";
+  };
+  userData = pkgs.writeText "impermanence-user-state.json" (builtins.toJSON userState);
 
   b = cfg.root.btrfs;
   rollback = pkgs.writeShellScript "impermanence-rollback" (builtins.readFile ./rollback.sh);
@@ -157,6 +156,13 @@ in
       an ephemeral root (btrfs rollback at boot) with declared persistence;
       requires my.btrfs-layout with rootSubvolume and persist, and the
       registry fact features.<host>.impermanence'';
+
+    userState = lib.mkOption {
+      type = lib.types.raw;
+      readOnly = true;
+      internal = true;
+      description = "What the system adds to every impermanent user's own list (features' my.state.user + home-manager state).";
+    };
 
     persistRoot = lib.mkOption {
       type = lib.types.str;
@@ -231,6 +237,7 @@ in
 
   config = lib.mkMerge [
     {
+      my.impermanence.userState = userState;
       my.internal.features.impermanence = {
         requires = [ "btrfs-layout" ];
         enabledBy = cfg.enable;

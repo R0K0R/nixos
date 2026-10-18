@@ -402,6 +402,38 @@
 
       registry = import ./registry { inherit lib; };
 
+      /*
+        A host as it will be AFTER a disk migration that has not happened yet,
+        to build before the day (docs/impermanence-migration.md). Same module
+        list as the real host plus the post-migration file and the registry
+        changes the migration commits; the committed host must evaluate to the
+        same toplevel.
+      */
+      migration = { galaxybook4-pro360 = mkHostWith {
+        hostName = "galaxybook4-pro360";
+        extraModules = [
+          ./hosts/galaxybook4-pro360/impermanence.nix
+          {
+            my.registry.extend =
+              raw:
+              raw
+              // {
+                users = raw.users // {
+                  r0k0r = raw.users.r0k0r // {
+                    overrides = (raw.users.r0k0r.overrides or { }) // { home = "impermanent"; };
+                    acceptTypeChange = "admin->admin";
+                  };
+                };
+                hosts = raw.hosts // {
+                  features = raw.hosts.features // {
+                    galaxybook4-pro360 = raw.hosts.features.galaxybook4-pro360 // { impermanence = true; };
+                  };
+                };
+              };
+          }
+        ];
+      }; };
+
       matrix = import ./lib/matrix.nix {
         inherit lib mkHostWith tuningRawOf;
         hosts = [ "galaxybook4-pro360" "victus-15" "dell-latitude" ];
@@ -409,6 +441,8 @@
     in
     {
       nixosConfigurations.victus-15 = mkHost "victus-15";
+      # Post-migration builds, not hosts (see the binding above).
+      inherit migration;
       nixosConfigurations.galaxybook4-pro360 = mkHost "galaxybook4-pro360";
       nixosConfigurations.dell-latitude = mkHost "dell-latitude";
 
