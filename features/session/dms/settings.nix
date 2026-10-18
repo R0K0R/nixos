@@ -293,7 +293,12 @@
   # runtime schema one-to-one.
   greeterEnableFprint = true;
   greeterEnableU2f = false;
-  greeterWallpaperPath = "~/Pictures/Wallpaper.jpg";
+  # Empty: the login screen shows the DESKTOP wallpaper. The greeter's
+  # preStart copies session.json's wallpaperPath into /var/lib/dms-greeter at
+  # every greetd start, so whatever is picked in DMS follows to the greeter.
+  # A path here would bypass that copy -- and "~/..." is the user's home,
+  # which the greeter account cannot read (0700). Also no hardcoded path.
+  greeterWallpaperPath = "";
   greeterUse24HourClock = true;
   greeterShowSeconds = false;
   greeterPadHours12Hour = false;
