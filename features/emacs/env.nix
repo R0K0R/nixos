@@ -309,8 +309,19 @@ let
     in
     if buildPlatform.canExecute hostPlatform then
       e
+    else if sdeTargets ? ${hostPlatform.gcc.arch} then
+      withSde e (pkgs.buildPackages.${name}.override args)
     else
-      withSde e (pkgs.buildPackages.${name}.override args);
+      # No SDE target (victus, znver3): the host builds itself, so its
+      # builders run the tuned code natively. The fork's broken flag is only
+      # canExecute comparing gcc.arch; gccarch-<arch> keeps the build on a
+      # machine that can run it.
+      e.overrideAttrs (old: {
+        requiredSystemFeatures = (old.requiredSystemFeatures or [ ]) ++ [ "gccarch-${hostPlatform.gcc.arch}" ];
+        meta = old.meta // {
+          broken = false;
+        };
+      });
 
   /*
     Unstable `emacs-pgtk` + xwidgets, against whatever WebKit nixpkgs ships.
