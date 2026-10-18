@@ -503,6 +503,20 @@ deliberate system change.
     which changes galaxybook's toplevel), and the kitty kitten URLs are pinned.
     His desktop (bonfire, pyre, lyre, ...) is his home repo's. Eval-only.
 
+11. **Impermanence** (features/core/impermanence; design HANDOFF §5.6 + per-user
+    lists, 2026-10-18), off everywhere, eval-only. btrfs rollback of @root in
+    the systemd initrd (old roots kept 14 days); system persistence through
+    nix-community/impermanence from defaults + features' my.state.system;
+    per user, each user suggests their list (home option my.persist, written
+    to /persist/home/<user>/.persist.json at activation) and the system
+    merges it at boot with features' my.state.user and the home-manager state
+    (persist-home-<user>, then hm-reactivate-<user>). Registry home =
+    "impermanent" is live. 36 features declare their state. galaxybook is
+    prepared, not migrated: hosts/galaxybook4-pro360/impermanence.nix +
+    flake output migration.galaxybook4-pro360 + docs/impermanence-migration.md
+    (the live-USB runbook). Open: /var/lib/nix-guests as a bind mount,
+    .config/noteworthy to agenix (HANDOFF 5.5).
+
 ### Next
 
 6. **hm-switch** (features/core/epoch, off): turn on with my.epoch once the
