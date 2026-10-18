@@ -19,6 +19,11 @@ in
   options.my.astro.users = import ../../../lib/user-scope.nix { inherit lib config; };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
+    {
+      my.state.user.optional.directories = [
+        ".local/share/siril" # Siril's python script venv; pip install to rebuild
+      ];
+    }
     (lib.mkIf (pkgSet ? system) { environment.systemPackages = pkgSet.system; })
     # Emitted only when non-empty, and keyed by this feature's `users`
     # scope rather than by a hardcoded account -- see lib/user-scope.nix.

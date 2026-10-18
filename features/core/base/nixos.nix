@@ -19,6 +19,11 @@ in
   options.my.base.users = import ../../../lib/user-scope.nix { inherit lib config; };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
+    {
+      my.state.user.secret.files = [
+        ".config/gh/hosts.yml" # gh OAuth token (config.yml is home-manager's)
+      ];
+    }
     (lib.mkIf (pkgSet ? system) { environment.systemPackages = pkgSet.system; })
     # Emitted only when non-empty, and keyed by this feature's `users`
     # scope rather than by a hardcoded account -- see lib/user-scope.nix.

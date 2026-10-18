@@ -24,6 +24,9 @@ in
   options.my.opencode.users = import ../../../lib/user-scope.nix { inherit lib config; };
 
   config = lib.mkIf cfg.enable {
+    my.state.user.state.directories = [
+      ".local/share/opencode" # session history database
+    ];
     environment.systemPackages = pkgSet.system;
   };
 }

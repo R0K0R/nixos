@@ -91,6 +91,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    my.state.user.state.directories = [
+      ".local/share/kakaotalk" # wine prefix with chat database and login; reinstall means re-auth
+    ];
     environment.systemPackages = [ kakaotalk ];
   };
 }

@@ -33,6 +33,22 @@ in
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
+      my.state.user.state.directories = [
+        ".config/google-chrome/Default" # Chrome profile (the ~4 GB of model caches beside it are skipped)
+        ".config/google-chrome/Profile 1" # second Chrome profile
+        ".config/discord" # Discord login and settings
+        ".zoom" # Zoom chat db and login
+        ".config/libreoffice" # LibreOffice user profile
+        ".pki" # NSS db: imported and client certificates
+        ".local/share/pki" # NSS db used by newer Chromium
+      ];
+      my.state.user.state.files = [
+        ".config/google-chrome/Local State" # Chrome profile index and encryption key wrapper
+        ".config/zoomus.conf" # Zoom prefs; the scale wrapper edits it in place
+        ".local/share/user-places.xbel" # Dolphin and file-dialog sidebar bookmarks
+      ];
+    }
+    {
       /*
         rnote SIGSEGV on touch: when the canvas's two-finger pan claims a touch
         sequence, GTK cancels the pinch-zoom gesture on it and emits `cancel`

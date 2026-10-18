@@ -49,6 +49,11 @@ in
     native path instead of adding to it.
   */
   config = lib.mkIf cfg.enable (lib.mkMerge [
+    {
+      my.state.user.state.directories = [
+        ".local/share/net.golbin.hop" # recent documents and webview storage
+      ];
+    }
     { environment.systemPackages = [ hop ]; }
 
     (lib.mkIf cfg.defaultHandler {

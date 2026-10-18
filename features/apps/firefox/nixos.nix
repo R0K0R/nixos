@@ -20,6 +20,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    my.state.user.state.directories = [
+      ".mozilla/firefox" # profiles: bookmarks, logins, extensions, history
+    ];
     programs.firefox = {
       enable = true;
       inherit (cfg) package;

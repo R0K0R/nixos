@@ -24,6 +24,9 @@ in
     not being used.
   */
   config = lib.mkIf cfg.enable {
+    my.state.user.state.directories = [
+      ".local/share/direnv" # the allow list of trusted .envrc files
+    ];
     /*
       Host-wide even though the feature is per-user scoped, because these are
       nix-daemon settings and the daemon is not per-user. If anyone on the

@@ -37,5 +37,9 @@ in
   # Accounts this feature applies to; defaults to the primary user.
   options.my.ssh.users = import ../../../lib/user-scope.nix { inherit lib config; };
 
-  config = lib.mkIf cfg.enable { };
+  config = lib.mkIf cfg.enable {
+    my.state.user.secret.directories = [
+      ".ssh" # private keys, authorized_keys, known_hosts (config is home-manager's)
+    ];
+  };
 }

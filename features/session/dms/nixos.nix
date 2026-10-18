@@ -78,6 +78,11 @@ in
   options.my.dms.users = import ../../../lib/user-scope.nix { inherit lib config; };
 
   config = lib.mkMerge [
+    (lib.mkIf cfg.enable {
+      my.state.user.state.directories = [
+        ".local/state/DankMaterialShell" # session.json, notepad notes, app usage, plugin state
+      ];
+    })
     {
       my.internal.features.dms = {
         # The shell reads my.desktop.compositor for its workspace and bar
@@ -113,6 +118,9 @@ in
     })
 
     (lib.mkIf cfg.greeter.enable {
+    my.state.system.optional.directories = [
+      "/var/lib/dms-greeter" # greeter's remembered user/session; trivial to rebuild
+    ];
     programs.dms-greeter = {
       enable = true;
       # The greeter has to launch the same compositor the session uses, so it

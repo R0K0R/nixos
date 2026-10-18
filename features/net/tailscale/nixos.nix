@@ -60,6 +60,9 @@ in
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
       services.tailscale.enable = true;
+      my.state.system.secret.directories = [
+        "/var/lib/tailscale" # node key and login state; losing it means re-authenticating the node
+      ];
 
       # DNS robustness across network changes. Without systemd-resolved, NM (dns=default) AND tailscale
       # MagicDNS both rewrite /etc/resolv.conf directly, so after a Wi-Fi change tailscale's forwarder is

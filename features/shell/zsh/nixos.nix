@@ -112,6 +112,9 @@ in
 
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
+      my.state.user.state.files = [
+        ".zsh_history" # shell history (root shares it via shareHistoryWith)
+      ];
       my.packages.perUser = lib.genAttrs cfg.users (_: pkgSet.user);
     })
 

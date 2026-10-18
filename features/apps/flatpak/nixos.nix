@@ -26,6 +26,12 @@
 
   config = lib.mkIf config.my.flatpak.enable {
   services.flatpak.enable = true;
+  my.state.system.optional.directories = [
+    "/var/lib/flatpak" # system-wide installs and the Flathub remote; apps are reinstalled by hand
+  ];
+  my.state.user.optional.directories = [
+    ".var" # per-app flatpak data (Sober/Roblox client and settings)
+  ];
 
   systemd.services.flatpak-add-flathub-repo = {
     description = "Add the Flathub Flatpak repository";

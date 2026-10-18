@@ -22,6 +22,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    my.state.user.secret.directories = [
+      ".config/syncthing" # device key/cert and folder config; a new key means re-pairing every peer
+    ];
     services.syncthing = {
       enable = true;
       inherit user;

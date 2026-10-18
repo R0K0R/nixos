@@ -77,6 +77,18 @@ let
   persistence = c.environment.persistence."/persist";
   dirsOf = map (d: d.directory or d) persistence.directories;
   filesOf = map (f: f.file or f) persistence.files;
+
+  # What persist-home-r0k0r is handed: the writeText of {directories, files}. The
+  # test cannot read that derivation (pure evaluation), so it rebuilds the same
+  # one from the declared my.state.user classes and requires the unit to name it.
+  stateUser = c.my.state.user;
+  pickUser = kind: lib.unique (lib.concatMap (cl: stateUser.${cl}.${kind} or [ ]) [ "secret" "state" ]);
+  expectedUserData = on.pkgs.writeText "impermanence-user-state.json" (
+    builtins.toJSON {
+      directories = [ ".local/state/nix" ".local/state/home-manager" ] ++ pickUser "directories";
+      files = pickUser "files";
+    }
+  );
 in
 {
   toplevel = c.system.build.toplevel.drvPath;
@@ -99,6 +111,17 @@ in
   systemPersist = expect "defaults + the agenix identity, declared by the agenix feature itself" (
     lib.elem "/var/lib/nixos" dirsOf && lib.elem "/etc/machine-id" filesOf && lib.elem "/etc/agenix/identity-ed25519" filesOf
   ) (toString filesOf);
+
+  # Declared by the features themselves: system paths reach environment.persistence,
+  # user paths reach the userData JSON that persist-home-<user> reads.
+  featureState = expect "fprint, cups, AccountsService reach /persist; ssh, firefox, gh reach the persist-home's user data; optional waydroid does not" (
+    lib.all (d: lib.elem d dirsOf) [ "/var/lib/fprint" "/var/lib/cups" "/var/lib/AccountsService" ]
+    && !(lib.elem "/var/lib/waydroid" dirsOf)
+    && lib.all (p: lib.elem p (pickUser "directories")) [ ".ssh" ".mozilla/firefox" ".local/state/DankMaterialShell" ]
+    && lib.all (p: lib.elem p (pickUser "files")) [ ".claude.json" ".config/gh/hosts.yml" ]
+    && !(lib.elem ".local/share/waydroid" (pickUser "directories"))
+    && lib.hasInfix (builtins.unsafeDiscardStringContext (toString expectedUserData)) c.systemd.services.persist-home-r0k0r.serviceConfig.ExecStart
+  ) (toString dirsOf);
 
   userUnits = expect "persist-home-r0k0r before logins, then hm-reactivate as r0k0r" (
     let

@@ -159,6 +159,17 @@ in
   services.accounts-daemon.enable = true;
   services.power-profiles-daemon.enable = true;
   services.geoclue2.enable = true;
+  my.state.system.state.directories = [
+    "/var/lib/AccountsService" # accounts-daemon: per-user icon, language, session choice
+    "/var/lib/power-profiles-daemon" # last chosen power profile
+    "/var/lib/cups" # CUPS printers, PPDs and job history; added by hand in the web UI
+  ];
+  my.state.user.secret.directories = [
+    ".local/share/keyrings" # libsecret keyring (login.keyring): stored passwords and tokens
+  ];
+  my.state.user.state.directories = [
+    ".config/dconf" # dconf user DB; keys set from GUIs live only here
+  ];
 
   /*
     Cups-pk-helper is pulled in via the printing stack (dbus activation + polkit)

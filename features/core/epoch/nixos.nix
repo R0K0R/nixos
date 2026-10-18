@@ -175,6 +175,9 @@ in
       '';
 
       environment.etc."nixos-epoch".text = computed.epoch + "\n";
+      my.state.system.state.directories = [
+        "/var/lib/nixos-epochs" # epoch history that hm-switch --update offers revisions from
+      ];
 
       environment.systemPackages = [
         hm-switch

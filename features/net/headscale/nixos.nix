@@ -51,6 +51,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    my.state.system.secret.directories = [
+      "/var/lib/headscale" # noise/private keys and the node database
+    ];
     services.tailscale = {
       enable = true;
       package = nixpkgs2405.tailscale;

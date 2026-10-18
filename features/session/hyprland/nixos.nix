@@ -76,6 +76,9 @@
   };
 
   config = lib.mkIf (config.my.desktop.compositor == "hyprland") {
+    my.state.user.state.directories = [
+      ".local/state/hypr" # last panel rotation (transform-eDP-1)
+    ];
     /*
       Hyprland from the R0K0R/Hyprland fork (features/hyprland/flake.nix says
       how it is laid out): `nixos` = nixpkgs' tag + the local bug fixes, each

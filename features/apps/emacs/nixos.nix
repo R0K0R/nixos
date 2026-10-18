@@ -92,6 +92,15 @@ in
   options.my.emacs.users = import ../../../lib/user-scope.nix { inherit lib config; };
 
   config = lib.mkIf cfg.enable {
+    my.state.user.secret.directories = [
+      ".gnupg" # private keys behind authinfo.gpg (gpg-agent.conf is home-manager's)
+    ];
+    my.state.user.state.files = [
+      ".newsrc.eld" # Gnus read marks and subscriptions
+    ];
+    my.state.user.optional.directories = [
+      ".local/share/doom" # doomLocalDir: profiles and transient state; regenerated on first run
+    ];
     my.internal.features."emacs.authinfo" = {
       requires = [ "agenix" ];
       enabledBy = cfg.authinfoSecret != null;

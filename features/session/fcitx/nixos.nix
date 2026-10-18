@@ -11,6 +11,9 @@ in
   options.my.fcitx.users = import ../../../lib/user-scope.nix { inherit lib config; };
 
   config = lib.mkIf cfg.enable {
+    my.state.user.state.directories = [
+      ".local/share/fcitx5" # learned hangul and user dictionary data
+    ];
     /*
       THE GTK3 IMMODULES CACHE, synthesized -- because under IntraISACross the
       tuned gtk3 ships none, and without it no GTK3 app has an IME at all.

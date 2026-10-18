@@ -51,6 +51,9 @@ lib.mkIf config.my.flamenco.enable {
     createHome = true;
   };
   users.groups.flamenco = { };
+  my.state.system.state.directories = [
+    "/var/lib/flamenco-manager" # manager database, job storage and shared render output
+  ];
 
   systemd.tmpfiles.rules = [
     "d /var/lib/flamenco-manager/shared        0775 flamenco flamenco -"

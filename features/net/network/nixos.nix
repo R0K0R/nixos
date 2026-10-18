@@ -34,6 +34,9 @@ in
   options.my.network.users = import ../../../lib/user-scope.nix { inherit lib config; };
 
   config = lib.mkIf cfg.enable {
+    my.state.user.secret.directories = lib.optionals cfg.kdeconnect.enable [
+      ".config/kdeconnect" # device key/cert and trusted phones; losing it means re-pairing
+    ];
     networking.networkmanager.enable = true;
 
     /*

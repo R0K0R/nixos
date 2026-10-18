@@ -30,6 +30,14 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    my.state.user.secret.directories = [
+      ".claude-science/identity" # daemon identity
+      ".claude-science/.key-backups" # backups of the encryption key
+      ".claude-science/.oauth-tokens" # connector OAuth tokens
+    ];
+    my.state.user.secret.files = [
+      ".claude-science/encryption.key" # encrypts the stored credentials; the 6 GB conda env is regenerable and not listed
+    ];
     environment.systemPackages = [ claude-science ];
 
     /*

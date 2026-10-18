@@ -9,5 +9,8 @@ in
 
   config = lib.mkIf cfg.enable {
     services.upower.enable = true;
+    my.state.system.optional.directories = [
+      "/var/lib/upower" # battery charge/rate history for the device list; rebuilds slowly
+    ];
   };
 }

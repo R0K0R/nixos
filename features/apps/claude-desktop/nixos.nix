@@ -74,6 +74,12 @@ in
   config = lib.mkIf cfg.enable (lib.mkMerge [
     { environment.systemPackages = [ claude-desktop ]; }
 
+    {
+      my.state.user.state.directories = [
+        ".config/Claude" # Electron profile: login, sessions, MCP config (caches are skipped by the user's choice)
+      ];
+    }
+
     (lib.mkIf cfg.cowork.enable {
       environment.systemPackages = [ pkgs.qemu ];
 

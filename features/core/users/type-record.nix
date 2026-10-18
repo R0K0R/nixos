@@ -111,6 +111,9 @@ in
     acceptTypeChange = "<old>-><new>"'';
 
   config = lib.mkIf (cfg.enable && recorded != { }) {
+    my.state.system.state.directories = [
+      "/var/lib/nixos-users" # each account's recorded type; the refusal check needs the previous boot's record
+    ];
     system.preSwitchChecks.nixos-user-types = script false + ''
       if [ "$refused" != 0 ]; then
         exit 1

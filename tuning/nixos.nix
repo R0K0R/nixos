@@ -244,6 +244,9 @@ in
     { nixpkgs.overlays = cfg.extraOverlays; }
 
     (lib.mkIf cfg.userCache.enable {
+      my.state.system.state.directories = [
+        "/var/lib/tuning-cache" # classifier evidence per host and user; the flake inputs path: into it
+      ];
       systemd.tmpfiles.rules = [
         "d /var/lib/tuning-cache 0755 root root -"
         "d /var/lib/tuning-cache/${hostName} 0755 root root -"

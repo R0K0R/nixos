@@ -156,6 +156,9 @@ ${lib.optionalString cfg.crossDerivation.enable "        export CCACHE_NIX_STORE
     }
 
     (lib.mkIf b.enable {
+      my.state.system.optional.directories = [
+        cfg.cacheDir # L1 ccache objects; hours of compile time to refill
+      ];
       assertions = [
         {
           assertion = b.peers == { } || b.identityFile != "/run/agenix/remote-builder-ssh-key" || config.my.agenix.enable;

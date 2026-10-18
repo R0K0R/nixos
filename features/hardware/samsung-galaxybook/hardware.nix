@@ -105,6 +105,9 @@ lib.mkIf config.my.samsung-galaxybook.enable {
     is on.
   */
   services.fprintd.enable = true;
+  my.state.system.state.directories = [
+    "/var/lib/fprint" # enrolled fingerprints (SDCP-bound templates); re-enrolling is manual
+  ];
 
   /*
     No fingerprint in tablet mode. The sensor is on the keyboard deck, which is

@@ -213,6 +213,12 @@ in
   options.my.claude-code.users = import ../../../lib/user-scope.nix { inherit lib config; };
 
   config = lib.mkIf cfg.enable {
+    my.state.user.state.directories = [
+      ".claude" # history, sessions, plans, memory; also holds .credentials.json
+    ];
+    my.state.user.secret.files = [
+      ".claude.json" # account/oauth state; activation edits it, so it must persist as a file
+    ];
     environment.systemPackages = [ claude-code ];
 
     systemd.tmpfiles.rules = lib.mkIf cfg.shareWithRoot [

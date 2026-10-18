@@ -19,6 +19,14 @@ in
   options.my.dev-toolchain.users = import ../../../lib/user-scope.nix { inherit lib config; };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
+    {
+      my.state.user.state.directories = [
+        ".cursor" # cursor-agent chats, plans and projects
+      ];
+      my.state.user.secret.directories = [
+        ".config/cursor" # cursor-agent login token
+      ];
+    }
     (lib.mkIf (pkgSet ? system) { environment.systemPackages = pkgSet.system; })
     # Emitted only when non-empty, and keyed by this feature's `users`
     # scope rather than by a hardcoded account -- see lib/user-scope.nix.

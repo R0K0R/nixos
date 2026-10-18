@@ -211,6 +211,9 @@ in
     }
 
     (lib.mkIf active {
+      my.state.system.state.directories = [
+        cfg.stateDir # per-guest subvolumes: each guest's upper layer and state
+      ];
       assertions = lib.mapAttrsToList (n: u: {
         assertion = config.users.users.${n}.uid != null;
         message = "my.guest-overlay: ${n} needs a pinned uid (registry files always have one).";

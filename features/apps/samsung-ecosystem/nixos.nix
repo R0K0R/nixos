@@ -15,6 +15,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    my.state.user.state.directories = [
+      ".local/share/GalaxyBudsClient" # paired buds, settings and battery stats
+    ];
     environment.systemPackages = pkgSet.system;
 
     /*
