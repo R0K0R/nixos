@@ -397,6 +397,20 @@
       },
       "parent": []
     },
+    "feat-foldpen": {
+      "inputs": {
+        "foldpen": "foldpen"
+      },
+      "locked": {
+        "path": "./features/foldpen",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/foldpen",
+        "type": "path"
+      },
+      "parent": []
+    },
     "feat-hakuspace": {
       "inputs": {
         "hakuspace": "hakuspace",
@@ -489,6 +503,24 @@
         "owner": "NixOS",
         "repo": "flake-compat",
         "type": "github"
+      }
+    },
+    "foldpen": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "lastModified": 1791574134,
+        "narHash": "sha256-+HdDflQvjMOIQRZ7PtD9FOiTjgXWL84ngPcyb5/HX4E=",
+        "ref": "refs/heads/master",
+        "rev": "79d9ca0941332d6a87d34ef0e96f89f9cd83604b",
+        "revCount": 6,
+        "type": "git",
+        "url": "file:///home/r0k0r/git_shit/foldpen"
+      },
+      "original": {
+        "type": "git",
+        "url": "file:///home/r0k0r/git_shit/foldpen"
       }
     },
     "hakuspace": {
@@ -669,16 +701,16 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1791914020,
-        "narHash": "sha256-B/DJET58beKz3fNZgz9F+Ye3EGeiuUORkFQmtdsXw0I=",
-        "owner": "R0K0R",
+        "lastModified": 1791456040,
+        "narHash": "sha256-H83yz/do+hjOO0uujHyH8RgtIQP2v7Mw+cLwcZK/xKc=",
+        "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "00a171f2f72e004a3916df33904932e335dd7355",
+        "rev": "e7439b6b14ad3cc35d05608ebca9bce01a25f5f8",
         "type": "github"
       },
       "original": {
-        "owner": "R0K0R",
-        "ref": "combined-fundamental",
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -715,6 +747,22 @@
         "type": "github"
       }
     },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1791914020,
+        "narHash": "sha256-B/DJET58beKz3fNZgz9F+Ye3EGeiuUORkFQmtdsXw0I=",
+        "owner": "R0K0R",
+        "repo": "nixpkgs",
+        "rev": "00a171f2f72e004a3916df33904932e335dd7355",
+        "type": "github"
+      },
+      "original": {
+        "owner": "R0K0R",
+        "ref": "combined-fundamental",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "rhwp-src": {
       "flake": false,
       "locked": {
@@ -741,13 +789,14 @@
         "feat-dms": "feat-dms",
         "feat-easyeffects": "feat-easyeffects",
         "feat-emacs": "feat-emacs",
+        "feat-foldpen": "feat-foldpen",
         "feat-hakuspace": "feat-hakuspace",
         "feat-hop": "feat-hop",
         "feat-hyprland": "feat-hyprland",
         "feat-niri": "feat-niri",
         "feat-samsung-galaxybook": "feat-samsung-galaxybook",
         "home-manager": "home-manager",
-        "nixpkgs": "nixpkgs",
+        "nixpkgs": "nixpkgs_2",
         "nixpkgs-upstream": "nixpkgs-upstream"
       }
     },

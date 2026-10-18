@@ -366,6 +366,9 @@ in
     # Cast to Miracast TVs/monitors (Wi-Fi Direct) and Chromecasts.
     wireless-display.enable = true;
     hyprland.keystone.enable = true;
+    # Galaxy Z Fold 6 as a stylus tablet (~/git_shit/foldpen): S Pen or a dummy
+    # pen in, low-fps mirror out, 3-finger gestures on the phone.
+    foldpen.enable = true;
 
     # X-Folding RGB Bluetooth keyboard: natural scroll on its trackpad without
     # inverting pinch-zoom (the firmware sends pinch as Ctrl + wheel).
