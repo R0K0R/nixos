@@ -11,6 +11,8 @@
 #   is-up   : exit 0 if the tunnel is carrying traffic (for automation)
 #   share   : host a Wi-Fi AP on this card and route its clients through the tunnel
 #   unshare : stop it
+#   carrier-watch : (started by `up`) re-pins the carrier and keep-direct routes
+#             after a link flap and rebuilds the ssh master -- see carrier_watch
 #   ssh-config : path to the generated jump chain (empty when there are none)
 #
 set -euo pipefail
@@ -145,6 +147,13 @@ TS_PRIO=5205
 IC_PRIO=5240
 LOG=/var/log/globaltun.log
 STATE=/run/globaltun.state
+# What pin_prefix pinned, one "target dev via" per line -- the PHYSICAL path,
+# recorded before the tun routes exist. carrier-watch restores these after a
+# link flap; it can never re-derive them later, because by then `ip route get`
+# answers with the tun.
+PINS=/run/globaltun.pins
+CW_PID=/run/globaltun-carrier-watch.pid
+CW_LOG=/run/globaltun-carrier-watch.log
 
 SSHOPTS=(-i "$KEY" -p "$RPORT"
          -o StrictHostKeyChecking=accept-new
@@ -301,7 +310,73 @@ pin_prefix(){
   if [ -n "$via" ]; then ip route replace "$target" via "$via" dev "$dev" onlink
   else                   ip route replace "$target" dev "$dev"
   fi || { echo "FAILED to pin $label $target (${via:+via $via }dev $dev)" >&2; return 1; }
+  { grep -vF "$target " "$PINS" 2>/dev/null || true; echo "$target $dev ${via:--}"; } > "$PINS.new" && mv "$PINS.new" "$PINS"
   echo "$label $target pinned ${via:+via $via }dev $dev"
+}
+
+# A Wi-Fi drop takes every route through the station with it -- the carrier's
+# /32 and the keep-direct prefixes included. DHCP brings the default back on
+# reconnect, nothing brings these back, and with them gone the carrier's own
+# packets fall into 0.0.0.0/1: the tunnel swallows the link it runs on, the
+# ssh master dies, and every flow through the tun -- DNS included -- stops
+# until someone runs `up` again by hand. Seen on victus-15 (2026-10-18), whose
+# station roams between campus APs every few minutes.
+#
+# carrier-watch repairs exactly that, and nothing else: it re-installs a
+# vanished pin on the device it was recorded on, through that device's CURRENT
+# default gateway (DHCP may have handed out another), once the device is back
+# (an address and a default route on it); then, if the ssh master did not
+# survive, it rebuilds the master and the remote relay. sing-box, gtlocal and
+# the tun stay up throughout -- they only ever talk to 127.0.0.1.
+cw_log(){ echo "$(date '+%F %T') $*"; }
+repin(){   # repin TARGET DEV VIA -> 0 restored or still present, 1 device not back yet
+  local target=$1 dev=$2 via=$3 cur
+  ip route show exact "$target" 2>/dev/null | grep -q " dev $dev" && return 0
+  ip -4 addr show dev "$dev" 2>/dev/null | grep -q ' inet ' || return 1
+  cur=$(ip route show default dev "$dev" 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="via"){print $(i+1); exit}}')
+  [ "$via" = - ] && via=""
+  # the device has an address but no default yet: DHCP still running
+  [ -n "$via" ] && [ -z "$cur" ] && return 1
+  via=${cur:-$via}
+  if [ -n "$via" ]; then ip route replace "$target" via "$via" dev "$dev" onlink
+  else                   ip route replace "$target" dev "$dev"
+  fi || return 1
+  cw_log "restored $target ${via:+via $via }dev $dev"
+}
+carrier_watch(){
+  local target dev via fails=0 wait
+  cw_log "watching the carrier ($CARRIER) and ${GT_KEEP_DIRECT:-no} keep-direct prefixes"
+  while :; do
+    wait=${GT_WATCH_INTERVAL:-5}
+    if [ -s "$PINS" ]; then
+      while read -r target dev via; do
+        repin "$target" "$dev" "$via" || wait=2
+      done < "$PINS"
+    fi
+    # The master only after its route is back: before that it would dial into the tun.
+    if ip route show exact "$CARRIER/32" 2>/dev/null | grep -qv "dev $TUN" && ! have_ctl; then
+      cw_log "ssh master gone; reconnecting"
+      if ( GT_TIMEOUTS="${GT_WATCH_TIMEOUTS:-20 40}" GT_RETRY_DELAY=5 master ) >>"$CW_LOG" 2>&1 \
+         && ( start_remote_relay ) >>"$CW_LOG" 2>&1; then
+        cw_log "carrier back"; fails=0
+      else
+        fails=$((fails + 1))
+        # back off while the far end (or the path to it) is still away
+        wait=$(( fails < 6 ? 10 * fails : 60 ))
+        cw_log "reconnect failed ($fails); next try in ${wait}s"
+      fi
+    fi
+    sleep "$wait"
+  done
+}
+carrier_watch_start(){
+  carrier_watch_stop
+  setsid "$0" carrier-watch </dev/null >>"$CW_LOG" 2>&1 &
+  echo $! > "$CW_PID"
+}
+carrier_watch_stop(){
+  [ -f "$CW_PID" ] && kill -- -"$(cat "$CW_PID")" 2>/dev/null
+  rm -f "$CW_PID"
 }
 
 # Tailscale marks its own WireGuard traffic 0x80000 and rule 5210 sends it to
@@ -695,6 +770,7 @@ up(){
   ip route replace 0.0.0.0/1   dev "$TUN"
   ip route replace 128.0.0.0/1 dev "$TUN"
   tailscale_bypass
+  carrier_watch_start
   if [ "$GT_ICMP" = 1 ]; then
     echo "--- starting icmp relay"
     start_gticmp || echo "(icmp relay unavailable -- tcp/udp unaffected)"
@@ -708,6 +784,8 @@ up(){
 
 down(){
   need_root
+  # first: it would otherwise "repair" the routes this is about to remove
+  carrier_watch_stop
   [ -f "$PIDF" ] && { kill "$(cat "$PIDF")" 2>/dev/null || true; rm -f "$PIDF"; }
   [ -f "$GLPID" ] && { kill "$(cat "$GLPID")" 2>/dev/null || true; rm -f "$GLPID"; }
   pkill -f 'python3 -u .*gtlocal.py' 2>/dev/null || true
@@ -734,7 +812,7 @@ EOF
   ip route del "$CARRIER/32" 2>/dev/null || true
   for p in ${GT_KEEP_DIRECT:-}; do ip route del "$p" 2>/dev/null || true; done
   ip link del "$TUN" 2>/dev/null || true
-  rm -f "$STATE"
+  rm -f "$STATE" "$PINS"
   # Last, so its first fix after this sees the real network rather than a
   # half-torn-down tunnel.
   thaw_tz
@@ -1055,6 +1133,7 @@ is_up(){ have_ctl && ip link show "$TUN" >/dev/null 2>&1; }
 
 status(){
   echo "--- ssh master"; have_ctl && echo "connected" || echo "no control socket"
+  echo "--- carrier watch"; [ -f "$CW_PID" ] && kill -0 "$(cat "$CW_PID")" 2>/dev/null && echo "running ($(tail -1 "$CW_LOG" 2>/dev/null))" || echo "not running"
   echo "--- forward";    ss -ltn 2>/dev/null | grep ":$LPORT" || echo "no :$LPORT listener"
   echo "--- gticmp";     ip -br addr show "$ICTUN" 2>/dev/null || echo "  no $ICTUN"
   echo "--- icmp rule";  ip rule show | grep -E "$IC_PRIO" || echo "  no icmp rule"
@@ -1140,11 +1219,12 @@ case "${1:-}" in
   unshare)    share_down ;;
   share-status) share_status ;;
   share-watch)  need_root; share_watch ;;
+  carrier-watch) need_root; carrier_watch ;;
   # Prints the path to the generated hop chain, or nothing when there are no
   # hops. Reading it explains the chain; for USING it, prefer `hop`, which also
   # supplies a password hop's askpass that a bare `ssh -F` would lack.
   ssh-config) [ ${#H_KIND[@]} -gt 0 ] && echo "$GT_SSHCFG" || true ;;
   hop)     shift; hop_ssh "$@" ;;
   probe)   probe ;;
-  *) echo "usage: $0 {up|down|status|verify|reload|reicmp|is-up|share|unshare|share-status|ssh-config|hop N [cmd]|probe}" >&2; exit 2 ;;
+  *) echo "usage: $0 {up|down|status|verify|reload|reicmp|is-up|share|unshare|share-status|carrier-watch|ssh-config|hop N [cmd]|probe}" >&2; exit 2 ;;
 esac
