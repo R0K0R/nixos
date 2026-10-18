@@ -79,11 +79,11 @@
     "claude-helper": {
       "flake": false,
       "locked": {
-        "lastModified": 1791276610,
-        "narHash": "sha256-CnoOE82vv6oYpX9p6cBQNAIAzaYcBVFqO4w0IQ4WFJk=",
+        "lastModified": 1791789990,
+        "narHash": "sha256-2pk+70aXVBT0yXnKQFcTHV0HUAsfCoAXytKsSHloTIs=",
         "owner": "R0K0R",
         "repo": "dms_claude_helper",
-        "rev": "96d5d145c8ccbad13b9e1e273800646d55561c0c",
+        "rev": "5098ba3c0a6da7a6884587fe82642f1ec60cd128",
         "type": "github"
       },
       "original": {
@@ -459,6 +459,22 @@
         "system"
       ]
     },
+    "feat-foldpen": {
+      "inputs": {
+        "foldpen": "foldpen"
+      },
+      "locked": {
+        "path": "./features/apps/foldpen",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/apps/foldpen",
+        "type": "path"
+      },
+      "parent": [
+        "system"
+      ]
+    },
     "feat-hakuspace": {
       "inputs": {
         "hakuspace": "hakuspace",
@@ -507,6 +523,26 @@
       },
       "original": {
         "path": "./features/session/hyprland",
+        "type": "path"
+      },
+      "parent": [
+        "system"
+      ]
+    },
+    "feat-impermanence": {
+      "inputs": {
+        "impermanence": "impermanence",
+        "nixpkgs": [
+          "system",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "path": "./features/core/impermanence",
+        "type": "path"
+      },
+      "original": {
+        "path": "./features/core/impermanence",
         "type": "path"
       },
       "parent": [
@@ -581,6 +617,24 @@
         "owner": "numtide",
         "repo": "flake-utils",
         "type": "github"
+      }
+    },
+    "foldpen": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_5"
+      },
+      "locked": {
+        "lastModified": 1791574134,
+        "narHash": "sha256-+HdDflQvjMOIQRZ7PtD9FOiTjgXWL84ngPcyb5/HX4E=",
+        "ref": "refs/heads/master",
+        "rev": "79d9ca0941332d6a87d34ef0e96f89f9cd83604b",
+        "revCount": 6,
+        "type": "git",
+        "url": "file:///home/r0k0r/git_shit/foldpen"
+      },
+      "original": {
+        "type": "git",
+        "url": "file:///home/r0k0r/git_shit/foldpen"
       }
     },
     "hakuspace": {
@@ -693,6 +747,32 @@
         "owner": "R0K0R",
         "ref": "nixos",
         "repo": "Hyprland",
+        "type": "github"
+      }
+    },
+    "impermanence": {
+      "inputs": {
+        "home-manager": [
+          "system",
+          "feat-impermanence"
+        ],
+        "nixpkgs": [
+          "system",
+          "feat-impermanence",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1769548169,
+        "narHash": "sha256-03+JxvzmfwRu+5JafM0DLbxgHttOQZkUtDWBmeUkN8Y=",
+        "owner": "nix-community",
+        "repo": "impermanence",
+        "rev": "7b1d382faf603b6d264f58627330f9faa5cba149",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "impermanence",
         "type": "github"
       }
     },
@@ -918,6 +998,22 @@
     },
     "nixpkgs_5": {
       "locked": {
+        "lastModified": 1791456040,
+        "narHash": "sha256-H83yz/do+hjOO0uujHyH8RgtIQP2v7Mw+cLwcZK/xKc=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "e7439b6b14ad3cc35d05608ebca9bce01a25f5f8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_6": {
+      "locked": {
         "lastModified": 1791914020,
         "narHash": "sha256-B/DJET58beKz3fNZgz9F+Ye3EGeiuUORkFQmtdsXw0I=",
         "owner": "R0K0R",
@@ -1064,24 +1160,26 @@
         "feat-dms": "feat-dms",
         "feat-easyeffects": "feat-easyeffects",
         "feat-emacs": "feat-emacs",
+        "feat-foldpen": "feat-foldpen",
         "feat-hakuspace": "feat-hakuspace",
         "feat-hop": "feat-hop",
         "feat-hyprland": "feat-hyprland",
+        "feat-impermanence": "feat-impermanence",
         "feat-niri": "feat-niri",
         "feat-samsung-galaxybook": "feat-samsung-galaxybook",
         "home-manager": "home-manager",
-        "nixpkgs": "nixpkgs_5",
+        "nixpkgs": "nixpkgs_6",
         "nixpkgs-upstream": "nixpkgs-upstream",
         "tuning-cache-dell-latitude": "tuning-cache-dell-latitude",
         "tuning-cache-galaxybook4-pro360": "tuning-cache-galaxybook4-pro360",
         "tuning-cache-victus-15": "tuning-cache-victus-15"
       },
       "locked": {
-        "lastModified": 1792304431,
-        "narHash": "sha256-CDIjQh6rfBIVW5Y0K19ha6ocC6wTm5LqIhY0VgAhq4c=",
+        "lastModified": 1792318563,
+        "narHash": "sha256-P46k6stPgDeK5Fhbf2JmCp7gn6d67gLwpeqhpV1MvS8=",
         "owner": "R0K0R",
         "repo": "nixos",
-        "rev": "8a141844125f40322f26fc360b55f4c8e7a85a35",
+        "rev": "57be67f93e7d97044106cae9b39d7dbd3356c8dd",
         "type": "github"
       },
       "original": {
