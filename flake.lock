@@ -1072,15 +1072,16 @@
         "home-manager": "home-manager",
         "nixpkgs": "nixpkgs_5",
         "nixpkgs-upstream": "nixpkgs-upstream",
+        "tuning-cache-dell-latitude": "tuning-cache-dell-latitude",
         "tuning-cache-galaxybook4-pro360": "tuning-cache-galaxybook4-pro360",
         "tuning-cache-victus-15": "tuning-cache-victus-15"
       },
       "locked": {
-        "lastModified": 1792250417,
-        "narHash": "sha256-8JpZbFbAzHqSFqxqd6LrbkO3Uf25Tbtq+rJ6ao1nzcM=",
+        "lastModified": 1792256628,
+        "narHash": "sha256-l4aSLW+i9oYJMAGOky/GBYpk+yTPPzlcAgLBuxTQ0fQ=",
         "owner": "R0K0R",
         "repo": "nixos",
-        "rev": "1fbd5239f710f1ea4e0690e8202dae74db912841",
+        "rev": "e9c7296395027c0a9f7d73e86ddedb51db605580",
         "type": "github"
       },
       "original": {
@@ -1134,6 +1135,20 @@
         "repo": "default",
         "type": "github"
       }
+    },
+    "tuning-cache-dell-latitude": {
+      "flake": false,
+      "locked": {
+        "path": "./tuning/runtime-cache/hosts/dell-latitude",
+        "type": "path"
+      },
+      "original": {
+        "path": "./tuning/runtime-cache/hosts/dell-latitude",
+        "type": "path"
+      },
+      "parent": [
+        "system"
+      ]
     },
     "tuning-cache-galaxybook4-pro360": {
       "flake": false,
