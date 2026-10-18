@@ -458,7 +458,7 @@ if nix.keystone then
     -- overshoots by keystone_bounce * keystone_bounce_decay^d -- a continuous formula,
     -- evaluated per card by the patch (each card gets its own curve, since Hyprland reads
     -- a curve live and a shared one switched between cards bent those already moving).
-    keystone_bounce = 0.2, keystone_bounce_decay = 0.5,
+    keystone_bounce = 0.3, keystone_bounce_decay = 1.1,
   } })
   -- A 3-finger swipe that starts on a pile card drives the pile live, in the panel's
   -- PHYSICAL frame (Hyprland fork, keystone dock-move-gestures):
