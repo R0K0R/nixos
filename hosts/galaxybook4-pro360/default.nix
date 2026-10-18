@@ -441,6 +441,8 @@ in
       mpv
       foliate
       localsend
+      # Google Workspace CLI (googleworkspace/cli); `gws classroom` for Classroom.
+      gws
     ];
 
     /*
