@@ -50,7 +50,7 @@ echo "resolving pnames via each store path's own deriver (accurate, not a string
 PNAME_PIPELINE='nix-store -q --requisites /run/current-system \
   | xargs nix-store -q --deriver 2>/dev/null \
   | grep "\.drv$" \
-  | while read -r drv; do [ -e "$drv" ] && echo "$drv"; done \
+  | while read -r drv; do if [ -e "$drv" ]; then echo "$drv"; fi; done \
   | xargs -n 200 nix derivation show 2>/dev/null \
   | jq -s -r "[.[] | .derivations | to_entries[] | (.value.env.pname // .value.structuredAttrs.pname // empty)] | unique | .[]"'
 if [ -n "${TIER1_SSH:-}" ]; then
@@ -74,11 +74,11 @@ if [ -n "${TIER1_SSH:-}" ]; then
       || echo "warning: evaluating $HOST here failed; falling back to the target for every .drv" >&2
   fi
   SHOW='xargs -n 200 nix derivation show 2>/dev/null | jq -s -r "[.[] | .derivations | to_entries[] | (.value.env.pname // .value.structuredAttrs.pname // empty)] | .[]"'
-  LOCAL_NAMES="$(while read -r d; do [ -e "$d" ] && echo "$d"; done <<<"$DRVS" | bash -c "$SHOW")"
+  LOCAL_NAMES="$(while read -r d; do if [ -e "$d" ]; then echo "$d"; fi; done <<<"$DRVS" | bash -c "$SHOW")"
   STILL="$(missing_here)"
   REMOTE_NAMES=""
   if [ -n "$STILL" ]; then
-    REMOTE_NAMES="$(ssh -o BatchMode=yes "$TIER1_SSH" "while read -r d; do [ -e \"\$d\" ] && echo \"\$d\"; done | $SHOW" <<<"$STILL")"
+    REMOTE_NAMES="$(ssh -o BatchMode=yes "$TIER1_SSH" "while read -r d; do if [ -e \"\$d\" ]; then echo \"\$d\"; fi; done | $SHOW" <<<"$STILL")"
   fi
   PNAMES="$(printf '%s\n%s\n' "$LOCAL_NAMES" "$REMOTE_NAMES" | grep -v '^$' | sort -u)"
   TOTAL=$(grep -c . <<<"$DRVS"); HERE=$(( TOTAL - $(grep -c . <<<"$STILL" || true) ))
