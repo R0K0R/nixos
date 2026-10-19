@@ -13,27 +13,10 @@ let
     url = "https://huggingface.co/QuantFactory/Qwen2.5-Coder-1.5B-GGUF/resolve/73c3c696087d8d57a3005e31f2afe78f43059739/Qwen2.5-Coder-1.5B.Q4_K_M.gguf";
     hash = "sha256-qcy2voAkEuYeGsvuYoeiOxHlbpRxhWD5EAdcZLYZSRA=";
   };
-  cc = pkgs.cudaPackages.backendStdenv.cc;
-  cudaHostCxx = "${cc}/bin/${cc.targetPrefix}c++";
 in
 {
   services.llama-cpp = {
     enable = true;
-    # IntraISACross: CMake's CUDA check runs nvcc with the hook's BUILD-platform compiler,
-    # which cannot see the host CUDA headers ("cuda_runtime.h: No such file or directory").
-    # Use the host nvcc and compiler, as opencv4 does. Fixed in the nixpkgs fork on
-    # pr/llama-cpp-cuda-intra-isa-cross; not on combined-fundamental, since bumping the
-    # nixpkgs pin invalidates the tuning runtime cache. Drop this once the pin carries it.
-    package = pkgs.llama-cpp.overrideAttrs (o: {
-      cmakeFlags = o.cmakeFlags ++ [
-        (lib.cmakeFeature "CMAKE_CUDA_COMPILER" (lib.getExe pkgs.cudaPackages.cuda_nvcc))
-        (lib.cmakeFeature "CMAKE_CUDA_HOST_COMPILER" cudaHostCxx)
-      ];
-      # keep the hook from appending its build-platform compiler after ours (CMake takes
-      # the last -D); fatbin compression, the one other thing that step sets, is kept
-      dontSetupCUDAToolkitCompilers = true;
-      env = (o.env or { }) // { NVCC_PREPEND_FLAGS = "-Xfatbin=-compress-all"; };
-    });
     settings = {
       host = "100.64.0.2";
       port = 8012;

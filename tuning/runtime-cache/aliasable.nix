@@ -1,5 +1,5 @@
 {
-  capturedAt = "2026-10-13T18:06:51Z";
+  capturedAt = "2026-10-19T12:16:32Z";
   names = [
     "AMB-plugins"
     "ArchiSteamFarm"
@@ -176,6 +176,7 @@
     "action-validator"
     "actiona"
     "actionlint"
+    "actions-languageserver"
     "activate-linux"
     "activemq"
     "activitywatch"
@@ -787,6 +788,7 @@
     "apprise"
     "approxmc"
     "apprun-cli"
+    "apps2samsung"
     "appstream"
     "appstream-glib"
     "apptainer"
@@ -856,6 +858,8 @@
     "ares"
     "ares-cli"
     "ares-rs"
+    "arf"
+    "arfWrapper"
     "arftracksat"
     "argagg"
     "argbash"
@@ -2119,6 +2123,7 @@
     "budgie-session"
     "budgie-systemmonitor-applet"
     "budgie-user-indicator-redux"
+    "budslink"
     "buf"
     "buffer"
     "buffrs"
@@ -4841,6 +4846,7 @@
     "double-conversion"
     "double-entry-generator"
     "doublecmd"
+    "doujinshi-dl"
     "doulos-sil"
     "dovecot"
     "dovecot-fts-flatcurve"
@@ -7094,6 +7100,7 @@
     "gforth"
     "gfs2-utils"
     "gfshare"
+    "gftools"
     "gftp"
     "gfxreconstruct"
     "gfxstream"
@@ -7176,6 +7183,7 @@
     "ghr-cli"
     "ghrepo-stats"
     "ghstack"
+    "ghtkn"
     "ghui"
     "ghunt"
     "ghw"
@@ -7302,6 +7310,7 @@
     "git-my"
     "git-nomad"
     "git-octopus"
+    "git-of-theseus"
     "git-open"
     "git-pages"
     "git-pages-cli"
@@ -7853,6 +7862,7 @@
     "gocyclo"
     "goda"
     "godef"
+    "godevccu"
     "godini"
     "godns"
     "godot"
@@ -8770,6 +8780,7 @@
     "helix"
     "helix-db"
     "helix-unwrapped"
+    "helixnotes"
     "hellmaker"
     "hello"
     "hello-cpp"
@@ -10181,6 +10192,7 @@
     "junest"
     "junicode"
     "juniper"
+    "junit_4"
     "junixsocket-common"
     "junixsocket-native-common"
     "junkie"
@@ -10986,6 +10998,7 @@
     "ldacbt"
     "ldap-manager"
     "ldapdomaindump"
+    "ldapin"
     "ldapmonitor"
     "ldapnomnom"
     "ldapvi"
@@ -11002,6 +11015,7 @@
     "ldns"
     "ldproxy"
     "ldtk"
+    "leaf-markdown-viewer"
     "leafnode1"
     "league-gothic"
     "league-mono"
@@ -12643,6 +12657,7 @@
     "looking-glass-client"
     "lookout"
     "lookup-license"
+    "loops-server"
     "loopwm"
     "lora"
     "loramon"
@@ -13222,6 +13237,7 @@
     "mblock-mlink"
     "mbmd"
     "mboot"
+    "mboxshell"
     "mbpfan"
     "mbpoll"
     "mbqn"
@@ -15377,6 +15393,7 @@
     "ocis_5-bin"
     "ockam"
     "ocl-icd"
+    "oclgrind"
     "oclock"
     "ocm"
     "ocm-cli"
@@ -17523,6 +17540,7 @@
     "protonvpn-gui"
     "protorpc"
     "protoscope"
+    "prototext"
     "prototypejs"
     "protox"
     "protozero"
@@ -18143,6 +18161,8 @@
     "rapidgzip"
     "rapidjson"
     "rapidraw"
+    "rapids-cmake"
+    "rapids-logger"
     "rapidxml"
     "rapidyaml"
     "rappel"
@@ -18193,6 +18213,7 @@
     "raxml"
     "raxml-mpi"
     "raycast"
+    "rayforge"
     "raygui"
     "raylib"
     "raylib-games"
@@ -18321,6 +18342,7 @@
     "redis-dump-go"
     "redis-plus-plus"
     "redisTestHook"
+    "redisbloom"
     "redisinsight"
     "redka"
     "redland"
@@ -18556,6 +18578,7 @@
     "ries"
     "riff"
     "riffdiff"
+    "riffle"
     "rifiuti"
     "rift-wm"
     "rig"
@@ -22701,6 +22724,7 @@
     "uniex"
     "unifdef"
     "unifi"
+    "unifi-endpoint"
     "unifi-protect-backup"
     "unified-memory-framework"
     "unifiedpush-common-proxies"
@@ -22773,6 +22797,7 @@
     "unused_deps"
     "unvanquished"
     "unwaf"
+    "unxip"
     "unyaffs"
     "unzip"
     "unzipNLS"
@@ -25167,8 +25192,8 @@
     "zzuf"
     "zzz"
   ];
-  nixpkgsNarHash = "sha256-B/DJET58beKz3fNZgz9F+Ye3EGeiuUORkFQmtdsXw0I=";
-  nixpkgsRev = "00a171f2f72e004a3916df33904932e335dd7355";
+  nixpkgsNarHash = "sha256-2w8ImkuVlwAiVtLkxr0MCbqhyQAC+VxSutXRV3ANcYc=";
+  nixpkgsRev = "c4e5229a59f10f21ce5df1aa2a6373f425a7030e";
   pnames = {
     AMB-plugins = "amb-plugins";
     ArchiSteamFarm = "archisteamfarm";
@@ -26466,6 +26491,7 @@
     julia_113 = "julia";
     julia_113-bin = "julia-bin";
     junction-font = "junction";
+    junit_4 = "junit";
     junixsocket-common = "com_kohlschutter_junixsocket_junixsocket-common";
     junixsocket-native-common = "com_kohlschutter_junixsocket_junixsocket-native-common";
     juno-theme = "juno";
