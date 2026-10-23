@@ -585,11 +585,11 @@
     "hyprland-keystone": {
       "flake": false,
       "locked": {
-        "lastModified": 1791978740,
-        "narHash": "sha256-gpjUEyJBYjv40WddehGQ3CaXa0NZ5IYYq0iKqU/ukis=",
+        "lastModified": 1792337635,
+        "narHash": "sha256-k/njw5cLB0qdHF//wNctQpbF/5w/rb9OzX5Ag5d+VEc=",
         "owner": "R0K0R",
         "repo": "Hyprland",
-        "rev": "9448a8950569881188844e43923da354e7e0fe3a",
+        "rev": "75b40e7ed1b50b7a6c2680d2dbb883ba64b76d9d",
         "type": "github"
       },
       "original": {
