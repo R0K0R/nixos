@@ -14,7 +14,8 @@
 #                      user-<name>.persist.json as .persist.json
 #   5 @swap         (empty; NixOS creates /swap/swapfile at first boot)
 #   6 @root-blank   (empty, read-only) and @root from it
-#   7 mount the new layout at /mnt/new and nixos-install the prepared toplevel
+#   7 mount the new layout at /mnt/new; set the system profile and the bootloader
+#     from INSIDE it (nixos-enter), with the system's own Nix
 # The old tree (subvolid 5's own folders: /home, /nix, /etc, ...) is left in
 # place, untouched: delete it only after the new system has booted and been
 # checked (the doc's last section).
@@ -111,6 +112,10 @@ if want 7; then
     mountpoint -q "$new/${m%%:*}" || run mount -t btrfs -o "subvol=${m#*:}" "$dev" "$new/${m%%:*}"
   done
   echo "  mount the EFI partition at $new/boot yourself (lsblk -f: the vfat one, UUID DFF1-0A5E) -- then rerun --step 7"
-  mountpoint -q "$new/boot" && run nixos-install --root "$new" --system "$toplevel" --no-root-passwd --no-channel-copy
+  # Not nixos-install: it would open @nix's database with the USB's own Nix, which
+  # is older than the 2.35 schema in it (the 26.05 ISO) and refuses or mangles it.
+  # Inside the new root, the system's own Nix sets the profile and the bootloader.
+  mountpoint -q "$new/boot" && run nixos-enter --root "$new" --system "$toplevel" -c \
+    "nix-env -p /nix/var/nix/profiles/system --set $toplevel && NIXOS_INSTALL_BOOTLOADER=1 /nix/var/nix/profiles/system/bin/switch-to-configuration boot"
 fi
 [ "$go" = 1 ] && echo "done" || echo "dry run -- add --go"

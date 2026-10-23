@@ -83,7 +83,7 @@ scripts/impermanence-migrate.sh /dev/disk/by-uuid/473402c5-fb75-4760-afee-e10d2d
 5. Create an empty `@swap`, with `chattr +C` set.
 6. Create `@root-blank` (empty, read-only), then `@root` as a snapshot of it.
 7. Mount the new layout at `/mnt/new`. **Mount the EFI partition at
-   `/mnt/new/boot` yourself**, then `nixos-install --system <prepared toplevel>`.
+   `/mnt/new/boot` yourself**, then rerun step 7: it sets the system profile and installs the bootloader from inside the new root (`nixos-enter`), with the system's own Nix. Not `nixos-install`: the 26.05 ISO's Nix is older than the 2.35 store database in `@nix`.
 
 Then reboot.
 
@@ -114,7 +114,7 @@ Then `home-manager switch` in `~/config/home`, so your home writes
 ## Undo
 
 - **Before step 7's reboot:** nothing old has changed. Boot the old system
-  (it is still the default entry until `nixos-install`), or delete the new
+  (it is still the default entry until step 7 installs the bootloader), or delete the new
   subvolumes.
 - **After it:** every old generation still in the boot menu boots the old
   flat tree (subvolid 5). The old `/home` and `/nix` folders are untouched,
