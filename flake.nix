@@ -442,7 +442,14 @@
               };
           }
         ];
-      }; };
+      };
+      # The LUKS migration (docs/luks-migration.md): the committed host plus
+      # the post-migration file, nothing else.
+      galaxybook4-pro360-luks = mkHostWith {
+        hostName = "galaxybook4-pro360";
+        extraModules = [ ./hosts/galaxybook4-pro360/luks.nix ];
+      };
+      };
 
       matrix = import ./lib/matrix.nix {
         inherit lib mkHostWith tuningRawOf;
@@ -529,6 +536,9 @@
       };
       evalTests.guest-overlay = import ./tests/guest-overlay.nix {
         inherit lib mkHostWith mkHomeLib;
+      };
+      evalTests.optional-features = import ./tests/optional-features.nix {
+        inherit lib mkHostWith;
       };
 
       /*

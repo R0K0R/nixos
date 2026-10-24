@@ -176,9 +176,9 @@ on upstream nixpkgs:
 - **btrfs-layout**
 - **impermanence** -- requires btrfs-layout
 - **guest-overlay** -- requires btrfs-layout
-- **ccache**
-- **ca-derivations**
-- **luks** -- TPM2 unlock, **no PIN** (the user's choice)
+- **ccache** -- client half consumed only by tuning's heavy overlay; builder half standalone
+- **ca-derivations** -- the "tuned" package policy asserts march
+- **luks** -- TPM2 unlock, **no PIN** (the user's choice); requires nothing
 - **tuning** -- three independent levers, all default off:
   - `march` -- the only one needing the fork (and SDE Emacs where builders
     cannot run the target), decided pre-eval;
@@ -516,14 +516,42 @@ deliberate system change.
     flake output migration.galaxybook4-pro360 + docs/impermanence-migration.md
     (the live-USB runbook). Open: /var/lib/nix-guests as a bind mount,
     .config/noteworthy to agenix (HANDOFF 5.5).
+    Migrated and committed on galaxybook4-pro360 on 2026-10-24 (live there).
+
+12. **Optional features split out** (Next 8) **and luks.** Each optional piece
+    is its own feature in `_meta`'s graph, declared while off: btrfs-layout,
+    impermanence (requires btrfs-layout), guest-overlay (requires
+    btrfs-layout), ccache and ccache.builder, ca-derivations, luks (requires
+    nothing). Most of the split had already happened piecemeal: ccache and
+    ca-derivations were features with their own options, and tuning only
+    consumes them (tuning/heavy.nix reads my.ccache.wrapperConfig and warns
+    on an unconsumed client half; tuning/ca.nix applies the "tuned" policy
+    because it needs tuning's classifier and heavy.skip; moving it into the
+    feature would also move its overlay in nixpkgs.overlays, which is
+    ordered by import order, so it stays). What was missing was ccache in the graph and
+    luks. Requirements that are not features stay ordinary assertions:
+    march for packages = "tuned", the systemd initrd for impermanence and
+    luks, agenix for a ccache builder on the default key. `luks`
+    (features/core/luks): LUKS2 + TPM2, no PIN, crypttab
+    `tpm2-device=auto` + `discard`, PCR 7 by default (why, and what changes
+    it, in the header), `luks-tpm2-enroll` for (re-)enrollment, recovery
+    key and header backup documented, assertions for a filesystem or the
+    rollback pointed at the LUKS header. No ordering code: the rollback
+    already waits on the btrfs's own device unit, which appears only after
+    the unlock. galaxybook4-pro360 is prepared, not encrypted:
+    hosts/galaxybook4-pro360/luks.nix (LUKS UUID chosen in advance for
+    `cryptsetup reencrypt --uuid`), migration.galaxybook4-pro360-luks,
+    docs/luks-migration.md. Toplevels of all three hosts unchanged;
+    `tests/optional-features-eval.sh`.
 
 ### Next
 
 6. **hm-switch** (features/core/epoch, off): turn on with my.epoch once the
    epoch history is wanted; plain `home-manager switch` works meanwhile.
 7. **Epoch + history + fallback session**, with Claude Code in the fallback.
-8. **Optional features split out**: ccache, CA, btrfs-layout, luks,
-   impermanence, each with `_meta` requires.
+8. ~~**Optional features split out**~~: done (see 12 above); left: the
+   LUKS migration of galaxybook4-pro360 itself (docs/luks-migration.md), and
+   hibernation on an encrypted swapfile, if ever wanted.
 9. ~~**handover and untrusted types**~~: done (see "Done" above); left: kiosk
    session pinning, handover login credentials.
 10. ~~**guest-overlay**~~: implemented (see 10 above), not yet run. First run

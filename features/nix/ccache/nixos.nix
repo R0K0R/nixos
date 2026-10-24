@@ -126,6 +126,20 @@ in
   };
 
   config = lib.mkMerge [
+    /*
+      Both halves in the feature graph (features/core/_meta), declared
+      unconditionally so they are visible while off. Neither requires another
+      FEATURE: the client half's one consumer is tuning/heavy.nix, which is
+      infrastructure rather than a feature, so that pairing stays a warning
+      there (an unconsumed client half is a no-op, not a broken machine). The
+      builder half's dependency on agenix is conditional on how the peers
+      authenticate, which a static `requires` cannot say; it stays the
+      assertion below, with a message that names both ways out.
+    */
+    {
+      my.internal.features.ccache.enabledBy = cfg.enable;
+      my.internal.features."ccache.builder".enabledBy = b.enable;
+    }
     {
       /*
         What goes into every ccache'd derivation, and nothing more. UMASK=002,

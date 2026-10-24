@@ -58,8 +58,8 @@ exactly one external input and no other feature. Hand it to another Galaxy Book
 owner and it works.
 
 **Optional means optional.** Every expensive or invasive piece -- tuning,
-ccache, content-addressed derivations, and later btrfs layout, impermanence,
-guest stores, LUKS -- is off by default, and "all off" is a plain NixOS on
+ccache, content-addressed derivations, btrfs layout, impermanence, guest
+stores, LUKS -- is off by default, and "all off" is a plain NixOS on
 upstream nixpkgs. Turning one on must never silently require another; that is
 what `_meta` requires are for.
 
@@ -378,14 +378,27 @@ refused.
 | tuning lever `o3` | `my.tuning.o3.enable` | -- (`my.tuning.enable`; native mode without march) | exists; on for both hosts, with march |
 | tuning lever `lto` | `my.tuning.lto.enable` | -- (`my.tuning.enable`; native mode without march) | exists; on for both hosts, with march |
 | heavy (mold + ccache over the tuned set) | `my.tuning.heavy` | -- | exists |
-| ccache | `my.ccache` (features/nix/ccache) | client half; `builder` half on NixOS builders | exists; to be split out of tuning's reach as its own optional feature |
-| content-addressed derivations | `my.ca-derivations` (features/nix/ca-derivations; the "tuned" package policy is applied by tuning/ca.nix and needs march) | ca-derivations live on the evaluating daemon and every builder | exists |
-| btrfs-layout (`/nix` its own subvolume) | `my.btrfs-layout` (features/core/btrfs-layout) | -- | exists; on for victus-15 (already a subvolume, `nix`); galaxybook needs the offline migration in the feature's header first |
-| impermanence | -- | btrfs-layout | **planned** |
+| ccache | `my.ccache` (features/nix/ccache); in `_meta` as `ccache` (client) and `ccache.builder` | -- (the client half's only consumer is `my.tuning.heavy`, which warns when the two are not paired; `builder` with peers on the default key asserts agenix) | exists; on for both tuned hosts, `builder` on victus-15. Its own feature: tuning reads `wrapperConfig`, nothing more |
+| content-addressed derivations | `my.ca-derivations` (features/nix/ca-derivations; the "tuned" package policy is applied by tuning/ca.nix, which needs tuning's classifier, and asserts march) | ca-derivations live on the evaluating daemon and every builder | exists; on for both tuned hosts |
+| btrfs-layout (`/nix` its own subvolume; root, persist, swap subvolumes) | `my.btrfs-layout` (features/core/btrfs-layout) | -- | exists; on for victus-15 (`/nix` only) and galaxybook4-pro360 (the full impermanence layout) |
+| impermanence | `my.impermanence` (features/core/impermanence) + registry fact `features.<host>.impermanence` | btrfs-layout (`_meta`; plus `rootSubvolume` and `persist`) | **live on galaxybook4-pro360 since 2026-10-24** (docs/impermanence-migration.md); `tests/impermanence-eval.sh` |
 | guest-overlay (per-guest overlay stores) | `my.guest-overlay` (features/nix/guest-overlay) + registry fact `features.<host>."guest-overlay"` | btrfs-layout | exists, off everywhere; eval-tested only (`tests/guest-overlay-eval.sh`), never run |
-| luks (TPM2 unlock, no PIN) | -- | -- | **planned** |
+| luks (TPM2 unlock, no PIN) | `my.luks` (features/core/luks) | -- (systemd initrd, asserted) | exists, off everywhere; eval-tested only (`tests/optional-features-eval.sh`). galaxybook4-pro360 is prepared, not encrypted: `hosts/galaxybook4-pro360/luks.nix`, `migration.galaxybook4-pro360-luks`, docs/luks-migration.md |
 
 All levers default to off, and all off is plain upstream nixpkgs.
+
+The non-tuning pieces are features in the `_meta` graph, each declared even
+while off. Their only `requires` edges are impermanence -> btrfs-layout and
+guest-overlay -> btrfs-layout; turning either on without the layout fails with
+"my.<feature>.enable requires my.btrfs-layout.enable". Requirements that are
+not other features (march for `ca-derivations.packages = "tuned"`, the systemd
+initrd for luks and impermanence, agenix for a ccache builder's default key)
+stay ordinary assertions in the feature that has them. The whole graph and
+those messages are pinned by `tests/optional-features-eval.sh`:
+
+```
+nix eval .#nixosConfigurations.<host>.config.my.internal.features --json
+```
 
 ### Tuning
 
