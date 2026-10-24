@@ -47,6 +47,14 @@ comm -13 "$tmp/valid" "$tmp/present" | { grep -vx '.links' || true; } | while IF
   rm -rf --one-file-system -- "${new:?}/store/$e"
 done
 
+# 3. The directories a read-only store still creates. Nix (2.35) runs its
+#    createDirs for .links, temproots, profiles, gcroots and db even when
+#    opening a store read-only -- harmless when they exist, "Read-only file
+#    system" when they do not, which on a VM's /nix they did not (found by
+#    tests/guest-overlay-vm.nix). Make sure they do before freezing.
+mkdir -p "$new/store/.links" "$new/var/nix/temproots" "$new/var/nix/db" \
+  "$new/var/nix/profiles/per-user" "$new/var/nix/gcroots/per-user"
+
 btrfs property set -ts "$new" ro true
 ln -sfn "$id" "$lroot/.current.tmp"
 mv -T "$lroot/.current.tmp" "$lroot/current"

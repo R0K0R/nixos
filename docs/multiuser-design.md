@@ -896,10 +896,22 @@ deliberate system change.
     store with nothing unregistered (grep -v with no output), and deleted the
     snapshot it had just published (its prune glob matched current/); the
     PAM rule broke evaluation on a host whose greetd stack is `include login`
-    (dell-latitude, found by the matrix). It passes the subvolume, snapshot
-    and overlay-mount checks; OPEN: in a `su guest` session /nix/store is not
-    the overlay (findmnt prints nothing, pam_namespace logs nothing) -- next
-    step is pam_namespace `debug` and a look at the session's mountinfo.
+    (dell-latitude, found by the matrix). PASSES since 2026-10-24, the
+    whole checklist a VM can cover: snapshot, mount, su and tty sessions
+    (the user manager included), `nix store info`, a sandboxed build and a
+    GC in the guest store, copy-up after an admin GC, drop of upper copies
+    the lower gained, a "switch" during a session (the session keeps its
+    lower) and the rebase at logout. Getting there fixed five more feature
+    bugs: pam_namespace read its config from its own store path (nixpkgs
+    builds linux-pam with sysconfdir = $out/etc), so guest sessions silently
+    ran on the system store -- the feature now uses a pam_namespace built to
+    read /etc/security/namespace.conf; a read-only lower store still makes
+    temproots/profiles/gcroots/db/.links (the snapshot now has them);
+    guest build logs went to the system's /nix/var/log (now `log=` in the
+    store URL); the guest's GC walked the lower layer and failed on its
+    referrers (the snapshot's top paths are now roots in the guest's state);
+    the overlay unit's Requires= on the oneshot snapshot made every rebase
+    take a new snapshot (now Wants= + RemainAfterExit, activation restarts it).
     Not coverable without network: substitution, the guest's own builders.
 12. **Eval matrix**: done -- lib/matrix.nix `pieces` (march, lto, o3, heavy,
     ccache, ca, btrfs-layout, impermanence, guest-overlay; luks a TODO entry
