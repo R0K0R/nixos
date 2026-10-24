@@ -111,7 +111,7 @@ in
   # -- 1. the real hosts ----------------------------------------------------
   real = {
     galaxybook4-pro360 = expect "gb4: admin r0k0r, pinnable victus-15 and yulee" (
-      summary (realLayout "galaxybook4-pro360") == "admin[r0k0r]: default victus-15 yulee"
+      summary (realLayout "galaxybook4-pro360") == "admin[benjamin r0k0r]: default victus-15 yulee"
     ) (summary (realLayout "galaxybook4-pro360"));
     victus-15 = expect "victus-15: admin r0k0r benjamin, no peers -> default only" (
       summary (realLayout "victus-15") == "admin[benjamin r0k0r]: default"
@@ -126,11 +126,12 @@ in
 
   # -- 2. synthetic gb4, feature on -----------------------------------------
   classes = expect "admin + member, guest (nix = none) has none" (
-    summary L == "admin[r0k0r]: default victus-15 yulee; member[mira]: default local victus-15 yulee"
+    summary L == "admin[benjamin r0k0r]: default victus-15 yulee; member[mira]: default local victus-15 yulee"
   ) (summary L);
-  routes = expect "routes: r0k0r -> admin, mira -> member, no guest" (
+  routes = expect "routes: r0k0r, benjamin -> admin, mira -> member, no guest" (
     lib.mapAttrs (_: r: r.socket) L.routes == {
       r0k0r = "/nix/var/nix/daemon-socket-admin/default";
+      benjamin = "/nix/var/nix/daemon-socket-admin/default";
       mira = "/nix/var/nix/daemon-socket-member/default";
     }
   ) (builtins.toJSON (lib.mapAttrs (_: r: r.socket) L.routes));
@@ -195,7 +196,7 @@ in
     lib.length (lib.filter (lib.hasPrefix "nix-daemon-") (lib.attrNames c.systemd.sockets)) == 7
   ) (toString (lib.filter (lib.hasPrefix "nix-daemon-") (lib.attrNames c.systemd.sockets)));
   group = expect "nix-class-member = mira; nix-class-admin = r0k0r" (
-    c.users.groups.nix-class-member.members == [ "mira" ] && c.users.groups.nix-class-admin.members == [ "r0k0r" ]
+    c.users.groups.nix-class-member.members == [ "mira" ] && c.users.groups.nix-class-admin.members == [ "benjamin" "r0k0r" ]
   ) (builtins.toJSON c.users.groups.nix-class-member.members);
   routingShell = expect "extraInit routes mira and r0k0r, only if writable" (
     lib.hasInfix "mira) __ncd_s=/nix/var/nix/daemon-socket-member/default ;;" c.environment.extraInit
