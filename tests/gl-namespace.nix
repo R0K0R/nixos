@@ -132,8 +132,12 @@ in
     tf.graphics-driver."/run/gl-driver/system"."L+".argument == tfOff."/run/opengl-driver"."L+".argument
     && tf.graphics-driver."/run/gl-driver/system-32"."L+".argument == tfOff."/run/opengl-driver-32"."L+".argument
   ) tf.graphics-driver."/run/gl-driver/system"."L+".argument;
-  sameEpoch = expect "epoch unchanged by the feature" (
-    c.system.build.epoch == off.config.system.build.epoch && c.system.build.epoch != "empty"
+  # The epoch DOES move: it hashes the PAM modules a session loads, and the
+  # feature loads lib/pam-namespace.nix's pam_namespace (the stock one reads
+  # its own store path's empty namespace.conf and does nothing). Turning the
+  # feature on is therefore a cross-epoch change, like any PAM change.
+  epochMoves = expect "epoch changes with the feature (pam_namespace is in the PAM surface)" (
+    c.system.build.epoch != off.config.system.build.epoch && c.system.build.epoch != "empty"
   ) c.system.build.epoch;
   instances = expect "instance parent 0000; seeds (L, not L+) for r0k0r only; gcroot dir" (
     let
