@@ -441,10 +441,9 @@ deliberate system change.
    homeLib (`facts.nix`), `narrow.<user>.localBuilds` accepted only where a
    host policy already makes it true. The deployed-type record and
    `acceptTypeChange` exist behind `my.registry.recordTypes.enable`, off.
-   Evaluated by `tests/user-types-eval.sh`. Still open: pinning a kiosk user
-   to the kiosk session (greeter), a passwordless/autologin handover login,
-   logind's 10 s UserStopDelaySec window, impermanent homes and overlay
-   stores.
+   Evaluated by `tests/user-types-eval.sh`. Still open: logind's 10 s
+   UserStopDelaySec window. (Kiosk pinning and handover credentials: 13
+   below. Impermanent homes and overlay stores: 10 and 11.)
 6. **trusted-users and uids from the registry.** `trusted-users` is
    derived in `nix-access.nix`: the host's `nix = admin` accounts plus
    `my.registry.nix.extraTrustedUsers` (non-people); `my.nix-settings.
@@ -569,6 +568,35 @@ deliberate system change.
     `cryptsetup reencrypt --uuid`), migration.galaxybook4-pro360-luks,
     docs/luks-migration.md. Toplevels of all three hosts unchanged;
     `tests/optional-features-eval.sh`.
+13. **Kiosk pinning and handover credentials** (Next 9). Pinning is
+    enforced below the greeter (features/core/users/kiosk.nix): greetd always
+    runs a session as `/bin/sh -c '. /etc/profile; ...; exec <cmd>'`, so the
+    first lines of /etc/profile (mkBefore, ahead of its sourced-once guard)
+    exec the account's launcher when `id -u` is a kiosk uid -- the command
+    the greeter sent, remembered or had typed in is never reached. The
+    launcher (`kiosk-shell-<prog>`: refuses any argument, sources
+    /etc/set-environment, `cage -s -- <prog>`) is also the account's login
+    shell, so a VT login lands in the same session; it is named through
+    /run/current-system/sw and is not in /etc/shells (su -s is ignored for
+    non-root). ssh is refused (sshd DenyUsers + a pam_succeed_if account
+    rule) and so is su (pam_succeed_if, root included); `-c` is refused by
+    the launcher. Registry: a kiosk account may not set `shell` or
+    `sshKeys`. Credentials (features/core/users/handover.nix): no fixed
+    password and no autologin -- `sudo handover issue <user> [--for ... |
+    --until ...]` ends the account's sessions, generates an 80-bit
+    passphrase printed once, stores only its yescrypt hash
+    (hashedPasswordFile under persistRoot on an impermanent host, 0700 root
+    dir) and applies it with usermod; the deadline (default 24 h) is an epoch
+    file checked by a pam_exec account rule on `login` (greetd's account
+    phase includes login's) that fails closed, plus a transient realtime
+    timer that revokes at the deadline. `handover revoke`, `handover
+    status`. User-file `handover.expires = "YYYY-MM-DD"` is the hard ceiling
+    (users.users.expires, checked by pam_unix for every service; issue
+    refuses past it); `passwordSecret` on a handover account is refused.
+    No host has a kiosk or handover account: toplevels unchanged.
+    `tests/user-types-eval.sh` checks the pin, shell, PAM stacks, ssh,
+    credential file, seed ordering and the refusals. Not run on a machine
+    yet (runtime plan in the commit/report); no VM test.
 
 12. **Class daemons + hm-switch builder variations** (2026-10-24).
     features/nix/class-daemons: per class present on a host, socket-activated
@@ -598,8 +626,10 @@ deliberate system change.
 8. ~~**Optional features split out**~~: done (see 12 above); left: the
    LUKS migration of galaxybook4-pro360 itself (docs/luks-migration.md), and
    hibernation on an encrypted swapfile, if ever wanted.
-9. ~~**handover and untrusted types**~~: done (see "Done" above); left: kiosk
-   session pinning, handover login credentials.
+9. ~~**handover and untrusted types**~~: done (see "Done" 5 and 13); left: a
+   first real run (a handover account on galaxybook: issue, greeter login
+   with another session selected, VT login, ssh/su refusal, deadline,
+   revoke, reboot), and logind's UserStopDelaySec window.
 10. ~~**guest-overlay**~~: implemented (see 10 above), not yet run. First run
     on victus-15 (btrfs-layout already true there): enable it plus a test
     guest, then check, in this order: the snapshot (`nix-guest-lower`), the

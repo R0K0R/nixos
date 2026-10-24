@@ -259,7 +259,8 @@ shows what each user ends up with on each host.
 (a package *attribute name*, resolved by the host's own pkgs), `passwordSecret`,
 `sshKeys` (public keys that may log in as them; never the builder key, which is
 root-only), optional `overrides` and `groups`; `tmpfsSize` (default `"2G"`) for a tmpfs
-home; `acceptTypeChange = "<old>-><new>"` to consent to one dangerous type
+home; `handover = { expires = "YYYY-MM-DD"; }` (handover type only) for the
+account's hard end; `acceptTypeChange = "<old>-><new>"` to consent to one dangerous type
 change (below).
 
 **`registry/types.nix`** -- presets over five axes:
@@ -319,7 +320,8 @@ piece gated on some account using it, so both real hosts are unchanged:
 | axis value | machinery |
 |---|---|
 | `home = tmpfs` | `tmpfs-home.nix`: a tmpfs (size `tmpfsSize`) mounted **per login**, bound to `user@<uid>.service` (RequiredBy/Before/PartOf, LazyUnmount) -- mounted before the user's manager starts, detached when it stops, the same lifetime logind gives `/run/user/<uid>`. logind kills those users' processes at logout (`KillUserProcesses` + `KillOnlyUsers`), so a straggler cannot keep the user, and with it the home, alive; lingering is refused. `createHome = false`: if the mount fails the home is root-owned, never persistent. Pins the uid. Re-login inside logind's 10 s `UserStopDelaySec` keeps the home. |
-| `session = { kiosk = "<pkg>"; }` | `kiosk.nix`: a "Kiosk (<prog>)" wayland-session running `cage -s -- <pkg>` from the system pkgs (handover: firefox). Not enforced that the kiosk user *picks* it; that is the greeter's choice. |
+| `session = { kiosk = "<pkg>"; }` | `kiosk.nix`: the account is **pinned** to `cage -s -- <pkg>` from the system pkgs (handover: firefox). The launcher is its login shell (VT login) and the first lines of /etc/profile exec it for that uid, so whatever session a greeter sends, greetd's `sh -c '. /etc/profile; ...; exec <cmd>'` never reaches `<cmd>`. ssh (DenyUsers + PAM) and su (PAM) refuse the account; the launcher refuses `-c`; it is not in /etc/shells. Also offered as a "Kiosk (<prog>)" session. No `shell` or `sshKeys` on such an account. |
+| type `handover` credentials | `handover.nix`: no fixed password, no autologin. `sudo handover issue <user> [--for "8 hours" \| --until "<date>"]` ends its sessions, prints a fresh 80-bit passphrase once and stores only the hash (root-only, under persistRoot on an impermanent host); a deadline (default 24 h) is checked at PAM account time on login/greetd (fail-closed) and a transient timer revokes at it. `handover revoke`, `handover status`. `handover.expires` in the user file is the hard ceiling (shadow expiry). `passwordSecret` is refused for this type. |
 | `nix = none` | `nix-access.nix`: left out of `nix.settings.allowed-users`. The list is only written on a host that has such a user; elsewhere it stays at its default `*`, so nix.conf is unchanged. `my.registry.nix.extraAllowedUsers` for service accounts. |
 | `nix = untrusted` | asserted absent from `trusted-users` (by name, `*` or `@group`). |
 | `nix = admin` | `nix-access.nix`: `trusted-users` is derived -- exactly the host's `nix = admin` accounts, plus root and `my.registry.nix.extraTrustedUsers` (non-people only). Host files no longer list trusted users. No preset uses it: people are untrusted, admins act through sudo. Remote builds reach a NixOS peer as its trusted `nix-ssh` account (`my.remote-builder.server`, upstream `nix.sshServe`: forced `nix-daemon --stdio`, builder key only); the wrappers that pin builders run their nix as root. |
@@ -366,9 +368,10 @@ key is root-only, because on a NixOS peer it logs in as the trusted
 
 `tests/user-types-eval.sh` evaluates a synthetic galaxybook with a handover
 and an untrusted user and the type record on, with builds disabled, and
-checks the mount, logind, kiosk session, allowed-users, facts, the generated
-check, and that the dangerous transitions and unenforceable narrowings are
-refused.
+checks the mount, logind, kiosk session and its pinning (profile pin, login
+shell, su/sshd PAM, DenyUsers), the handover credential wiring, allowed-users,
+facts, the generated check, and that the dangerous transitions, unenforceable
+narrowings and handover/kiosk misconfigurations are refused.
 
 ## Optional pieces
 
@@ -383,6 +386,7 @@ refused.
 | btrfs-layout (`/nix` its own subvolume; root, persist, swap subvolumes) | `my.btrfs-layout` (features/core/btrfs-layout) | -- | exists; on for victus-15 (`/nix` only) and galaxybook4-pro360 (the full impermanence layout) |
 | impermanence | `my.impermanence` (features/core/impermanence) + registry fact `features.<host>.impermanence` | btrfs-layout (`_meta`; plus `rootSubvolume` and `persist`) | **live on galaxybook4-pro360 since 2026-10-24** (docs/impermanence-migration.md); `tests/impermanence-eval.sh` |
 | guest-overlay (per-guest overlay stores) | `my.guest-overlay` (features/nix/guest-overlay) + registry fact `features.<host>."guest-overlay"` | btrfs-layout | exists, off everywhere; eval-tested only (`tests/guest-overlay-eval.sh`), never run |
+| kiosk pinning + handover credentials | registry `session = { kiosk = ...; }` / `type = "handover"` (features/core/users/kiosk.nix, handover.nix) | a kiosk / handover account (pinned uid) | exists, no host has such an account; eval-tested only (`tests/user-types-eval.sh`), never run |
 | luks (TPM2 unlock, no PIN) | `my.luks` (features/core/luks) | -- (systemd initrd, asserted) | exists, off everywhere; eval-tested only (`tests/optional-features-eval.sh`). galaxybook4-pro360 is prepared, not encrypted: `hosts/galaxybook4-pro360/luks.nix`, `migration.galaxybook4-pro360-luks`, docs/luks-migration.md |
 | class daemons (one nix-daemon per user class, pinnable per-peer sockets) | `my.class-daemons` (features/nix/class-daemons) + registry fact `features.<host>."class-daemons"` | remote-builder.client when a class has builders; agenix for `sshKeySecret` | exists, off everywhere; eval-tested only (`tests/class-daemons-eval.sh`), never run -- runtime plan below |
 | hm-switch (home switch with `--on PEER` / `--local` / `--eval-on PEER`) | `my.epoch.hmSwitch.enable` (features/core/epoch; defaults to `my.epoch.enable`) | -- | exists; on for galaxybook4-pro360 (without the epoch) |

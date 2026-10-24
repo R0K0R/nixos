@@ -54,6 +54,7 @@ in
   imports = [
     ./tmpfs-home.nix
     ./kiosk.nix
+    ./handover.nix
     ./nix-access.nix
     ./type-record.nix
   ];
@@ -217,8 +218,28 @@ in
               type = lib.types.nullOr lib.types.package;
               default = null;
               description = ''
-                Offer a greetd session that runs this package alone under cage
-                (kiosk.nix). Its meta.mainProgram is what runs.
+                Pin this account to one program under cage (kiosk.nix): its
+                login shell, and whatever session a greeter asks for, run
+                this package's meta.mainProgram and nothing else; ssh and su
+                refuse the account. Requires a pinned uid.
+              '';
+            };
+
+            handover = lib.mkOption {
+              type = lib.types.nullOr (
+                lib.types.submodule {
+                  options.expires = lib.mkOption {
+                    type = lib.types.nullOr (lib.types.strMatching "[0-9]{4}-[0-9]{2}-[0-9]{2}");
+                    default = null;
+                    description = "Hard end of the account (users.users.<n>.expires): no lending is issued past it.";
+                  };
+                }
+              );
+              default = null;
+              description = ''
+                A handover account (registry type "handover"): its password is
+                issued per lending by `handover issue` and ends at a deadline
+                checked at login (handover.nix). From the registry.
               '';
             };
 
