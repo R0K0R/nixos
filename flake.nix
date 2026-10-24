@@ -530,6 +530,9 @@
       evalTests.guest-overlay = import ./tests/guest-overlay.nix {
         inherit lib mkHostWith mkHomeLib;
       };
+      evalTests.class-daemons = import ./tests/class-daemons.nix {
+        inherit lib mkHostWith;
+      };
 
       /*
         `nix flake check` as the one-command gate. Forcing each host's toplevel

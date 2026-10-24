@@ -35,6 +35,11 @@
                   every user it accepts. Asserted against nix.settings.max-jobs
                   (lib/registry-users.nix), since homeLib facts report it as
                   what a user's builds do.
+    class-daemons people reach the store through a nix-daemon of their user
+                  class (registry type) rather than the shared one -- their
+                  own builders list, builder key and pinnable per-peer sockets
+                  (features/nix/class-daemons). Asserted against
+                  my.class-daemons.enable.
 */
 {
   hosts = {
@@ -82,6 +87,7 @@
       ca-derivations = true;
       guest-overlay = false;
       impermanence = true;
+      class-daemons = false;
     };
 
     victus-15 = {
@@ -95,6 +101,7 @@
       ca-derivations = true;
       guest-overlay = false;
       impermanence = false;
+      class-daemons = false;
     };
 
     dell-latitude = {
@@ -108,6 +115,7 @@
       ca-derivations = false;
       guest-overlay = false;
       impermanence = false;
+      class-daemons = false;
     };
 
     yulee = {

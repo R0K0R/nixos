@@ -35,14 +35,7 @@ in
     that has such an account, so other hosts' toplevels do not move.
   */
   environment.systemPackages = lib.mkIf (standalone != { }) [
-    (pkgs.callPackage "${inputs.home-manager}/home-manager" {
-      path = "${inputs.home-manager}";
-      # Its `home-manager option` wraps nixos-option, which puts pkgs.nix on
-      # PATH -- 2.34, a second Nix next to the system's nix.package (2.35)
-      # and the client/daemon split that broke CA builds before. Same
-      # nixos-option, the system's Nix.
-      pkgs = pkgs // { nixos-option = pkgs.nixos-option.override { nix = config.nix.package; }; };
-    })
+    (import ./home-manager-cli.nix { inherit inputs pkgs; nix = config.nix.package; })
   ];
 
   home-manager = {
