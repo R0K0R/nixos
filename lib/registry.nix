@@ -342,6 +342,24 @@ in
             )
           )
           && (
+            /*
+              No password at all: anyone at the keyboard logs in. Only for
+              accounts that can do nothing with it -- refused whenever the
+              account has the sudo grant (its type's or its own override;
+              hosts can only narrow grants, so this covers every host).
+            */
+            !(u ? passwordless)
+            || (
+              u.passwordless == true
+              && !(elem "sudo" (u.overrides.grants or types.${u.type}.grants or [ ]))
+              && !(u ? passwordSecret)
+            )
+            || throw ''
+              registry: ${where}: passwordless = true is only for accounts without the sudo grant and
+              without a passwordSecret (an empty password on a sudoer is a root shell for anyone
+              at the keyboard).''
+          )
+          && (
             (u.type or null) != "handover"
             || !(u ? passwordSecret)
             || throw ''
@@ -601,6 +619,7 @@ in
               // lib.optionalAttrs (sessionKind e.session == "kiosk") { kiosk = pkgs.${e.session.kiosk}; }
               // lib.optionalAttrs (u.type == "handover") { handover.expires = u.handover.expires or null; }
               // lib.optionalAttrs (u ? description) { inherit (u) description; }
+              // lib.optionalAttrs (u.passwordless or false) { passwordless = true; }
               # A host that keeps an account's password local (hosts.nix
               # localPasswords) does not get the registry's secret for it.
               // lib.optionalAttrs (u ? passwordSecret && !(elem n (h.localPasswords or [ ]))) { inherit (u) passwordSecret; }

@@ -70,7 +70,9 @@
 { config, lib, pkgs, ... }:
 
 let
-  hand = lib.filterAttrs (_: u: u.handover != null) config.my.users;
+  # A passwordless handover account (registry passwordless = true) has no
+  # credential to issue: none of this applies to it.
+  hand = lib.filterAttrs (_: u: u.handover != null && !u.passwordless) config.my.users;
   names = lib.attrNames hand;
 
   imp = config.my.impermanence;

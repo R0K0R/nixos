@@ -243,6 +243,19 @@ in
               '';
             };
 
+            passwordless = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Log in without a password: an empty hash, and nullok on the
+                login and greetd PAM services (nullok only matters to an
+                account whose hash IS empty, so everyone else still needs
+                theirs). From the registry, which refuses it on any account
+                with the sudo grant. A passwordless handover account skips
+                the per-lending credential (handover.nix).
+              '';
+            };
+
             typeRecord = lib.mkOption {
               type = lib.types.nullOr lib.types.raw;
               default = null;
@@ -340,6 +353,14 @@ in
         }
       ) (lib.filterAttrs (_: u: u.passwordSecret != null) cfg);
 
+      # nullok for the services a passwordless account logs in through (the
+      # greeter and the VT). Only when one exists: elsewhere nothing changes.
+      security.pam.services = lib.mkIf (lib.any (u: u.passwordless) (lib.attrValues cfg)) (
+        lib.genAttrs ([ "login" ] ++ lib.optional config.services.greetd.enable "greetd") (_: {
+          allowNullPassword = true;
+        })
+      );
+
       users.users = lib.mkMerge [
         (lib.mapAttrs (
           username: u:
@@ -352,6 +373,7 @@ in
           // lib.optionalAttrs (u.passwordSecret != null) {
             hashedPasswordFile = "/run/agenix/hashed-password-${username}";
           }
+          // lib.optionalAttrs u.passwordless { hashedPassword = ""; }
           // lib.optionalAttrs (u.shell != null) { inherit (u) shell; }
           // lib.optionalAttrs (u.sshKeys != [ ]) { openssh.authorizedKeys.keys = u.sshKeys; }
           # tmpfs-home.nix owns the directory: it is a mountpoint, and the

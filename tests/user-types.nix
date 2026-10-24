@@ -45,7 +45,10 @@ let
       hosts = raw.hosts // {
         hosts = raw.hosts.hosts // {
           ${host} = raw.hosts.hosts.${host} // {
-            users = raw.hosts.hosts.${host}.users ++ [ "guest" "visitor" ];
+            # Its own list, not the host's plus these: the real host now has a
+            # guest and a handoff of its own (registry/users), and the checks
+            # below are about exactly these accounts.
+            users = [ "r0k0r" "guest" "visitor" ];
             narrow.visitor.localBuilds = false;
           };
         };
@@ -138,9 +141,12 @@ in
   logind = expect "logind kills only guest" (
     c.services.logind.settings.Login.KillUserProcesses && c.services.logind.settings.Login.KillOnlyUsers == "guest"
   ) "KillUserProcesses=yes KillOnlyUsers=${c.services.logind.settings.Login.KillOnlyUsers}";
-  realHostLogind = expect "real gb4 logind untouched" (
-    !off.config.services.logind.settings.Login.KillUserProcesses && !(off.config.services.logind.settings.Login ? KillOnlyUsers)
-  ) "KillUserProcesses=no";
+  # The real gb4's one tmpfs home is handoff's: logind kills only that
+  # account's processes at logout, never r0k0r's (KillOnlyUsers).
+  realHostLogind = expect "real gb4 logind kills only handoff" (
+    off.config.services.logind.settings.Login.KillUserProcesses
+    && (off.config.services.logind.settings.Login.KillOnlyUsers or null) == "handoff"
+  ) "KillOnlyUsers=${toString (off.config.services.logind.settings.Login.KillOnlyUsers or "unset")}";
 
   # -- kiosk session -----------------------------------------------------
   sessions = expect "kiosk-firefox offered" (lib.elem "kiosk-firefox" sessionNames) (toString sessionNames);
@@ -214,7 +220,9 @@ in
   allowedUsers = expect "allowed-users excludes guest" (
     c.nix.settings.allowed-users == [ "root" "r0k0r" "visitor" ]
   ) (toString c.nix.settings.allowed-users);
-  realHostAllowedUsers = expect "real gb4 keeps allowed-users = *" (off.config.nix.settings.allowed-users == [ "*" ]) (
+  # The real gb4 has guest and handoff (nix = none) since 2026-10-24, so its
+  # daemon admits only the accounts with store access.
+  realHostAllowedUsers = expect "real gb4: allowed-users = root + r0k0r (guest, handoff have nix = none)" (off.config.nix.settings.allowed-users == [ "root" "r0k0r" ]) (
     toString off.config.nix.settings.allowed-users
   );
   nixConf = expect "nix.conf differs from the real host's" (
