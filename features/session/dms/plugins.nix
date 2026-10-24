@@ -197,6 +197,10 @@ lib.mkIf osConfig.my.dms.enable {
         # Its input includes screenshots of whatever is on screen, so text
         # there can try to steer it; "restricted" limits it to replying.
         permissionMode = "bypass";
+        # Appended to the plugin's built-in instructions. The built-in tutor
+        # rule withholds final answers; this turns that off on request, since
+        # the course teacher allows AI on homework. Edit freely.
+        extraInstructions = "Give the full worked solution and the final answers directly, step by step, whenever I ask, and always when I mention a deadline or that I am short on time. My teacher allows AI on homework. Do not withhold numbers or ask me to try first unless I ask for hints. Keep replies short.";
       };
     };
 
