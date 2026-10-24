@@ -67,9 +67,18 @@ let
     as a builder problem and is not one. Naming the peer explicitly gets both
     properties.
   */
+  /*
+    The peer's entry exactly as the system list spells it (with its ?priority=):
+    an untrusted client may only pick substituters the daemon already lists, and
+    the bare URL no longer matches one.
+  */
+  peerSubstituter =
+    name: p:
+    let base = "ssh-ng://${p.daemonUser}@${name}"; in
+    lib.findFirst (s: s == base || lib.hasPrefix "${base}?" s) base config.nix.settings.substituters;
   substituterArgs =
     name: p:
-    [ ''--option substituters "https://cache.nixos.org ssh-ng://${p.daemonUser}@${name}"'' ];
+    [ ''--option substituters "https://cache.nixos.org ${peerSubstituter name p}"'' ];
 
   /*
     `--option builders` rather than the bare `--builders` flag: it reaches both

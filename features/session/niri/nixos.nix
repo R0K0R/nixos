@@ -50,6 +50,14 @@
           '';
         }
       ];
+
+      /*
+        Off on every host, not only niri ones: the module is imported everywhere
+        (above) and its cache defaults on. All packages get IntraISACross hashes,
+        so niri.cachix.org never hits -- and under CA every unresolved derivation
+        still costs a 404 there per build (~0.4 s each, measured 2026-10-24).
+      */
+      niri-flake.cache.enable = false;
     }
 
     # Wayland compositor (niri) + graphical login.
@@ -58,9 +66,6 @@
         enable = true;
         package = pkgs.niri-unstable;
       };
-
-      # All packages get meteorlake-specific hashes; niri.cachix.org never hits.
-      niri-flake.cache.enable = false;
     })
   ];
 }

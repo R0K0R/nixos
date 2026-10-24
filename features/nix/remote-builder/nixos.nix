@@ -367,7 +367,14 @@ in
       max-jobs = 0;
       # Use peer /nix/store as a binary cache — arch-specific builds that miss
       # cache.nixos.org are served from the peer directly.
-      substituters = [ "https://cache.nixos.org" ] ++ cfg.substituters;
+      #
+      # Peers are asked FIRST, in list order (priority 10, 11, ...; cache.nixos.org
+      # advertises 40). An ssh-ng store has no priority of its own and sorted after
+      # every binary cache, so under CA each unresolved derivation cost a 404 from
+      # every public cache before the peer that had its build trace was asked:
+      # 93% of a 34-minute query phase (measured 2026-10-24).
+      substituters = [ "https://cache.nixos.org" ]
+        ++ lib.imap0 (i: s: "${s}${if lib.hasInfix "?" s then "&" else "?"}priority=${toString (10 + i)}") cfg.substituters;
       trusted-public-keys = [
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
       ] ++ cfg.trustedPublicKeys;

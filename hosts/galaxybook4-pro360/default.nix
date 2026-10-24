@@ -369,7 +369,8 @@ in
       # skipping the substituter (measured 2026-09-07, nix 2.34.8).
       # nix-ssh on victus-15: its trusted builder account (my.remote-builder.server).
       # yulee is unmanaged; its own nix.conf trusts r0k0r.
-      substituters = [ "ssh-ng://r0k0r@yulee" "ssh-ng://nix-ssh@victus-15" ];
+      # victus-15 first: it builds and holds the worlds; yulee is shared and often loaded.
+      substituters = [ "ssh-ng://nix-ssh@victus-15" "ssh-ng://r0k0r@yulee" ];
       trustedPublicKeys = [
         "yulee-1:KgdwkCN5m+hewJTk+A05PjwI3BbnZAE9NW2n634N7vM="
         "victus-15-1:W5OP8VVbu7Q7z2o5grHJ5Zp+ynm536+QVv+b8fBQJlQ="
