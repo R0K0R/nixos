@@ -42,4 +42,9 @@ in
   # so it is persisted. Ownership is the directory's own in /persist (made by
   # hand when it moved), which the bind mount carries over.
   my.state.system.state.directories = [ "/etc/nixos" ];
+  # Admin-writable, user-READABLE: the copy that moved it here carried the old
+  # checkout's 0777, so every account -- passwordless guest included -- could
+  # edit the system flake (found 2026-10-24). Mode only; the owner stays the
+  # admin's. Applied at boot and on every switch.
+  systemd.tmpfiles.rules = [ "z /persist/etc/nixos 0755 - - -" ];
 }
