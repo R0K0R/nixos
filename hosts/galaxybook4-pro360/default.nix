@@ -276,6 +276,10 @@ in
     opencode.enable = true;
     direnv.enable = true;
     nix-settings.enable = true;
+    # hm-switch without the epoch (my.epoch stays off): `hm-switch --on
+    # victus-15 | --local | --eval-on victus-15` for the standalone home, the
+    # build step through sudo until class daemons are on. One package on PATH.
+    epoch.hmSwitch.enable = true;
     # Record each account's deployed type (/var/lib/nixos-users/<user>.type)
     # and refuse a dangerous move away from it without acceptTypeChange.
     registry.recordTypes.enable = true;

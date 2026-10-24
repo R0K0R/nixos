@@ -93,6 +93,32 @@ and keys exist only for classes that have real users. The user registry and the
 host user lists are flake-level plain data precisely so every host -- builders
 included -- can derive them without evaluating any other host.
 
+Implemented as features/nix/class-daemons (off; see Done 12). Decisions made
+while implementing it:
+
+- **A class is a registry type.** Members are the host's accounts of that type
+  with daemon access (nix = untrusted or admin).
+- **Members stay untrusted on their class daemon.** Nix cannot trust a client
+  for `builders` alone: a trusted client can import unsigned paths, register
+  realisations, disable sandbox/require-sigs per connection and set hooks the
+  daemon runs as root -- on a store everyone shares. So builder *choice* is a
+  socket choice: each class gets a `default` daemon (its builders, the host's
+  max-jobs), one daemon per builder that builds only there, and optionally a
+  `local` one. `trusted = true` exists per class but is accepted only when
+  every member is already nix = admin: a class daemon moves trust, never widens
+  it.
+- **The class key is the real builder ACL.** The class daemon runs ssh with
+  `-F` its own ssh_config (otherwise root's `Match localuser root`
+  IdentityFile would offer the host builder key too); a peer that does not
+  accept the class key is not reachable from that class.
+- **Routing** is NIX_REMOTE from the shells' common init and a systemd user
+  environment generator, only when unset and only when the socket is writable
+  (a session older than the group membership would otherwise get EACCES).
+  pam_env cannot condition per user; ~/.config/nix is the user's file.
+- `restrictDefault` (the "default daemon: root + admin" half) exists, off: an
+  unrouted process of a member (a system unit with User=, an old session)
+  would lose the store instead of falling back.
+
 ## Trust and guest stores
 
 **Sharing a store is sharing trust.** Anything a guest can write and the admin
@@ -517,10 +543,30 @@ deliberate system change.
     (the live-USB runbook). Open: /var/lib/nix-guests as a bind mount,
     .config/noteworthy to agenix (HANDOFF 5.5).
 
+12. **Class daemons + hm-switch builder variations** (2026-10-24).
+    features/nix/class-daemons: per class present on a host, socket-activated
+    nix-daemons at /nix/var/nix/daemon-socket-<class>/<variant> (default,
+    one per builder, local), root:nix-class-<class> 0660; NIX_CONF_DIR files
+    that `include /etc/nix/nix.conf` and override allowed-users, trusted-users,
+    builders, max-jobs, substituters (+ restated require-sigs/sandbox); a
+    per-class builder key (agenix or a root 0400 file) used through a class
+    ssh_config; NIX_REMOTE routing. Registry fact
+    features.<host>."class-daemons" (false everywhere), _meta requires
+    (remote-builder.client when a class has builders, agenix for its key).
+    hm-switch: its own switch `my.epoch.hmSwitch.enable` (default
+    my.epoch.enable), epoch check advisory and skipped when the epoch is off,
+    `--on PEER` / `--local` / `--eval-on PEER`, built through the class
+    daemon's socket, else `sudo` for the build of the finished .drv only
+    (sudo-grant users), else the system's builders with a note; activation
+    always the user's. On for galaxybook4-pro360 (only a package on PATH).
+    Eval-tested (tests/class-daemons-eval.sh); class daemons never run -- the
+    runtime plan is in the README.
+
 ### Next
 
-6. **hm-switch** (features/core/epoch, off): turn on with my.epoch once the
-   epoch history is wanted; plain `home-manager switch` works meanwhile.
+6. **hm-switch**: ~~off~~ on for galaxybook4-pro360 without the epoch (Done
+   12); the epoch check comes with my.epoch. Next: class daemons' first run
+   (README runtime plan), then hm-switch through them.
 7. **Epoch + history + fallback session**, with Claude Code in the fallback.
 8. **Optional features split out**: ccache, CA, btrfs-layout, luks,
    impermanence, each with `_meta` requires.
