@@ -259,6 +259,7 @@ in
               config.nix.package
               pkgs.coreutils
               pkgs.findutils
+              pkgs.getent
               pkgs.gnugrep
               pkgs.gnused
               pkgs.jq

@@ -223,8 +223,11 @@ Agreed 2026-10-17, implemented 2026-10-18 (evaluation only, nothing built):
 `lib/surface-check.nix` (the check), `tuning/candidates.nix` + the
 `my.tuning.{o3,lto}.{candidates,exclude}` options, the per-host cache inputs,
 `tuning-refresh`, `scripts/tuning-cache-{migrate,relock}.sh`;
-`tests/user-tuning-eval.sh`. The caches are still in the repo: the migration
-to /var/lib/tuning-cache needs root on each host.
+`tests/user-tuning-eval.sh`, `tests/user-tuning-scripts.sh`. Made ready to
+run 2026-10-24 (reviewed against impermanence, /etc/nixos and untrusted
+users; dry runs and the post-migration evaluation done, see [Running the
+migration](#running-the-migration)). The caches are still in the repo: the
+migration to /var/lib/tuning-cache needs root on each host.
 
 ### Each user picks their package set
 
@@ -332,6 +335,72 @@ set cannot safely load the system's in-process code FAILS to evaluate.
    compositor and its plugins) always run from the system's set and are not
    checked -- users reach them over protocols.
 
+#### Open question: perl and sqlite on the march hosts (evidence, 2026-10-24)
+
+The agreed rule stands (any mismatch fails). This is the evidence for
+deciding whether these two should be exempted, gathered without builds:
+galaxybook4-pro360's own outputs (realised CA paths in its store) against
+nixpkgs-upstream's (in the store, also on cache.nixos.org). Not compared on
+victus-15 (its outputs are not in this store); its set takes the same
+cross branches.
+
+Why they differ at all: in the IntraISACross set `buildPlatform.canExecute
+hostPlatform` is false and `buildPlatform != hostPlatform`, so nixpkgs takes
+its cross branches.
+
+**sqlite 3.53.3** -- 3 patches only in the system's build, all under
+`lib.optionals (buildPlatform != hostPlatform)`, all fetched with `includes`
+limited to build files: sqlite commit 67c202ab (`main.mk`: adds
+`-DBUILD_sqlite` to `T.compile.tcl`, the TCL-extension compile, for
+Unix-on-Windows cross), d501b949 and e4e1b4a4 (`autosetup/sqlite-config.tcl`:
+untangle `--with-tcl`/`--with-tclsh`). nixpkgs marks them "not cross-specific,
+make unconditional next mass rebuild". Compared outputs:
+- file lists of `out` and `dev`: identical;
+- `sqlite3.h`, `sqlite3ext.h`: byte-identical; `sqlite3.pc`: identical modulo
+  store paths;
+- `libsqlite3.so.3.53.3`: the same 368 exported dynamic symbols, the same
+  NEEDED (libm, libz, libc), the same 57 embedded compile-option strings
+  (`ENABLE_FTS5`, `THREADSAFE`, ... down to `COMPILER=gcc-16.2.0`).
+By every installed artifact the two are the same ABI; only code generation
+(march/O3/LTO) differs, which the rule already accepts. Where it is really
+in-process: `pam_lastlog2.so` (util-linux) links libsqlite3, but on the
+running system it is only in `login`'s stack, not in a screen locker's; the graphics closure
+reaches sqlite only through python3.
+
+**perl 5.42.3** -- the patches (`cross.patch`, `cross-fdopendir.patch`,
+`perl-cross-1.6.4--5.42.3.patch`) are the visible part of a different
+BUILD: the cross branch configures with perl-cross instead of `Configure`.
+The outputs differ for real:
+- archname `x86_64-linux` (system) vs `x86_64-linux-thread-multi`
+  (upstream): every XS module lives under a different directory;
+- `useshrplib=false`: the system has only a static `CORE/libperl.a`, its
+  `bin/perl` NEEDs no libperl; upstream ships `libperl.so` and links it;
+- 332 `Config_heavy.pl` keys differ, among them `use64bitint`/`use64bitall`
+  (undef vs define; `ivsize`=`uvsize`=8 on both, so IV width is the same),
+  `sig_count` (0 vs 65; `sig_name`/`sig_num` are the same), `ccflags` (no
+  `-D_REENTRANT`, no `-fstack-protector-strong` recorded) and `optimize`;
+  the same: threads/multiplicity, all sizes, byte order, `api_versionstring`.
+So perl is NOT ABI-neutral between the sets. But there is no in-process path
+on the surface: the system has no `libperl.so` anything could load; the
+graphics driver's runtime closure (/run/opengl-driver) contains no perl at
+all -- mesa is reached only because the walk follows `buildInputs`; and the
+system profile's perl is a program, whose XS modules a user's perl would not
+find (different archname directory) and would refuse at load if it did
+(perl's XS handshake croaks on a mismatched interpreter instead of running).
+
+Not part of the question but seen in the same run: a home without r0k0r's
+own modules on galaxybook4-pro360 is also refused for `libsigc++` (system
+3.8.1 through easyeffects, the home's 2.12.1). That is the check keying by
+pname: the two are different libraries (`libsigc-3.0.so.0` vs
+`libsigc-2.0.so.0`) and can share a process. A precision issue of the walk,
+not a fork patch.
+
+Options for the decision: (a) keep failing; (b) an explicit, reviewed
+exemption list in `lib/surface-check.nix` (sqlite on this evidence; perl on
+the "no in-process path" argument, which is about the surface as walked, not
+about the two builds); (c) make the walk follow runtime references (needs
+outputs, i.e. builds -- the reason it walks `buildInputs` today).
+
 ### Every user feeds the classifier
 
 The classifier (`tuning/runtime-cache/lookup.nix`) decides what the levers
@@ -342,7 +411,8 @@ it (system feature modules, `home.packages`), and live in the flake. They
 move out and split per user:
 
 ```
-/var/lib/tuning-cache/<host>/system.nix          tier 1 + tier 2 of the system
+/var/lib/tuning-cache/<host>/system-tier1.nix    tier 1 of the system
+/var/lib/tuning-cache/<host>/system-tier2.nix    tier 2 of the system
 /var/lib/tuning-cache/<host>/users/<user>.nix    that user's evidence
 ```
 
@@ -373,10 +443,14 @@ tuning-cache-galaxybook4-pro360 = { url = "path:/var/lib/tuning-cache/galaxybook
 tuning-cache-victus-15          = { url = "path:/var/lib/tuning-cache/victus-15";          flake = false; };
 ```
 
-Relocking is by hand, one admin script:
-1. gather: copy every host's directory to the relocking machine, same path;
-2. relock: `nix flake update tuning-cache-*`, commit;
-3. distribute: `nix copy` every locked store path to every host -- so a host
+Relocking is by hand, one admin script (`scripts/tuning-cache-relock.sh`):
+1. check: this host's `users/*.nix` are each owned by the user they are named
+   after (or root) and world-readable, else refuse;
+2. gather: copy every other host's directory to the relocking machine, same
+   path, keeping only user files their owner wrote;
+3. relock: `nix flake update tuning-cache-<migrated hosts>`, commit;
+4. GC roots for the locked store paths, here and on every host distributed to;
+5. distribute: `nix flake archive --to` every reachable host -- so a host
    whose directory changed since (users keep writing) still evaluates the
    locked content.
 
@@ -392,6 +466,100 @@ Accepted consequences:
   the rebuild and the admin fixes it.
 - Relock commits are manual.
 - Tombstoned users' files are removed (or skipped by the merge).
+
+### Running the migration
+
+Reviewed 2026-10-24 against what the hosts are now. What changed in the
+scripts, and why:
+
+- **Where the system's files are written** (`tuning/runtime-cache/cache-dir.sh`)
+  is decided by `flake.lock` (does `tuning-cache-<host>` point at
+  /var/lib/tuning-cache?), no longer by whether that directory exists.
+  `userCache.enable` creates the directory at its switch, BEFORE the inputs
+  move: by existence, a `cache-refresh` in that window wrote where no
+  evaluation reads and the in-repo copy the rebuild used silently aged.
+  Once migrated, a host's files are written ON that host only: the relocking
+  machine's copy of another host is a mirror the next gather replaces, so
+  refreshing another migrated host is skipped with a message (Tier 2 and
+  Tier 1-over-ssh alike); in-repo hosts work as before.
+- **Impermanence.** /var/lib/tuning-cache is declared in
+  `my.state.system.state` (a bind mount from /persist on galaxybook4-pro360,
+  checked by `tests/user-tuning.nix` `userCacheOn`). The migration refuses to
+  seed an impermanent host whose /var/lib/tuning-cache is not a mount yet:
+  the files would land on the tmpfs root and vanish at the next boot.
+- **Untrusted users and the shared users/ directory.** It is sticky and
+  world-writable, so anyone can create any NAME in it (a sticky directory
+  only stops deleting others' files). The relock refuses a local
+  `users/<u>.nix` not owned by `<u>` (or root), and gathers only correctly
+  owned files from other hosts; `lookup.nix` additionally ignores a file
+  whose `user`/`host` fields do not match its name and directory (not a
+  security boundary, a guard against copies). `tuning-refresh` writes 0644
+  whatever the umask (the gather reads as the admin, not root). Root's
+  `--user`/`--all` run the user's refresh with a clean environment
+  (`runuser ... env -i`), and a user without a home repo is skipped (exit 2),
+  not a failure. Nothing a user writes needs the daemon's trust: it is
+  evaluation plus `nix-store -q`.
+- **The locked paths need GC roots.** The caches are read at evaluation and
+  referenced by no output, so the first GC after a relock deletes them, and
+  the next evaluation fails with a NAR hash mismatch as soon as the directory
+  has changed. Measured with Nix 2.35.2 (scratch flake): a locked `path:`
+  input whose store path is valid is used as is, with the directory changed
+  or even gone -- so a rooted (or distributed) copy is all a host needs. The
+  relock roots them in /nix/var/nix/gcroots/tuning-cache/ here and as the
+  admin's indirect roots (~/.local/state/tuning-cache/gcroots) on every host
+  it distributes to. The evalWorker path (`nixos-rebuild` evaluating on
+  victus-15) is unaffected: it `nix flake archive`s the checkout, inputs
+  included, at every rebuild.
+- **Idempotent, with a dry run.** `scripts/tuning-cache-migrate.sh [-n]`
+  (seed this host) and `--switch-inputs [HOST...]` (the relocking machine);
+  `scripts/tuning-cache-relock.sh [-n]` (the dry run writes the would-be lock
+  to a temp file and diffs it). Seeding never overwrites, the URL rewrite
+  only matches the in-repo form, a host ssh cannot reach keeps its input in
+  the repo (dell-latitude: no route from galaxybook4-pro360 today), and
+  `--switch-inputs` refuses a reachable host that is not seeded yet.
+  `TUNING_CACHE_ROOT` points both at a scratch directory for trying them.
+- /etc/nixos: the scripts and `tuning-refresh` take the flake from their own
+  checkout / `my.tuning.flakePath` (default /etc/nixos), which is now a real
+  directory on both galaxybook4-pro360 (persisted from /persist/etc/nixos)
+  and victus-15 (checked 2026-10-24: a directory at 4c41011, not the old
+  symlink).
+
+**Order.** One flake.lock holds every host's input, so the order is about
+who must be seeded before the relocking machine locks what it gathered:
+
+1. Commit `my.tuning.userCache.enable = true` for victus-15 and
+   galaxybook4-pro360 (dell-latitude can wait: unreachable, untuned, no
+   system files; its input stays in the repo). Evaluated: it changes each
+   toplevel only by `tuning-refresh` (+ its fish completions on victus-15),
+   the tmpfiles rules and, on galaxybook4-pro360, the /var/lib/tuning-cache
+   bind mount and its persistence directory -- no package of the tuned set
+   moves (`nix build --dry-run`: exactly `tuning-refresh.drv` and
+   `unit-var-lib-tuning-x2dcache.mount.drv` added on galaxybook4-pro360).
+2. **victus-15 first**: switch it, then on it `scripts/tuning-cache-migrate.sh -n`
+   and without `-n`. First because the relocking machine gathers victus-15's
+   directory and would otherwise lock an empty cache for it (all its tuning
+   back to Tier 3); `--switch-inputs` refuses that case anyway.
+3. galaxybook4-pro360: switch, check `findmnt /var/lib/tuning-cache`, then
+   `scripts/tuning-cache-migrate.sh -n`, `scripts/tuning-cache-migrate.sh`,
+   `scripts/tuning-cache-migrate.sh -n --switch-inputs` and finally
+   `scripts/tuning-cache-migrate.sh --switch-inputs` (rewrites flake.nix,
+   gathers, relocks, roots, distributes).
+4. Evaluate both toplevels: they must equal step 1's. Measured in advance:
+   galaxybook4-pro360 with userCache on and its input overridden to a copy of
+   the migrated directory (the two tier files, an empty users/) evaluates to
+   the same drvPath as with the in-repo input. Then commit
+   `flake.nix flake.lock` and pull that commit into victus-15's /etc/nixos.
+5. The first real `tuning-refresh` (each user, on their host) and a relock.
+   This one is MEANT to change the set: measured with r0k0r's evidence on
+   galaxybook4-pro360 today (`tuning-refresh --print`: 1328 names, 1141 from
+   the home generation's closure, 563 from evaluating ~/config/home), only 3
+   names are new to the system's tiers (intel-sde, shader-slang,
+   tree-sitter-odoc), and the toplevel gains exactly one build:
+   `shader-slang-x86_64-unknown-linux-gnu-2026.19` (kitty's, host-runtime
+   now, so built tuned instead of substituted from upstream), plus 4 fetched
+   sources. (The dry run lists ~1095 derivations for the baseline
+   too -- under CA it over-reports, and today's main may not be built here
+   yet -- so only the differences between variants are meaningful.)
 
 ## Threat model
 
@@ -641,14 +809,20 @@ deliberate system change.
     /nix is a btrfs subvolume (not the host-shared store the test driver
     mounts by default).
 12. **Eval matrix**: all optional pieces off, all on, and each alone.
-13. ~~**Per-user tuning**~~ implemented (see that section); left: the
-    one-time cache migration (root, every host), and a first real
-    tuning-refresh. Measured on implementation: an untuned home on either
-    march host is REFUSED by the surface check -- perl (cross.patch,
-    cross-fdopendir.patch, perl-cross) and sqlite (cross-only autosetup tcl
-    patches) differ between the IntraISACross set and a native one. Both are
-    build-system patches; whether that makes them ABI-neutral cannot be
-    computed, so the agreed rule (fail) stands until decided otherwise.
+13. ~~**Per-user tuning**~~ implemented (see that section) and made ready
+    to run (2026-10-24, [Running the migration](#running-the-migration):
+    flake.lock-driven cache_dir, persistence check, owner check, GC roots,
+    dry runs); left: the one-time cache migration (root; victus-15 first,
+    then galaxybook4-pro360 with `--switch-inputs`), and a first real
+    tuning-refresh + relock (measured in advance: r0k0r's evidence adds one
+    tuned build, shader-slang). Measured on implementation: an untuned home
+    on either march host is REFUSED by the surface check -- perl
+    (cross.patch, cross-fdopendir.patch, perl-cross) and sqlite (cross-only
+    autosetup tcl patches) differ between the IntraISACross set and a native
+    one. The agreed rule (fail) stands; the evidence for deciding is in
+    [Open question: perl and sqlite](#open-question-perl-and-sqlite-on-the-march-hosts-evidence-2026-10-24)
+    (sqlite: ABI-identical outputs; perl: a genuinely different build with
+    no in-process path on the surface).
     Originally planned: the home option `my.tuning` and
     `mkHome`'s `_module.args.pkgs`; candidate lists as system options
     (`my.tuning.{o3,lto}.{candidates,exclude}`) and home options
