@@ -118,8 +118,11 @@ in
     })
 
     (lib.mkIf cfg.greeter.enable {
-    my.state.system.optional.directories = [
-      "/var/lib/dms-greeter" # greeter's remembered user/session; trivial to rebuild
+    # state, not optional: the remembered SESSION is what it holds, and when
+    # it was wiped the greeter fell back to the first entry, "Hyprland
+    # (uwsm-managed)", which this config does not start under (2026-10-24).
+    my.state.system.state.directories = [
+      "/var/lib/dms-greeter" # greeter's remembered user/session
     ];
     programs.dms-greeter = {
       enable = true;

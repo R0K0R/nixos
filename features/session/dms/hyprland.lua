@@ -15,7 +15,12 @@ local mod = nix.mod
 -- values in features/hyprland/home.nix.
 -- ~/.config/hypr is already on package.path: Hyprland puts its config dir
 -- there itself.
-require("dms.colors")
+-- pcall: on a fresh home (impermanence wipes ~/.config/hypr/dms every boot)
+-- the file does not exist until DMS first writes it, a second or so into
+-- the session. A bare require raised the error overlay for those seconds AND
+-- aborted the rest of this file and every feature required after it;
+-- DMS's write triggers a reload that loads the colors anyway.
+pcall(require, "dms.colors")
 
 -- Glassmorphism for DMS layer surfaces. The compositor enables blur;
 -- a layer surface has to opt in, which is what these do. ignore_alpha

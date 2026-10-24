@@ -177,6 +177,22 @@ lib.mkIf inScope (lib.mkMerge [
     # (0.56.0's src/config/lua/bindings/*.cpp) rather than assumed from docs
     # of a fast-moving pre-1.0 API -- see the header of ./hyprland.lua.
     configType = "lua";
+
+    /*
+      Both greeter entries have to work: plain "Hyprland" and "Hyprland
+      (uwsm-managed)". home-manager's default start hook stops and restarts
+      hyprland-session.target, whose PropagatesStopTo=graphical-session.target
+      takes uwsm's wayland-session@ target down with it (BindsTo) -- the
+      compositor exited cleanly a second after every uwsm login (2026-10-24).
+      Under uwsm the dance is unnecessary anyway: uwsm brings up
+      graphical-session.target itself, and everything here hangs off that.
+      So skip it when this Hyprland runs inside uwsm's wayland-wm@ unit; the
+      cgroup says so without relying on any environment variable. No double
+      quotes: home-manager pastes this into a Lua "..." string.
+    */
+    systemd.extraCommands = [
+      "{ grep -q /wayland-wm@ /proc/self/cgroup || { systemctl --user stop hyprland-session.target && systemctl --user start hyprland-session.target; }; }"
+    ];
   };
 }
 
