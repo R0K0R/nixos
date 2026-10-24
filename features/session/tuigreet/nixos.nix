@@ -88,18 +88,43 @@ in
           exec ${session.bin} \
             >"''${XDG_CACHE_HOME:-$HOME/.cache}/${compositor}-greetd.log" 2>&1
         '';
+
+        /*
+          The epoch guard (my.fallback-session.guard). tuigreet reads THIS
+          directory, not the displayManager aggregate the guard rewrites, so
+          the same routing is applied here: the entry runs guarded-session in
+          front of the quiet launcher, with an "(ignore epoch)" entry beside it
+          and the fallback session's own. Off: the directory is exactly the
+          one entry above, as before.
+        */
+        fb = config.my.fallback-session;
+        guard = fb.enable && fb.guard.enable;
+        gs = "${fb.internal.guardedSession}/bin/guarded-session";
         # Offer exactly that session. NixOS has no /usr/share/wayland-sessions for tuigreet to scan;
         # upstream points --sessions at the displayManager aggregate, but that .desktop runs the
         # compositor directly -- hence the banner. Keeping the compositor's own Name + .desktop
         # filename means --remember-user-session still matches.
-        quietSessions = pkgs.writeTextDir "share/wayland-sessions/${session.file}" ''
+        entry = name: exec: ''
           [Desktop Entry]
-          Name=${session.name}
+          Name=${name}
           Comment=${session.name}
           Type=Application
           DesktopNames=${session.name}
-          Exec=${quietLaunch}
+          Exec=${exec}
         '';
+        quietSessions =
+          if !guard then
+            pkgs.writeTextDir "share/wayland-sessions/${session.file}" (entry session.name quietLaunch)
+          else
+            pkgs.runCommand "tuigreet-sessions" { } ''
+              d=$out/share/wayland-sessions
+              mkdir -p $d
+              cp ${pkgs.writeText session.file (entry session.name "${gs} ${quietLaunch}")} $d/${session.file}
+              cp ${
+                pkgs.writeText "ignore-epoch.desktop" (entry "${session.name} (ignore epoch)" "${gs} --ignore-epoch ${quietLaunch}")
+              } $d/${lib.removeSuffix ".desktop" session.file}-ignore-epoch.desktop
+              ln -s ${fb.internal.sessionEntry}/share/wayland-sessions/fallback.desktop $d/
+            '';
       in
       {
         /*

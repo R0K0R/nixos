@@ -281,10 +281,26 @@ in
     opencode.enable = true;
     direnv.enable = true;
     nix-settings.enable = true;
-    # hm-switch without the epoch (my.epoch stays off): `hm-switch --on
-    # victus-15 | --local | --eval-on victus-15` for the standalone home, the
-    # build step through sudo until class daemons are on. One package on PATH.
-    epoch.hmSwitch.enable = true;
+    # The system epoch (features/core/epoch): epoch.json in the toplevel, the
+    # boot/switch history in /var/lib/nixos-epochs (persisted), every home
+    # built for this host recording the epoch it was built for, hm-switch
+    # (`--on victus-15 | --local | --eval-on victus-15`, epoch check advisory)
+    # and hm-rollback.
+    epoch.enable = true;
+    # Enforcement, system-side: every greetd session goes through
+    # guarded-session, so a home generation built for another epoch -- or no
+    # generation at all -- gets the fallback session (cage + the system kitty
+    # + a menu with Claude Code). "Hyprland (ignore epoch)" in the greeter,
+    # or [s] in the fallback, starts the normal session anyway.
+    fallback-session = {
+      enable = true;
+      guard.enable = true;
+      # [s] when "Fallback" is picked from the greeter by hand.
+      normalSession = "start-hyprland";
+      # The home in use when this was turned on predates the epoch module;
+      # true once it has been switched to a home built for this revision.
+      unrecordedIsMismatch = false;
+    };
     # Record each account's deployed type (/var/lib/nixos-users/<user>.type)
     # and refuse a dangerous move away from it without acceptTypeChange.
     registry.recordTypes.enable = true;

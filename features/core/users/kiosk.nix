@@ -97,7 +97,14 @@ let
       Exec=${launcherExe pkg}
       Type=Application
     '').overrideAttrs
-      { passthru.providedSessions = [ name ]; };
+      {
+        passthru = {
+          providedSessions = [ name ];
+          # Only system code runs in it: my.fallback-session.guard links it
+          # through unchanged.
+          epochGuard = false;
+        };
+      };
 
   launcherExe = pkg: "${launcher pkg}/bin/kiosk-shell-${progOf pkg}";
 
