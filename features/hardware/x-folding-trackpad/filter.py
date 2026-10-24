@@ -131,6 +131,10 @@ def main(path):
     )
     clf = Classifier()
     frame = []
+    # Every key the keyboard sends in the first seconds after the grab goes to
+    # the journal: a key it sends on connecting (an OS-mode Super, say) with
+    # no release would otherwise be invisible -- the stuck-Super evidence.
+    watch_until = time.monotonic() + 3.0
 
     def emit(frames):
         for f in frames:
@@ -152,6 +156,8 @@ def main(path):
                         emit(clf.feed(frame, time.monotonic()))
                         frame = []
                     continue
+                if ev.type == EV_KEY and time.monotonic() < watch_until:
+                    print(f"connect: key {ev.code} value {ev.value}", file=sys.stderr, flush=True)
                 frame.append((ev.type, ev.code, ev.value))
     except OSError:
         # Device went away (Bluetooth disconnect). systemd stops this instance

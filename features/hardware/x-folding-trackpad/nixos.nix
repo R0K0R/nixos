@@ -34,10 +34,18 @@ in
     - features/hyprland turns its global input:natural_scroll off whenever
       this is enabled; otherwise the wheel would be inverted twice.
 
-    Failure mode, if the filter is not running: keyd skips the raw device and
-    nothing grabs it, so Hyprland reads it directly -- scrolling reverts to
-    the unnatural direction and keyd's remaps do not apply to this keyboard.
-    Nothing worse.
+    - Hyprland's libinput is told to IGNORE both the raw node and the
+      filter's (LIBINPUT_IGNORE_DEVICE): it only ever reads keyd's virtual
+      keyboard and pointer. Without that, every connection had two windows
+      in which Hyprland read a node about to be grabbed -- the raw one until
+      the filter's Python had started and grabbed it, the filtered one until
+      keyd grabbed that (04.71 -> ~05.0 and 05.01 -> 05.05 on 2026-10-25). A
+      key pressed inside a window and released after the grab stayed held in
+      Hyprland until the device went away: Super "held" after connecting,
+      cleared by reconnecting.
+    Failure mode, if the filter or keyd is not running: this keyboard (and its
+    trackpad) does nothing, since Hyprland ignores both of its nodes. Both
+    restart on failure; keyd also carries the laptop's own keyboard.
   */
   options.my.x-folding-trackpad.enable = lib.mkEnableOption ''
     natural scrolling for the X-Folding RGB keyboard's trackpad that leaves
@@ -47,6 +55,9 @@ in
   config = lib.mkIf cfg.enable {
     services.udev.extraRules = ''
       ACTION=="add", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="X-Folding RGB", ATTRS{id/vendor}=="${vendor}", ATTRS{id/product}=="${product}", TAG+="systemd", ENV{SYSTEMD_WANTS}+="x-folding-trackpad@%k.service"
+      # Neither node is Hyprland's: keyd's virtual devices carry this keyboard
+      # (see the plumbing note above for the stuck-Super race this closes).
+      ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", ATTRS{id/vendor}=="${vendor}", ATTRS{id/product}=="${product}|f021", ENV{LIBINPUT_IGNORE_DEVICE}="1"
     '';
 
     systemd.services."x-folding-trackpad@" = {
