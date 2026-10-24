@@ -21,6 +21,15 @@ if [ ! -d "$FLAKE_ROOT/hosts/$HOST" ]; then
   echo "no hosts/$HOST -- pass an explicit hostname matching a hosts/ directory" >&2
   exit 1
 fi
+# Where it goes, decided first: a migrated cache of another host is not
+# written here (cache-dir.sh), so do not spend the closure walk on it.
+rc=0
+DIR=$(cache_dir "$HOST") || rc=$?
+case $rc in
+  0) ;;
+  3) echo "tier1 for $HOST SKIPPED here" >&2; exit 0 ;;
+  *) exit 1 ;;
+esac
 
 # Read pname directly from each requisite's own deriver rather than parsing
 # it out of the store path string. An earlier version used
@@ -121,7 +130,7 @@ export TIER1_NIXPKGS_REV="$NIXPKGS_REV"
 export TIER1_NIXPKGS_NARHASH="$NIXPKGS_NARHASH"
 export TIER1_CAPTURED_AT="$CAPTURED_AT"
 
-OUT="$(cache_dir "$HOST")/system-tier1.nix"
+OUT="$DIR/system-tier1.nix"
 TMP_OUT="$(mktemp)"
 
 # Bare `nix eval` (no --json/--raw) on a plain data attrset pretty-prints

@@ -16,8 +16,14 @@ refresh_one() {
     exit 1
   fi
 
-  local OUT TMP_OUT
-  OUT="$(cache_dir "$HOST")/system-tier2.nix"
+  local OUT TMP_OUT DIR rc=0
+  DIR=$(cache_dir "$HOST") || rc=$?
+  case $rc in
+    0) ;;
+    3) echo "tier2 for $HOST SKIPPED here" >&2; return 0 ;;
+    *) exit 1 ;;
+  esac
+  OUT="$DIR/system-tier2.nix"
   TMP_OUT="$(mktemp)"
   local CAPTURED_AT
   CAPTURED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

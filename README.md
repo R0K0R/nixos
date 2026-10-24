@@ -389,6 +389,7 @@ narrowings and handover/kiosk misconfigurations are refused.
 | kiosk pinning + handover credentials | registry `session = { kiosk = ...; }` / `type = "handover"` (features/core/users/kiosk.nix, handover.nix) | a kiosk / handover account (pinned uid) | exists, no host has such an account; eval-tested only (`tests/user-types-eval.sh`), never run |
 | luks (TPM2 unlock, no PIN) | `my.luks` (features/core/luks) | -- (systemd initrd, asserted) | exists, off everywhere; eval-tested only (`tests/optional-features-eval.sh`). galaxybook4-pro360 is prepared, not encrypted: `hosts/galaxybook4-pro360/luks.nix`, `migration.galaxybook4-pro360-luks`, docs/luks-migration.md |
 | class daemons (one nix-daemon per user class, pinnable per-peer sockets) | `my.class-daemons` (features/nix/class-daemons) + registry fact `features.<host>."class-daemons"` | remote-builder.client when a class has builders; agenix for `sshKeySecret` | exists, off everywhere; eval-tested only (`tests/class-daemons-eval.sh`), never run -- runtime plan below |
+| per-user tuning cache (`/var/lib/tuning-cache/<host>/users`, `tuning-refresh`) | `my.tuning.userCache.enable` (tuning/nixos.nix); the inputs move with `scripts/tuning-cache-migrate.sh`, relocked by `scripts/tuning-cache-relock.sh` | -- (independent of `my.tuning.enable`); impermanent hosts persist the directory via `my.state` | exists, off everywhere; ready to run, not run (docs/multiuser-design.md, "Running the migration": victus-15 first); `tests/user-tuning-eval.sh`, `tests/user-tuning-scripts.sh` |
 | hm-switch (home switch with `--on PEER` / `--local` / `--eval-on PEER`) | `my.epoch.hmSwitch.enable` (features/core/epoch; defaults to `my.epoch.enable`) | -- | exists; on for galaxybook4-pro360 (without the epoch) |
 
 All levers default to off, and all off is plain upstream nixpkgs.
@@ -498,7 +499,9 @@ in the system's set, the home's packages in its own, and any library with the
 same version but a different source or patch list fails the evaluation with a
 full explanation. Measured: an untuned home on either march host is refused
 (perl and sqlite carry cross-build patches in the system's IntraISACross set);
-lto/o3 choices pass. `tests/user-tuning-eval.sh`.
+lto/o3 choices pass (the evidence for that decision: docs/multiuser-design.md,
+"Open question: perl and sqlite"). `tests/user-tuning-eval.sh`,
+`tests/user-tuning-scripts.sh`.
 
 ## Rebuilding
 

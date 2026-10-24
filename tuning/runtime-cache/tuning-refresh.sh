@@ -1,6 +1,11 @@
-# tuning-refresh [--repo DIR]                 your own evidence, for this host
+# tuning-refresh [--repo DIR] [--print]       your own evidence, for this host
 # tuning-refresh --user NAME [--repo DIR]     root: NAME's, run AS NAME
 # tuning-refresh --all                        root: every user of this host
+#
+# --print writes the file to stdout instead of into the cache directory, and
+# does not need the directory to exist: a dry run, before the admin has set
+# anything up (or with TUNING_CACHE_DIR pointed at a scratch directory, the
+# same run against a copy).
 #
 # Writes $TUNING_CACHE_DIR/<host>/users/<user>.nix (default
 # /var/lib/tuning-cache): the package names this user's home actually runs,
@@ -26,14 +31,15 @@ die() { echo "tuning-refresh: $*" >&2; exit 1; }
 host=$(hostname)
 cache=${TUNING_CACHE_DIR:-/var/lib/tuning-cache}
 repo=""
-target="" all=0
+target="" all=0 print=0
 while [ $# -gt 0 ]; do
   case $1 in
     --user) target=$2; shift ;;
     --all) all=1 ;;
     --repo) repo=$2; shift ;;
+    --print) print=1 ;;
     -h | --help)
-      echo "usage: tuning-refresh [--repo DIR] | --user NAME [--repo DIR] | --all"
+      echo "usage: tuning-refresh [--repo DIR] [--print] | --user NAME [--repo DIR] | --all"
       exit 0
       ;;
     *) die "unknown argument $1" ;;
@@ -54,11 +60,22 @@ if [ "$all" = 1 ] || [ -n "$target" ]; then
     access=$(nix eval --raw --impure --expr "
       ((builtins.getFlake \"$SYSTEM_FLAKE\").registry.effective.\"$host\".\"$u\").nix" 2>/dev/null || echo unknown)
     echo "== $u ($access)" >&2
+    r=0
     if [ "$access" = overlay ]; then
-      systemd-run --user --machine="$u@" --wait --pipe --quiet -- "$0" ${repo:+--repo "$repo"} || rc=1
+      systemd-run --user --machine="$u@" --wait --pipe --quiet -- "$0" ${repo:+--repo "$repo"} || r=$?
     else
-      runuser -u "$u" -- "$0" ${repo:+--repo "$repo"} || rc=1
+      # A clean environment, not root's: runuser keeps most of the caller's
+      # variables, and root's NIX_*/XDG_* would point the user's nix at
+      # root's config and caches.
+      uhome=$(getent passwd "$u" | cut -d: -f6)
+      runuser -u "$u" -- env -i PATH="$PATH" HOME="$uhome" USER="$u" LOGNAME="$u" \
+        ${TUNING_CACHE_DIR:+TUNING_CACHE_DIR="$TUNING_CACHE_DIR"} "$0" ${repo:+--repo "$repo"} || r=$?
     fi
+    case $r in
+      0) ;;
+      2) echo "   skipped: $u has no standalone home here" >&2 ;;
+      *) rc=1 ;;
+    esac
   done
   exit $rc
 fi
@@ -66,7 +83,16 @@ fi
 user=$(id -un)
 repo=${repo:-${HM_REPO:-$HOME/config/home}}
 dir=$cache/$host/users
-[ -d "$dir" ] && [ -w "$dir" ] || die "$dir does not exist or is not writable: the admin has not set up the tuning cache on $host yet (my.tuning.userCache.enable, scripts/tuning-cache-migrate.sh)"
+if [ "$print" = 0 ]; then
+  [ -d "$dir" ] && [ -w "$dir" ] || die "$dir does not exist or is not writable: the admin has not set up the tuning cache on $host yet (my.tuning.userCache.enable, scripts/tuning-cache-migrate.sh); --print shows what would be written"
+fi
+# Exit 2, not 1: root's --all skips such a user instead of failing (an
+# integrated home, homeActivation = "system", is already the system's own
+# evidence; an account without a home repo has nothing of its own).
+if ! [ -e "$repo/flake.nix" ]; then
+  echo "tuning-refresh: no home repo at $repo (--repo DIR, or HM_REPO)" >&2
+  exit 2
+fi
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -124,6 +150,17 @@ nix eval --impure --expr '
     nixpkgsNarHash = e "NARHASH";
     nixpkgsRev = e "REV";
     runtimeNames = lines;
-  }' >"$dir/.$user.nix.tmp"
-mv "$dir/.$user.nix.tmp" "$dir/$user.nix"
-echo "wrote $dir/$user.nix ($(wc -l <"$tmp/names") names: $(wc -l <"$tmp/closure") from the closure, $(wc -l <"$tmp/evalnames") from the evaluation) -- counts once the admin relocks the cache"
+  }' >"$tmp/out.nix"
+summary="$(wc -l <"$tmp/names") names: $(wc -l <"$tmp/closure") from the closure, $(wc -l <"$tmp/evalnames") from the evaluation"
+if [ "$print" = 1 ]; then
+  cat "$tmp/out.nix"
+  echo "tuning-refresh: --print, nothing written ($summary; would be $dir/$user.nix)" >&2
+  exit 0
+fi
+# 0644 whatever the umask: the relock's gather reads every user's file over
+# ssh as the admin, not as root, and silently copies nothing it cannot read.
+# Written next to the target, then renamed, so a concurrent relock never
+# locks half a file (lookup.nix reads only *.nix, not the .tmp).
+install -m 0644 "$tmp/out.nix" "$dir/.$user.nix.tmp"
+mv -f "$dir/.$user.nix.tmp" "$dir/$user.nix"
+echo "wrote $dir/$user.nix ($summary) -- counts once the admin relocks the cache"

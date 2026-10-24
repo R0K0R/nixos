@@ -1,0 +1,4 @@
+A synthetic tuning-cache-<host> directory for tests/user-tuning.nix (the
+lookup.nix validation of users/*.nix). Stamped "sha256-fixture"; the test
+hands lookup.nix a nixpkgs input with that narHash. Not a real cache: no
+system-tier files, and every name is made up.

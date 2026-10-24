@@ -59,6 +59,41 @@ in
     in
     expect "an untuned home on a march host is refused (perl/sqlite cross patches)" (!r.success) "refused";
 
+  # -- my.tuning.userCache (the per-host directory and tuning-refresh) --------
+  # On the impermanent host: the directory must be persisted, or everything
+  # the migration seeds and users write is gone at the next boot.
+  userCacheOn =
+    let
+      c =
+        (mkHostWith {
+          hostName = "galaxybook4-pro360";
+          extraModules = [ { my.tuning.userCache.enable = true; } ];
+        }).config;
+      persisted = lib.concatMap (p: map (d: d.directory or d) p.directories) (lib.attrValues c.environment.persistence);
+    in
+    expect "userCache: sticky users/ dir, tuning-refresh installed, /var/lib/tuning-cache persisted" (
+      lib.elem "d /var/lib/tuning-cache/galaxybook4-pro360/users 1777 root root -" c.systemd.tmpfiles.rules
+      && lib.any (p: (p.name or "") == "tuning-refresh") c.environment.systemPackages
+      && lib.elem "/var/lib/tuning-cache" persisted
+    ) "on";
+
+  # -- the users/ evidence files (tuning/runtime-cache/lookup.nix) -------------
+  # A synthetic cache directory, and a nixpkgs whose narHash is its stamp.
+  userEvidence =
+    let
+      l = import ../tuning/runtime-cache/lookup.nix {
+        inputs = inputs // {
+          nixpkgs = inputs.nixpkgs // { narHash = "sha256-fixture"; };
+          "tuning-cache-victus-15" = ./fixtures/tuning-cache;
+        };
+        host = "victus-15";
+      };
+    in
+    expect
+      "only a current, correctly named file for this host counts (not misnamed, stale, another host's, or a .tmp)"
+      (l.userNames == [ "zz-fixture-alice" ] && l.isHostRuntime "zz-fixture-alice")
+      (builtins.toJSON l.userNames);
+
   refused = {
     leverOff = mustFail "packages.o3 with o3 off" (hl.pkgsFor { o3 = false; packages.o3 = [ "jq" ]; }).hello.drvPath;
     o3Claims = mustFail "packages.lto on a name o3 tunes" (hl.pkgsFor { packages.lto = [ "jq" ]; }).hello.drvPath;

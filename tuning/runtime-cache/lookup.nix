@@ -140,14 +140,28 @@ let
   tier2Valid = tier2 != null && tier2.nixpkgsNarHash == currentNarHash;
 
   usersDir = cacheDir + "/users";
-  userFiles =
+  userFileNames =
     if builtins.pathExists usersDir then
-      lib.mapAttrsToList (n: _: usersDir + "/${n}") (
-        lib.filterAttrs (n: t: t == "regular" && lib.hasSuffix ".nix" n) (builtins.readDir usersDir)
-      )
+      lib.attrNames (lib.filterAttrs (n: t: t == "regular" && lib.hasSuffix ".nix" n) (builtins.readDir usersDir))
     else
       [ ];
-  userCaches = lib.filter (c: c != null && c.nixpkgsNarHash == currentNarHash) (map readCache userFiles);
+  /*
+    A user file counts only if it says it is that user's (user = its file
+    name) and this host's. Not a security boundary -- the contents are the
+    user's to write; the ownership check is scripts/tuning-cache-relock.sh's,
+    which sees file owners before locking erases them -- but it keeps a file
+    copied under the wrong name or into the wrong host's directory from
+    counting silently.
+  */
+  readUserCache =
+    n:
+    let
+      c = readCache (usersDir + "/${n}");
+    in
+    if c != null && c.user or null == lib.removeSuffix ".nix" n && c.host or null == host then c else null;
+  userCaches = lib.filter (c: c != null && c.nixpkgsNarHash or null == currentNarHash) (
+    map readUserCache userFileNames
+  );
   userNames = dropBuildOnly (lib.concatMap (c: c.runtimeNames) userCaches);
   # Exposed for consumers where a Tier 3-only (no cache) answer isn't safe to
   # act on silently -- e.g. host-upstream-substitute-overlay.nix, where a
@@ -361,6 +375,9 @@ let
 in
 {
   inherit isHostRuntime hasWarmCache;
+  # The names the users/ files contributed, after validation: for
+  # tests/user-tuning.nix, which checks which files count without forcing Tier 3.
+  inherit userNames;
   # De-duplicated through an attrset, not lib.unique: that is a foldl' testing each
   # name against every one kept so far -- quadratic over thousands of names, and
   # the single largest cost this file added to an eval (2026-10-08 profile).
