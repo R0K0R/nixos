@@ -143,7 +143,7 @@ in
     && lib.hasInfix "restart nix-guest-overlay-guest.service" s."user@1902".serviceConfig.ExecStopPost
   ) "ok";
   activation = expect "activation asks for a new snapshot" (
-    lib.hasInfix "start --no-block nix-guest-lower.service" (let a = c.system.activationScripts.nix-guest-lower; in a.text or a)
+    lib.hasInfix "restart --no-block nix-guest-lower.service" (let a = c.system.activationScripts.nix-guest-lower; in a.text or a)
   ) "ok";
   nixMount = expect "/nix from victus-15's subvolume" (lib.elem "subvol=nix" c.fileSystems."/nix".options) (
     toString c.fileSystems."/nix".options

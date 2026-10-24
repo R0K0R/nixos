@@ -88,6 +88,22 @@ if [ -n "$old" ] && [ "$old" != "$cur" ] && [ -f "$db" ]; then
   done
 fi
 
+# THE LOWER LAYER IS ALIVE, as far as the guest's GC is concerned. Nix's
+# local-overlay GC walks the merged store directory, lower entries included,
+# and the guest's roots do not keep the system's paths alive: it "deletes"
+# them (a no-op on the lower layer), trips over their lower referrers
+# ("BUG: cannot delete path ... in use") and fails (found by
+# tests/guest-overlay-vm.nix). So the snapshot's top paths -- those no other
+# path refers to, whose closures are the whole snapshot -- are roots in the
+# guest's state, root-owned, rewritten on every mount.
+roots=$d/state/gcroots/nix-guest-lower
+install -d -m 0755 -o "$uid" -g "$gid" "$d/state/gcroots"
+rm -rf --one-file-system -- "$roots"
+install -d -m 0755 -o root -g root "$roots"
+sqlite3 -readonly "file:$new/var/nix/db/db.sqlite?immutable=1" \
+  'SELECT path FROM ValidPaths WHERE id NOT IN (SELECT reference FROM Refs WHERE referrer <> reference)' |
+  while IFS= read -r p; do ln -s "$p" "$roots/${p##*/}"; done
+
 mount --bind "$new" "$d/lower/nix"
 mount -o remount,bind,ro "$d/lower/nix"
 mount -t overlay overlay \

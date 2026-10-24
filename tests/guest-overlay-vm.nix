@@ -38,7 +38,7 @@
   NOT COVERED (no network in a test VM): a substitution into the guest
   store, and a build on a builder of the guest's own. A "system switch" is
   simulated by what the activation script does: a new path in the system
-  store and `systemctl start nix-guest-lower`.
+  store and `systemctl restart nix-guest-lower`.
 
   Build (needs kvm: dispatched to a builder):
     nix build -L .#checks.x86_64-linux.guest-overlay-vm
@@ -152,7 +152,10 @@ let
             # NixOS's read-only bind by now.
             top=$(mktemp -d)
             mount -t btrfs -o subvolid=5 /dev/disk/by-label/${label} "$top"
-            find "$top" "$top/nix" -xdev \! -uid 0 -exec chown -h root:root {} +
+            # Only what the image brought: / itself and /nix. Activation has
+            # already made /home/guest, which must stay the guest's.
+            chown root:root "$top" "$top/nix-path-registration"
+            find "$top/nix" -xdev \! -uid 0 -exec chown -h root:root {} +
             umount "$top" && rmdir "$top"
             ${config.nix.package.out}/bin/nix-store --load-db < /nix-path-registration
             rm /nix-path-registration
@@ -171,7 +174,8 @@ let
         derivation {
           name = "guest-build-''${marker}";
           system = "x86_64-linux";
-          builder = "${pkgs.bash}/bin/bash";
+          # storePath: an input of the derivation, so the sandbox has it.
+          builder = "''${builtins.storePath "${pkgs.bash}"}/bin/bash";
           args = [ "-c" "echo ''${marker} ''${if a == null then "" else builtins.storePath a} > $out" ];
         }
       '';
@@ -229,7 +233,7 @@ pkgs.testers.runNixOSTest (
       def new_snapshot():
           """What every activation does; returns the new snapshot's id."""
           before = current()
-          machine.succeed("systemctl start nix-guest-lower.service")
+          machine.succeed("systemctl restart nix-guest-lower.service")
           after = current()
           assert after != before, "nix-guest-lower made no new snapshot"
           return after
@@ -265,19 +269,25 @@ pkgs.testers.runNixOSTest (
           machine.succeed(f"btrfs subvolume show {base}/guest")
 
       with subtest("guest session: their store, the system's untouched"):
-          assert g("findmnt -no FSTYPE /nix/store") == "overlay"
+          # Diagnostics first (logged, never fail): what the session sees.
+          machine.log(machine.execute("su guest -c 'grep -E \" /nix/store | /etc/nix | /run/wrappers \" /proc/self/mountinfo'")[1])
+          machine.log(machine.execute("journalctl -b --no-pager | grep -i namespace")[1])
+          # stat -f names the TOP mount; findmnt would list the system's
+          # read-only bind under it too.
+          fs = g("stat -f -c %T /nix/store")
+          assert fs == "overlayfs", f"guest /nix/store is {fs!r}"
           g("grep -q '^store = local-overlay://' /etc/nix/nix.conf")
           g("test ! -e /run/wrappers/bin/sudo")
-          info = g("nix store info")
+          info = g("nix store info 2>&1")
           machine.log(info)
           assert "local-overlay" in info, info
           # No propagation back: the system's /nix/store is still plain btrfs.
-          machine.succeed("findmnt -no FSTYPE --target /nix/store | grep -qx btrfs")
+          machine.succeed("stat -f -c %T /nix/store | grep -qx btrfs")
           machine.succeed("test -e /run/wrappers/bin/sudo")
 
       with subtest("a build in the guest store"):
           out = g("nix-build --no-out-link /etc/guest-test/build.nix --argstr marker one")
-          g(f"grep -qx 'one ' {out}")
+          g(f"grep -qx one {out}")
           machine.fail(f"test -e {out}")
           machine.succeed(f"test -e {base}/guest/upper/$(basename {out})")
           kept = g("nix-build -o ~/kept /etc/guest-test/build.nix --argstr marker kept")
@@ -312,12 +322,14 @@ pkgs.testers.runNixOSTest (
           machine.send_chars("guest\n")
           machine.wait_until_tty_matches("1", "Password: ")
           machine.send_chars("guest\n")
-          machine.wait_for_unit("user@1902.service")
-          machine.send_chars("findmnt -no FSTYPE /nix/store > /tmp/login-fstype\n")
+          machine.wait_until_tty_matches("1", "guest@machine")
+          machine.wait_until_succeeds("systemctl is-active user@1902.service", timeout=60)
+          machine.send_chars("stat -f -c %T /nix/store > /tmp/login-fstype\n")
           machine.wait_for_file("/tmp/login-fstype")
-          assert machine.succeed("cat /tmp/login-fstype").strip() == "overlay"
+          assert machine.succeed("cat /tmp/login-fstype").strip() == "overlayfs"
+          # The user manager (PAM service systemd-user) too.
           machine.succeed(
-              "findmnt -N $(pgrep -u guest -x systemd | head -1) -no FSTYPE /nix/store | grep -qx overlay"
+              "nsenter -t $(pgrep -u guest -x systemd | head -1) -m stat -f -c %T /nix/store | grep -qx overlayfs"
           )
 
       with subtest("a switch during the session: the session keeps its lower"):

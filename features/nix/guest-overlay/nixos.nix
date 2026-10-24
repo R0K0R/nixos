@@ -87,7 +87,11 @@ let
   storeUrl =
     n:
     "local-overlay://?lower-store=${enc "local?root=${base}/${n}/lower&read-only=true"}"
-    + "&upper-layer=${base}/${n}/upper&state=${base}/${n}/state";
+    + "&upper-layer=${base}/${n}/upper&state=${base}/${n}/state"
+    # Build logs too: the default is the system's /nix/var/log/nix, which a
+    # guest cannot write ("creating directory /nix/var/log/nix/drvs/..":
+    # found by tests/guest-overlay-vm.nix). build-dir already follows state.
+    + "&log=${base}/${n}/state/log";
 
   # The guest's /etc/nix/nix.conf. A real file (tmpfiles C), never a symlink
   # into /etc/static: that would resolve through the guest's lower snapshot,
@@ -110,6 +114,25 @@ let
       max-jobs = ${if facts.localBuilds or true then "auto" else "0"}
     '';
   nixConf = n: pkgs.writeText "nix-guest-${n}.conf" (nixConfText n);
+
+  /*
+    pam_namespace READS ITS CONFIG FROM ITS OWN STORE PATH. nixpkgs builds
+    linux-pam with sysconfdir = $out/etc, and pam_namespace has no argument
+    for another file, so the /etc/security/namespace.conf this feature writes
+    was never read: the module found its own empty default, did nothing and
+    returned success -- the guest's sessions ran on the system store with no
+    error anywhere (found by tests/guest-overlay-vm.nix, `findmnt /nix/store`
+    empty in a su session). This copy of the module looks in /etc instead;
+    only pam_namespace.so is used from it, so nothing else in the system
+    moves. The vendor fallback (the package's own etc) is left as it is.
+  */
+  pamNamespace = config.security.pam.package.overrideAttrs (o: {
+    pname = "${o.pname or "linux-pam"}-namespace-etc";
+    postPatch = (o.postPatch or "") + ''
+      substituteInPlace modules/pam_namespace/pam_namespace.h \
+        --replace-fail '(SCONFIG_DIR "/namespace' '("/etc/security/namespace'
+    '';
+  });
 
   sessionRules = svc: config.security.pam.services.${svc}.rules.session;
   ownStack = svc: (sessionRules svc) ? unix && (sessionRules svc).unix.enable;
@@ -251,7 +274,7 @@ in
           # the user manager it starts both see the guest's store.
           order = ((sessionRules svc).unix.order or 0) + 60;
           control = "required";
-          modulePath = "${config.security.pam.package}/lib/security/pam_namespace.so";
+          modulePath = "${pamNamespace}/lib/security/pam_namespace.so";
         };
       });
 
@@ -275,8 +298,18 @@ in
             after = [ "local-fs.target" ];
             before = map (n: "nix-guest-overlay-${n}.service") names;
             restartIfChanged = false;
+            /*
+              RemainAfterExit, and the overlay units only WANT it. Each guest's
+              overlay unit is restarted at that guest's logout (the rebase);
+              with Requires= on an exited oneshot, every such restart pulled
+              in a fresh snapshot first, and the guest rebased onto a lower
+              nobody had asked for (found by tests/guest-overlay-vm.nix). Now
+              a snapshot is taken at boot and on `restart` (activation), and
+              Wants= keeps a restart of this unit from stopping the overlays.
+            */
             serviceConfig = {
               Type = "oneshot";
+              RemainAfterExit = true;
               ExecStart = "${snapshot} ${lroot} ${base} ${lib.escapeShellArgs names}";
             };
           };
@@ -294,7 +327,7 @@ in
                 "nix-guest-lower.service"
                 "systemd-tmpfiles-setup.service"
               ];
-              requires = [ "nix-guest-lower.service" ];
+              wants = [ "nix-guest-lower.service" ];
               # A switch must not unmount a guest's store under them; the
               # snapshot service asks for a rebase, which waits for a logout.
               restartIfChanged = false;
@@ -331,7 +364,7 @@ in
       # see them. Skipped in stage 2 (no systemd yet); the unit's wantedBy covers boot.
       system.activationScripts.nix-guest-lower = ''
         if [ -d /run/systemd/system ]; then
-          ${config.systemd.package}/bin/systemctl start --no-block nix-guest-lower.service || true
+          ${config.systemd.package}/bin/systemctl restart --no-block nix-guest-lower.service || true
         fi
       '';
     })
