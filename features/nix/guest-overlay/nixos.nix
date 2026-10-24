@@ -111,6 +111,14 @@ let
     '';
   nixConf = n: pkgs.writeText "nix-guest-${n}.conf" (nixConfText n);
 
+  sessionRules = svc: config.security.pam.services.${svc}.rules.session;
+  ownStack = svc: (sessionRules svc) ? unix && (sessionRules svc).unix.enable;
+  includedBy =
+    svc:
+    map (r: r.modulePath) (
+      lib.filter (r: r.enable && r.control == "include") (lib.attrValues (sessionRules svc))
+    );
+
   only = "~" + lib.concatStringsSep "," names;
   namespaceConf = ''
     # nix-guest overlay stores (features/nix/guest-overlay). Instance parents are
@@ -214,18 +222,34 @@ in
       my.state.system.state.directories = [
         cfg.stateDir # per-guest subvolumes: each guest's upper layer and state
       ];
-      assertions = lib.mapAttrsToList (n: u: {
+      assertions = map (svc: {
+        assertion = ownStack svc || lib.any (t: lib.elem t cfg.pamServices && ownStack t) (includedBy svc);
+        message = "my.guest-overlay: PAM service ${svc} has no pam_unix session of its own and includes none of my.guest-overlay.pamServices (${toString (includedBy svc)}); its sessions would run on the system store.";
+      }) cfg.pamServices
+      ++ lib.mapAttrsToList (n: u: {
         assertion = config.users.users.${n}.uid != null;
         message = "my.guest-overlay: ${n} needs a pinned uid (registry files always have one).";
       }) guests;
 
       environment.etc."security/namespace.conf".text = namespaceConf;
 
+      /*
+        INCLUDED STACKS. nixpkgs builds some session stacks as `session include
+        login` with no pam_unix of their own -- greetd's, found by the eval
+        matrix on dell-latitude ("attribute 'unix' missing"). Those get
+        pam_namespace through the stack they include; a second instance would
+        try to set up the namespace again. So the rule is only enabled where
+        the stack has its own pam_unix, and an including stack must include
+        one that is in pamServices (asserted below). `enable` rather than
+        mkIf: the attribute names of rules.session must not depend on its
+        own values.
+      */
       security.pam.services = lib.genAttrs cfg.pamServices (svc: {
         rules.session.namespace = {
+          enable = ownStack svc;
           # Right after pam_unix: before pam_systemd, so a login session and
           # the user manager it starts both see the guest's store.
-          order = config.security.pam.services.${svc}.rules.session.unix.order + 60;
+          order = ((sessionRules svc).unix.order or 0) + 60;
           control = "required";
           modulePath = "${config.security.pam.package}/lib/security/pam_namespace.so";
         };

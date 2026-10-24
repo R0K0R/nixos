@@ -542,6 +542,15 @@
       */
       checks.x86_64-linux = lib.mapAttrs (
         _: cfg: cfg.config.system.build.toplevel
-      ) self.nixosConfigurations;
+      ) self.nixosConfigurations
+      // {
+        /*
+          features/nix/guest-overlay booted: a VM whose /nix is a btrfs
+          subvolume, one overlay guest, the design doc's first-run checklist
+          as far as a VM without network goes. Plain upstream nixpkgs, never
+          the tuned set. Needs kvm (a builder). See tests/guest-overlay-vm.nix.
+        */
+        guest-overlay-vm = import ./tests/guest-overlay-vm.nix { inherit inputs lib; };
+      };
     };
 }

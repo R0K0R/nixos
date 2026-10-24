@@ -381,9 +381,9 @@ refused.
 | ccache | `my.ccache` (features/nix/ccache) | client half; `builder` half on NixOS builders | exists; to be split out of tuning's reach as its own optional feature |
 | content-addressed derivations | `my.ca-derivations` (features/nix/ca-derivations; the "tuned" package policy is applied by tuning/ca.nix and needs march) | ca-derivations live on the evaluating daemon and every builder | exists |
 | btrfs-layout (`/nix` its own subvolume) | `my.btrfs-layout` (features/core/btrfs-layout) | -- | exists; on for victus-15 (already a subvolume, `nix`); galaxybook needs the offline migration in the feature's header first |
-| impermanence | -- | btrfs-layout | **planned** |
-| guest-overlay (per-guest overlay stores) | `my.guest-overlay` (features/nix/guest-overlay) + registry fact `features.<host>."guest-overlay"` | btrfs-layout | exists, off everywhere; eval-tested only (`tests/guest-overlay-eval.sh`), never run |
-| luks (TPM2 unlock, no PIN) | -- | -- | **planned** |
+| impermanence | `my.impermanence` (features/core/impermanence) + registry fact `features.<host>.impermanence` | btrfs-layout (rootSubvolume, persist), systemd initrd | exists; on for galaxybook4-pro360 |
+| guest-overlay (per-guest overlay stores) | `my.guest-overlay` (features/nix/guest-overlay) + registry fact `features.<host>."guest-overlay"` | btrfs-layout | exists, off everywhere; eval-tested (`tests/guest-overlay-eval.sh`), VM test `checks.x86_64-linux.guest-overlay-vm` (partially passing, see design doc Next 11) |
+| luks (TPM2 unlock, no PIN) | -- | -- | **planned** (lib/matrix.nix has its TODO entry) |
 
 All levers default to off, and all off is plain upstream nixpkgs.
 
@@ -550,11 +550,28 @@ that moves the package set, so run it with a reachable builder or
 
 `scripts/eval-matrix.sh` keeps the optional pieces optional. It evaluates, and
 never builds, synthetic variants of each real host defined in `lib/matrix.nix`:
-everything off (plain upstream nixpkgs), each lever and feature alone, and all
-on. It reports any variant whose result differs from the expected one. The real
-`nixosConfigurations` are untouched by it. The "all" variant, with emacs on,
-evaluates to exactly the real host's toplevel, which is how the matrix is known
-to be faithful. Run it after any change to tuning, ccache, CA or `_meta`.
+every piece of [Optional pieces](#optional-pieces) off (plain upstream
+nixpkgs), each alone, all on, the combinations that matter (`lto-o3`,
+`march-lto`, `btrfs-impermanence`, ...), and the combinations that are invalid
+by design (impermanence or guest-overlay without btrfs-layout, the
+fork-only tuning levers without march, `ca` "tuned" without march, march
+without `enable`, btrfs-layout on dell-latitude's ext4 root), which must FAIL
+with the assertion that names the reason -- the script checks the message, so
+failing for another reason is reported too. A new piece is one entry in
+`lib/matrix.nix`'s `pieces`. Patterns select a subset
+(`scripts/eval-matrix.sh 'dell-latitude/*' '*/off'`; `--list` shows them);
+an IntraISACross host's variants take about a minute each, run one at a time.
+With `--with-emacs`, the `host` variant must equal the real host's toplevel
+(checked), which is how the matrix is known to be faithful. Run it after any
+change to tuning, ccache, CA, the btrfs/impermanence/guest features or `_meta`.
+
+`checks.x86_64-linux.guest-overlay-vm` (tests/guest-overlay-vm.nix) boots
+guest-overlay in a VM whose `/nix` is a btrfs subvolume, on plain upstream
+nixpkgs: snapshot, overlay mount, guest sessions (su and a tty login, the
+user manager included), `nix store info`, a build and a GC in the guest
+store, rebase with copy-up after an admin GC, and a "switch" during a session
+(kept lower, rebase at logout). Needs kvm, so it builds on a builder:
+`nix build -L .#checks.x86_64-linux.guest-overlay-vm`.
 
 ### Users (home)
 
