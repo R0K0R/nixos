@@ -109,6 +109,9 @@ let
   axes = [ "home" "nix" "session" "builders" "grants" ];
 
   rank = v: lib.lists.findFirstIndex (x: x == v) null axisValues.nix;
+  # home values by how much survives a reboot, least first (see `narrow`).
+  homePersistence = [ "tmpfs" "impermanent" "persistent" ];
+  persistRank = v: lib.lists.findFirstIndex (x: x == v) null homePersistence;
 
   sessionKind =
     s:
@@ -219,6 +222,13 @@ let
   narrow =
     where: e: n:
     let
+      /*
+        home narrows by what survives a reboot: a persistent home keeps
+        everything, an impermanent one only its persist manifest, a tmpfs one
+        nothing. So a host may make a persistent user impermanent there (the
+        machine's root is wiped; galaxybook4-pro360) without that leaking to
+        every other host the user lives on, as a user-file override would.
+      */
       bad =
         filter (axis: !(
           if axis == "builders" then
@@ -227,6 +237,8 @@ let
             isList n.grants && subtractLists e.grants n.grants == [ ]
           else if axis == "nix" then
             rank n.nix != null && rank n.nix <= rank e.nix
+          else if axis == "home" then
+            persistRank n.home != null && persistRank n.home <= persistRank e.home
           else
             false
         )) (attrNames n);
@@ -235,7 +247,8 @@ let
       throw ''
         registry: ${where}: narrow.${fmtList bad} would widen or is not narrowable
         (narrowable: builders true->false, grants to a subset, nix to a lower rank of
-        [ ${fmtList axisValues.nix} ]).''
+        [ ${fmtList axisValues.nix} ], home to one that keeps less of
+        [ ${fmtList homePersistence} ]).''
     else
       e // n;
 

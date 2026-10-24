@@ -16,7 +16,8 @@
              cannot decrypt it, and agenix would then fail at activation. The
              account's other axes are unchanged.
     narrow   <user> -> axes to narrow on this host (never widen): builders
-             true -> false, grants to a subset, nix to a lower rank. Plus
+             true -> false, grants to a subset, nix to a lower rank, home to
+             one that keeps less (persistent -> impermanent -> tmpfs). Plus
              `localBuilds = false`, accepted only where the host builds
              nothing locally anyway (Nix has no per-user max-jobs; see
              lib/registry.nix). Groups follow grants (lib/registry.nix
@@ -40,6 +41,9 @@
     galaxybook4-pro360 = {
       users = [ "r0k0r" ];
       primary = "r0k0r";
+      # The root is wiped at every boot (features.impermanence below); his home
+      # with it, rebuilt from his persist manifest (~/config/home/persist.nix).
+      narrow.r0k0r.home = "impermanent";
     };
 
     victus-15 = {
@@ -77,7 +81,7 @@
       ccache = true;
       ca-derivations = true;
       guest-overlay = false;
-      impermanence = false;
+      impermanence = true;
     };
 
     victus-15 = {

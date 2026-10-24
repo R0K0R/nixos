@@ -29,6 +29,9 @@ in
     # Hands the accelerometer's IIO buffer to the `input` group so the
     # vehicle-motion-cues DMS plugin can stream it without root.
     ./accelerometer.nix
+    # The btrfs subvolume layout and the ephemeral root, since the live-USB
+    # migration of 2026-10-24 (docs/impermanence-migration.md).
+    ./impermanence.nix
   ];
 
   services.tailscale.enable = true;
