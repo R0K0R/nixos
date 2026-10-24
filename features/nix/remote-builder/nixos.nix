@@ -281,6 +281,11 @@ in
   })
   (lib.mkIf cfg.enable {
     nix.distributedBuilds = true;
+    # root's ssh state (known_hosts beyond the declared peers, config): the daemon
+    # dials builders and ssh-ng substituters as root.
+    my.state.system.secret.directories = [ "/root/.ssh" ];
+    # A hand-installed builder key (no sshKeySecret) is a file on the root.
+    my.state.system.secret.files = lib.optional (!lib.hasPrefix "/run/" cfg.sshKey) cfg.sshKey;
 
     /*
       ROOT-ONLY. This key is what a NixOS peer trusts (its nix-ssh account,

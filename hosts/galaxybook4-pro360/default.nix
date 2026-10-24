@@ -32,6 +32,9 @@ in
   ];
 
   services.tailscale.enable = true;
+  # Enabled here, not through my.tailscale, so the feature's state entry does not
+  # apply: the node key and login, or the node re-registers after every wipe.
+  my.state.system.secret.directories = [ "/var/lib/tailscale" ];
   # `tailscale up/login/set/...` as r0k0r without sudo. Tailscale has no group for
   # this: the operator is one user, stored in tailscaled's prefs, and applied by
   # the module's tailscaled-set unit on every boot.

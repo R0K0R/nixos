@@ -673,6 +673,12 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # The keys are hand-installed files outside the store: under impermanence
+    # they went with the first wipe (2026-10-24) and the tunnel could not log
+    # in. agenix paths (/run/...) are rebuilt every boot and need nothing.
+    my.state.system.secret.files = lib.filter (k: k != null && !lib.hasPrefix "/run/" k)
+      ([ cfg.sshKey ] ++ map (j: j.sshKey or null) cfg.jumps);
+
     /*
       NetworkManager must never touch the AP interface. It matches saved
       profiles against ANY available wifi device, so on a card that permits two

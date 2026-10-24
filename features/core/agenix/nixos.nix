@@ -81,7 +81,19 @@ in
     { my.internal.features.agenix.enabledBy = cfg.enable; }
 
     (lib.mkIf cfg.enable {
-    age.identityPaths = cfg.identityPaths;
+    /*
+      Under impermanence, read each identity from its copy in the persist root,
+      not from the bind mount at its usual path: agenix decrypts during the
+      initrd's activation, BEFORE impermanence binds the file into place, so
+      the usual path was empty and every secret was skipped on the first boot
+      (2026-10-24: "identityPaths entry ... not present!"). The persist root
+      is neededForBoot, so it is mounted by then.
+    */
+    age.identityPaths =
+      let imp = config.my.impermanence or { }; in
+      if imp.enable or false then
+        map (p: if lib.hasPrefix "${imp.persistRoot}/" p then p else imp.persistRoot + p) cfg.identityPaths
+      else cfg.identityPaths;
 
     # The root of trust survives an ephemeral root (features/core/impermanence):
     # without it, every secret is gone after the first reboot. Plain data;

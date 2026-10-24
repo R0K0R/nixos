@@ -125,7 +125,10 @@ lib.mkMerge [
         merged="$(${pkgs.jq}/bin/jq --argjson add "$servers" \
           '.mcpServers = ((.mcpServers // {}) + $add.mcpServers)' "$state")"
         if [ "$merged" != "$(cat "$state")" ]; then
-          run install -m 600 /dev/stdin "$state" <<< "$merged"
+          # In place, never replaced: under impermanence the file is a bind
+          # mount from /persist, and install's unlink fails with EBUSY --
+          # which aborted the whole activation on the first boot (2026-10-24).
+          run printf '%s\n' "$merged" > "$state"
         fi
       fi
     '';

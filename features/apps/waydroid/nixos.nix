@@ -212,10 +212,10 @@ in
 
     (lib.mkIf cfg.enable {
       virtualisation.waydroid.enable = true;
-      my.state.system.optional.directories = [
+      my.state.system.state.directories = [
         "/var/lib/waydroid" # images, vendor overlay and waydroid.cfg; reinitialised by waydroid-init
       ];
-      my.state.user.optional.directories = [
+      my.state.user.state.directories = [
         ".local/share/waydroid" # Android /data: installed apps and their logins (3 GB)
       ];
 
