@@ -335,6 +335,15 @@
             so mixing the system set already does with itself is not blamed on
             the user. Skipped -- no second evaluation -- for a host-set home.
           */
+          /*
+            With its own driver tree (my.graphics.driver, features/session/
+            gl-namespace) the check turns half around: the system's tree is
+            no longer loaded into the home's programs (skip "graphics"; the
+            tree's own closure joins the user side instead), and the home's
+            tree is loaded into the system's programs run in its sessions --
+            checked against the system profile, minus what the system's own
+            driver already mixes there.
+          */
           surfaceErrors =
             args: cfg:
             if ut.isHostSet cfg.my.tuning hostName nixos then
@@ -342,11 +351,30 @@
             else
               let
                 base = gen.mkHome ({ inherit nixos; } // args);
-                result = sc.check {
+                drv = cfg.my.graphics.driver;
+                own = drv.enable;
+                g = nixos.config.hardware.graphics;
+                sysDriver = lib.optionals g.enable ([ g.package ] ++ g.extraPackages);
+                forward = sc.check {
                   osConfig = nixos.config;
-                  homePackages = cfg.home.packages;
-                  baselinePackages = base.config.home.packages;
+                  homePackages = cfg.home.packages ++ lib.optionals own (drv.packages ++ drv.packages32);
+                  baselinePackages =
+                    base.config.home.packages
+                    ++ lib.optionals own (base.config.my.graphics.driver.packages ++ base.config.my.graphics.driver.packages32);
+                  skip = lib.optional own "graphics";
                 };
+                reverse = sc.check {
+                  osConfig = nixos.config;
+                  homePackages = drv.packages;
+                  baselinePackages = sysDriver;
+                  skip = [ "graphics" "nss" "locale" "pam" ];
+                };
+                result = forward // {
+                  conflicts =
+                    forward.conflicts
+                    ++ lib.optionals own (map (c: c // { group = "driver"; }) reverse.conflicts);
+                };
+                mappable = nixos.config.my.gl-namespace.active && lib.elem args.username nixos.config.my.gl-namespace.users;
               in
               lib.optional (result.conflicts != [ ]) (
                 sc.explain {
@@ -354,6 +382,8 @@
                   levers = ut.resolve cfg.my.tuning hostName nixos;
                   hostLevers = ut.hostLevers nixos;
                   inherit result;
+                  hints = lib.optional (!own && mappable && lib.any (c: c.group == "graphics") result.conflicts)
+                    "For the graphics driver: this host can give you your own (my.graphics.driver.enable = true;), built from your set.";
                 }
               );
         in
@@ -371,6 +401,17 @@
               intraISACross = t.intraISACross.enable;
             };
             impermanence = false;
+            # The system's driver and whether a home may bring its own
+            # (my.graphics.driver; features/session/gl-namespace).
+            graphics = {
+              inherit (nixos.config.hardware.graphics) enable enable32Bit;
+              packages = map (p: p.pname or (lib.getName p)) (
+                lib.optionals nixos.config.hardware.graphics.enable (
+                  [ nixos.config.hardware.graphics.package ] ++ nixos.config.hardware.graphics.extraPackages
+                )
+              );
+              perUserDriver = if nixos.config.my.gl-namespace.active then nixos.config.my.gl-namespace.users else [ ];
+            };
             # From the registry this host was evaluated with (the same data
             # its accounts came from; a test's extended registry included).
             users = reg.effective.${hostName} or { };
@@ -543,6 +584,10 @@
       evalTests.class-daemons = import ./tests/class-daemons.nix {
         inherit lib mkHostWith;
       };
+      evalTests.gl-namespace = import ./tests/gl-namespace.nix {
+        inherit lib mkHostWith mkHomeLib;
+        inherit (self) setuidGlChecks;
+      };
 
       /*
         `nix flake check` as the one-command gate. Forcing each host's toplevel
@@ -553,8 +598,27 @@
         on any change that moves the package set, so run it with a reachable
         builder or `--builders ''`.
       */
-      checks.x86_64-linux = lib.mapAttrs (
-        _: cfg: cfg.config.system.build.toplevel
+      checks.x86_64-linux =
+        lib.mapAttrs (_: cfg: cfg.config.system.build.toplevel) self.nixosConfigurations
+        // lib.mapAttrs' (host: chk: lib.nameValuePair "setuid-no-gl-${host}" chk) (
+          lib.filterAttrs (host: _: self.nixosConfigurations.${host}.config.my.gl-namespace.active) self.setuidGlChecks
+        );
+
+      /*
+        Build-time check that no privileged wrapper loads GL (lib/setuid-gl-
+        check.nix): a BUILD over the wrappers' runtime closures, so not part
+        of any toplevel. For every host, to run on the builders whenever
+        wanted (`nix build .#setuidGlChecks.<host>`); under checks only for
+        hosts where features/session/gl-namespace is active, where it guards
+        something real.
+      */
+      setuidGlChecks = lib.mapAttrs (
+        host: cfg:
+        import ./lib/setuid-gl-check.nix {
+          inherit lib;
+          inherit (cfg) pkgs config;
+          hostName = host;
+        }
       ) self.nixosConfigurations;
     };
 }
