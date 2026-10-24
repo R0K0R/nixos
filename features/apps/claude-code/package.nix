@@ -13,6 +13,7 @@
   ripgrep,
   bubblewrap,
   socat,
+  bashInteractive,
   versionCheckHook,
   writableTmpDirAsHomeHook,
   # the claude-code-bin flake input (a raw binary file in the store)
@@ -48,6 +49,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       --set-default FORCE_AUTOUPDATE_PLUGINS 1 \
       --set DISABLE_INSTALLATION_CHECKS 1 \
       --set USE_BUILTIN_RIPGREP 0 \
+      --set-default CLAUDE_CODE_SHELL ${bashInteractive}/bin/bash \
       --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ alsa-lib ]} \
       --prefix PATH : ${
         lib.makeBinPath (

@@ -65,7 +65,10 @@ lib.mkIf (osConfig.my.zsh.enable && inScope) {
       # the alias now checks rather than assumes, and a host without eza simply
       # keeps coreutils ls.
       if [ "$TERM" != linux ] && command -v eza >/dev/null 2>&1; then
-        alias ls='eza --icons'
+        # --icons=auto, not --icons: eza 0.23 takes an optional value there
+        # and read the next word as it -- `ls Mail` failed with "invalid value
+        # 'Mail' for '--icons'".
+        alias ls='eza --icons=auto'
       fi
       if [ "$TERM" = xterm-kitty ]; then
         alias ssh='kitten ssh'

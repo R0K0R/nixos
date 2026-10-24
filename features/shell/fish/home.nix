@@ -59,7 +59,8 @@ lib.mkIf (osConfig.my.fish.enable && inScope) {
       end
 
       if test "$TERM" != linux
-        alias ls 'eza --icons'
+        # --icons=auto: a bare --icons swallows the next word (see zsh/home.nix)
+        alias ls 'eza --icons=auto'
       end
       if test "$TERM" = xterm-kitty
         alias ssh 'kitten ssh'
