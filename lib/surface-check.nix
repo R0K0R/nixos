@@ -32,6 +32,12 @@
                directories (Qt, GTK, GIO, GStreamer) are on every user's
                search paths, so anything installed there can be loaded
   A PAM module whose package is none of those is reported as unchecked.
+
+  A home with its OWN graphics driver (my.graphics.driver, features/session/
+  gl-namespace) is checked with `skip = [ "graphics" ]`, and homeLib runs a
+  second check the other way round -- its tree against the system profile,
+  reported as group "driver" -- because system programs in its sessions load
+  that tree.
 */
 { lib }:
 
@@ -133,6 +139,10 @@ in
       # host-built and upstream-substituted) is not the user's choice and is
       # not reported.
       baselinePackages ? [ ],
+      # Surface groups to leave out. A home with its own graphics driver
+      # (my.graphics.driver, features/session/gl-namespace) skips "graphics":
+      # the system's tree is not loaded into its processes.
+      skip ? [ ],
     }:
     let
       c = osConfig;
@@ -159,7 +169,7 @@ in
         pkgs = lib.filter (x: x != null) (map (d: byDrv.${d} or null) (contextDrvs m));
       }) pamPaths;
 
-      groups = {
+      groups = removeAttrs {
         graphics = lib.optionals (c.hardware.graphics.enable or false) (
           lib.optional (c.hardware.graphics.package or null != null) c.hardware.graphics.package
           ++ (c.hardware.graphics.extraPackages or [ ])
@@ -168,7 +178,7 @@ in
         locale = lib.optional (c.i18n.glibcLocales != null) c.i18n.glibcLocales;
         pam = lib.concatMap (r: r.pkgs) pamResolved;
         profile = c.environment.systemPackages;
-      };
+      } skip;
 
       user = walk homePackages;
       base = walk baselinePackages;
@@ -209,6 +219,8 @@ in
       levers,
       hostLevers,
       result,
+      # Extra lines for WHAT YOU CAN DO.
+      hints ? [ ],
     }:
     let
       fmt = lv: "{ march = ${if lv.march == null then "none" else lv.march}; lto = ${lib.boolToString lv.lto}; o3 = ${lib.boolToString lv.o3}; }";
@@ -218,6 +230,9 @@ in
         locale = "the glibc locale archive";
         pam = "PAM modules, which your screen locker loads to check your password";
         profile = "plugins in the system profile (Qt, GTK, GIO, GStreamer, IM modules), which are on your programs' plugin search paths";
+        # The other direction: homeLib relabels the check of a home's own
+        # driver tree against the system profile.
+        driver = "YOUR graphics driver (my.graphics.driver), the other way round: the system's programs in your sessions (the compositor, the system terminal, anything in the system profile) load it from /run/opengl-driver";
       };
       byLib = lib.groupBy (c: c.library) result.conflicts;
       describe =
@@ -276,7 +291,7 @@ in
           "- Set the lever that differs from the system's back to \"system\"."
       }
       - Or leave the libraries above out of your home's closure, if a program you
-        added is what pulls them in.
+        added is what pulls them in.${lib.concatMapStrings (h: "\n- ${h}") hints}
       There is no override: a library built twice with different patches in one
       process is the one combination this check exists to stop. If you think these
       patches cannot change an interface, take it to the admin.

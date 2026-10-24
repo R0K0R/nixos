@@ -29,8 +29,19 @@ let
     ++ lib.optional (cfg.claude != null) cfg.claude
   ) (builtins.readFile ./fallback-banner.sh);
 
-  fallback-session = mkScript "fallback-session" [ pkgs.cage pkgs.kitty fallback-banner ] (
-    lib.optionalString (cfg.normalSession != null) ''
+  /*
+    Under my.gl-namespace a mapped user's /run/opengl-driver is THEIR tree,
+    possibly built against another system epoch -- the very case this session
+    exists for. cage and kitty are the system's, so they get the system's
+    tree through gl-system-driver. Only when the namespace is active, so the
+    script is unchanged everywhere else.
+  */
+  glNs = config.my.gl-namespace.active or false;
+  fallback-session = mkScript "fallback-session" ([ pkgs.cage pkgs.kitty fallback-banner ] ++ lib.optional glNs config.my.gl-namespace.systemDriverEnv) (
+    lib.optionalString glNs ''
+      cage() { gl-system-driver cage "$@"; }
+    ''
+    + lib.optionalString (cfg.normalSession != null) ''
       FALLBACK_DEFAULT_NORMAL=${lib.escapeShellArg cfg.normalSession}
     ''
     + builtins.readFile ./fallback-session.sh

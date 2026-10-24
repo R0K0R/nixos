@@ -391,6 +391,7 @@ narrowings and handover/kiosk misconfigurations are refused.
 | class daemons (one nix-daemon per user class, pinnable per-peer sockets) | `my.class-daemons` (features/nix/class-daemons) + registry fact `features.<host>."class-daemons"` | remote-builder.client when a class has builders; agenix for `sshKeySecret` | exists, off everywhere; eval-tested only (`tests/class-daemons-eval.sh`), never run -- runtime plan below |
 | per-user tuning cache (`/var/lib/tuning-cache/<host>/users`, `tuning-refresh`) | `my.tuning.userCache.enable` (tuning/nixos.nix); the inputs move with `scripts/tuning-cache-migrate.sh`, relocked by `scripts/tuning-cache-relock.sh` | -- (independent of `my.tuning.enable`); impermanent hosts persist the directory via `my.state` | exists, off everywhere; ready to run, not run (docs/multiuser-design.md, "Running the migration": victus-15 first); `tests/user-tuning-eval.sh`, `tests/user-tuning-scripts.sh` |
 | hm-switch (home switch with `--on PEER` / `--local` / `--eval-on PEER`) | `my.epoch.hmSwitch.enable` (features/core/epoch; defaults to `my.epoch.enable`) | -- | exists; on for galaxybook4-pro360 (without the epoch) |
+| per-user graphics driver (`/run/opengl-driver` per user, in a mount namespace) | `my.gl-namespace` (features/session/gl-namespace) + home option `my.graphics.driver` | `hardware.graphics`; no privileged wrapper that loads GL (asserted; build-time check `setuidGlChecks.<host>`) -- Hyprland's cap_sys_nice wrapper fails it | exists, off everywhere; eval-tested (`tests/gl-namespace-eval.sh`, `tests/gl-namespace-select.sh`), never run -- runtime plan below |
 
 All levers default to off, and all off is plain upstream nixpkgs.
 
@@ -665,6 +666,54 @@ run. On galaxybook4-pro360, as root, in this order:
    permission denied.
 9. Roll back with `nixos-rebuild test` from the previous generation (or a
    reboot); nothing outside /etc and the sockets is touched.
+
+### gl-namespace: runtime test plan (not run yet)
+
+`my.gl-namespace` maps `/run/opengl-driver` per user (features/session/
+gl-namespace/nixos.nix explains the layout). Evaluated, never run. On
+galaxybook4-pro360, as root unless said otherwise:
+
+1. Host file: `my.gl-namespace.enable = true;` and decide Hyprland's
+   cap_sys_nice wrapper -- `security.wrappers.Hyprland.enable = lib.mkForce
+   false;` (Hyprland loses SCHED_RR) or `my.gl-namespace.allowPrivilegedGL.Hyprland
+   = "<reason>";`. Without one of them evaluation refuses. Then
+   `nix build .#setuidGlChecks.galaxybook4-pro360` (builds on a builder) must
+   pass, and `nixos-rebuild test` (not switch).
+2. Root namespace: `readlink /run/opengl-driver` is `/run/gl-driver/view/tree`,
+   `readlink -f /run/opengl-driver` equals `readlink -f /run/gl-driver/system`;
+   `stat -c %a /run/gl-driver/inst` is `0`; `cat /etc/security/namespace.conf`;
+   the epoch (`/run/current-system/epoch.json`, if on) is unchanged.
+3. A new VT login as r0k0r WITHOUT a driver in the home: `findmnt
+   /run/gl-driver/view` shows the bind of `/run/gl-driver/inst/r0k0r`;
+   `readlink /run/gl-driver/view/tree` is `/run/gl-driver/system`;
+   `vulkaninfo --summary` / `eglinfo -B` work; `journalctl -t gl-driver-select`.
+4. User manager: `systemd-run --user --pty findmnt /run/gl-driver/view` shows
+   the same bind (its own namespace: `readlink /proc/self/ns/mnt` differs from
+   the login shell's).
+5. Home with its own driver: in the home repo `my.tuning.<lever>` differing
+   from the host plus `my.graphics.driver.enable = true;`, `hm-switch`. Then
+   `readlink $(readlink -f ~/.local/state/nix/profiles/home-manager)/graphics-driver`
+   is the new tree, the path unit fired (`journalctl -u gl-driver-select@r0k0r`),
+   `readlink /run/gl-driver/inst/r0k0r/tree` and
+   `/nix/var/nix/gcroots/gl-driver/r0k0r` name it; in a NEW process of the
+   session `readlink -f /run/opengl-driver` is the user's tree, from a root VT
+   it is still the system's.
+6. Desktop through greetd + uwsm: `ls -l /proc/$(pidof Hyprland)/root/run/gl-driver/view/tree`
+   and the same for an app started from the launcher show the user's tree;
+   `grep dri /proc/$(pidof Hyprland)/maps` names the user's mesa.
+7. A system switch during the session: the mapped user's tree stays, an
+   unmapped user (and the greeter) follow the new system tree.
+8. Rollback and GC: `hm-rollback` repoints the tree (path unit); deleting old
+   generations + `nix-collect-garbage` keeps the selected tree (gcroot).
+9. Fallback session: in its kitty `echo $LIBGL_DRIVERS_PATH` is under
+   `/run/gl-driver/system`, and `grep dri /proc/$(pidof cage)/maps` names the
+   system's mesa.
+10. Failure mode: point the profile's `graphics-driver` at a non-store path (a
+    test generation) -- the login still works on the system's tree and the
+    journal says why.
+11. Roll back with `nixos-rebuild test` from the previous generation (or a
+    reboot): /run is a tmpfs; the gcroots directory is left behind (harmless,
+    remove by hand).
 
 ## Adding things
 

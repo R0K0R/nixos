@@ -57,7 +57,9 @@ derivations outputs are unknown before the build.
 - Surface shrink: the fewer singletons, the rarer epoch changes. galaxybook can
   reach zero in-process system code (empty epoch); NVIDIA is victus's only
   epoch member. `/run/opengl-driver` is RUNPATH-baked, so it is mapped per user
-  in a mount namespace rather than being a singleton.
+  in a mount namespace rather than being a singleton (features/session/
+  gl-namespace, Done 14). It stays in the epoch while anyone -- an unmapped
+  user, the greeter, the fallback session -- loads the system's tree.
 
 ### Where checks are enforced
 
@@ -128,6 +130,11 @@ later reads is an injection path. So:
   read-only to them at most; `extra-sandbox-paths` is audited; `sandbox = true`
   everywhere.
 - No setuid wrapper may have `/run/opengl-driver` in its RUNPATH (asserted).
+  Implemented with gl-namespace: an evaluation assertion over the privileged
+  wrappers' derivations and declared inputs, and the build-time check
+  `setuidGlChecks.<host>` over their runtime closures (RUNPATH, baked dlopen
+  directories, GL packages by name). Hyprland's cap_sys_nice wrapper fails
+  both.
 
 **Guest overlay store** (supersedes the guest-store / salting / signature ideas
 below). Each guest gets a `local-overlay-store` on **every** machine, builders
@@ -785,6 +792,32 @@ deliberate system change.
     Eval-tested (tests/class-daemons-eval.sh); class daemons never run -- the
     runtime plan is in the README.
 
+14. **Per-user graphics driver** (2026-10-24). features/session/gl-namespace:
+    `/run/opengl-driver -> /run/gl-driver/view/tree`, the view a real
+    directory polyinstantiated by pam_namespace (user method, noinit, the
+    mapped users only) over `/run/gl-driver/inst/<user>`, whose `tree` link
+    names the user's tree or `/run/gl-driver/system` (the system's buildEnv,
+    same derivation as before, so the epoch is unchanged). A directory and a
+    link, not a bind over the old symlink: pam_namespace would follow it and
+    bind over the system tree's store path, which the next switch leaves
+    behind. The home declares the tree (`my.graphics.driver`: a buildEnv from
+    the home's own set, the system's graphics packages by pname by default,
+    linked as `$generation/graphics-driver`); `gl-driver-select` (root, pam_exec
+    before pam_namespace, and a path unit on the home-manager profile)
+    resolves the current generation's link, accepts only a root-owned
+    top-level store directory, repoints the instance and keeps a gcroot.
+    Session stacks: login (greetd includes it), su, sudo, sshd, systemd-user
+    -- user@.service gets its own namespace binding the same instance, so the
+    user manager (the desktop under uwsm) sees the same tree. Surface check:
+    a home with its own driver skips "graphics" and checks its tree against
+    the system profile (group "driver"); the fallback session's cage runs
+    through `gl-system-driver`. Trust: the setuid/setcap assertion and
+    build-time check above. Off everywhere, toplevels unchanged;
+    `tests/gl-namespace-eval.sh`, `tests/gl-namespace-select.sh`; the
+    build-time check was run once on victus-15 (passes) and galaxybook4-pro360
+    (fails on Hyprland, as expected). Never run on a machine; runtime plan in
+    the README.
+
 ### Next
 
 6. **hm-switch**: ~~off~~ on for galaxybook4-pro360 without the epoch (Done
@@ -840,6 +873,11 @@ deliberate system change.
     [Open question: perl and sqlite](#open-question-perl-and-sqlite-on-the-march-hosts-evidence-2026-10-24)
     (sqlite: ABI-identical outputs; perl: a genuinely different build with
     no in-process path on the surface).
+14. **gl-namespace first run** (README runtime plan), after deciding
+    Hyprland's cap_sys_nice wrapper (disable, or allowPrivilegedGL with a
+    reason). Not handled: overlay guests (their tree lives in their own
+    store), NVIDIA's userspace from a user's set (tied to the running kernel
+    module; keep the system's driver there), 32-bit trees from a march set.
     Originally planned: the home option `my.tuning` and
     `mkHome`'s `_module.args.pkgs`; candidate lists as system options
     (`my.tuning.{o3,lto}.{candidates,exclude}`) and home options

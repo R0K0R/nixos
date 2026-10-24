@@ -18,7 +18,8 @@
                derivations Nix itself knows the string depends on, so a
                variable cannot slip past by being spelled oddly.
     graphics   /run/opengl-driver(-32) -- the buildEnv graphics.nix links
-               there, taken from its tmpfiles argument so it is the same
+               there (/run/gl-driver/system(-32) under gl-namespace),
+               taken from its tmpfiles argument so it is the same
                derivation the system installs, not a reconstruction of it.
                libGL/Vulkan ICDs are dlopen'ed from here by every GL program,
                which is why an NVIDIA driver bump is the classic epoch.
@@ -93,6 +94,9 @@ let
       ) config.systemd.globalEnvironment
     );
 
+  # features/session/gl-namespace moves the system's tree one link down
+  # (/run/opengl-driver -> view -> /run/gl-driver/system); the tree, and so
+  # the epoch, is the same.
   graphicsEntries =
     let
       g = config.systemd.tmpfiles.settings.graphics-driver or { };
@@ -101,7 +105,7 @@ let
     lib.optionals (config.hardware.graphics.enable or false) (
       lib.concatMap (
         p: lib.optionals (arg p != null) (entriesFrom "graphics" p (arg p))
-      ) [ "/run/opengl-driver" "/run/opengl-driver-32" ]
+      ) [ "/run/opengl-driver" "/run/opengl-driver-32" "/run/gl-driver/system" "/run/gl-driver/system-32" ]
     );
 
   pamEntries = lib.concatLists (
