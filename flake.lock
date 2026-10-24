@@ -923,26 +923,28 @@
     "tuning-cache-galaxybook4-pro360": {
       "flake": false,
       "locked": {
-        "path": "./tuning/runtime-cache/hosts/galaxybook4-pro360",
+        "lastModified": 1792825527,
+        "narHash": "sha256-tJAPNx9RUmR+Dhqm9EiZcEd/xzrOkglnY+UJzZ0EeoU=",
+        "path": "/var/lib/tuning-cache/galaxybook4-pro360",
         "type": "path"
       },
       "original": {
-        "path": "./tuning/runtime-cache/hosts/galaxybook4-pro360",
+        "path": "/var/lib/tuning-cache/galaxybook4-pro360",
         "type": "path"
-      },
-      "parent": []
+      }
     },
     "tuning-cache-victus-15": {
       "flake": false,
       "locked": {
-        "path": "./tuning/runtime-cache/hosts/victus-15",
+        "lastModified": 1792825540,
+        "narHash": "sha256-eeVjGwGd+nT9omxGciioPQ12Ay1XD0BUN1nCuqWczQ4=",
+        "path": "/var/lib/tuning-cache/victus-15",
         "type": "path"
       },
       "original": {
-        "path": "./tuning/runtime-cache/hosts/victus-15",
+        "path": "/var/lib/tuning-cache/victus-15",
         "type": "path"
-      },
-      "parent": []
+      }
     },
     "vehicle-motion-cues": {
       "flake": false,

@@ -65,11 +65,11 @@
       locked like any input and relocked by hand (scripts/tuning-cache-relock.sh).
     */
     tuning-cache-galaxybook4-pro360 = {
-      url = "path:./tuning/runtime-cache/hosts/galaxybook4-pro360";
+      url = "path:/var/lib/tuning-cache/galaxybook4-pro360";
       flake = false;
     };
     tuning-cache-victus-15 = {
-      url = "path:./tuning/runtime-cache/hosts/victus-15";
+      url = "path:/var/lib/tuning-cache/victus-15";
       flake = false;
     };
     # Untuned host (my.tuning.enable = false): nothing writes system tier files
