@@ -188,7 +188,7 @@ in
 
     flakePath = lib.mkOption {
       type = lib.types.str;
-      default = "/home/r0k0r/flakes/nixos";
+      default = "/etc/nixos";
       description = "Where this flake lives on disk, baked into runtime-cache-refresh.";
     };
 

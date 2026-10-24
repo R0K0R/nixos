@@ -6,7 +6,7 @@
   builder URL) and copies results back for switch — hence builders-use-substitutes.
 
   One-time bootstrap (before the first switch that installs this module):
-    bash ~/flakes/nixos/scripts/bootstrap-yulee-builder-on-laptop.sh
+    bash /etc/nixos/scripts/bootstrap-yulee-builder-on-laptop.sh
     # then run switch once with --builders (see script output)
 
   On a peer (/etc/nix/nix.conf):
@@ -176,7 +176,7 @@ in
 
     flakePath = lib.mkOption {
       type = lib.types.str;
-      default = "/home/r0k0r/flakes/nixos";
+      default = "/etc/nixos";
       description = "Flake path baked into the generated wrapper scripts.";
     };
 

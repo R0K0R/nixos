@@ -35,8 +35,11 @@ in
 
   my.impermanence.enable = true;
 
-  # /etc/nixos was a symlink to the flake made by hand; a fresh root would lose
-  # it. Declared from the option the rebuild tooling already reads, so the
-  # path stays defined in one place.
-  systemd.tmpfiles.rules = [ "L+ /etc/nixos - - - - ${config.my.tuning.flakePath}" ];
+  # The system flake itself (docs/multiuser-design.md: a real directory at
+  # /etc/nixos, the admin's to write, everyone's to read). It used to be a
+  # checkout in ~/flakes/nixos with /etc/nixos a symlink to it; now the
+  # checkout lives here, owned by the admin, and /etc is wiped with the root,
+  # so it is persisted. Ownership is the directory's own in /persist (made by
+  # hand when it moved), which the bind mount carries over.
+  my.state.system.state.directories = [ "/etc/nixos" ];
 }
