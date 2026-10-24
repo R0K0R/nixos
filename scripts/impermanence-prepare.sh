@@ -48,6 +48,8 @@ for u in $(nix eval --raw "$flake#$attr.config.my.users" --apply 'us: builtins.c
   jq -s '{directories: ((.[0].directories // []) + (.[1].directories // []) | unique),
           files: ((.[0].files // []) + (.[1].files // []) | unique)}' \
     "$plan/user-$u.persist.json" "$plan/user-$u.system.json" >"$plan/user-$u.json"
+  # the same entries one per line: the live USB may have no jq
+  jq -r '.directories[], .files[]' "$plan/user-$u.json" >"$plan/user-$u.paths.txt"
   echo "   $(jq '.directories|length' "$plan/user-$u.json") directories, $(jq '.files|length' "$plan/user-$u.json") files"
 done
 echo "plan written to $plan -- the USB session reads it from the old /home"

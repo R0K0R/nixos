@@ -10,7 +10,7 @@
 #   2 @nix          <- /nix            (cp --reflink=always: metadata only)
 #   3 @windows-backup <- /home/<primary>/windows-backup
 #   4 @persist      <- every system path in the plan, and per user every entry
-#                      of user-<name>.json under @persist/home/<name>/, plus
+#                      of user-<name>.paths.txt (no jq on the ISO) under @persist/home/<name>/, plus
 #                      user-<name>.persist.json as .persist.json
 #   5 @swap         (empty; NixOS creates /swap/swapfile at first boot)
 #   6 @root-blank   (empty, read-only) and @root from it
@@ -45,7 +45,13 @@ copy() {
   [ -e "$src" ] || [ -L "$src" ] || { echo "  (absent) $src"; return 0; }
   [ -e "$dst" ] && { echo "  (exists) $dst"; return 0; }
   run mkdir -p "$(dirname "$dst")"
-  run cp -a --reflink=always "$src" "$dst"
+  # NOCOW files (+C: the journal, VM images) cannot be reflinked into a COW
+  # subvolume ("failed to clone: Invalid argument"): copy those in full instead.
+  if [ "$go" = 1 ] && ! cp -a --reflink=always "$src" "$dst" 2>/dev/null; then
+    echo "  (reflink refused, copying in full) $src"
+    rm -rf "$dst"
+    cp -a --reflink=auto "$src" "$dst"
+  elif [ "$go" != 1 ]; then echo "+ cp -a --reflink=always $src $dst"; fi
   if [ "$go" = 1 ]; then
     a=$(cd "$src" 2>/dev/null && find . | sort | sha256sum || stat -c '%s %Y' "$src")
     b=$(cd "$dst" 2>/dev/null && find . | sort | sha256sum || stat -c '%s %Y' "$dst")
@@ -86,9 +92,9 @@ if want 4; then
     uid=$(stat -c %u "$top/home/$u") gid=$(stat -c %g "$top/home/$u")
     run install -d -m 0700 -o "$uid" -g "$gid" "$top/@persist/home" "$top/@persist/home/$u"
     run chmod 0755 "$top/@persist/home"
-    jq -r '.directories[], .files[]' "$f" | while IFS= read -r p; do
+    while IFS= read -r p; do
       copy "$top/home/$u/$p" "$top/@persist/home/$u/$p"
-    done
+    done <"$plan/user-$u.paths.txt"
     run install -m 0644 -o "$uid" -g "$gid" "$plan/user-$u.persist.json" "$top/@persist/home/$u/.persist.json"
   done
 fi
@@ -104,7 +110,9 @@ if want 6; then
 fi
 if want 7; then
   echo "== 7 install $toplevel"
-  [ -e "$top/@nix/store/${toplevel#/nix/store/}" ] || { echo "the prepared toplevel is not in @nix/store -- was it built (prepare script) before step 2?" >&2; exit 1; }
+  # A dry run creates no @nix: check the store step 2 copies from instead.
+  store=$top/@nix/store; [ "$go" = 1 ] || [ -d "$store" ] || store=$top/nix/store
+  [ -e "$store/${toplevel#/nix/store/}" ] || { echo "the prepared toplevel is not in $store -- was it built (prepare script) before step 2?" >&2; exit 1; }
   run mkdir -p "$new"
   mountpoint -q "$new" || run mount -t btrfs -o subvol=@root "$dev" "$new"
   for m in nix:@nix persist:@persist swap:@swap; do
