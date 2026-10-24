@@ -44,7 +44,9 @@
 {
   hosts = {
     galaxybook4-pro360 = {
-      users = [ "r0k0r" ];
+      # benjamin joins once his password secret is encrypted to galaxybook too
+      # (age/hashed-password-benjamin.age is victus-15's only).
+      users = [ "r0k0r" "guest" "handoff" ];
       primary = "r0k0r";
       # The root is wiped at every boot (features.impermanence below); his home
       # with it, rebuilt from his persist manifest (~/config/home/persist.nix).
