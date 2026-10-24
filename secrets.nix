@@ -133,7 +133,7 @@ in
       sudo age -d -i /etc/ssh/ssh_host_ed25519_key age/hashed-password-r0k0r.age
   */
   "age/hashed-password-r0k0r.age".publicKeys = allHosts;
-  "age/hashed-password-benjamin.age".publicKeys = [ victus15 ];
+  "age/hashed-password-benjamin.age".publicKeys = [ victus15 galaxybook ];
 
   # Gnus/auth-source credentials (netrc format: imap.gmail.com and
   # smtp.gmail.com lines for both accounts). Consumed by Emacs running as

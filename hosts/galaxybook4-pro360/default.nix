@@ -236,12 +236,13 @@ in
     */
     kakaotalk.enable = true;
     session-env.enable = true;
-    # Kept, not deleted: the feature still describes what fish would do here,
-    # and re-enabling is a one-line change. systemIntegration goes off with it
-    # -- its only purpose is vendor completion paths for a fish login shell.
+    # benjamin's login shell (registry), as on victus-15: the feature scoped
+    # to him alone, so r0k0r's zsh is unaffected; systemIntegration for the
+    # vendor completion paths a fish login shell wants.
     fish = {
-      enable = false;
-      systemIntegration = false;
+      enable = true;
+      systemIntegration = true;
+      users = [ "benjamin" ];
     };
     zsh = {
       enable = true;

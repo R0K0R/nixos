@@ -44,13 +44,15 @@
 {
   hosts = {
     galaxybook4-pro360 = {
-      # benjamin joins once his password secret is encrypted to galaxybook too
-      # (age/hashed-password-benjamin.age is victus-15's only).
-      users = [ "r0k0r" "guest" "handoff" ];
+      users = [ "r0k0r" "benjamin" "guest" "handoff" ];
       primary = "r0k0r";
       # The root is wiped at every boot (features.impermanence below); his home
       # with it, rebuilt from his persist manifest (~/config/home/persist.nix).
       narrow.r0k0r.home = "impermanent";
+      # An admin on his own machine, a guest with a desktop on this one: no
+      # sudo here (network + media), the same narrowing victus-15 gives him
+      # for groups. His home stays persistent: bound whole from /persist.
+      narrow.benjamin.grants = [ "network" "media" ];
     };
 
     victus-15 = {
