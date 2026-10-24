@@ -268,6 +268,9 @@ in
   };
 
   config = lib.mkMerge [
+  # Named so other features can require it (features/_meta), e.g. class
+  # daemons that dispatch to these peers.
+  { my.internal.features."remote-builder.client".enabledBy = cfg.enable; }
   (lib.mkIf config.my.remote-builder.server.enable {
     nix.sshServe = {
       enable = true;

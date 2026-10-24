@@ -384,6 +384,8 @@ refused.
 | impermanence | `my.impermanence` (features/core/impermanence) + registry fact `features.<host>.impermanence` | btrfs-layout (`_meta`; plus `rootSubvolume` and `persist`) | **live on galaxybook4-pro360 since 2026-10-24** (docs/impermanence-migration.md); `tests/impermanence-eval.sh` |
 | guest-overlay (per-guest overlay stores) | `my.guest-overlay` (features/nix/guest-overlay) + registry fact `features.<host>."guest-overlay"` | btrfs-layout | exists, off everywhere; eval-tested only (`tests/guest-overlay-eval.sh`), never run |
 | luks (TPM2 unlock, no PIN) | `my.luks` (features/core/luks) | -- (systemd initrd, asserted) | exists, off everywhere; eval-tested only (`tests/optional-features-eval.sh`). galaxybook4-pro360 is prepared, not encrypted: `hosts/galaxybook4-pro360/luks.nix`, `migration.galaxybook4-pro360-luks`, docs/luks-migration.md |
+| class daemons (one nix-daemon per user class, pinnable per-peer sockets) | `my.class-daemons` (features/nix/class-daemons) + registry fact `features.<host>."class-daemons"` | remote-builder.client when a class has builders; agenix for `sshKeySecret` | exists, off everywhere; eval-tested only (`tests/class-daemons-eval.sh`), never run -- runtime plan below |
+| hm-switch (home switch with `--on PEER` / `--local` / `--eval-on PEER`) | `my.epoch.hmSwitch.enable` (features/core/epoch; defaults to `my.epoch.enable`) | -- | exists; on for galaxybook4-pro360 (without the epoch) |
 
 All levers default to off, and all off is plain upstream nixpkgs.
 
@@ -577,11 +579,68 @@ Standalone accounts (see [Who activates a home](#who-activates-a-home)):
 home-manager switch --flake ~/config/home#<user>@<host>
 ```
 
-or the **planned** `hm-switch` wrapper, which adds advisory checks (lock
-consistency with the system flake, the generation's epoch against the system's
-history) before switching. Users are untrusted in the daemon at that point, so
-they substitute and use what the system has built, but cannot pass
-`--builders` or extra substituters.
+or `hm-switch` (`my.epoch.hmSwitch.enable`), which switches `~/config/home`
+as `$USER@<host>` and adds:
+
+- the epoch check when `my.epoch` is on (advisory; `--force` skips it, and with
+  the epoch off it says so and switches);
+- builder variations like the system's wrappers: `--on PEER` (only that peer
+  builds), `--local` (no remote builders), `--eval-on PEER` (evaluate on the
+  peer, copy the `.drv` files back, build as chosen). Activation is always the
+  user's own (`./activate` of the built generation).
+
+Users are untrusted on the shared daemon, which ignores a pinned builder from
+them. So the pin goes through the user's **class daemon** when
+`my.class-daemons` is on (one socket per peer: choosing the variant is choosing
+the socket, no trust needed), otherwise through `sudo` for the build step only
+-- for users with the registry's sudo grant; evaluation stays the user's --
+and otherwise hm-switch says so and builds with the system's builders.
+
+### Class daemons: runtime test plan (not run yet)
+
+`my.class-daemons` is evaluated (`tests/class-daemons-eval.sh`) but has never
+run. On galaxybook4-pro360, as root, in this order:
+
+1. Builder key for class `admin`, the way the host builder key already is
+   (agenix: the root is impermanent, and a hand-placed file in /etc would need
+   its persist bind first): `ssh-keygen -t ed25519 -N "" -C
+   nix-class-admin@galaxybook4-pro360 -f <scratch>/nix-class-admin`, encrypt
+   the private half to `age/nix-class-admin-ssh-key.age` (recipient
+   galaxybook4-pro360 in `secrets.nix`), delete the plaintext, and set
+   `my.class-daemons.classes.admin.sshKeySecret = ../../age/nix-class-admin-ssh-key.age`.
+   Authorize the `.pub`: victus-15's `my.remote-builder.server.extraKeys`
+   (switch victus-15 first), yulee's `~r0k0r/.ssh/authorized_keys` by hand.
+2. Set `features.galaxybook4-pro360."class-daemons" = true` in
+   registry/hosts.nix and `my.class-daemons.enable = true` in the host file;
+   `nixos-rebuild test` (not switch: a reboot undoes it).
+3. Units and files: `systemctl list-sockets 'nix-daemon-admin-*'` shows three
+   sockets; `ls -l /nix/var/nix/daemon-socket-admin/` shows
+   `srw-rw---- root nix-class-admin`; `getent group nix-class-admin` lists
+   r0k0r; `cat /etc/nix/class-daemons/admin-default/nix.conf`.
+4. Key and ssh path, as the daemon uses them (root, the class ssh_config,
+   nothing else): `NIX_SSHOPTS="-F /etc/nix/class-daemons/admin/ssh_config -v"
+   nix store info --store ssh-ng://nix-ssh@victus-15` answers, and the ssh
+   debug output offers only `/run/agenix/nix-class-admin-ssh-key`.
+5. As r0k0r, in a NEW login (the group is only picked up at login):
+   `echo $NIX_REMOTE` is `unix:///nix/var/nix/daemon-socket-admin/default`;
+   `nix store info` answers; `systemctl --user show-environment | grep NIX_REMOTE`
+   shows the same for the user manager (after `systemctl --user daemon-reexec`
+   or a re-login).
+6. Pinning without sudo: `NIX_REMOTE=unix:///nix/var/nix/daemon-socket-admin/victus-15
+   nix build --rebuild nixpkgs#hello -L` builds on victus-15 only (the log
+   names it); the same with `.../yulee`. Then `hm-switch --on victus-15` and
+   `hm-switch --eval-on victus-15`, and check `hm-switch --on yulee` does not
+   ask for a password.
+7. Untrusted stays untrusted: through the class socket, `nix build --option
+   sandbox false ...` prints "ignoring the client-specified setting", and
+   `nix copy --no-check-sigs --to unix:///nix/var/nix/daemon-socket-admin/default`
+   of an unsigned, input-addressed path fails with "lacks a valid signature" --
+   exactly as on the shared daemon.
+8. Another user cannot connect: `sudo -u nobody nix --store
+   unix:///nix/var/nix/daemon-socket-admin/default store info` fails with
+   permission denied.
+9. Roll back with `nixos-rebuild test` from the previous generation (or a
+   reboot); nothing outside /etc and the sockets is touched.
 
 ## Adding things
 

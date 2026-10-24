@@ -33,7 +33,11 @@ let
   users = config.my.users;
   # "overlay" users have a store of their own (features/nix/guest-overlay) and
   # no business on the shared daemon.
-  excluded = lib.attrNames (lib.filterAttrs (_: u: u.nix == "none" || u.nix == "overlay") users);
+  # Accounts routed to a daemon of their own class (features/nix/class-daemons
+  # with restrictDefault) are kept off the shared one as well.
+  elsewhere = config.my.registry.nix.defaultDaemonExcludes;
+  offShared = n: u: u.nix == "none" || u.nix == "overlay" || lib.elem n elsewhere;
+  excluded = lib.attrNames (lib.filterAttrs offShared users);
   admins = lib.attrNames (lib.filterAttrs (_: u: u.nix == "admin") users);
   untrustedish = lib.filterAttrs (_: u: lib.elem u.nix [ "none" "overlay" "untrusted" ]) users;
 
@@ -68,12 +72,23 @@ in
     '';
   };
 
+  options.my.registry.nix.defaultDaemonExcludes = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    internal = true;
+    description = ''
+      Accounts left out of the shared daemon's allowed-users although their
+      nix axis would allow them: they have a daemon of their own
+      (my.class-daemons.restrictDefault). Empty everywhere by default.
+    '';
+  };
+
   config = {
     nix.settings.trusted-users = admins ++ config.my.registry.nix.extraTrustedUsers;
 
     nix.settings.allowed-users = lib.mkIf (excluded != [ ]) (
       [ "root" ]
-      ++ lib.attrNames (lib.filterAttrs (_: u: u.nix != "none" && u.nix != "overlay") users)
+      ++ lib.attrNames (lib.filterAttrs (n: u: !(offShared n u)) users)
       ++ config.my.registry.nix.extraAllowedUsers
     );
 

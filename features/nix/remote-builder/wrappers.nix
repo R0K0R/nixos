@@ -264,16 +264,48 @@ let
   rebuildFor = name: p: if name == cfg.evalWorker then remoteEvalFor name p else localEvalFor name p;
   renamedTo = n: drv: pkgs.runCommandLocal n { } "mkdir -p $out/bin; ln -s ${drv}/bin/* $out/bin/${n}";
 in
-lib.mkIf (cfg.enable && cfg.wrappers.enable) {
-  assertions = [{
-    assertion = cfg.evalWorker == null || (cfg.peers ? ${toString cfg.evalWorker} && cfg.peers.${cfg.evalWorker}.enable);
-    message = "my.remote-builder.client.evalWorker = ${toString cfg.evalWorker}: not an enabled peer";
-  }];
+{
+  /*
+    The wrappers' own pinning, as data, for the other scripts that pin builders
+    the same way (features/core/epoch's hm-switch, for a user whose build
+    step goes through sudo). The SAME strings the nixos-rebuild-<peer> and
+    -local wrappers pass, so the two cannot drift; read whether or not the
+    wrappers themselves are on. Internal, read-only: nothing in the toplevel
+    depends on it unless a consumer bakes it into a script.
+  */
+  options.my.remote-builder.client.pinned = lib.mkOption {
+    type = lib.types.raw;
+    internal = true;
+    readOnly = true;
+    default = {
+      peers = lib.mapAttrs (name: p: {
+        builders = builderSpec name p;
+        substituters = "https://cache.nixos.org ${peerSubstituter name p}";
+      }) cfg.peers;
+      local = {
+        maxJobs = cfg.localJobs;
+        cores = cfg.localCores;
+        substituters = "https://cache.nixos.org";
+      };
+    };
+    description = ''
+      peers.<name> = { builders; substituters; }: the --option values that make
+      only that peer build (as root: they are trusted-user settings).
+      local = { maxJobs; cores; substituters; }: the -local wrappers' values.
+    '';
+  };
 
-  environment.systemPackages =
-    [ localRebuild localShell ]
-    ++ lib.mapAttrsToList (name: p: renamedTo "nixos-rebuild-${name}" (rebuildFor name p)) cfg.peers
-    ++ lib.optional (cfg.evalWorker != null) (localEvalFor cfg.evalWorker cfg.peers.${cfg.evalWorker})
-    ++ lib.optional (cfg.evalWorker != null) defaultRebuild
-    ++ lib.mapAttrsToList shellFor cfg.peers;
+  config = lib.mkIf (cfg.enable && cfg.wrappers.enable) {
+    assertions = [{
+      assertion = cfg.evalWorker == null || (cfg.peers ? ${toString cfg.evalWorker} && cfg.peers.${cfg.evalWorker}.enable);
+      message = "my.remote-builder.client.evalWorker = ${toString cfg.evalWorker}: not an enabled peer";
+    }];
+
+    environment.systemPackages =
+      [ localRebuild localShell ]
+      ++ lib.mapAttrsToList (name: p: renamedTo "nixos-rebuild-${name}" (rebuildFor name p)) cfg.peers
+      ++ lib.optional (cfg.evalWorker != null) (localEvalFor cfg.evalWorker cfg.peers.${cfg.evalWorker})
+      ++ lib.optional (cfg.evalWorker != null) defaultRebuild
+      ++ lib.mapAttrsToList shellFor cfg.peers;
+  };
 }
