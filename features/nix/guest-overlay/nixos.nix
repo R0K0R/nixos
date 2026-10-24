@@ -115,24 +115,9 @@ let
     '';
   nixConf = n: pkgs.writeText "nix-guest-${n}.conf" (nixConfText n);
 
-  /*
-    pam_namespace READS ITS CONFIG FROM ITS OWN STORE PATH. nixpkgs builds
-    linux-pam with sysconfdir = $out/etc, and pam_namespace has no argument
-    for another file, so the /etc/security/namespace.conf this feature writes
-    was never read: the module found its own empty default, did nothing and
-    returned success -- the guest's sessions ran on the system store with no
-    error anywhere (found by tests/guest-overlay-vm.nix, `findmnt /nix/store`
-    empty in a su session). This copy of the module looks in /etc instead;
-    only pam_namespace.so is used from it, so nothing else in the system
-    moves. The vendor fallback (the package's own etc) is left as it is.
-  */
-  pamNamespace = config.security.pam.package.overrideAttrs (o: {
-    pname = "${o.pname or "linux-pam"}-namespace-etc";
-    postPatch = (o.postPatch or "") + ''
-      substituteInPlace modules/pam_namespace/pam_namespace.h \
-        --replace-fail '(SCONFIG_DIR "/namespace' '("/etc/security/namespace'
-    '';
-  });
+  # pam_namespace that actually reads /etc/security/namespace.conf (stock
+  # nixpkgs reads its own store path and silently does nothing): see the lib.
+  pamNamespace = import ../../../lib/pam-namespace.nix { inherit config; };
 
   sessionRules = svc: config.security.pam.services.${svc}.rules.session;
   ownStack = svc: (sessionRules svc) ? unix && (sessionRules svc).unix.enable;

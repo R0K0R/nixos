@@ -348,7 +348,9 @@ in
           namespace = {
             order = config.security.pam.services.${svc}.rules.session.unix.order + 60;
             control = "required";
-            modulePath = "${config.security.pam.package}/lib/security/pam_namespace.so";
+            # Not the stock module: it reads its own store path's empty
+            # namespace.conf and silently does nothing (lib/pam-namespace.nix).
+            modulePath = "${import ../../../lib/pam-namespace.nix { inherit config; }}/lib/security/pam_namespace.so";
           };
         };
       });
