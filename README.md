@@ -385,7 +385,7 @@ narrowings and handover/kiosk misconfigurations are refused.
 | content-addressed derivations | `my.ca-derivations` (features/nix/ca-derivations; the "tuned" package policy is applied by tuning/ca.nix, which needs tuning's classifier, and asserts march) | ca-derivations live on the evaluating daemon and every builder | exists; on for both tuned hosts |
 | btrfs-layout (`/nix` its own subvolume; root, persist, swap subvolumes) | `my.btrfs-layout` (features/core/btrfs-layout) | -- | exists; on for victus-15 (`/nix` only) and galaxybook4-pro360 (the full impermanence layout) |
 | impermanence | `my.impermanence` (features/core/impermanence) + registry fact `features.<host>.impermanence` | btrfs-layout (`_meta`; plus `rootSubvolume` and `persist`) | **live on galaxybook4-pro360 since 2026-10-24** (docs/impermanence-migration.md); `tests/impermanence-eval.sh` |
-| guest-overlay (per-guest overlay stores) | `my.guest-overlay` (features/nix/guest-overlay) + registry fact `features.<host>."guest-overlay"` | btrfs-layout | exists, off everywhere; eval-tested only (`tests/guest-overlay-eval.sh`), never run |
+| guest-overlay (per-guest overlay stores) | `my.guest-overlay` (features/nix/guest-overlay) + registry fact `features.<host>."guest-overlay"` | btrfs-layout | exists, off everywhere; eval-tested (`tests/guest-overlay-eval.sh`), VM test `checks.x86_64-linux.guest-overlay-vm` (partially passing, see design doc Next 11) |
 | kiosk pinning + handover credentials | registry `session = { kiosk = ...; }` / `type = "handover"` (features/core/users/kiosk.nix, handover.nix) | a kiosk / handover account (pinned uid) | exists, no host has such an account; eval-tested only (`tests/user-types-eval.sh`), never run |
 | luks (TPM2 unlock, no PIN) | `my.luks` (features/core/luks) | -- (systemd initrd, asserted) | exists, off everywhere; eval-tested only (`tests/optional-features-eval.sh`). galaxybook4-pro360 is prepared, not encrypted: `hosts/galaxybook4-pro360/luks.nix`, `migration.galaxybook4-pro360-luks`, docs/luks-migration.md |
 | class daemons (one nix-daemon per user class, pinnable per-peer sockets) | `my.class-daemons` (features/nix/class-daemons) + registry fact `features.<host>."class-daemons"` | remote-builder.client when a class has builders; agenix for `sshKeySecret` | exists, off everywhere; eval-tested only (`tests/class-daemons-eval.sh`), never run -- runtime plan below |
@@ -569,11 +569,28 @@ that moves the package set, so run it with a reachable builder or
 
 `scripts/eval-matrix.sh` keeps the optional pieces optional. It evaluates, and
 never builds, synthetic variants of each real host defined in `lib/matrix.nix`:
-everything off (plain upstream nixpkgs), each lever and feature alone, and all
-on. It reports any variant whose result differs from the expected one. The real
-`nixosConfigurations` are untouched by it. The "all" variant, with emacs on,
-evaluates to exactly the real host's toplevel, which is how the matrix is known
-to be faithful. Run it after any change to tuning, ccache, CA or `_meta`.
+every piece of [Optional pieces](#optional-pieces) off (plain upstream
+nixpkgs), each alone, all on, the combinations that matter (`lto-o3`,
+`march-lto`, `btrfs-impermanence`, ...), and the combinations that are invalid
+by design (impermanence or guest-overlay without btrfs-layout, the
+fork-only tuning levers without march, `ca` "tuned" without march, march
+without `enable`, btrfs-layout on dell-latitude's ext4 root), which must FAIL
+with the assertion that names the reason -- the script checks the message, so
+failing for another reason is reported too. A new piece is one entry in
+`lib/matrix.nix`'s `pieces`. Patterns select a subset
+(`scripts/eval-matrix.sh 'dell-latitude/*' '*/off'`; `--list` shows them);
+an IntraISACross host's variants take about a minute each, run one at a time.
+With `--with-emacs`, the `host` variant must equal the real host's toplevel
+(checked), which is how the matrix is known to be faithful. Run it after any
+change to tuning, ccache, CA, the btrfs/impermanence/guest features or `_meta`.
+
+`checks.x86_64-linux.guest-overlay-vm` (tests/guest-overlay-vm.nix) boots
+guest-overlay in a VM whose `/nix` is a btrfs subvolume, on plain upstream
+nixpkgs: snapshot, overlay mount, guest sessions (su and a tty login, the
+user manager included), `nix store info`, a build and a GC in the guest
+store, rebase with copy-up after an admin GC, and a "switch" during a session
+(kept lower, rebase at logout). Needs kvm, so it builds on a builder:
+`nix build -L .#checks.x86_64-linux.guest-overlay-vm`.
 
 ### Users (home)
 

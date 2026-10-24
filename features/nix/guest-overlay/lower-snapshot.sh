@@ -41,7 +41,9 @@ rm -f "$db-wal" "$db-shm"
 #    complete (Nix registers after writing and invalidates before deleting).
 sqlite3 "$db" 'SELECT path FROM ValidPaths' | sed 's|^/nix/store/||' | sort -u >"$tmp/valid"
 ls -A "$new/store" | sort -u >"$tmp/present"
-comm -13 "$tmp/valid" "$tmp/present" | grep -vx '.links' | while IFS= read -r e; do
+# (grep exits 1 when nothing is left -- the usual case on a quiet store --
+# which pipefail would turn into a failed snapshot: found by the VM test.)
+comm -13 "$tmp/valid" "$tmp/present" | { grep -vx '.links' || true; } | while IFS= read -r e; do
   rm -rf --one-file-system -- "${new:?}/store/$e"
 done
 
@@ -57,6 +59,9 @@ for u in "$@"; do
   fi
 done
 for d in "$lroot"/*/; do
+  # current/ matches the glob too, and deleting through it deletes the
+  # snapshot it points at -- the newest one (found by the VM test).
+  [ -L "${d%/}" ] && continue
   s=$(basename "$d")
   case " $keep " in *" $s "*) continue ;; esac
   btrfs subvolume delete "$d" >/dev/null || echo "nix-guest-lower: could not delete $d" >&2

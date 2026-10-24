@@ -73,8 +73,12 @@ let
       "/etc/ssh/ssh_host_rsa_key.pub"
     ];
   };
-  systemDirs = lib.optionals cfg.system.defaults systemDefaults.directories ++ cfg.system.directories ++ pick "system" "directories";
-  systemFiles = lib.optionals cfg.system.defaults systemDefaults.files ++ cfg.system.files ++ pick "system" "files";
+  # unique: the same path from two sources is normal -- agenix's identity is
+  # the sshd host key on a host that runs sshd (victus-15), also a default
+  # here -- and nix-community/impermanence refuses a path listed twice.
+  # Found by lib/matrix.nix's victus-15/btrfs-impermanence.
+  systemDirs = lib.unique (lib.optionals cfg.system.defaults systemDefaults.directories ++ cfg.system.directories ++ pick "system" "directories");
+  systemFiles = lib.unique (lib.optionals cfg.system.defaults systemDefaults.files ++ cfg.system.files ++ pick "system" "files");
 
   alwaysUser = [
     ".local/state/nix"

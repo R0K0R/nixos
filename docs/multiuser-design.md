@@ -637,10 +637,27 @@ deliberate system change.
     info`, a substitution, a build on a builder of the guest's own, GC in
     the guest store, a system switch during a session (the session keeps its
     lower; logout -> rebase), copy-up after an admin GC.
-11. **nixosTest VM tests on victus** for the guest paths: needs a VM whose
-    /nix is a btrfs subvolume (not the host-shared store the test driver
-    mounts by default).
-12. **Eval matrix**: all optional pieces off, all on, and each alone.
+11. **nixosTest VM test** for the guest paths: written,
+    `checks.x86_64-linux.guest-overlay-vm` (tests/guest-overlay-vm.nix),
+    plain upstream nixpkgs. /nix is a real btrfs subvolume: a `mkfs.btrfs
+    --rootdir --subvol nix` image of the VM's closure as the backing file of
+    its root disk (mountHostNixStore and useDefaultFilesystems off). Its first
+    runs found and fixed three bugs: nix-guest-lower died under pipefail on a
+    store with nothing unregistered (grep -v with no output), and deleted the
+    snapshot it had just published (its prune glob matched current/); the
+    PAM rule broke evaluation on a host whose greetd stack is `include login`
+    (dell-latitude, found by the matrix). It passes the subvolume, snapshot
+    and overlay-mount checks; OPEN: in a `su guest` session /nix/store is not
+    the overlay (findmnt prints nothing, pam_namespace logs nothing) -- next
+    step is pam_namespace `debug` and a look at the session's mountinfo.
+    Not coverable without network: substitution, the guest's own builders.
+12. **Eval matrix**: done -- lib/matrix.nix `pieces` (march, lto, o3, heavy,
+    ccache, ca, btrfs-layout, impermanence, guest-overlay; luks a TODO entry
+    until it lands): all off, all on, each alone, combinations, and the
+    invalid-by-design ones, which must fail with their assertion (checked by
+    scripts/eval-matrix.sh). All 75 host/variant pairs as expected
+    (2026-10-24). It found that impermanence on victus-15 needs /home
+    neededForBoot and deduplicated persistence paths (fixed in the feature).
 13. ~~**Per-user tuning**~~ implemented (see that section); left: the
     one-time cache migration (root, every host), and a first real
     tuning-refresh. Measured on implementation: an untuned home on either
