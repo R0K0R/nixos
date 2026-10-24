@@ -48,8 +48,11 @@ let
             # Its own list, not the host's plus these: the real host now has a
             # guest and a handoff of its own (registry/users), and the checks
             # below are about exactly these accounts.
-            users = [ "r0k0r" "guest" "visitor" ];
-            narrow.visitor.localBuilds = false;
+            # benjamin too: the host file names him (my.fish.users).
+            users = [ "r0k0r" "benjamin" "guest" "visitor" ];
+            # Added to the host's own narrowing, not in place of it: `//`
+            # on `narrow` would drop narrow.r0k0r.home = "impermanent".
+            narrow = (raw.hosts.hosts.${host}.narrow or { }) // { visitor.localBuilds = false; };
           };
         };
       };
@@ -218,11 +221,11 @@ in
 
   # -- nix access --------------------------------------------------------
   allowedUsers = expect "allowed-users excludes guest" (
-    c.nix.settings.allowed-users == [ "root" "r0k0r" "visitor" ]
+    c.nix.settings.allowed-users == [ "root" "benjamin" "r0k0r" "visitor" ]
   ) (toString c.nix.settings.allowed-users);
   # The real gb4 has guest and handoff (nix = none) since 2026-10-24, so its
   # daemon admits only the accounts with store access.
-  realHostAllowedUsers = expect "real gb4: allowed-users = root + r0k0r (guest, handoff have nix = none)" (off.config.nix.settings.allowed-users == [ "root" "r0k0r" ]) (
+  realHostAllowedUsers = expect "real gb4: allowed-users = root + the people with store access (guest, handoff have nix = none)" (off.config.nix.settings.allowed-users == [ "root" "benjamin" "r0k0r" ]) (
     toString off.config.nix.settings.allowed-users
   );
   nixConf = expect "nix.conf differs from the real host's" (
@@ -245,8 +248,40 @@ in
   standaloneHome = expect "r0k0r standalone: not integrated, CLI shipped, home still evaluable" (
     !(c.home-manager.users ? r0k0r)
     && lib.any (p: (p.pname or p.name or "") == "home-manager") c.environment.systemPackages
-    && !((mkHomeLib host on).mkHome { username = "r0k0r"; }).config.submoduleSupport.enable
+    && !(
+      (mkHomeLib host on).mkHome {
+        username = "r0k0r";
+        # His home is impermanent here, and an impermanent home with an
+        # empty my.persist is refused (lib/home-persist.nix); his real list
+        # lives in his home repo.
+        modules = [ { my.persist.directories = [ "KSA" ]; } ];
+      }
+    ).config.submoduleSupport.enable
   ) (toString (lib.attrNames c.home-manager.users));
+
+  /*
+    -- home axis: persistent -> impermanent -> tmpfs ----------------------
+    impermanent is accepted where the host's registry facts declare
+    impermanence (gb4 does), and a host may NARROW a home to one that keeps
+    less across a reboot -- r0k0r is persistent in his user file and
+    narrowed to impermanent on gb4 only (registry/hosts.nix). Widening is
+    refused (refused.narrowWiden*).
+  */
+  homeNarrowed = expect "r0k0r: persistent in the user file, impermanent on gb4 only, persistent on victus-15" (
+    reg.effective.${host}.r0k0r.home == "impermanent"
+    && c.my.users.r0k0r.impermanentHome
+    && reg.effective.victus-15.r0k0r.home == "persistent"
+  ) "${reg.effective.${host}.r0k0r.home} on gb4, ${reg.effective.victus-15.r0k0r.home} on victus-15";
+  impermanentAccepted =
+    let
+      e = (regWith (r: r // { users = r.users // { visitor = r.users.visitor // { overrides.home = "impermanent"; }; }; })).effective.${host}.visitor;
+    in
+    expect "home = impermanent accepted on gb4 (declares impermanence)" (e.home == "impermanent") e.home;
+  narrowToTmpfs =
+    let
+      e = (regWith (r: r // { hosts = r.hosts // { hosts = r.hosts.hosts // { ${host} = r.hosts.hosts.${host} // { narrow = r.hosts.hosts.${host}.narrow // { visitor = r.hosts.hosts.${host}.narrow.visitor // { home = "tmpfs"; }; }; }; }; }; })).effective.${host}.visitor;
+    in
+    expect "narrow persistent -> tmpfs accepted" (e.home == "tmpfs") e.home;
 
   # -- uids --------------------------------------------------------------
   uids = expect "every registry account has its registry uid" (
@@ -348,6 +383,22 @@ in
           };
         }
       )).effective.victus-15.visitor
+    );
+    # Narrowing keeps less, never more: tmpfs -> impermanent widens the
+    # handover guest's home, impermanent -> persistent widens an
+    # impermanent user's.
+    narrowWidenTmpfs = mustFail "narrow.guest.home = impermanent (tmpfs keeps less)" (
+      (regWith (r: r // { hosts = r.hosts // { hosts = r.hosts.hosts // { ${host} = r.hosts.hosts.${host} // { narrow = r.hosts.hosts.${host}.narrow // { guest.home = "impermanent"; }; }; }; }; })).effective.${host}.guest
+    );
+    narrowWidenImpermanent = mustFail "narrow.visitor.home = persistent over an impermanent visitor" (
+      (regWith (
+        r:
+        r
+        // {
+          users = r.users // { visitor = r.users.visitor // { overrides.home = "impermanent"; }; };
+          hosts = r.hosts // { hosts = r.hosts.hosts // { ${host} = r.hosts.hosts.${host} // { narrow = r.hosts.hosts.${host}.narrow // { visitor = r.hosts.hosts.${host}.narrow.visitor // { home = "persistent"; }; }; }; }; };
+        }
+      )).effective.${host}.visitor
     );
     # Only a home-manager session has a home to activate.
     standaloneKiosk = mustFail "homeActivation = standalone on a kiosk user" (

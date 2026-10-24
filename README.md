@@ -390,8 +390,10 @@ narrowings and handover/kiosk misconfigurations are refused.
 | luks (TPM2 unlock, no PIN) | `my.luks` (features/core/luks) | -- (systemd initrd, asserted) | exists, off everywhere; eval-tested only (`tests/optional-features-eval.sh`). galaxybook4-pro360 is prepared, not encrypted: `hosts/galaxybook4-pro360/luks.nix`, `migration.galaxybook4-pro360-luks`, docs/luks-migration.md |
 | class daemons (one nix-daemon per user class, pinnable per-peer sockets) | `my.class-daemons` (features/nix/class-daemons) + registry fact `features.<host>."class-daemons"` | remote-builder.client when a class has builders; agenix for `sshKeySecret` | exists, off everywhere; eval-tested only (`tests/class-daemons-eval.sh`), never run -- runtime plan below |
 | per-user tuning cache (`/var/lib/tuning-cache/<host>/users`, `tuning-refresh`) | `my.tuning.userCache.enable` (tuning/nixos.nix); the inputs move with `scripts/tuning-cache-migrate.sh`, relocked by `scripts/tuning-cache-relock.sh` | -- (independent of `my.tuning.enable`); impermanent hosts persist the directory via `my.state` | exists, off everywhere; ready to run, not run (docs/multiuser-design.md, "Running the migration": victus-15 first); `tests/user-tuning-eval.sh`, `tests/user-tuning-scripts.sh` |
-| hm-switch (home switch with `--on PEER` / `--local` / `--eval-on PEER`) | `my.epoch.hmSwitch.enable` (features/core/epoch; defaults to `my.epoch.enable`) | -- | exists; on for galaxybook4-pro360 (without the epoch) |
+| hm-switch (home switch with `--on PEER` / `--local` / `--eval-on PEER`) | `my.epoch.hmSwitch.enable` (features/core/epoch; defaults to `my.epoch.enable`) | -- | exists; on for galaxybook4-pro360 (with the epoch check since my.epoch is on there) |
 | per-user graphics driver (`/run/opengl-driver` per user, in a mount namespace) | `my.gl-namespace` (features/session/gl-namespace) + home option `my.graphics.driver` | `hardware.graphics`; no privileged wrapper that loads GL (asserted; build-time check `setuidGlChecks.<host>`) -- Hyprland's cap_sys_nice wrapper fails it | exists, off everywhere; eval-tested (`tests/gl-namespace-eval.sh`, `tests/gl-namespace-select.sh`), never run -- runtime plan below |
+| epoch (surface hash, `epoch.json` in the toplevel, boot/switch history, epoch recorded in every home built for the host, hm-rollback) | `my.epoch.enable` (features/core/epoch, lib/epoch.nix) | -- (under impermanence /var/lib/nixos-epochs is declared as state) | **on for galaxybook4-pro360** (2026-10-24), not switched yet; `tests/session-safety-eval.sh`; runtime plan below |
+| fallback session + epoch guard (every greetd session behind `guarded-session`; mismatch or no home -> cage + system kitty + menu with Claude Code; "<Name> (ignore epoch)" entries) | `my.fallback-session.enable`, `.guard.enable` (features/session/fallback-session) | epoch (`_meta`); greetd for the guard (asserted) | **on for galaxybook4-pro360** (guard on, `unrecordedIsMismatch` off for now), not switched yet; PAM banner off everywhere |
 
 All levers default to off, and all off is plain upstream nixpkgs.
 
@@ -714,6 +716,65 @@ galaxybook4-pro360, as root unless said otherwise:
 11. Roll back with `nixos-rebuild test` from the previous generation (or a
     reboot): /run is a tmpfs; the gcroots directory is left behind (harmless,
     remove by hand).
+
+### Epoch and fallback session: runtime test plan (not run yet)
+
+On for galaxybook4-pro360. Switch from a CLEAN, PUSHED commit: the toplevel
+records `inputs.self.rev`, a dirty tree records `<rev>-dirty`, which
+`hm-switch --update` never relocks to, and the home repo fetches the system
+from GitHub.
+
+1. `sudo nixos-rebuild switch --flake /etc/nixos#galaxybook4-pro360`. The
+   running session is untouched (greetd is not restarted). Check:
+   `cat /run/current-system/epoch.json`, `cat /etc/nixos-epoch` (the same
+   epoch), `findmnt /var/lib/nixos-epochs` (bound from
+   /persist/var/lib/nixos-epochs), `systemctl status nixos-epoch-record`,
+   `cat /var/lib/nixos-epochs/history.jsonl` (one `"source":"current"` line
+   with this rev, epoch and generation number).
+2. `session-epoch-check` as r0k0r: `status=unrecorded` (the active home was
+   built before the epoch module existed). `hm-rollback` lists generations,
+   all "unrecorded".
+3. Record the epoch in the home: `hm-switch --update` (relocks
+   `system` to the rev in the history, builds, activates). Now
+   `session-epoch-check` says `status=match`, `cat
+   ~/.local/state/home-manager/gcroots/current-home/epoch` is the system's,
+   and `hm-rollback` marks the new generation `=*`. Commit the relock in
+   ~/config/home.
+4. The fallback by hand, no mismatch needed: log out; the greeter now lists
+   Hyprland, Hyprland (ignore epoch), Hyprland (uwsm-managed) (+ ignore
+   epoch) and Fallback (system terminal); the remembered "Hyprland" is the
+   guarded entry. Pick Fallback: cage with a kitty showing the menu (system
+   epoch, `home generation N <epoch> (match)`). Try [c] (Claude Code in
+   ~/config/home with the brief as its first message; quit it), [t] (shell;
+   exit), then [s] -> Hyprland starts in the same login. Log out again.
+5. Matching login: pick Hyprland -> the normal session, as before. In a
+   terminal `echo $EPOCH_GUARD` prints `passed`; `journalctl -t
+   guarded-session -b` is empty (only diversions and ignore-epoch starts are
+   logged).
+6. Reboot. Then: history.jsonl still there (persisted) with no new line
+   (same toplevel as the last one); greeter -> Hyprland -> normal session
+   (hm-reactivate re-linked the same generation).
+7. Forcing a mismatch safely, with a throwaway home generation: in
+   ~/config/home add a temporary module
+   `{ lib, ... }: { home.extraBuilderCommands = lib.mkAfter "printf bogus > $out/epoch"; }`
+   (mkAfter: it overwrites the real file), `hm-switch`, remove the module
+   again (do not commit it). `session-epoch-check` -> `status=mismatch
+   home=bogus`. Log out, pick Hyprland: the fallback session instead,
+   showing the mismatch and "newest generation built for this epoch: N-1";
+   `journalctl -t guarded-session` logs the diversion. From there:
+   - [s] starts Hyprland anyway (and "Hyprland (ignore epoch)" from the
+     greeter does the same, logged as such);
+   - [r] rolls back to generation N-1 (hm-rollback N-1), then [q] logs
+     out, and the next Hyprland login is normal again.
+8. Getting out at any point: [q] in the menu ends the session (back to the
+   greeter); "Hyprland (ignore epoch)" in the greeter bypasses the check;
+   Ctrl+Alt+F2 gives a getty for `hm-rollback <n>` or `sudo nixos-rebuild
+   switch --rollback`; the boot menu has the previous system generation
+   (which predates the guard). If cage cannot start at all, the session ends
+   at once and the greeter returns -- use the ignore-epoch entry.
+9. Afterwards set `my.fallback-session.unrecordedIsMismatch = true` on
+   galaxybook4-pro360: from then on an unrecorded generation (built before
+   the epoch, or rolled back to from before step 3) gets the fallback too.
 
 ## Adding things
 

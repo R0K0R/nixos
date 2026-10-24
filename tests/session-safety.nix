@@ -1,7 +1,10 @@
 /*
   Session-safety pieces (features/core/epoch, features/session/fallback-session)
-  switched ON in a synthetic copy of galaxybook4-pro360 -- the real hosts keep
-  them off, so this is the only place their enabled branches are evaluated.
+  on a synthetic copy of galaxybook4-pro360 with everything switched on,
+  including what the real host leaves off (the PAM banner, strict handling of
+  unrecorded generations) and a fixed rev, so the values do not move with
+  every commit. `off` is the same host with the epoch, the fallback session
+  and the guard switched OFF -- the real gb4 has them on since 2026-10-24.
 
   Every attribute is a string (drvPaths, the epoch), so forcing the whole set
   evaluates everything without building anything. Run it with builds disabled
@@ -20,26 +23,51 @@ let
   host = "galaxybook4-pro360";
 
   on = mkHostWith { hostName = host; extraModules = [
-    ({ config, ... }: {
+    {
       my.epoch.enable = true;
       my.epoch.rev = "0000000000000000000000000000000000000000";
       my.fallback-session = {
         enable = true;
         normalSession = "start-hyprland";
-        guardSessions = [ config.programs.hyprland.package ];
+        guard.enable = true;
         pamBanner.services = [ "login" "sshd" ];
-        unrecordedIsMismatch = true;
+        unrecordedIsMismatch = lib.mkForce true;
       };
-    })
+    }
   ]; };
-  off = mkHostWith { hostName = host; };
+  off = mkHostWith { hostName = host; extraModules = [
+    {
+      my.epoch.enable = lib.mkForce false;
+      my.epoch.hmSwitch.enable = true;
+      my.fallback-session.enable = lib.mkForce false;
+      my.fallback-session.guard.enable = lib.mkForce false;
+    }
+  ]; };
 
   c = on.config;
   homeLib = mkHomeLib host on;
+  /*
+    r0k0r's home is impermanent on gb4, and an impermanent home with an empty
+    my.persist is refused (lib/home-persist.nix) -- his real list is in his
+    home repo (~/config/home/persist.nix), which this flake cannot read. A
+    one-entry stand-in keeps the home evaluable. `home` gets the epoch module
+    only through the system (home-manager.sharedModules); `homeExplicit`
+    also names homeLib.epochModule, which the module key must deduplicate.
+  */
+  persist = { my.persist.directories = [ "KSA" ]; };
   home = homeLib.mkHome {
     username = "r0k0r";
-    modules = [ homeLib.epochModule ];
+    modules = [ persist ];
   };
+  homeExplicit = homeLib.mkHome {
+    username = "r0k0r";
+    modules = [ persist homeLib.epochModule ];
+  };
+  homeOff = (mkHomeLib host off).mkHome {
+    username = "r0k0r";
+    modules = [ persist ];
+  };
+  dm = c.services.displayManager.sessionData;
 in
 {
   toplevel = c.system.build.toplevel.drvPath;
@@ -49,7 +77,49 @@ in
   surfaceSize = toString (lib.length c.system.build.epochSurfacePaths);
   recordUnit = c.systemd.units."nixos-epoch-record.service".unit.drvPath;
   sessions = lib.concatMapStringsSep " " (p: p.drvPath) c.services.displayManager.sessionPackages;
+  # The guard: the aggregate greeters read is the rebuilt one (its own
+  # assertion checks the merge), with an ignore-epoch id per guarded session,
+  # the guarded ids first, and upstream's x11 wrapper kept.
+  guardedDesktops = dm.desktops.drvPath;
+  guardedNames =
+    let
+      n = dm.sessionNames;
+      ignore = lib.filter (lib.hasSuffix "-ignore-epoch") n;
+    in
+    # Guarded first; ignore-epoch variants of exactly the compositor's
+    # sessions; the fallback and gb4's kiosk-firefox (handoff) unguarded.
+    if
+      lib.take 2 n == [ "hyprland" "hyprland-uwsm" ]
+      && ignore == [ "hyprland-ignore-epoch" "hyprland-uwsm-ignore-epoch" ]
+      && lib.elem "fallback" n
+      && lib.elem "kiosk-firefox" n
+      && dm.autologinSession == "hyprland"
+      && dm ? wrapper
+    then
+      lib.concatStringsSep " " dm.sessionNames
+    else
+      throw "sessionData: names ${toString dm.sessionNames}, autologin ${toString dm.autologinSession}, wrapper ${lib.boolToString (dm ? wrapper)}";
+  guardOffAggregate =
+    if off.config.services.displayManager.sessionData.desktops.drvPath != dm.desktops.drvPath then
+      off.config.services.displayManager.sessionData.desktops.drvPath
+    else
+      throw "guard off still uses the guarded aggregate";
+  guardScript =
+    let
+      t = c.my.fallback-session.internal.guardedSession.text or "";
+    in
+    if lib.hasInfix "GUARD_STRICT=1" t && lib.hasInfix "GUARD_USERS='benjamin r0k0r'" t then "strict, users benjamin r0k0r" else throw "guarded-session: unexpected header";
   pamLogin = if lib.hasInfix "epoch-login-banner" c.security.pam.services.login.text then lib.head (lib.filter (lib.hasInfix "epoch-banner") (lib.splitString "\n" c.security.pam.services.login.text)) else throw "pam banner not wired into login";
   homeActivation = home.activationPackage.drvPath;
-  homeEpochModule = home.config.home.extraBuilderCommands;
+  homeEpochModule =
+    let
+      cmds = home.config.home.extraBuilderCommands;
+      n = lib.length (lib.filter (lib.hasInfix "> $out/epoch") (lib.splitString "\n" cmds));
+    in
+    if n == 1 && lib.hasInfix c.system.build.epoch cmds then cmds else throw "home: ${toString n} epoch lines in extraBuilderCommands";
+  homeExplicitSame =
+    if homeExplicit.activationPackage.drvPath == home.activationPackage.drvPath then "yes" else throw "naming homeLib.epochModule as well changed the home (module key not deduplicated)";
+  homeOffNoEpoch =
+    if lib.hasInfix "$out/epoch" homeOff.config.home.extraBuilderCommands then throw "home on a host with the epoch off records one" else "none";
+  factsEpoch = builtins.toJSON homeLib.facts.epoch;
 }

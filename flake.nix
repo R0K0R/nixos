@@ -303,11 +303,11 @@
                      was built against.
           epochModule  home module writing that epoch (and the rev) into
                      every generation as `$generation/epoch`, which
-                     session-epoch-check and hm-rollback read. NOT in
-                     `modules`: adding a file to the generation changes the
-                     activation package, so including it by default would
-                     move every existing home. A user repo opts in with
-                     modules = [ ... system.homeLib.<host>.epochModule ].
+                     session-epoch-check, guarded-session and hm-rollback
+                     read. mkHome includes it by itself on a host with
+                     my.epoch on (through home-manager.sharedModules, see
+                     features/core/epoch/epoch-home.nix); exported for a
+                     repo that wants it explicitly elsewhere.
       */
       tuningDefaults = {
         march = "system";
@@ -400,7 +400,14 @@
               o3 = t.o3.enable;
               intraISACross = t.intraISACross.enable;
             };
-            impermanence = false;
+            # The registry fact (asserted against my.impermanence.enable).
+            impermanence = hf.impermanence or false;
+            # Whether homes built here record the epoch (and the guard can
+            # check them), and the epoch they record.
+            epoch = {
+              inherit (nixos.config.my.epoch) enable rev;
+              value = nixos.config.system.build.epoch;
+            };
             # The system's driver and whether a home may bring its own
             # (my.graphics.driver; features/session/gl-namespace).
             graphics = {

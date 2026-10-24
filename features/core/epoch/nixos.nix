@@ -248,6 +248,20 @@ in
       '';
 
       environment.etc."nixos-epoch".text = computed.epoch + "\n";
+
+      /*
+        Every home built for this host records the epoch it was built
+        against -- integrated ones and homeLib's standalone ones alike, since
+        mkHome evaluates the system's final sharedModules. See epoch-home.nix.
+        Changes no system derivation on a host without integrated homes.
+      */
+      home-manager.sharedModules = [
+        (import ./epoch-home.nix {
+          inherit lib;
+          inherit (computed) epoch;
+          inherit (cfg) rev;
+        })
+      ];
       my.state.system.state.directories = [
         "/var/lib/nixos-epochs" # epoch history that hm-switch --update offers revisions from
       ];

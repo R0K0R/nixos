@@ -75,6 +75,18 @@ derivations outputs are unknown before the build.
   as its first message. A user's first login (no generation yet) also gets the
   fallback session and an empty persistence manifest.
 
+Implemented as (Done 14, on for galaxybook4-pro360): the hashed set is not a
+hand-kept singleton list but the computed **surface** (`lib/epoch.nix`, see
+[Surface compatibility](#surface-compatibility)): the system derivations
+loaded INTO user processes -- session-environment plugin paths, the graphics
+driver, PAM and NSS modules, the locale archive. glibc, systemd and the
+locker's PAM modules enter through it; the kernel, dbus, polkit, nix and
+greetd are reached over protocols and are not hashed (a change there needs no
+home rebuild). The history is JSON lines, `/var/lib/nixos-epochs/history.jsonl`.
+greetd has no session wrapper, so the guard is in the session entries every
+greeter reads: the `desktops` aggregate is rebuilt with each Exec= behind
+`guarded-session`, plus "<Name> (ignore epoch)" entries for "start anyway".
+
 ## Impermanence fit
 
 - Persistence is a **per-user manifest** (data, `persist.nix` in the user
@@ -773,6 +785,39 @@ deliberate system change.
     credential file, seed ordering and the refusals. Not run on a machine
     yet (runtime plan in the commit/report); no VM test.
 
+14. **Epoch + history + fallback session, on for galaxybook4-pro360**
+    (Next 7, 2026-10-24). my.epoch: `epoch.json` {epoch, rev, host} in the
+    toplevel, /etc/nixos-epoch, `nixos-epoch-record.service` (boot and
+    switch; RequiresMountsFor the persisted /var/lib/nixos-epochs, declared
+    through my.state.system.state) appending to history.jsonl and
+    backfilling the boot menu, hm-switch (advisory check) and hm-rollback.
+    Every home built for a host with the epoch on records it: the epoch
+    module (`$generation/epoch`, `$generation/system-rev`) is in
+    home-manager.sharedModules, which homeLib's mkHome evaluates too, so no
+    user repo has to opt in (homeLib.<host>.epochModule stays exported,
+    deduplicated by its module key); homeLib facts gain `epoch` (and
+    `impermanence` now reports the registry fact instead of a constant
+    false). my.fallback-session.guard (replaces `guardSessions`): the
+    sessionData `desktops` aggregate is rebuilt from the same
+    sessionPackages with every Exec= prefixed by guarded-session under the
+    same file names (so the greeter's remembered "hyprland.desktop" is the
+    guarded one), plus `<id>-ignore-epoch` entries; mkAfter puts the
+    definition last in sessionData's untyped `//` merge (definitions arrive
+    in reverse module order: without it upstream's won) and an assertion
+    checks the result. guarded-session: match -> the session; mismatch or
+    no generation -> fallback-session; unrecorded -> the session unless
+    unrecordedIsMismatch; only accounts with a home-manager home are
+    checked (kiosk and the fallback entry itself are passed through,
+    `passthru.epochGuard = false`); EPOCH_GUARD=passed lets a nested guard
+    (uwsm resolving hyprland.desktop) through. tuigreet keeps its own
+    entries and applies the same routing when the guard is on. The epoch is
+    unchanged by all of it (`desktops` is in ignoreSurface by name).
+    galaxybook4-pro360: epoch, fallback session and guard on,
+    unrecordedIsMismatch off until the home has been switched once on the new
+    revision. victus-15 and dell-latitude unchanged. Eval-tested
+    (tests/session-safety-eval.sh); not run yet -- runtime plan in the
+    README.
+
 12. **Class daemons + hm-switch builder variations** (2026-10-24).
     features/nix/class-daemons: per class present on a host, socket-activated
     nix-daemons at /nix/var/nix/daemon-socket-<class>/<variant> (default,
@@ -820,10 +865,14 @@ deliberate system change.
 
 ### Next
 
-6. **hm-switch**: ~~off~~ on for galaxybook4-pro360 without the epoch (Done
-   12); the epoch check comes with my.epoch. Next: class daemons' first run
-   (README runtime plan), then hm-switch through them.
-7. **Epoch + history + fallback session**, with Claude Code in the fallback.
+6. **hm-switch**: on for galaxybook4-pro360, with the epoch check since
+   Done 14. Next: class daemons' first run (README runtime plan), then
+   hm-switch through them.
+7. ~~**Epoch + history + fallback session**~~: implemented and on for
+   galaxybook4-pro360 (Done 14); left: the first switch + reboot (README
+   runtime plan), then `unrecordedIsMismatch = true` there; victus-15 (the
+   NVIDIA surface) after its /etc/nixos move; the PAM banner
+   (`pamBanner.services`) is still off everywhere.
 8. ~~**Optional features split out**~~: done (see 12 above); left: the
    LUKS migration of galaxybook4-pro360 itself (docs/luks-migration.md), and
    hibernation on an encrypted swapfile, if ever wanted.
