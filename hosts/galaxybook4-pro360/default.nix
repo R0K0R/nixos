@@ -128,6 +128,10 @@ in
       # build-time accelerators for the whole tuned host set (tuning/heavy.nix).
       # Content addressing is its own feature now, my.ca-derivations below.
       heavy.enable = true;
+      # The per-user half of the classifier (/var/lib/tuning-cache/<host>,
+      # tuning-refresh); its one-time migration runs after this switch,
+      # victus-15 first (docs/multiuser-design.md, Running the migration).
+      userCache.enable = true;
       # Literal, and it must stay one: flake.nix raw-imports this file to pick
       # between the patched fork and plain upstream nixpkgs before the module
       # system exists. false here would substitute the whole package set from

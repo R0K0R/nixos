@@ -241,6 +241,10 @@
       # build-time accelerators for the whole tuned host set (tuning/heavy.nix).
       # Content addressing is its own feature now, my.ca-derivations below.
       heavy.enable = true;
+      # The per-user half of the classifier (/var/lib/tuning-cache/<host>,
+      # tuning-refresh); its one-time migration runs after this switch,
+      # victus-15 first (docs/multiuser-design.md, Running the migration).
+      userCache.enable = true;
       # Literal, and it must stay one -- see the note in galaxybook4-pro360.
       enable = true;
       march = "znver3";
