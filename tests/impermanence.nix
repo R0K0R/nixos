@@ -23,6 +23,15 @@ let
         };
       };
       hosts = raw.hosts // {
+        # The committed host narrows r0k0r to impermanent itself (since the
+        # migration); a persistent variant has to drop that too.
+        hosts = raw.hosts.hosts // {
+          ${host} = raw.hosts.hosts.${host} // {
+            narrow = (raw.hosts.hosts.${host}.narrow or { }) // {
+              r0k0r = builtins.removeAttrs (raw.hosts.hosts.${host}.narrow.r0k0r or { }) [ "home" ];
+            };
+          };
+        };
         features = raw.hosts.features // {
           ${host} = raw.hosts.features.${host} // { impermanence = fact; };
         };
@@ -114,12 +123,14 @@ in
 
   # Declared by the features themselves: system paths reach environment.persistence,
   # user paths reach the userData JSON that persist-home-<user> reads.
-  featureState = expect "fprint, cups, AccountsService reach /persist; ssh, firefox, gh reach the persist-home's user data; optional waydroid does not" (
-    lib.all (d: lib.elem d dirsOf) [ "/var/lib/fprint" "/var/lib/cups" "/var/lib/AccountsService" ]
-    && !(lib.elem "/var/lib/waydroid" dirsOf)
+  # waydroid is "state" since c5df030 (its images and data); flatpak and doom
+  # are "optional", which the default classes leave out.
+  featureState = expect "fprint, cups, AccountsService, waydroid reach /persist; ssh, firefox, gh reach the persist-home's user data; optional flatpak and doom do not" (
+    lib.all (d: lib.elem d dirsOf) [ "/var/lib/fprint" "/var/lib/cups" "/var/lib/AccountsService" "/var/lib/waydroid" ]
+    && !(lib.elem "/var/lib/flatpak" dirsOf)
     && lib.all (p: lib.elem p (pickUser "directories")) [ ".ssh" ".mozilla/firefox" ".local/state/DankMaterialShell" ]
     && lib.all (p: lib.elem p (pickUser "files")) [ ".claude.json" ".config/gh/hosts.yml" ]
-    && !(lib.elem ".local/share/waydroid" (pickUser "directories"))
+    && !(lib.elem ".local/share/doom" (pickUser "directories"))
     && lib.hasInfix (builtins.unsafeDiscardStringContext (toString expectedUserData)) c.systemd.services.persist-home-r0k0r.serviceConfig.ExecStart
   ) (toString dirsOf);
 
@@ -145,8 +156,10 @@ in
     factMismatch = refusedBy "impermanence on, registry fact off" "features.${host}.impermanence" (
       hostWith { fact = false; home = "persistent"; }
     );
-    identityLost = refusedBy "agenix identity on the ephemeral root (secret class not persisted)" "age.identityPaths" (
-      hostWith { extra.my.impermanence.classes = lib.mkForce [ "state" ]; }
+    # The agenix feature reads its identities from the persist root since
+    # c5df030, so only an identity path set past it can land on the root.
+    identityLost = refusedBy "agenix identity on the ephemeral root" "age.identityPaths" (
+      hostWith { extra.age.identityPaths = lib.mkForce [ "/etc/agenix/elsewhere" ]; }
     );
     swapOnRoot = refusedBy "swapfile on the ephemeral root" "swapfile" (hostWith { extra.my.swapfile.path = lib.mkForce "/swapfile"; });
     noFact = mustFail "home = impermanent on a host without the fact" (
