@@ -20,8 +20,12 @@
   global checks below run whenever ANY host reads the registry.
 
   AXES AND THEIR MACHINERY. home = "tmpfs", nix = "none" / "untrusted", kiosk
-  sessions and with them the handover and untrusted types are implemented
-  (features/core/users: tmpfs-home.nix, kiosk.nix, nix-access.nix).
+  sessions (pinned: whatever the greeter asks for, the login gets the one
+  program) and with them the handover and untrusted types are implemented
+  (features/core/users: tmpfs-home.nix, kiosk.nix, nix-access.nix). The
+  handover TYPE also carries its credentials -- not an axis, a property of
+  lending: a passphrase issued per lending with a deadline, and an optional
+  `handover.expires` ceiling in the user file (handover.nix).
   home = "impermanent" is features/core/impermanence: the home is wiped with
   the root at every boot and rebuilt from the user's own persist list merged
   with the features' (accepted on a host whose facts declare impermanence).
@@ -325,6 +329,26 @@ in
             || throw "registry: ${where}: tmpfsSize must be a tmpfs size= value like \"2G\" or \"25%\", got ${builtins.toJSON u.tmpfsSize}"
           )
           && (
+            !(u ? handover)
+            || (
+              (u.type or null) == "handover"
+              || throw "registry: ${where}: `handover` is only for type = \"handover\" accounts"
+            )
+            && (
+              isAttrs u.handover
+              && subtractLists [ "expires" ] (attrNames u.handover) == [ ]
+              && (!(u.handover ? expires) || isString u.handover.expires && builtins.match "[0-9]{4}-[0-9]{2}-[0-9]{2}" u.handover.expires != null)
+              || throw "registry: ${where}: handover must be { expires = \"YYYY-MM-DD\"; } (or {}), got ${builtins.toJSON u.handover}"
+            )
+          )
+          && (
+            (u.type or null) != "handover"
+            || !(u ? passwordSecret)
+            || throw ''
+              registry: ${where}: a handover account has no fixed password -- an admin issues one
+              per lending on the machine (`sudo handover issue ${n}`). Drop passwordSecret.''
+          )
+          && (
             !(u ? acceptTypeChange)
             || (isString u.acceptTypeChange && builtins.match "[a-z0-9-]+->[a-z0-9-]+" u.acceptTypeChange != null)
             || throw "registry: ${where}: acceptTypeChange must be \"<old type>-><new type>\", got ${builtins.toJSON u.acceptTypeChange}"
@@ -538,6 +562,10 @@ in
                 in the guest's own store.''
             else if sessionKind e.session == "kiosk" && !(pkgs ? ${e.session.kiosk}) then
               throw "registry: ${where}: session.kiosk = \"${e.session.kiosk}\" is not a package attribute of this host's pkgs"
+            else if sessionKind e.session == "kiosk" && (u ? shell || (u.sshKeys or [ ]) != [ ]) then
+              throw ''
+                registry: ${where}: a kiosk session pins the login shell to the kiosk launcher and
+                refuses ssh (features/core/users/kiosk.nix); drop `shell` and `sshKeys`.''
             else if (u.homeActivation or "system") == "standalone" && e.session != "home-manager" then
               throw ''
                 registry: ${where}: homeActivation = "standalone" but session is ${builtins.toJSON e.session}.
@@ -571,6 +599,7 @@ in
               // lib.optionalAttrs (e.home == "tmpfs") { tmpfsHome.size = u.tmpfsSize or "2G"; }
               // lib.optionalAttrs (e.home == "impermanent") { impermanentHome = true; }
               // lib.optionalAttrs (sessionKind e.session == "kiosk") { kiosk = pkgs.${e.session.kiosk}; }
+              // lib.optionalAttrs (u.type == "handover") { handover.expires = u.handover.expires or null; }
               // lib.optionalAttrs (u ? description) { inherit (u) description; }
               # A host that keeps an account's password local (hosts.nix
               # localPasswords) does not get the registry's secret for it.

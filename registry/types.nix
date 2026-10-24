@@ -35,6 +35,11 @@
     tmpfsSize         size= of a tmpfs home, default "2G".
     acceptTypeChange  "<old type>-><new type>": consent to one dangerous
                       transition. Inert once the new type is recorded.
+    handover          { expires = "YYYY-MM-DD"; } (handover type only): the
+                      account's hard end. Its password is never declared:
+                      an admin issues one per lending on the machine
+                      (`sudo handover issue <user>`, features/core/users/
+                      handover.nix).
 
   `overridable` is per type and deliberately short. An override outside it is
   an error, not a silent no-op: a "member" whose file says nix = admin is an
@@ -86,7 +91,8 @@
   };
 
   # A machine lent to someone: wiped at logout, one program, nothing else.
-  # Which program is the only thing a handover user may choose.
+  # Which program is the only thing a handover user may choose; whatever the
+  # greeter offers, the login runs that program (kiosk.nix pins it).
   handover = {
     home = "tmpfs";
     nix = "none";

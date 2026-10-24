@@ -6,7 +6,8 @@
 
   The synthetic registry (my.registry.extend) adds two accounts to gb4:
 
-    guest    handover: tmpfs home (1G), nix = none, kiosk firefox
+    guest    handover: tmpfs home (1G), nix = none, kiosk firefox (pinned),
+             handover.expires = "2026-12-31"
     visitor  untrusted, with nix overridden to "untrusted" and
              narrow.localBuilds = false (true anyway on gb4, max-jobs = 0),
              acceptTypeChange = "member->untrusted"
@@ -32,6 +33,7 @@ let
           type = "handover";
           description = "Handover guest";
           tmpfsSize = "1G";
+          handover.expires = "2026-12-31";
         };
         visitor = {
           uid = 1901;
@@ -60,6 +62,17 @@ let
     ];
   };
   off = mkHostWith { hostName = host; };
+
+  # The same synthetic host with sshd on (gb4 runs none): the ssh refusal.
+  withSsh = mkHostWith {
+    hostName = host;
+    extraModules = [
+      {
+        my.registry.extend = extend;
+        services.openssh.enable = true;
+      }
+    ];
+  };
 
   # visitor trusted by hand, past the registry: the nix-access assertion
   # must catch it. Only config.assertions is forced, not the toplevel.
@@ -134,6 +147,69 @@ in
   kioskSession = kioskEntry.drvPath;
   kioskOnce = expect "one kiosk entry" (lib.length (lib.filter (lib.hasPrefix "kiosk-") sessionNames) == 1) (toString sessionNames);
 
+  # -- kiosk pinning -----------------------------------------------------
+  # One launcher, used three ways: login shell, greeter entry, /etc/profile pin.
+  kioskShell = expect "guest's login shell is the kiosk launcher" (
+    c.users.users.guest.shell == "/run/current-system/sw/bin/kiosk-shell-firefox"
+  ) (toString c.users.users.guest.shell);
+  kioskShellNotListed = expect "launcher not in /etc/shells (su -s stays refused)" (
+    !(lib.hasInfix "kiosk-shell" c.environment.etc.shells.text)
+  ) "absent";
+  profilePin =
+    let
+      d = builtins.unsafeDiscardStringContext;
+      head' = d (lib.head (lib.splitString "__ETC_PROFILE_SOURCED" c.environment.etc.profile.text));
+    in
+    expect "/etc/profile execs the launcher for uid 1900 before its sourced-once guard" (
+      builtins.match ".*1900\\) exec /nix/store/[a-z0-9]+-kiosk-shell-firefox/bin/kiosk-shell-firefox ;;.*" head' != null
+    ) head';
+  visitorUnpinned = expect "visitor (no kiosk) keeps the default shell, is not pinned" (
+    !(lib.hasInfix "1901)" c.environment.etc.profile.text) && !(lib.hasInfix "kiosk-shell" (toString (c.users.users.visitor.shell or "")))
+  ) (toString (c.users.users.visitor.shell or "default"));
+  sshDenied =
+    let
+      sc = withSsh.config;
+      acct = lib.filter (lib.hasPrefix "account") (lib.splitString "\n" sc.security.pam.services.sshd.text);
+    in
+    expect "with sshd on: DenyUsers guest, and sshd's account stack refuses guest first" (
+      !c.services.openssh.enable
+      && sc.services.openssh.settings.DenyUsers == [ "guest" ]
+      && lib.hasInfix "pam_succeed_if.so quiet user notin guest" (lib.head acct)
+    ) "DenyUsers ${builtins.toJSON sc.services.openssh.settings.DenyUsers}; ${lib.head acct}";
+  suRefused =
+    let
+      t = c.security.pam.services.su.text;
+      acct = lib.filter (lib.hasPrefix "account") (lib.splitString "\n" t);
+    in
+    expect "su: pam_succeed_if notin guest first in the account stack" (
+      acct != [ ] && lib.hasInfix "pam_succeed_if.so quiet user notin guest" (lib.head acct)
+    ) (lib.concatStringsSep " | " acct);
+
+  # -- handover credentials ----------------------------------------------
+  credentialFile = expect "guest's hash file is under persistRoot (gb4 is impermanent), expiry from the registry" (
+    c.users.users.guest.hashedPasswordFile == "/persist/var/lib/handover/guest.hash" && c.users.users.guest.expires == "2026-12-31"
+  ) "${toString c.users.users.guest.hashedPasswordFile} expires ${toString c.users.users.guest.expires}";
+  credentialSeed = expect "the locked seed is written before the users script" (
+    lib.elem "handover-credentials" c.system.activationScripts.users.deps
+    && lib.hasInfix "/persist/var/lib/handover" (let a = c.system.activationScripts.handover-credentials; in if lib.isString a then a else a.text)
+  ) (toString c.system.activationScripts.users.deps);
+  deadlinePam =
+    let
+      acct = svc: lib.filter (lib.hasPrefix "account") (lib.splitString "\n" c.security.pam.services.${svc}.text);
+    in
+    expect "login checks the deadline first in its account stack; greetd's account is `include login`" (
+      lib.hasInfix "# handover-deadline" (lib.head (acct "login"))
+      && lib.hasInfix "pam_exec.so quiet seteuid" (lib.head (acct "login"))
+      && lib.length (acct "greetd") == 1
+      && lib.hasPrefix "account include login" (lib.head (acct "greetd"))
+    ) (lib.concatStringsSep " | " (acct "login" ++ acct "greetd"));
+  handoverTool = expect "handover command installed" (
+    lib.any (p: (p.name or "") == "handover") c.environment.systemPackages
+  ) "present";
+  visitorPassword = expect "visitor's password is not handover-managed" (
+    (c.users.users.visitor.hashedPasswordFile or null) == null
+  ) "untouched";
+
   # -- nix access --------------------------------------------------------
   allowedUsers = expect "allowed-users excludes guest" (
     c.nix.settings.allowed-users == [ "root" "r0k0r" "visitor" ]
@@ -204,6 +280,19 @@ in
   scripts = {
     preSwitch = preSwitch;
     activation = c.system.activationScripts.nixos-user-types.text;
+    # The handover/kiosk shell, as .drv paths: `nix derivation show <drv>`
+    # prints the script (env.text) without building it, for `bash -n`.
+    handover =
+      let
+        pkg = name: (lib.findFirst (p: (p.name or "") == name) (throw "no ${name}") c.environment.systemPackages).drvPath;
+      in
+      {
+        tool = pkg "handover";
+        kioskShell = pkg "kiosk-shell-firefox";
+        pamCheck = lib.head (
+          lib.attrNames (builtins.getContext (lib.last c.security.pam.services.login.rules.account.handover-deadline.args))
+        );
+      };
   };
 
   refused = {
@@ -236,15 +325,21 @@ in
         }
       )).effective.victus-15.visitor
     );
-    # Still without machinery.
-    impermanent = mustFail "home = impermanent" (
-      # attrNames, not the entry: the entry holds packages, and deepSeq
-      # into a package set overflows instead of throwing.
-      lib.attrNames
-        ((regWith (r: r // { users = r.users // { visitor = r.users.visitor // { overrides.home = "impermanent"; }; }; })).materialize
-          host
-          on.pkgs
-        ).visitor
+    # home = impermanent exists now (features/core/impermanence), but only
+    # where the host's registry facts declare it: refused on victus-15.
+    impermanent = mustFail "home = impermanent on a host without impermanence" (
+      (regWith (
+        r:
+        r
+        // {
+          users = r.users // { visitor = r.users.visitor // { overrides.home = "impermanent"; }; };
+          hosts = r.hosts // {
+            hosts = r.hosts.hosts // {
+              victus-15 = r.hosts.hosts.victus-15 // { users = r.hosts.hosts.victus-15.users ++ [ "visitor" ]; };
+            };
+          };
+        }
+      )).effective.victus-15.visitor
     );
     # Only a home-manager session has a home to activate.
     standaloneKiosk = mustFail "homeActivation = standalone on a kiosk user" (
@@ -257,6 +352,22 @@ in
       lib.attrNames
         ((regWith (r: r // { users = r.users // { visitor = r.users.visitor // { groups = [ "wheel" ]; }; }; })).materialize host on.pkgs)
         .visitor
+    );
+    # A handover password is issued per lending, never declared.
+    handoverSecret = mustFail "passwordSecret on a handover account" (
+      (regWith (r: r // { users = r.users // { guest = r.users.guest // { passwordSecret = ./user-types.nix; }; }; })).check
+    );
+    handoverOnOtherType = mustFail "handover key on an untrusted account" (
+      (regWith (r: r // { users = r.users // { visitor = r.users.visitor // { handover = { }; }; }; })).check
+    );
+    handoverExpires = mustFail "handover.expires = \"next week\"" (
+      (regWith (r: r // { users = r.users // { guest = r.users.guest // { handover.expires = "next week"; }; }; })).check
+    );
+    # Pinned: no shell of its own, no ssh.
+    kioskSshKeys = mustFail "sshKeys on a kiosk account" (
+      lib.attrNames
+        ((regWith (r: r // { users = r.users // { guest = r.users.guest // { sshKeys = [ "ssh-ed25519 AAAA" ]; }; }; })).materialize host on.pkgs)
+        .guest
     );
     tmpfsSize = mustFail "tmpfsSize = 2 gigs" (
       (regWith (r: r // { users = r.users // { guest = r.users.guest // { tmpfsSize = "2 gigs"; }; }; })).check
