@@ -261,9 +261,18 @@
             })
             ./hosts/${hostName}
             # Phase-1 bootstrap: pin nixos-rebuild to unpatched upstream so it
-            # hits cache.nixos.org and doesn't need to be built from our patched stdenv.
-            { system.build.nixos-rebuild = lib.mkForce
-                inputs.nixpkgs-upstream.legacyPackages.x86_64-linux.nixos-rebuild; }
+            # doesn't need to be built from our patched stdenv -- but with THIS
+            # host's Nix, as NixOS's own definition does (tools.nix). Upstream's
+            # default is 2.34, which lacks 2.35's CA protocol: "the daemon is
+            # missing the 'realisation-with-path-not-hash' protocol feature" on
+            # every `nixos-rebuild --flake` (2026-10-24). Only the Python
+            # wrapper is rebuilt for that; it is small.
+            ({ config, ... }: {
+              system.build.nixos-rebuild = lib.mkForce
+                (inputs.nixpkgs-upstream.legacyPackages.x86_64-linux.nixos-rebuild.override {
+                  nix = config.nix.package;
+                });
+            })
           ] ++ extraModules;
         };
 
