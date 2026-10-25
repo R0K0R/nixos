@@ -140,6 +140,19 @@ lib.mkIf config.my.tuning.qtPatches.enable {
         nixos-rebuild = genericPkgs.nixos-rebuild;
         nixos-rebuild-ng = genericPkgs.nixos-rebuild-ng;  # 26.05 Python rewrite of the same tool
 
+        # appstream-qt copies appstream's nativeBuildInputs/mesonFlags/patches but
+        # not its depsBuildBuild (the build platform's pkg-config), so a cross
+        # build -- IntraISACross included -- fails data/meson.build's native
+        # appstream lookup: "Native appstream required for cross-building".
+        # Upstream bug; the fix is R0K0R/nixpkgs pr/appstream-qt-cross (d818d67),
+        # carried here until the fork pin moves. Only homes reach it so far
+        # (benjamin's KDE apps on galaxybook4-pro360, 2026-10-25).
+        kdePackages = prev.kdePackages.overrideScope (_kf: kp: {
+          appstream-qt = kp.appstream-qt.overrideAttrs (old: {
+            depsBuildBuild = (old.depsBuildBuild or [ ]) ++ (prev.appstream.depsBuildBuild or [ ]);
+          });
+        });
+
         # ---- Per-package overrides not covered by the testsKilled map ----
 
         # guile 3.0.11 already incorporates the cross-compilation patch that nixpkgs
