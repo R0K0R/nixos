@@ -147,9 +147,29 @@ lib.mkIf config.my.tuning.qtPatches.enable {
         # Upstream bug; the fix is R0K0R/nixpkgs pr/appstream-qt-cross (d818d67),
         # carried here until the fork pin moves. Only homes reach it so far
         # (benjamin's KDE apps on galaxybook4-pro360, 2026-10-25).
+        #
+        # Next in the same configure step: a cross-built qtbase ships no
+        # moc/uic/rcc (its CMake takes them from QT_HOST_PATH), and meson's Qt
+        # module looks only in the host Qt's bindir/libexecdir and on PATH --
+        # "MOC sources specified and couldn't find uic-qt6". A cross file names
+        # the build platform's tools, the usual nixpkgs answer for meson
+        # programs (gnome-maps, eos-installer). Upstream bug too; the fix is
+        # R0K0R/nixpkgs pr/appstream-qt-cross-qt-tools (b420d83). Gated on the predicate
+        # qtbase itself uses for leaving the tools out, so the build-platform
+        # splice of this overlay is untouched.
         kdePackages = prev.kdePackages.overrideScope (_kf: kp: {
           appstream-qt = kp.appstream-qt.overrideAttrs (old: {
             depsBuildBuild = (old.depsBuildBuild or [ ]) ++ (prev.appstream.depsBuildBuild or [ ]);
+            mesonFlags =
+              (old.mesonFlags or [ ])
+              ++ lib.optionals (!prev.stdenv.buildPlatform.canExecute prev.stdenv.hostPlatform) [
+                "--cross-file=${final.writeText "appstream-qt-tools.ini" ''
+                  [binaries]
+                  moc = '${final.buildPackages.qt6.qtbase}/libexec/moc'
+                  uic = '${final.buildPackages.qt6.qtbase}/libexec/uic'
+                  rcc = '${final.buildPackages.qt6.qtbase}/libexec/rcc'
+                ''}"
+              ];
           });
         });
 
