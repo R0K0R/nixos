@@ -6,11 +6,10 @@
       The system flake. Its homeLib.<host> hands out the host's own pkgs, the
       feature home modules and the facts, so this repo pins no nixpkgs and no
       home-manager of its own: a second nixpkgs here would be a second package
-      set and rebuild everything the system already has. The `multiuser` branch
-      is the one that exports homeLib; switch to the default branch once it is
-      merged.
+      set and rebuild everything the system already has. The default branch:
+      the multiuser work, which exports homeLib, became main on 2026-10-24.
     */
-    system.url = "github:R0K0R/nixos/multiuser";
+    system.url = "github:R0K0R/nixos";
 
     /*
       Everything below is a USER-level input: a program or config that only this home consumes,

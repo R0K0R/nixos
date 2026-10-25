@@ -224,11 +224,11 @@
     "doom-private_2": {
       "flake": false,
       "locked": {
-        "lastModified": 1792076238,
-        "narHash": "sha256-lAPseSiaEjAWnO3P1icbXF+9Dc6s11sKpJO2ZbsLmjw=",
+        "lastModified": 1792657374,
+        "narHash": "sha256-JVIwE8FdrzN8B1CiMIEcuNXoHK04FB1ezLgfg9BAu4Y=",
         "owner": "R0K0R",
         "repo": "doom-emacs",
-        "rev": "a4116c67970325b3521d4b5128ea8fd78656b26e",
+        "rev": "36106be6bc6064826eaa14e1f827623f947b3d94",
         "type": "github"
       },
       "original": {
@@ -719,11 +719,11 @@
     "hyprland-keystone": {
       "flake": false,
       "locked": {
-        "lastModified": 1791978740,
-        "narHash": "sha256-gpjUEyJBYjv40WddehGQ3CaXa0NZ5IYYq0iKqU/ukis=",
+        "lastModified": 1792860036,
+        "narHash": "sha256-jZFSMdbhxbi9awjQkLWCsbZd4E+UhQg/ugO8eon476U=",
         "owner": "R0K0R",
         "repo": "Hyprland",
-        "rev": "9448a8950569881188844e43923da354e7e0fe3a",
+        "rev": "a9685ffac72e015ccd848f8e4a9ee4379a16852b",
         "type": "github"
       },
       "original": {
@@ -736,11 +736,11 @@
     "hyprland-nixos": {
       "flake": false,
       "locked": {
-        "lastModified": 1791978740,
-        "narHash": "sha256-0yv3dE5OoP8bnLGaSUkniKLFH4ie7F307oJNnIOWbds=",
+        "lastModified": 1792860036,
+        "narHash": "sha256-gWoleUKSOVqKYODByR6hDFX3PQjhVyiRlALEfxN4+9g=",
         "owner": "R0K0R",
         "repo": "Hyprland",
-        "rev": "23e6c87b80ad03a54799dd315e39e57a2dafb11d",
+        "rev": "0bf29a817ddab512ce1af8d01337470c7729e87d",
         "type": "github"
       },
       "original": {
@@ -763,11 +763,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1769548169,
-        "narHash": "sha256-03+JxvzmfwRu+5JafM0DLbxgHttOQZkUtDWBmeUkN8Y=",
+        "lastModified": 1792739756,
+        "narHash": "sha256-s0TeXWG5Ci75Y/Hzon0Z7NrN/fG773Rc54/z6oPFszQ=",
         "owner": "nix-community",
         "repo": "impermanence",
-        "rev": "7b1d382faf603b6d264f58627330f9faa5cba149",
+        "rev": "fa627f4c8b8e92f58f58a73d99ee4e1304e64eb2",
         "type": "github"
       },
       "original": {
@@ -1014,11 +1014,11 @@
     },
     "nixpkgs_6": {
       "locked": {
-        "lastModified": 1791914020,
-        "narHash": "sha256-B/DJET58beKz3fNZgz9F+Ye3EGeiuUORkFQmtdsXw0I=",
+        "lastModified": 1792412113,
+        "narHash": "sha256-2w8ImkuVlwAiVtLkxr0MCbqhyQAC+VxSutXRV3ANcYc=",
         "owner": "R0K0R",
         "repo": "nixpkgs",
-        "rev": "00a171f2f72e004a3916df33904932e335dd7355",
+        "rev": "c4e5229a59f10f21ce5df1aa2a6373f425a7030e",
         "type": "github"
       },
       "original": {
@@ -1175,16 +1175,15 @@
         "tuning-cache-victus-15": "tuning-cache-victus-15"
       },
       "locked": {
-        "lastModified": 1792318563,
-        "narHash": "sha256-P46k6stPgDeK5Fhbf2JmCp7gn6d67gLwpeqhpV1MvS8=",
+        "lastModified": 1792905283,
+        "narHash": "sha256-uQ7WM5Dm8lxLvl/LEWWhcBdkNxVtBv5cfBqJIisj0z8=",
         "owner": "R0K0R",
         "repo": "nixos",
-        "rev": "57be67f93e7d97044106cae9b39d7dbd3356c8dd",
+        "rev": "71b0ccab6e83aa0384a6d5144c6e9347ac3b16fe",
         "type": "github"
       },
       "original": {
         "owner": "R0K0R",
-        "ref": "multiuser",
         "repo": "nixos",
         "type": "github"
       }
@@ -1251,30 +1250,28 @@
     "tuning-cache-galaxybook4-pro360": {
       "flake": false,
       "locked": {
-        "path": "./tuning/runtime-cache/hosts/galaxybook4-pro360",
+        "lastModified": 1792825527,
+        "narHash": "sha256-tJAPNx9RUmR+Dhqm9EiZcEd/xzrOkglnY+UJzZ0EeoU=",
+        "path": "/var/lib/tuning-cache/galaxybook4-pro360",
         "type": "path"
       },
       "original": {
-        "path": "./tuning/runtime-cache/hosts/galaxybook4-pro360",
+        "path": "/var/lib/tuning-cache/galaxybook4-pro360",
         "type": "path"
-      },
-      "parent": [
-        "system"
-      ]
+      }
     },
     "tuning-cache-victus-15": {
       "flake": false,
       "locked": {
-        "path": "./tuning/runtime-cache/hosts/victus-15",
+        "lastModified": 1792825540,
+        "narHash": "sha256-eeVjGwGd+nT9omxGciioPQ12Ay1XD0BUN1nCuqWczQ4=",
+        "path": "/var/lib/tuning-cache/victus-15",
         "type": "path"
       },
       "original": {
-        "path": "./tuning/runtime-cache/hosts/victus-15",
+        "path": "/var/lib/tuning-cache/victus-15",
         "type": "path"
-      },
-      "parent": [
-        "system"
-      ]
+      }
     },
     "vehicle-motion-cues": {
       "flake": false,
