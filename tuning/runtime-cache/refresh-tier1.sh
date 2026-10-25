@@ -53,10 +53,33 @@ esac
 #    in a batch doesn't exist, silently producing zero output for every
 #    other (valid) path batched alongside it. Filtered via a plain
 #    existence check before batching, not caught after the fact.
+# THE TUNED CLOSURE, not the whole one. A system can carry sessions that
+# only untuned accounts run (registry/types.nix `tuned`; GNOME for guest and
+# handoff on galaxybook4-pro360). Their packages are in the toplevel's
+# closure, and counting them would tune them at the next rebuild -- users
+# other than r0k0r and benjamin do not use tuning. The toplevel lists them
+# in `untuned-roots` (my.tuning.untunedRoots); this walks the references
+# from the toplevel without entering those paths, so what the system ALSO
+# reaches some other way stays, and what it reaches only through them does
+# not. No file (an older generation, a host without such sessions): the
+# plain closure, exactly as before. Plain nix-store and coreutils, one
+# --references call per level, so it runs the same on a TIER1_SSH target.
+TUNED_REQUISITES='
+  top=$(readlink -f "$1")
+  w=$(mktemp -d); trap "rm -rf $w" EXIT
+  if [ -r "$top/untuned-roots" ]; then grep -v "^$" "$top/untuned-roots" | sort -u > "$w/cut"; else : > "$w/cut"; fi
+  echo "$top" > "$w/front"; cp "$w/front" "$w/seen"
+  while [ -s "$w/front" ]; do
+    xargs nix-store -q --references < "$w/front" | sort -u | comm -23 - "$w/seen" | comm -23 - "$w/cut" > "$w/next"
+    sort -u -m "$w/seen" "$w/next" -o "$w/seen"
+    mv "$w/next" "$w/front"
+  done
+  echo "untuned-roots: $(grep -c . "$w/cut") cut, $(grep -c . "$w/seen") paths kept" >&2
+  cat "$w/seen"'
 echo "resolving pnames via each store path's own deriver (accurate, not a string-pattern guess)..."
 # The same pipeline locally or on the TIER1_SSH target; quoted once, so the remote
 # shell sees it exactly as the local one would.
-PNAME_PIPELINE='nix-store -q --requisites /run/current-system \
+PNAME_PIPELINE='bash -c "$TUNED_REQUISITES" _ /run/current-system \
   | xargs nix-store -q --deriver 2>/dev/null \
   | grep "\.drv$" \
   | while read -r drv; do if [ -e "$drv" ]; then echo "$drv"; fi; done \
@@ -75,7 +98,8 @@ if [ -n "${TIER1_SSH:-}" ]; then
   # host's toplevel HERE instantiates the same .drvs into this store (same config,
   # same paths), so: show what exists locally, after instantiating if anything is
   # missing; ask the target for whatever still is; report the rest.
-  DRVS="$(ssh -o BatchMode=yes "$TIER1_SSH" 'nix-store -q --requisites /run/current-system | xargs nix-store -q --deriver 2>/dev/null | grep "\.drv$" | sort -u')"
+  # The walk's script on stdin (bash -s), so no quoting survives two shells.
+  DRVS="$(ssh -o BatchMode=yes "$TIER1_SSH" 'bash -s -- /run/current-system | xargs nix-store -q --deriver 2>/dev/null | grep "\.drv$" | sort -u' <<<"$TUNED_REQUISITES")"
   missing_here() { while read -r d; do [ -e "$d" ] || echo "$d"; done <<<"$DRVS"; }
   if [ -n "$(missing_here)" ]; then
     echo "instantiating $HOST's system here to recreate .drvs it has garbage-collected (~1 min)..."
@@ -93,7 +117,7 @@ if [ -n "${TIER1_SSH:-}" ]; then
   TOTAL=$(grep -c . <<<"$DRVS"); HERE=$(( TOTAL - $(grep -c . <<<"$STILL" || true) ))
   echo "(closure read on $TIER1_SSH: $TOTAL derivers, $HERE resolved here, rest asked of $TIER1_SSH)"
 else
-  PNAMES="$(bash -c "$PNAME_PIPELINE")"
+  PNAMES="$(TUNED_REQUISITES="$TUNED_REQUISITES" bash -c "$PNAME_PIPELINE")"
   REMOTE_VERSION=""
 fi
 

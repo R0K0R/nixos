@@ -49,6 +49,18 @@
                       (`sudo handover issue <user>`, features/core/users/
                       handover.nix).
 
+  `tuned` is per type too, and not an axis: whether this host's tuning
+  serves the user. A tuned user's home is built from the system's (tuned)
+  set by default, and what he runs is evidence for the tuning classifier
+  (tuning/runtime-cache/lookup.nix: tier 1, tier 2, users/<user>.nix). An
+  untuned user's packages come from the plain upstream set
+  (my.tuning.untunedPkgs: features/session/gnome, a kiosk's cage), are kept
+  out of every tier, and a home of his defaults to my.tuning = false
+  (lib/home-generator.nix). Only admins are tuned: the machines' owners,
+  whose use the tuned set is built for -- r0k0r's rule, "users other than me
+  and benjamin do not use tuning". Not overridable, so a new member or guest
+  is untuned unless their type says otherwise.
+
   `overridable` is per type and deliberately short. An override outside it is
   an error, not a silent no-op: a "member" whose file says nix = admin is an
   admin with a misleading label, and the label is what people read.
@@ -72,6 +84,7 @@
     builders = false;
     grants = [ "sudo" "network" "media" ];
     rank = 3;
+    tuned = true;
     overridable = [ "home" "nix" "builders" "session" "grants" ];
   };
 
@@ -82,6 +95,7 @@
     builders = false;
     grants = [ "network" "media" ];
     rank = 2;
+    tuned = false;
     overridable = [ "home" "session" "grants" ];
   };
 
@@ -95,6 +109,7 @@
     builders = false;
     grants = [ ];
     rank = 1;
+    tuned = false;
     overridable = [ "home" "nix" "session" ];
   };
 
@@ -108,6 +123,7 @@
     builders = false;
     grants = [ ];
     rank = 0;
+    tuned = false;
     overridable = [ "session" ];
   };
 }

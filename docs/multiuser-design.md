@@ -486,6 +486,48 @@ Accepted consequences:
   after.
 - User files are Nix, evaluated by every system rebuild; a broken one breaks
   the rebuild and the admin fixes it.
+
+**Only tuned users count** (2026-10-25, r0k0r: "users other than me and
+benjamin do not use tuning"). Which accounts a host's tuning serves is a
+type property, `tuned` in registry/types.nix (true for admin only; not an
+axis, not overridable), derived per host as `registry.tuned.<host>` and
+`my.users.<n>.tuned` -- no name list anywhere in tuning/. Admin type rather
+than "r0k0r and benjamin" because the type is what says "this is one of the
+machine's owners"; a future member or guest is untuned by default, and a
+type, not a host file, is where that changes. Every evidence path honours it:
+
+- tier 1 (`refresh-tier1.sh`) walks the toplevel's references without
+  entering `untuned-roots` (my.tuning.untunedRoots, a file in the toplevel):
+  what the system reaches only through untuned sessions is not captured; with
+  no file the walk equals `nix-store -q --requisites` (checked against the
+  running gb4: identical, 4114 paths). It never scanned processes -- tier 1 is
+  the system closure, so the cut is by store path, not by uid.
+- tier 2 (`tier2-eval.nix`) takes only tuned accounts' homes and drops
+  untunedRoots from its anchors;
+- `users/<user>.nix` (lookup.nix) count only for the host's tuned users --
+  the directory is world-writable, so a guest's file is ignored by name.
+  tuning-refresh itself is unchanged (it is in every userCache host's
+  toplevel; lookup.nix is the enforcement point);
+- tier 3 reads feature packages.nix files: features for untuned sessions
+  have none (features/session/gnome).
+
+What only untuned accounts run comes from `my.tuning.untunedPkgs`: plain
+nixpkgs-upstream (imported as overlays/upstream-tools.nix imports it, so it
+substitutes from cache.nixos.org) on a tuned host, the host's own pkgs on an
+untuned one. Measured with a tier 1 that had leaked GNOME's names (the
+pre-cut behaviour): +157 derivations on gb4 even with GNOME itself
+redirected (tuned mutter, nautilus, gvfs, ibus, udisks, libreoffice... -- the
+tuned system's own references to those names stop being aliased). Hence the
+cut AND the redirect. The untuned set's programs still load the system's
+PAM/NSS/locale/mesa, exactly as the aliased upstream programs do today; the
+surface check reports perl and sqlite (via mesa) and db/sqlite (via PAM/NSS)
+for GNOME, the same class it reports for r0k0r's aliased packages.extra.
+
+An untuned account's standalone home defaults to `my.tuning = false`
+(lib/home-generator.nix, mkDefault). On a march host the surface check
+REFUSES that home ("Open question: perl and sqlite" above) and its message
+says so: that decision comes first. An untuned account cannot have an
+integrated home (asserted). No such account exists today.
 - Relock commits are manual.
 - Tombstoned users' files are removed (or skipped by the merge).
 
@@ -895,6 +937,16 @@ deliberate system change.
     refresh-tier1 would see them in the live closure and the next rebuild
     would build them tuned (+174 derivations measured, webkitgtk-6.0 among
     them). Not run on a machine yet (runtime plan in the commit).
+
+16. **Untuned guests** (2026-10-25). registry/types.nix `tuned` (admin
+    only), `registry.tuned.<host>`, `my.users.<n>.tuned`, homeLib
+    `facts.tunedUsers`; `my.tuning.untunedPkgs` / `untunedRoots`
+    (tuning/nixos.nix) and the toplevel's `untuned-roots`; GNOME and the
+    kiosk launcher from the untuned set; refresh-tier1's cut walk, tier2's
+    tuned-only homes, lookup.nix's tuned-only users/ files; mkHome's untuned
+    default and the integrated-home assertion. See "Only tuned users count"
+    above. victus-15 and dell-latitude unchanged; gb4: only the GNOME
+    pieces (now upstream) and the untuned-roots file; r0k0r's home unchanged.
 
 ### Next
 

@@ -33,6 +33,9 @@ let
           uid = 1903;
           type = "member";
           description = "Synthetic member";
+          # A member is not tuned (registry/types.nix `tuned`), and an
+          # untuned account's home cannot be the system-built integrated one.
+          homeActivation = "standalone";
         };
         guest = {
           uid = 1904;

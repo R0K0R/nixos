@@ -382,8 +382,15 @@
                   levers = ut.resolve cfg.my.tuning hostName nixos;
                   hostLevers = ut.hostLevers nixos;
                   inherit result;
-                  hints = lib.optional (!own && mappable && lib.any (c: c.group == "graphics") result.conflicts)
-                    "For the graphics driver: this host can give you your own (my.graphics.driver.enable = true;), built from your set.";
+                  hints =
+                    lib.optional (!own && mappable && lib.any (c: c.group == "graphics") result.conflicts)
+                      "For the graphics driver: this host can give you your own (my.graphics.driver.enable = true;), built from your set."
+                    ++ lib.optional (!(nixos.config.my.users.${args.username}.tuned or true)) ''
+                      You are not tuned on ${hostName} (registry/types.nix `tuned`: only admins are), so
+                        this home defaults to an untuned set (lib/home-generator.nix). On a march host that
+                        is refused until the admins decide the perl/sqlite question
+                        (docs/multiuser-design.md, "Open question: perl and sqlite on the march hosts").
+                        Nothing for you to change; ask them.'';
                 }
               );
         in
@@ -422,6 +429,9 @@
             # From the registry this host was evaluated with (the same data
             # its accounts came from; a test's extended registry included).
             users = reg.effective.${hostName} or { };
+            # The accounts this host's tuning serves (registry/types.nix
+            # `tuned`): the others' homes default to an untuned set.
+            tunedUsers = reg.tuned.${hostName} or [ ];
             /*
               What the daemon does for each user here -- the honest version
               of the nix and builders axes (lib/registry.nix's header):

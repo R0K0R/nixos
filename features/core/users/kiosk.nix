@@ -57,9 +57,19 @@ let
 
   progOf = pkg: baseNameOf (lib.getExe pkg);
 
+  /*
+    A kiosk account is never tuned (registry/types.nix `tuned`): cage and
+    the launcher come from the untuned set, and both are untunedRoots, so
+    the system's tuning neither builds them nor counts them as evidence. The
+    program is the registry's attribute of the host's set -- if the tuned
+    system already ships it (the handover preset's firefox), that copy;
+    otherwise it is reached only through the launcher and cut out with it.
+  */
+  upkgs = config.my.tuning.untunedPkgs;
+
   launcher =
     pkg:
-    pkgs.writeShellScriptBin "kiosk-shell-${progOf pkg}" ''
+    upkgs.writeShellScriptBin "kiosk-shell-${progOf pkg}" ''
       if [ $# -gt 0 ]; then
         echo "this account runs ${progOf pkg} and nothing else" >&2
         exit 1
@@ -68,7 +78,7 @@ let
       # the login shell depend on environment.variables, which depends on
       # the session packages this launcher is one of.
       . /etc/set-environment
-      exec ${lib.getExe pkgs.cage} -s -- ${lib.getExe pkg}
+      exec ${lib.getExe upkgs.cage} -s -- ${lib.getExe pkg}
     '';
 
   entry =
@@ -76,7 +86,7 @@ let
     let
       name = "kiosk-${progOf pkg}";
     in
-    (pkgs.writeTextDir "share/wayland-sessions/${name}.desktop" ''
+    (upkgs.writeTextDir "share/wayland-sessions/${name}.desktop" ''
       [Desktop Entry]
       Name=Kiosk (${progOf pkg})
       Comment=${progOf pkg} alone, full screen, nothing else
@@ -109,6 +119,8 @@ in
     services.displayManager.sessionPackages = map entry kioskPkgs;
 
     environment.systemPackages = map launcher kioskPkgs;
+
+    my.tuning.untunedRoots = map launcher kioskPkgs ++ map entry kioskPkgs;
 
     users.users = lib.genAttrs names (n: {
       shell = shellPath kioskUsers.${n}.kiosk;

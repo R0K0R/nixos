@@ -103,21 +103,33 @@
 let
   cfg = config.my.gnome;
 
+  /*
+    Everything here is for accounts the host's tuning does not serve
+    (registry/types.nix `tuned`; guest and handoff), so all of it comes from
+    the untuned set (my.tuning.untunedPkgs: plain upstream, from
+    cache.nixos.org) -- the session, the shell, the apps, the portal, the
+    launcher's own tools. Before, the classifier merely had not seen these
+    names yet. Listed in my.tuning.untunedRoots below, so their use is never
+    evidence for tuning the system's set either. No packages.nix in this
+    feature: lookup.nix's Tier 3 would read it as anchors.
+  */
+  upkgs = config.my.tuning.untunedPkgs;
+
   pinned = lib.attrNames (lib.filterAttrs (_: u: u.desktop == "gnome") config.my.users);
 
   # The shell and what it cannot start without; cfg.packages are the apps.
   core = [
-    pkgs.gnome-shell
-    pkgs.gnome-session
-    pkgs.gnome-settings-daemon
-    pkgs.gsettings-desktop-schemas
-    pkgs.xdg-desktop-portal-gnome
-    pkgs.adwaita-icon-theme
-    pkgs.gnome-backgrounds
+    upkgs.gnome-shell
+    upkgs.gnome-session
+    upkgs.gnome-settings-daemon
+    upkgs.gsettings-desktop-schemas
+    upkgs.xdg-desktop-portal-gnome
+    upkgs.adwaita-icon-theme
+    upkgs.gnome-backgrounds
   ];
   sessionPkgs = core ++ cfg.packages;
 
-  env = pkgs.buildEnv {
+  env = upkgs.buildEnv {
     name = "gnome-session-env";
     paths = sessionPkgs;
     pathsToLink = [ "/bin" "/share" "/etc/xdg" ];
@@ -127,7 +139,7 @@ let
   # nixpkgs' extraInit loop, at evaluation time: each package's own schema dir.
   schemaDirs = lib.concatMapStringsSep ":" (p: "${p}/share/gsettings-schemas/${p.name}") sessionPkgs;
 
-  overrides = pkgs.gnome.nixos-gsettings-overrides.override {
+  overrides = upkgs.gnome.nixos-gsettings-overrides.override {
     favoriteAppsOverride = ''
       [org.gnome.shell]
       favorite-apps=[ ${lib.concatMapStringsSep ", " (a: "'${a}'") cfg.favoriteApps} ]
@@ -144,16 +156,16 @@ let
     '';
   };
 
-  fontsConf = pkgs.writeText "gnome-session-fonts.conf" ''
+  fontsConf = upkgs.writeText "gnome-session-fonts.conf" ''
     <?xml version="1.0"?>
     <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
     <fontconfig>
       <include ignore_missing="yes">/etc/fonts/fonts.conf</include>
-      <dir>${pkgs.adwaita-fonts}/share/fonts</dir>
+      <dir>${upkgs.adwaita-fonts}/share/fonts</dir>
     </fontconfig>
   '';
 
-  launcher = pkgs.writeShellScriptBin "gnome-desktop-session" ''
+  launcher = upkgs.writeShellScriptBin "gnome-desktop-session" ''
     if [ $# -gt 0 ]; then
       echo "gnome-desktop-session takes no arguments" >&2
       exit 1
@@ -174,27 +186,34 @@ let
 
     # The session's D-Bus services, for this user's bus only (see the header).
     services="''${XDG_DATA_HOME:-$HOME/.local/share}/dbus-1/services"
-    ${pkgs.coreutils}/bin/mkdir -p "$services"
+    ${upkgs.coreutils}/bin/mkdir -p "$services"
     for l in "$services"/*.service; do
       [ -L "$l" ] || continue
-      case "$(${pkgs.coreutils}/bin/readlink "$l")" in
-        /nix/store/*-gnome-session-env/*) ${pkgs.coreutils}/bin/rm -f "$l" ;;
+      case "$(${upkgs.coreutils}/bin/readlink "$l")" in
+        /nix/store/*-gnome-session-env/*) ${upkgs.coreutils}/bin/rm -f "$l" ;;
       esac
     done
     for f in ${env}/share/dbus-1/services/*.service; do
-      [ -e "$f" ] && ${pkgs.coreutils}/bin/ln -sfn "$f" "$services/"
+      [ -e "$f" ] && ${upkgs.coreutils}/bin/ln -sfn "$f" "$services/"
     done
-    ${config.systemd.package}/bin/busctl --user call org.freedesktop.DBus /org/freedesktop/DBus \
+    ${upkgs.systemd}/bin/busctl --user call org.freedesktop.DBus /org/freedesktop/DBus \
       org.freedesktop.DBus ReloadConfig >/dev/null 2>&1 || true
 
     # --no-reexec: gnome-session would otherwise re-execute itself through
     # `$SHELL -l -c`, i.e. through /etc/profile again.
-    exec ${pkgs.gnome-session}/bin/gnome-session --no-reexec
+    exec ${upkgs.gnome-session}/bin/gnome-session --no-reexec
   '';
   launcherExe = "${launcher}/bin/gnome-desktop-session";
 
+  systemdPkgs = [
+    upkgs.gnome-session
+    upkgs.gnome-shell
+    upkgs.gnome-settings-daemon
+    upkgs.xdg-desktop-portal-gnome
+  ];
+
   entry =
-    (pkgs.writeTextDir "share/wayland-sessions/gnome.desktop" ''
+    (upkgs.writeTextDir "share/wayland-sessions/gnome.desktop" ''
       [Desktop Entry]
       Name=GNOME
       Comment=The GNOME desktop
@@ -220,12 +239,12 @@ in
         gnome-console
         gnome-text-editor
       ];
-      defaultText = lib.literalExpression "with pkgs; [ gnome-control-center nautilus gnome-console gnome-text-editor ]";
+      defaultText = lib.literalExpression "with config.my.tuning.untunedPkgs; [ gnome-control-center nautilus gnome-console gnome-text-editor ]";
       description = ''
         Applications of the GNOME session, beyond the shell itself. In the
         session's data dirs, PATH and D-Bus services only -- not in
         environment.systemPackages, so no other session lists or activates
-        them. Each is built in the host's package set.
+        them. From my.tuning.untunedPkgs, like the rest of the session.
       '';
     };
 
@@ -275,12 +294,7 @@ in
     (lib.mkIf cfg.enable {
       services.displayManager.sessionPackages = lib.mkAfter [ entry ];
 
-      systemd.packages = [
-        pkgs.gnome-session
-        pkgs.gnome-shell
-        pkgs.gnome-settings-daemon
-        pkgs.xdg-desktop-portal-gnome
-      ];
+      systemd.packages = systemdPkgs;
 
       # As nixpkgs' gnome.nix and gnome-settings-daemon.nix: the session
       # monitor must not be restarted by a switch (that ends the session),
@@ -298,6 +312,9 @@ in
       security.polkit.enable = true;
       services.accounts-daemon.enable = true;
       services.upower.enable = lib.mkDefault true;
+
+      # Not evidence for the system's tuning (refresh-tier1's cut).
+      my.tuning.untunedRoots = [ launcher entry env overrides fontsConf ] ++ systemdPkgs;
 
       my.internal.sessionPins = lib.genAttrs pinned (_: {
         command = launcherExe;

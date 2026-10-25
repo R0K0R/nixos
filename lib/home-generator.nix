@@ -94,6 +94,12 @@ in
                     && t.packages.o3 ++ t.packages.lto ++ t.exclude.o3 ++ t.exclude.lto == [ ];
                   message = "my.tuning in ${n}'s home: an integrated home (homeActivation = \"system\") is built from the system's package set; per-user tuning needs homeActivation = \"standalone\".";
                 }
+                {
+                  # The system builds an integrated home from its own (tuned)
+                  # set; an untuned account's home cannot be one.
+                  assertion = u.tuned or true;
+                  message = "${n} is not tuned on this host (registry/types.nix `tuned`), but an integrated home (homeActivation = \"system\") is built from the system's tuned set. Give the account homeActivation = \"standalone\" (its home then defaults to an untuned set -- refused on a march host until the perl/sqlite question in docs/multiuser-design.md is decided).";
+                }
               ];
             }
           )
@@ -188,6 +194,29 @@ in
             # beats home-manager's `_module.args.pkgs = mkDefault pkgs`; the
             # same fixpoint home-manager's nixpkgs module relies on.
             ({ config, ... }: { _module.args.pkgs = pkgsFor config.my.tuning; })
+            /*
+              An account this host's tuning does not serve (my.users.<n>.tuned,
+              registry/types.nix `tuned`: everyone but the admins) gets an
+              untuned set by DEFAULT -- users other than r0k0r and benjamin
+              do not use tuning. mkDefault, so it is a stated default and not
+              a hidden one: the home's own my.tuning still wins.
+
+              ON A MARCH HOST THIS HOME IS REFUSED, by design and for now:
+              lib/surface-check.nix finds perl and sqlite built differently in
+              the fork's IntraISACross set and in plain upstream, and the
+              agreed rule is to fail (docs/multiuser-design.md, "Open question:
+              perl and sqlite on the march hosts"). That question has to be
+              decided before such a user can have a home there; the failure
+              message says so (flake.nix surfaceErrors). No such account
+              exists today: guest and handoff have no home-manager session.
+            */
+            (lib.mkIf (!(u.tuned or true)) {
+              my.tuning = {
+                march = lib.mkDefault false;
+                lto = lib.mkDefault false;
+                o3 = lib.mkDefault false;
+              };
+            })
             glue
             (userModule u)
           ]

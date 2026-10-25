@@ -81,7 +81,21 @@ in
   # A synthetic cache directory, and a nixpkgs whose narHash is its stamp.
   userEvidence =
     let
-      l = import ../tuning/runtime-cache/lookup.nix {
+      lookupWith =
+        tunedUsers:
+        import ../tuning/runtime-cache/lookup.nix {
+          inputs = inputs // {
+            nixpkgs = inputs.nixpkgs // { narHash = "sha256-fixture"; };
+            "tuning-cache-victus-15" = ./fixtures/tuning-cache;
+          };
+          host = "victus-15";
+          inherit tunedUsers;
+        };
+      # alice tuned (an admin, say); then the same files with alice untuned.
+      l = lookupWith [ "alice" ];
+      untuned = lookupWith [ ];
+      # The real registry: no fixture user is anyone on victus-15.
+      real = import ../tuning/runtime-cache/lookup.nix {
         inputs = inputs // {
           nixpkgs = inputs.nixpkgs // { narHash = "sha256-fixture"; };
           "tuning-cache-victus-15" = ./fixtures/tuning-cache;
@@ -90,9 +104,9 @@ in
       };
     in
     expect
-      "only a current, correctly named file for this host counts (not misnamed, stale, another host's, or a .tmp)"
-      (l.userNames == [ "zz-fixture-alice" ] && l.isHostRuntime "zz-fixture-alice")
-      (builtins.toJSON l.userNames);
+      "only a current, correctly named file for this host counts (not misnamed, stale, another host's, or a .tmp), and only a tuned user's"
+      (l.userNames == [ "zz-fixture-alice" ] && l.isHostRuntime "zz-fixture-alice" && untuned.userNames == [ ] && real.userNames == [ ])
+      (builtins.toJSON { tuned = l.userNames; untuned = untuned.userNames; registry = real.userNames; });
 
   refused = {
     leverOff = mustFail "packages.o3 with o3 off" (hl.pkgsFor { o3 = false; packages.o3 = [ "jq" ]; }).hello.drvPath;

@@ -395,6 +395,7 @@ in
               || throw "registry/types.nix: ${tn}.overridable names unknown axes: ${fmtList (subtractLists axes t.overridable)}"
             )
             && (builtins.isInt (t.rank or null) || throw "registry/types.nix: ${tn}.rank must be an integer (demotion order, see the header there)")
+            && (builtins.isBool (t.tuned or null) || throw "registry/types.nix: ${tn}.tuned must be a bool (whether this host's tuning serves the type, see the header there)")
           )
         ) (attrNames types)
         && lib.all (
@@ -433,6 +434,15 @@ in
           guard (checkLocalBuilds where f (contradictions where f e1) nw)
         )
       ) hosts.hosts;
+
+      /*
+        host -> the accounts this host's tuning serves (registry/types.nix
+        `tuned`: today the admins). The ONE answer to "whose use counts":
+        the classifier's evidence (refresh-tier1's cut, tier2-eval's homes,
+        lookup.nix's users/<user>.nix), mkHome's default package set, and
+        homeLib facts all read this list rather than naming anyone.
+      */
+      tuned = mapAttrs (hn: h: guard (filter (n: types.${users.${n}.type}.tuned) h.users)) hosts.hosts;
 
       /*
         host -> user -> what the nix daemon actually does for this user (see
@@ -612,6 +622,7 @@ in
                 # nothing on a host whose users are all persistent admins
                 # and members.
                 inherit (e) nix;
+                tuned = types.${u.type}.tuned;
                 typeRecord =
                   let
                     r = transition.recordOf u.type e;
@@ -648,6 +659,7 @@ in
         types
         hosts
         effective
+        tuned
         nixFacts
         transition
         materialize

@@ -204,6 +204,71 @@ in
     */
     userCache.enable = lib.mkEnableOption "the per-user tuning cache directory and tuning-refresh";
 
+    /*
+      THE UNTUNED SET, for what only untuned accounts run (registry/types.nix
+      `tuned`: everyone but the admins). r0k0r's rule: users other than him
+      and benjamin do not use tuning. Before this, such sessions (GNOME for
+      guest and handoff) were untuned only by accident -- the classifier had
+      never seen their packages -- and the first refresh-tier1 after a switch
+      would have seen them in the live closure and turned the next rebuild
+      into a tuned GNOME (measured 2026-10-25: +174 derivations, webkitgtk-6.0
+      among them).
+
+      plain upstream nixpkgs, imported exactly as overlays/upstream-tools.nix
+      imports it for its aliases, so a package that was already aliased keeps
+      its derivation (and substitutes from cache.nixos.org) and one that was
+      not now is. Not genericPkgs (tuning/pkgs-config.nix): that is the FORK
+      without gcc.arch, whose patches move derivations off the binary cache.
+      No host overlay applies inside it: a hardware overlay (the mesa trim)
+      is the system's business, and the system's driver is what these
+      programs load anyway.
+
+      THE SURFACE, unchanged from before this option: these programs still
+      load the system's in-process code -- PAM, NSS, the locale archive, the
+      tuned mesa under /run/opengl-driver, the GIO modules on the system's
+      plugin paths. lib/surface-check.nix over the GNOME packages reports
+      perl and sqlite (through mesa) and db/sqlite (through PAM/NSS) -- the
+      same class it reports for the aliased upstream programs r0k0r runs
+      today (foliate and his packages.extra: perl, brotli;
+      docs/multiuser-design.md "Open question: perl and sqlite"). Same
+      versions and sources in both sets; what differs is the fork's
+      IntraISACross patch set.
+
+      A host whose own set is already plain upstream (tuning off) gets its
+      own pkgs.
+    */
+    untunedPkgs = lib.mkOption {
+      type = lib.types.raw;
+      readOnly = true;
+      default =
+        if cfg.enable then
+          import inputs.nixpkgs-upstream {
+            system = "x86_64-linux";
+            config.allowUnfree = true;
+          }
+        else
+          pkgs;
+      defaultText = lib.literalMD "plain nixpkgs-upstream on a tuned host, the host's own `pkgs` otherwise";
+      description = "The package set for programs only untuned accounts run (see the comment above).";
+    };
+
+    /*
+      Store paths only untuned accounts' sessions reach (the GNOME launcher,
+      its environment, its user units). Written to the toplevel as
+      `untuned-roots`, so refresh-tier1.sh can leave out of the system's
+      evidence whatever the system reaches ONLY through them. Features add
+      to it; a host without any gets no file.
+    */
+    untunedRoots = lib.mkOption {
+      type = lib.types.listOf lib.types.package;
+      default = [ ];
+      description = ''
+        Packages run only by untuned accounts' sessions, and everything they
+        alone reach: not evidence for the tuning classifier
+        (tuning/runtime-cache/refresh-tier1.sh, tier2-eval.nix).
+      '';
+    };
+
     extraOverlays = lib.mkOption {
       type = lib.types.listOf (lib.types.functionTo (lib.types.functionTo lib.types.attrs));
       default = [ ];
@@ -242,6 +307,12 @@ in
       surface later as a missing compositor.
     */
     { nixpkgs.overlays = cfg.extraOverlays; }
+
+    (lib.mkIf (cfg.untunedRoots != [ ]) {
+      system.extraSystemBuilderCmds = ''
+        printf '%s\n' ${lib.escapeShellArgs (map toString cfg.untunedRoots)} > $out/untuned-roots
+      '';
+    })
 
     (lib.mkIf cfg.userCache.enable {
       my.state.system.state.directories = [
