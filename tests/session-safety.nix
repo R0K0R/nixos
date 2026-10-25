@@ -86,13 +86,14 @@ in
       n = dm.sessionNames;
       ignore = lib.filter (lib.hasSuffix "-ignore-epoch") n;
     in
-    # Guarded first; ignore-epoch variants of exactly the compositor's
-    # sessions; the fallback and gb4's kiosk-firefox (handoff) unguarded.
+    # Guarded first, the compositor's ahead of GNOME (my.gnome appends its
+    # entry); ignore-epoch variants of exactly the guarded sessions; the
+    # fallback unguarded. No kiosk: gb4's handoff is pinned to GNOME now.
     if
-      lib.take 2 n == [ "hyprland" "hyprland-uwsm" ]
-      && ignore == [ "hyprland-ignore-epoch" "hyprland-uwsm-ignore-epoch" ]
+      lib.take 3 n == [ "hyprland" "hyprland-uwsm" "gnome" ]
+      && ignore == [ "hyprland-ignore-epoch" "hyprland-uwsm-ignore-epoch" "gnome-ignore-epoch" ]
       && lib.elem "fallback" n
-      && lib.elem "kiosk-firefox" n
+      && !(lib.elem "kiosk-firefox" n)
       && dm.autologinSession == "hyprland"
       && dm ? wrapper
     then

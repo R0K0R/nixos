@@ -196,12 +196,15 @@ override:
 |---|---|
 | home | persistent / tmpfs / impermanent |
 | nix | none / overlay / untrusted / admin |
-| session | home-manager / system-default / kiosk |
+| session | home-manager / system-default / kiosk / desktop (gnome) |
 | builders | bool |
 | grants | sudo, network, media, serial, input |
 
 Presets: **admin**, **member**, **untrusted**, **handover** (tmpfs home + kiosk:
-a machine lent to someone). Hosts may narrow a user's axes, never widen them.
+a machine lent to someone). kiosk and desktop sessions are pinned: whatever the
+greeter offers or remembers, a greetd login of the account runs that session
+(features/core/users/session-pin.nix). On galaxybook4-pro360 guest (untrusted)
+and handoff (handover) override their session to `{ desktop = "gnome"; }`. Hosts may narrow a user's axes, never widen them.
 The deployed type is recorded, and dangerous transitions (e.g. persistent to
 tmpfs) need an explicit `acceptTypeChange`. uids are never reused: removed
 users stay in the registry as tombstones.
@@ -862,6 +865,36 @@ deliberate system change.
     build-time check was run once on victus-15 (passes) and galaxybook4-pro360
     (fails on Hyprland, as expected). Never run on a machine; runtime plan in
     the README.
+
+15. **GNOME for guest and handoff on galaxybook4-pro360** (2026-10-25). A
+    fourth session kind, `session = { desktop = "gnome"; }` (lib/registry.nix
+    `axisValues.desktop`, a closed list). Pinning is one mechanism now,
+    features/core/users/session-pin.nix (`my.internal.sessionPins.<user> =
+    { command; greeterOnly; }` -> the first lines of /etc/profile): kiosk
+    pins every shell that reads /etc/profile (its login shell is the
+    launcher), a desktop pins only the shell greetd started
+    (`/proc/$PPID/comm` = greetd), because login shells inside the desktop
+    -- and gnome-session's own `$SHELL -l -c` re-exec -- read /etc/profile
+    too. A desktop account keeps a real login shell; VT login is not pinned.
+    features/session/gnome (`my.gnome`, off by default, on for gb4) does NOT
+    use services.desktopManager.gnome, whose system-wide changes (env on the
+    epoch surface, pathsToLink "/share", apps and their D-Bus services in
+    the system profile, autostarts, PAM keyring, forced services) are listed
+    in its header: systemwide it adds only inert GNOME user units
+    (systemd.packages, no [Install]) and the greeter entry; everything else
+    is in the launcher's environment (data dirs, gsettings overrides with the
+    lock screen off -- unlock needs GDM --, Adwaita fonts) and the session's
+    D-Bus services are linked into the user's own
+    `$XDG_DATA_HOME/dbus-1/services`. The epoch, every environment variable
+    but the greeter aggregate in XDG_DATA_DIRS, PAM, D-Bus packages, portals,
+    fonts, udev and r0k0r's home are identical with and without it
+    (tests/user-types-eval.sh `gnome*`). handover type: its credential
+    assertion accepts any pinned session. Build cost today: none heavy --
+    gb4's classifier aliases the GNOME packages to upstream (they are not in
+    the tier caches), so they substitute; after the first switch a
+    refresh-tier1 would see them in the live closure and the next rebuild
+    would build them tuned (+174 derivations measured, webkitgtk-6.0 among
+    them). Not run on a machine yet (runtime plan in the commit).
 
 ### Next
 

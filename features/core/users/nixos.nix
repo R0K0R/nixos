@@ -53,6 +53,7 @@ in
   */
   imports = [
     ./tmpfs-home.nix
+    ./session-pin.nix
     ./kiosk.nix
     ./handover.nix
     ./nix-access.nix
@@ -222,6 +223,20 @@ in
                 login shell, and whatever session a greeter asks for, run
                 this package's meta.mainProgram and nothing else; ssh and su
                 refuse the account. Requires a pinned uid.
+              '';
+            };
+
+            desktop = lib.mkOption {
+              type = lib.types.nullOr (lib.types.enum [ "gnome" ]);
+              default = null;
+              description = ''
+                Pin this account to one desktop session (the registry's
+                session = { desktop = "gnome"; }): whatever session a greeter
+                asks for, a greetd login of this account starts that desktop
+                (session-pin.nix, greeter-only). The desktop's feature
+                provides the launcher and must be enabled
+                (features/session/gnome: my.gnome.enable). Unlike a kiosk the
+                account keeps a real login shell. Requires a pinned uid.
               '';
             };
 

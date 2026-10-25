@@ -14,26 +14,12 @@
   greeters as "Kiosk (<prog>)" (harmless for anyone else to pick: it runs
   the program as them).
 
-  PINNING, ENFORCED BELOW THE GREETER. Hiding the other entries from a
-  greeter would pin nothing: the greeter is a UI, dms-greeter remembers the
-  last session per user, tuigreet lets anyone type a command, and the
-  session greetd starts is whatever string the greeter sends. What greetd
-  does with that string is fixed, though (greetd 0.10 session/worker.rs):
-  as the user, it execs
-
-    /bin/sh -c '[ -f /etc/profile ] && . /etc/profile; [ -f $HOME/.profile ] && . $HOME/.profile; exec <cmd>'
-
-  (source_profile, greetd's default; asserted below). So the first lines of
-  /etc/profile -- mkBefore, ahead of its own "sourced once" guard, so a
-  greeter-supplied __ETC_PROFILE_SOURCED cannot skip them -- exec the
-  user's launcher when the real uid (id -u, an absolute path: nothing from
-  the environment) is a kiosk account. The requested command is never
-  reached, whatever the greeter offered, remembered or was typed into. The
-  launcher sources /etc/set-environment itself, since it replaces the rest
-  of /etc/profile (/etc/set-environment is what /etc/profile sources
-  first). The greeter's environment is trusted here: it is the
-  system's own greeter process, and neither tuigreet nor dms-greeter lets
-  the person at the keyboard set variables.
+  PINNING, ENFORCED BELOW THE GREETER: session-pin.nix, the mechanism every
+  pinned session kind shares. A kiosk pin is unscoped (greeterOnly =
+  false): every shell that reads /etc/profile as a kiosk uid execs the
+  launcher, which is right for an account whose login shell IS the
+  launcher and that has no other shell to give anyone. The launcher sources
+  /etc/set-environment itself, since it replaces the rest of /etc/profile.
 
   EVERY OTHER WAY IN, decided per path:
 
@@ -116,12 +102,6 @@ let
   */
   shellPath = pkg: "/run/current-system/sw/bin/kiosk-shell-${progOf pkg}";
 
-  uidOf = n: config.users.users.${n}.uid;
-
-  pin = lib.concatMapStrings (n: ''
-    ${toString (uidOf n)}) exec ${launcherExe kioskUsers.${n}.kiosk} ;;
-  '') names;
-
   pamPkg = config.security.pam.package;
 in
 {
@@ -134,13 +114,11 @@ in
       shell = shellPath kioskUsers.${n}.kiosk;
     });
 
-    environment.etc.profile.text = lib.mkBefore ''
-      # Kiosk accounts get their one program, whatever session was asked for
-      # (features/core/users/kiosk.nix).
-      case "$(${pkgs.coreutils}/bin/id -u)" in
-        ${pin}
-      esac
-    '';
+    # Every shell that reads /etc/profile as a kiosk uid (session-pin.nix).
+    my.internal.sessionPins = lib.genAttrs names (n: {
+      command = launcherExe kioskUsers.${n}.kiosk;
+      greeterOnly = false;
+    });
 
     services.openssh.settings.DenyUsers = lib.mkIf config.services.openssh.enable names;
 
@@ -154,13 +132,7 @@ in
     });
 
     assertions =
-      [
-        {
-          assertion = (config.services.greetd.settings.general.source_profile or true) != false;
-          message = "kiosk users (${lib.concatStringsSep ", " names}) are pinned through /etc/profile, which greetd only sources with general.source_profile = true.";
-        }
-      ]
-      ++ lib.concatMap (n: [
+      lib.concatMap (n: [
         {
           assertion = kioskUsers.${n}.shell == null;
           message = "my.users.${n}: a kiosk account's login shell is its launcher; drop `shell`.";
@@ -168,10 +140,6 @@ in
         {
           assertion = kioskUsers.${n}.sshKeys == [ ];
           message = "my.users.${n}: a kiosk account cannot log in over ssh (DenyUsers); drop sshKeys.";
-        }
-        {
-          assertion = uidOf n != null;
-          message = "my.users.${n}: a kiosk account needs a pinned uid (the /etc/profile pin matches on it).";
         }
       ]) names;
   };

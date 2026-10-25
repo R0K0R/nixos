@@ -22,7 +22,10 @@
   AXES AND THEIR MACHINERY. home = "tmpfs", nix = "none" / "untrusted", kiosk
   sessions (pinned: whatever the greeter asks for, the login gets the one
   program) and with them the handover and untrusted types are implemented
-  (features/core/users: tmpfs-home.nix, kiosk.nix, nix-access.nix). The
+  (features/core/users: tmpfs-home.nix, kiosk.nix, nix-access.nix).
+  session = { desktop = "gnome"; } is the same pin with a whole desktop
+  behind it (session-pin.nix, the launcher from features/session/gnome,
+  which the host must enable). The
   handover TYPE also carries its credentials -- not an axis, a property of
   lending: a passphrase issued per lending with a deadline, and an optional
   `handover.expires` ceiling in the user file (handover.nix).
@@ -93,6 +96,9 @@ let
     # private upper store, an untrusted one to the shared daemon.
     nix = [ "none" "overlay" "untrusted" "admin" ];
     grants = [ "sudo" "network" "media" "serial" "input" ];
+    # session = { desktop = <one of these>; }: a full desktop, pinned. Each
+    # name is a feature that provides its launcher (features/session/<name>).
+    desktop = [ "gnome" ];
   };
 
   /*
@@ -123,6 +129,8 @@ let
       s
     else if isAttrs s && attrNames s == [ "kiosk" ] && isString s.kiosk then
       "kiosk"
+    else if isAttrs s && attrNames s == [ "desktop" ] && elem s.desktop axisValues.desktop then
+      "desktop"
     else
       null;
 
@@ -134,8 +142,9 @@ let
     where: axis: v:
     if axis == "session" then
       (if sessionKind v != null then v else throw ''
-        registry: ${where}: session must be "home-manager", "system-default" or
-        { kiosk = "<attribute name of a package>"; }, got ${builtins.toJSON v}'')
+        registry: ${where}: session must be "home-manager", "system-default",
+        { kiosk = "<attribute name of a package>"; } or { desktop = <one of ${fmtList axisValues.desktop}>; },
+        got ${builtins.toJSON v}'')
     else if axis == "builders" then
       (if isBool v then v else throw "registry: ${where}: builders must be a bool, got ${builtins.toJSON v}")
     else if axis == "grants" then
@@ -617,6 +626,7 @@ in
               // lib.optionalAttrs (e.home == "tmpfs") { tmpfsHome.size = u.tmpfsSize or "2G"; }
               // lib.optionalAttrs (e.home == "impermanent") { impermanentHome = true; }
               // lib.optionalAttrs (sessionKind e.session == "kiosk") { kiosk = pkgs.${e.session.kiosk}; }
+              // lib.optionalAttrs (sessionKind e.session == "desktop") { inherit (e.session) desktop; }
               // lib.optionalAttrs (u.type == "handover") { handover.expires = u.handover.expires or null; }
               // lib.optionalAttrs (u ? description) { inherit (u) description; }
               // lib.optionalAttrs (u.passwordless or false) { passwordless = true; }

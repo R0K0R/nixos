@@ -12,6 +12,13 @@
              narrow.localBuilds = false (true anyway on gb4, max-jobs = 0),
              acceptTypeChange = "member->untrusted"
 
+  The real host (`off`) has guest (untrusted) and handoff (handover, tmpfs
+  home) pinned to GNOME (session = { desktop = "gnome"; }, my.gnome):
+  `gnome*` checks the greeter-only pin, the greeter entry and the guard's
+  pass-through, and -- against the same host with my.gnome forced off
+  (`noGnome`) -- that GNOME reaches nothing of r0k0r's: the epoch, the
+  environment, the system packages and his home's drvPath are identical.
+
   Every attribute is a string; forcing the set evaluates everything and
   builds nothing. Run with builds disabled (tests/user-types-eval.sh). Each
   check either returns a short description of what it saw or throws saying
@@ -90,6 +97,14 @@ let
         my.registry.nix.extraTrustedUsers = [ "visitor" ];
       }
     ];
+  };
+
+  # The real host with GNOME switched off (guest and handoff keep their
+  # registry session, so the feature's assertion must fire; only
+  # config.assertions and leaf values are forced, never the toplevel).
+  noGnome = mkHostWith {
+    hostName = host;
+    extraModules = [ { my.gnome.enable = lib.mkForce false; } ];
   };
 
   c = on.config;
@@ -338,6 +353,141 @@ in
       };
   };
 
+  # -- desktop sessions: GNOME for guest and handoff on the real host ----
+  gnomeRegistry = expect "registry: guest and handoff have session { desktop = gnome; }" (
+    lib.all (n: off.config.my.registry.loaded.effective.${host}.${n}.session == { desktop = "gnome"; }) [ "guest" "handoff" ]
+    && off.config.my.users.guest.desktop == "gnome"
+    && off.config.my.users.handoff.desktop == "gnome"
+    && off.config.my.users.handoff.kiosk == null
+    && off.config.my.users.r0k0r.desktop == null
+  ) "guest, handoff: gnome; r0k0r: none";
+  gnomePins =
+    let
+      p = off.config.my.internal.sessionPins;
+      exe = "${off.config.my.gnome.internal.launcher}/bin/gnome-desktop-session";
+    in
+    expect "real gb4 pins exactly guest and handoff, greeter-only, to the GNOME launcher" (
+      lib.attrNames p == [ "guest" "handoff" ] && lib.all (n: p.${n}.greeterOnly && p.${n}.command == exe) [ "guest" "handoff" ]
+    ) (builtins.toJSON (lib.mapAttrs (_: v: v.greeterOnly) p));
+  gnomeProfilePin =
+    let
+      d = builtins.unsafeDiscardStringContext;
+      head' = d (lib.head (lib.splitString "__ETC_PROFILE_SOURCED" off.config.environment.etc.profile.text));
+      pinOf = uid: builtins.match (".*" + uid + "\\) \\{ IFS= read -r __session_pin_parent < \"/proc/\\$PPID/comm\"; } 2>/dev/null\n +\\[ \"\\$\\{__session_pin_parent-}\" = greetd ] && exec [^ ]+/bin/gnome-desktop-session\n +unset __session_pin_parent ;;.*") head';
+    in
+    expect "/etc/profile: 1002 and 1003 exec the GNOME launcher only under greetd, before the sourced-once guard; 1000/1001 unpinned" (
+      pinOf "1002" != null && pinOf "1003" != null && !(lib.hasInfix "1000)" head') && !(lib.hasInfix "1001)" head')
+    ) head';
+  gnomeShells = expect "guest and handoff keep a real login shell (no kiosk launcher), nothing in /etc/shells" (
+    !(lib.hasInfix "kiosk-shell" (toString (off.config.users.users.guest.shell or "")))
+    && !(lib.hasInfix "kiosk-shell" (toString (off.config.users.users.handoff.shell or "")))
+    && !(lib.hasInfix "gnome-desktop-session" off.config.environment.etc.shells.text)
+  ) "${toString (off.config.users.users.handoff.shell or "default")}";
+  gnomeNoKiosk = expect "real gb4: no kiosk launcher, entry or su refusal any more" (
+    !(lib.any (p: lib.hasPrefix "kiosk-" (lib.head (p.providedSessions or [ "" ]))) off.config.services.displayManager.sessionPackages)
+    && !(off.config.security.pam.services.su.rules.account ? kiosk-pin)
+  ) "none";
+  gnomeGreeter =
+    let
+      dm = off.config.services.displayManager.sessionData;
+      entry = lib.findFirst (p: p.providedSessions or [ ] == [ "gnome" ]) (throw "no gnome session package") off.config.services.displayManager.sessionPackages;
+    in
+    expect "greeter: GNOME is a guarded entry of the rebuilt desktops aggregate, after Hyprland, with an ignore-epoch twin" (
+      lib.take 2 dm.sessionNames == [ "hyprland" "hyprland-uwsm" ]
+      && lib.elem "gnome" dm.sessionNames
+      && lib.elem "gnome-ignore-epoch" dm.sessionNames
+      # Its block of the aggregate's builder: its files, put in guard mode.
+      && lib.any (b: lib.hasPrefix "gnome;" b && lib.hasInfix (builtins.unsafeDiscardStringContext "${entry}") b && lib.hasInfix "put $kind \"$f\" guard" b) (
+        lib.splitString "for n in " (builtins.unsafeDiscardStringContext dm.desktops.buildCommand)
+      )
+      && lib.hasInfix (builtins.unsafeDiscardStringContext "Exec=${off.config.my.gnome.internal.launcher}/bin/gnome-desktop-session") (builtins.unsafeDiscardStringContext entry.text)
+    ) (lib.concatStringsSep " " dm.sessionNames);
+  gnomeGuardPassThrough =
+    let
+      t = off.config.my.fallback-session.internal.guardedSession.text or "";
+    in
+    expect "guarded-session checks only the home-manager accounts: guest and handoff pass through" (
+      lib.hasInfix "GUARD_USERS='benjamin r0k0r'" t
+    ) (lib.head (lib.filter (lib.hasPrefix "GUARD_USERS") (lib.splitString "
+" t)));
+  gnomeHandoffTmpfs =
+    let
+      m = lib.filter (m: m.where == "/home/handoff") off.config.systemd.mounts;
+    in
+    expect "handoff keeps its tmpfs home bound to user@1003, logind kills only handoff" (
+      lib.length m == 1
+      && lib.elem "user@1003.service" (lib.head m).requiredBy
+      && off.config.services.logind.settings.Login.KillOnlyUsers == "handoff"
+    ) (lib.head m).options;
+  gnomePasswordless =
+    let
+      pam = off.config.security.pam.services;
+    in
+    expect "empty-password login still works: nullok on login (greetd's auth is a substack of login), empty hashes" (
+      lib.hasInfix "nullok" pam.login.text
+      && (lib.hasInfix "nullok" pam.greetd.text || lib.hasInfix "auth substack login" pam.greetd.text)
+      && off.config.users.users.guest.hashedPassword == ""
+      && off.config.users.users.handoff.hashedPassword == ""
+    ) "nullok";
+  gnomeAssertion = expect "a desktop = gnome account on a host without my.gnome fails an assertion" (
+    lib.any (a: !a.assertion && lib.hasInfix "needs my.gnome.enable" a.message) noGnome.config.assertions
+  ) "refused";
+
+  /*
+    GNOME reaches nothing outside its own sessions. Same host, same registry,
+    my.gnome on (`off`, the real gb4) and forced off (`noGnome`):
+  */
+  gnomeEpoch = expect "my.gnome does not move the epoch" (
+    off.config.system.build.epoch == noGnome.config.system.build.epoch
+  ) off.config.system.build.epoch;
+  gnomeEnvironment =
+    let
+      env = cfg: lib.mapAttrs (_: v: builtins.unsafeDiscardStringContext (toString v)) (
+        removeAttrs (cfg.environment.variables // cfg.environment.sessionVariables) [ "XDG_DATA_DIRS" ]
+      );
+      dirs = cfg: builtins.unsafeDiscardStringContext (toString cfg.environment.sessionVariables.XDG_DATA_DIRS);
+      sw = cfg: map (p: builtins.unsafeDiscardStringContext p.name) cfg.environment.systemPackages;
+      a = off.config;
+      b = noGnome.config;
+      # The only move: the greeter's session aggregate ("desktops", which
+      # gains gnome.desktop) is one of the XDG_DATA_DIRS entries.
+      # (A CA placeholder on gb4, so matched by value, not by name.)
+      desktopsOf = cfg: builtins.unsafeDiscardStringContext "${cfg.services.displayManager.sessionData.desktops}/share";
+      noDesktops = cfg: lib.filter (e: e != desktopsOf cfg) (lib.splitString ":" (dirs cfg));
+      same = {
+        variables = env a == env b;
+        XDG_DATA_DIRS = noDesktops a == noDesktops b && dirs a != dirs b;
+        systemPackages = sw a == sw b;
+        extraInit = a.environment.extraInit == b.environment.extraInit;
+        pam = lib.mapAttrs (_: s: s.text) a.security.pam.services == lib.mapAttrs (_: s: s.text) b.security.pam.services;
+        dbus = map (p: p.name) a.services.dbus.packages == map (p: p.name) b.services.dbus.packages;
+        portals = map (p: p.name) a.xdg.portal.extraPortals == map (p: p.name) b.xdg.portal.extraPortals;
+        portalConfig = a.xdg.portal.config == b.xdg.portal.config;
+        pathsToLink = a.environment.pathsToLink == b.environment.pathsToLink;
+        fonts = map (p: p.name) a.fonts.packages == map (p: p.name) b.fonts.packages;
+        udev = map (p: p.name) a.services.udev.packages == map (p: p.name) b.services.udev.packages;
+      };
+      differ = lib.attrNames (lib.filterAttrs (_: v: !v) same);
+    in
+    expect "my.gnome adds no variable, no system package, no extraInit, no PAM rule, no D-Bus package, no portal, no font, no udev rule" (
+      differ == [ ]
+    ) "identical${lib.optionalString (differ != [ ]) " except ${toString differ}"}";
+  gnomeUserUnits =
+    let
+      added = lib.subtractLists (lib.attrNames noGnome.config.systemd.user.units) (lib.attrNames off.config.systemd.user.units);
+      pkgs' = lib.subtractLists (map (p: p.name) noGnome.config.systemd.packages) (map (p: p.name) off.config.systemd.packages);
+    in
+    expect "my.gnome adds only GNOME's own (unwanted) user units" (
+      lib.all (u: lib.hasPrefix "gnome-session" u) added
+      && lib.all (n: lib.any (p: lib.hasPrefix p n) [ "gnome-session-" "gnome-shell-" "gnome-settings-daemon-" "xdg-desktop-portal-gnome-" ]) pkgs'
+    ) "units ${toString added}; packages ${toString pkgs'}";
+  gnomeHome =
+    let
+      persist = { my.persist.directories = [ "KSA" ]; };
+      h = cfg: ((mkHomeLib host cfg).mkHome { username = "r0k0r"; modules = [ persist ]; }).activationPackage.drvPath;
+    in
+    expect "r0k0r's home is the same derivation with and without my.gnome" (h off == h noGnome) (h off);
+
   refused = {
     # member -> untrusted without consent: a demotion.
     demotion = mustFail "member->untrusted without acceptTypeChange" (
@@ -427,6 +577,13 @@ in
       lib.attrNames
         ((regWith (r: r // { users = r.users // { guest = r.users.guest // { sshKeys = [ "ssh-ed25519 AAAA" ]; }; }; })).materialize host on.pkgs)
         .guest
+    );
+    # Desktops are a closed list (lib/registry.nix axisValues.desktop).
+    unknownDesktop = mustFail "session = { desktop = \"kde\"; }" (
+      (regWith (r: r // { users = r.users // { visitor = r.users.visitor // { overrides.session = { desktop = "kde"; }; }; }; })).effective.${host}.visitor
+    );
+    desktopExtraKey = mustFail "session = { desktop = \"gnome\"; kiosk = \"firefox\"; }" (
+      (regWith (r: r // { users = r.users // { visitor = r.users.visitor // { overrides.session = { desktop = "gnome"; kiosk = "firefox"; }; }; }; })).effective.${host}.visitor
     );
     tmpfsSize = mustFail "tmpfsSize = 2 gigs" (
       (regWith (r: r // { users = r.users // { guest = r.users.guest // { tmpfsSize = "2 gigs"; }; }; })).check
