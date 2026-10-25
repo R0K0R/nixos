@@ -13,8 +13,16 @@
               untrusted = the shared daemon without trusted-user rights;
               admin = trusted-users.
     session   home-manager | system-default | { kiosk = "<package attr>"; }
+              | { desktop = "gnome"; }
               What a login gets: the user's own home-manager generation, the
-              system's defaults with no per-user generation, or one program.
+              system's defaults with no per-user generation, one program, or
+              one desktop. kiosk and desktop are PINNED: whatever the greeter
+              offers or remembers, a greetd login of the account runs that
+              session (features/core/users/session-pin.nix). A kiosk is the
+              program under cage and the account's login shell; a desktop
+              (lib/registry.nix axisValues.desktop: "gnome") is the system's
+              GNOME, from the host's features/session/gnome, and the account
+              keeps a real shell (its terminal has one anyway).
     builders  bool -- may name builders and substituters of his own (needs
               nix = admin: --builders is a trusted-user setting). It cannot
               keep a user's builds off the host daemon's OWN builders; the

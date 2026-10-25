@@ -544,6 +544,11 @@ in
       greeter.enable = true;
     };
 
+    # GNOME for guest and handoff (registry session = { desktop = "gnome"; },
+    # pinned), and as a "GNOME" greeter entry. Scoped to its own sessions:
+    # r0k0r's and benjamin's Hyprland sees none of it (the feature's header).
+    gnome.enable = true;
+
     network = {
       enable = true;
       kdeconnect.enable = true;

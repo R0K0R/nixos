@@ -249,8 +249,9 @@ in
     system.activationScripts.users.deps = [ "handover-credentials" ];
 
     /*
-      The services whose login leads to the pinned session (kiosk.nix): the
-      greeter and the VT login. sshd and su refuse kiosk users outright.
+      The services whose login leads to the account's session: the greeter
+      (pinned, session-pin.nix) and the VT login. sshd and su refuse kiosk
+      users outright.
       nixpkgs' greetd service has no rule stack of its own -- its account
       phase is `include login` -- so the login rule covers it; the greetd
       rule only applies if a later nixpkgs gives greetd default rules
@@ -281,8 +282,11 @@ in
         message = "my.users.${n}: a handover account's password is issued per lending (`handover issue`), not declared; drop passwordSecret/hashedPasswordFile.";
       }
       {
-        assertion = config.my.users.${n}.kiosk != null;
-        message = "my.users.${n}: a handover account needs a kiosk session -- the credential is for the pinned program, not a desktop.";
+        # Kiosk or desktop: either way the login is pinned (session-pin.nix),
+        # so the credential opens exactly that session and nothing the
+        # greeter could be asked for instead.
+        assertion = config.my.internal.sessionPins ? ${n};
+        message = "my.users.${n}: a handover account needs a pinned session (kiosk or desktop) -- the credential is for the pinned session, not whatever the greeter offers.";
       }
     ]) names;
   };
