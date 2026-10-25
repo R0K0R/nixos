@@ -271,6 +271,18 @@ in
               '';
             };
 
+            tuned = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = ''
+                Whether this host's tuning serves the account (registry/types.nix
+                `tuned`; from the registry, true for an account not from it). An
+                untuned account's use never feeds the tuning classifier, the
+                sessions only it runs come from my.tuning.untunedPkgs, and its
+                standalone home defaults to an untuned set.
+              '';
+            };
+
             typeRecord = lib.mkOption {
               type = lib.types.nullOr lib.types.raw;
               default = null;

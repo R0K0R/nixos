@@ -64,6 +64,9 @@
   inputs,
   system ? "x86_64-linux",
   host,
+  # The tuned accounts of this host; null = the registry's (below). For
+  # tests with synthetic cache files.
+  tunedUsers ? null,
 }:
 let
   lib = inputs.nixpkgs.lib;
@@ -125,7 +128,7 @@ let
                          of their current home generation plus an evaluation
                          of their home repo, their own modules included
 
-    Every valid file adds names; a user's file is evidence like Tier 1's, for
+    Every valid file of a TUNED user (below) adds names; such a file is evidence like Tier 1's, for
     every set on this host (docs/multiuser-design.md, "Every user feeds the
     classifier"). The warm-cache guard below stays the SYSTEM's: it is about
     whether the system's own evidence exists.
@@ -153,12 +156,26 @@ let
     copied under the wrong name or into the wrong host's directory from
     counting silently.
   */
+  /*
+    Only the users this host's tuning serves count (registry/types.nix
+    `tuned`, lib/registry.nix `tuned`: the admins). The directory is
+    world-writable (sticky), so a guest's file can exist -- written by hand,
+    or by a tuning-refresh from before this rule -- and is skipped here by
+    name, not trusted to be absent. The real registry, not a test's extended
+    one: this file has no module system to read my.registry from, and
+    evidence is about the real accounts. This is THE enforcement point:
+    tuning-refresh itself still writes anyone's file (the script is in
+    every userCache host's toplevel, and filtering here keeps those
+    unchanged); a file nobody reads is evidence of nothing.
+  */
+  tunedUsers' = if tunedUsers != null then tunedUsers else (import ../../registry { inherit lib; }).tuned.${host} or [ ];
   readUserCache =
     n:
     let
       c = readCache (usersDir + "/${n}");
+      u = lib.removeSuffix ".nix" n;
     in
-    if c != null && c.user or null == lib.removeSuffix ".nix" n && c.host or null == host then c else null;
+    if lib.elem u tunedUsers' && c != null && c.user or null == u && c.host or null == host then c else null;
   userCaches = lib.filter (c: c != null && c.nixpkgsNarHash or null == currentNarHash) (
     map readUserCache userFileNames
   );

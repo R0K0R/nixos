@@ -139,8 +139,16 @@ let
   standaloneHomes = lib.mapAttrs (username: _: (gen.mkHome { nixos = pass1; inherit username; }).config) (
     gen.standaloneUsers lib cfg
   );
+  /*
+    Only the homes of accounts this host's tuning serves (my.users.<n>.tuned,
+    registry/types.nix `tuned`): an untuned user's packages are not
+    evidence, the same rule refresh-tier1's cut and lookup.nix's users/
+    filter apply.
+  */
+  isTuned = n: cfg.my.users.${n}.tuned or true;
   homePackages = lib.concatMap (u: u.home.packages or [ ]) (
-    lib.attrValues (cfg.home-manager.users or { }) ++ lib.attrValues standaloneHomes
+    lib.attrValues (lib.filterAttrs (n: _: isTuned n) (cfg.home-manager.users or { }))
+    ++ lib.attrValues (lib.filterAttrs (n: _: isTuned n) standaloneHomes)
   );
 
   graphics =
@@ -151,7 +159,9 @@ let
     lib.optional ((cfg.programs.hyprland.package or null) != null) cfg.programs.hyprland.package
     ++ lib.optional ((cfg.programs.hyprland.portalPackage or null) != null) cfg.programs.hyprland.portalPackage;
 
-  anchors = lib.filter (p: p != null && (p ? pname || p ? name)) (
+  # Minus what only untuned accounts' sessions run (my.tuning.untunedRoots).
+  untunedRoots = map (p: builtins.unsafeDiscardStringContext p.outPath) (cfg.my.tuning.untunedRoots or [ ]);
+  anchors = lib.filter (p: p != null && (p ? pname || p ? name) && !(lib.elem (builtins.unsafeDiscardStringContext p.outPath) untunedRoots)) (
     cfg.environment.systemPackages ++ homePackages ++ graphics ++ compositorPackages
   );
 

@@ -107,6 +107,29 @@ let
     extraModules = [ { my.gnome.enable = lib.mkForce false; } ];
   };
 
+  /*
+    visitor with a standalone home-manager session: the untuned account
+    with a home that no real host has yet. Its home must default to an
+    untuned set -- and on gb4, a march host, be refused by the surface check
+    until the perl/sqlite decision. `untunedIntegrated` is the same account
+    with an integrated home, which cannot be untuned at all.
+  */
+  withVisitorHome =
+    activation:
+    raw:
+    let
+      r = extend raw;
+    in
+    r // { users = r.users // { visitor = r.users.visitor // { overrides = r.users.visitor.overrides // { session = "home-manager"; }; homeActivation = activation; }; }; };
+  untunedHome = mkHostWith {
+    hostName = host;
+    extraModules = [ { my.registry.extend = withVisitorHome "standalone"; } ];
+  };
+  untunedIntegrated = mkHostWith {
+    hostName = host;
+    extraModules = [ { my.registry.extend = withVisitorHome "system"; } ];
+  };
+
   c = on.config;
   reg = c.my.registry.loaded;
   facts = (mkHomeLib host on).facts;
@@ -488,7 +511,57 @@ in
     in
     expect "r0k0r's home is the same derivation with and without my.gnome" (h off == h noGnome) (h off);
 
+  # -- tuned and untuned accounts (registry/types.nix `tuned`) -----------
+  tunedRegistry = expect "tuned = the admins: r0k0r and benjamin on gb4, nobody else" (
+    lib.sort lib.lessThan off.config.my.registry.loaded.tuned.${host} == [ "benjamin" "r0k0r" ]
+    && lib.sort lib.lessThan reg.tuned.${host} == [ "benjamin" "r0k0r" ]
+    && off.config.my.users.r0k0r.tuned
+    && off.config.my.users.benjamin.tuned
+    && !off.config.my.users.guest.tuned
+    && !off.config.my.users.handoff.tuned
+    && !c.my.users.visitor.tuned
+    && (mkHomeLib host off).facts.tunedUsers == off.config.my.registry.loaded.tuned.${host}
+  ) (toString off.config.my.registry.loaded.tuned.${host});
+  untunedGnome =
+    let
+      roots = off.config.my.tuning.untunedRoots;
+      # A tuned derivation on gb4 is content-addressed (ca-derivations
+      # "tuned"): its output is a placeholder until built. Everything from
+      # the untuned set is plain input-addressed upstream.
+      tuned = lib.filter (p: !(lib.hasPrefix "/nix/store/" (builtins.unsafeDiscardStringContext p.outPath))) roots;
+    in
+    expect "GNOME: every untunedRoot (launcher, entry, env, overrides, fonts, user units) is from the untuned set, and the toplevel lists them" (
+      tuned == [ ]
+      && lib.length roots == 9
+      && lib.hasInfix "untuned-roots" off.config.system.extraSystemBuilderCmds
+      && off.config.my.gnome.internal.launcher.outPath == (lib.findFirst (p: p.name == "gnome-desktop-session") null roots).outPath
+    ) "${toString (map (p: p.name) roots)}${lib.optionalString (tuned != [ ]) "; TUNED: ${toString (map (p: p.name) tuned)}"}";
+  untunedHomeDefault =
+    let
+      h = (mkHomeLib host untunedHome).mkHome {
+        username = "visitor";
+        # The default itself, without building the untuned set or running the
+        # surface check (both below).
+        pkgsFor = _: untunedHome.pkgs;
+        extraChecks = _: [ ];
+      };
+      t = h.config.my.tuning;
+      r = (mkHomeLib host untunedHome).mkHome { username = "r0k0r"; modules = [ { my.persist.directories = [ "KSA" ]; } ]; pkgsFor = _: untunedHome.pkgs; extraChecks = _: [ ]; };
+    in
+    expect "an untuned account's standalone home defaults to my.tuning = false; a tuned one's stays \"system\"" (
+      t.march == false && t.lto == false && t.o3 == false
+      && r.config.my.tuning.march == "system" && r.config.my.tuning.lto == "system"
+    ) "visitor ${builtins.toJSON { inherit (t) march lto o3; }}, r0k0r ${builtins.toJSON { inherit (r.config.my.tuning) march lto o3; }}";
+  untunedIntegratedRefused = expect "an untuned account with an integrated home fails an assertion" (
+    lib.any (a: !a.assertion && lib.hasInfix "visitor is not tuned on this host" a.message) untunedIntegrated.config.assertions
+  ) "refused";
+
   refused = {
+    # The untuned default on a march host: refused by the surface check
+    # until the perl/sqlite question is decided (lib/home-generator.nix).
+    untunedHomeOnMarchHost = mustFail "visitor's untuned home on gb4" (
+      ((mkHomeLib host untunedHome).mkHome { username = "visitor"; }).activationPackage.drvPath
+    );
     # member -> untrusted without consent: a demotion.
     demotion = mustFail "member->untrusted without acceptTypeChange" (
       T.check "visitor" (rec' "member" "persistent" "untrusted") (rec' "untrusted" "persistent" "untrusted") null
