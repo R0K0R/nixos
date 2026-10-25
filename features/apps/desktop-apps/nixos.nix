@@ -37,6 +37,7 @@ in
         ".config/google-chrome/Default" # Chrome profile (the ~4 GB of model caches beside it are skipped)
         ".config/google-chrome/Profile 1" # second Chrome profile
         ".config/discord" # Discord login and settings
+        ".config/Vencord" # Vencord (Discord client mod) settings and plugins
         ".zoom" # Zoom chat db and login
         ".config/libreoffice" # LibreOffice user profile
         ".pki" # NSS db: imported and client certificates

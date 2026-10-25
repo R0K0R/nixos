@@ -20,8 +20,13 @@ in
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
+      my.state.user.state.directories = [
+        ".config/siril" # Siril's settings and working directories
+      ];
       my.state.user.optional.directories = [
         ".local/share/siril" # Siril's python script venv; pip install to rebuild
+        ".local/share/siril-scripts" # the script repository; Siril fetches it again
+        ".local/share/siril-spcc-database" # photometric colour database; downloadable
       ];
     }
     (lib.mkIf (pkgSet ? system) { environment.systemPackages = pkgSet.system; })
