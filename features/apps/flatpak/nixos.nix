@@ -26,10 +26,13 @@
 
   config = lib.mkIf config.my.flatpak.enable {
   services.flatpak.enable = true;
-  my.state.system.optional.directories = [
-    "/var/lib/flatpak" # system-wide installs and the Flathub remote; apps are reinstalled by hand
+  # state, not optional: an installed app (Sober) and its data are things a
+  # person set up, and "reinstall by hand after every boot" on an impermanent
+  # host is no way to keep them (gb4 lost Sober with the migration, 2026-10-24).
+  my.state.system.state.directories = [
+    "/var/lib/flatpak" # system-wide installs and the Flathub remote
   ];
-  my.state.user.optional.directories = [
+  my.state.user.state.directories = [
     ".var" # per-app flatpak data (Sober/Roblox client and settings)
   ];
 
