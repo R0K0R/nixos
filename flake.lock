@@ -1175,11 +1175,11 @@
         "tuning-cache-victus-15": "tuning-cache-victus-15"
       },
       "locked": {
-        "lastModified": 1792905283,
-        "narHash": "sha256-uQ7WM5Dm8lxLvl/LEWWhcBdkNxVtBv5cfBqJIisj0z8=",
+        "lastModified": 1792906842,
+        "narHash": "sha256-6VA2k0hDN5GsfQokFpDz+Sz3YeoK/iErp+jyTKpSuHQ=",
         "owner": "R0K0R",
         "repo": "nixos",
-        "rev": "71b0ccab6e83aa0384a6d5144c6e9347ac3b16fe",
+        "rev": "6339d3a2342ff152cfcbb2746e2781c28ee9c28a",
         "type": "github"
       },
       "original": {
