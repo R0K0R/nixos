@@ -29,7 +29,15 @@ let
       isQtModule = name: pkg:
         name == "wrapQtAppsHook" || name == "qttools" || name == "qttranslations"
         || (lib.isDerivation pkg && lib.hasPrefix "qt" (pkg.pname or name));
-      skipQtbaseOverride = name: builtins.elem name [ "qtquickcontrols" "qttranslations" ];
+      # Only modules whose function TAKES qtbase. Overriding one that does not
+      # fails with "called with unexpected argument 'qtbase'", which tryEval
+      # cannot catch -- Qt 5's qtquickcontrols2 did, the moment a home pulled
+      # it in (benjamin's on galaxybook4-pro360, 2026-10-25). The names are the
+      # ones that hit it before the arguments were checked.
+      skipQtbaseOverride =
+        name: pkg:
+        builtins.elem name [ "qtquickcontrols" "qttranslations" ]
+        || !((lib.functionArgs pkg.override) ? qtbase);
       hasQmakeHook =
         drv:
         lib.any (x: x != null && lib.getName x == "qmake-hook") (drv.nativeBuildInputs or [ ]);
@@ -43,7 +51,7 @@ let
       else if isQtModule name pkg && lib.isDerivation pkg && pkg ? override then
         let
           withQtbase =
-            if skipQtbaseOverride name then
+            if skipQtbaseOverride name pkg then
               pkg
             else
               let attempt = lib.tryEval (pkg.override { inherit qtbase; }); in
