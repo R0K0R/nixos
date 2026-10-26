@@ -566,7 +566,7 @@ read over ssh (`my.tuning.refreshTool.sshTargets` -- victus-15 is reachable,
 the laptop runs no sshd, so from victus its Tier 1 is skipped).
 
 Per-feature `update.sh` scripts bump pinned upstreams
-(`features/apps/claude-code/update.sh`, `features/apps/claude-desktop/update.sh`).
+(`features/apps/claude-code/update.sh`; Claude Desktop is pinned in the home repo, `modules/apps/claude-desktop/update.sh`).
 
 `nix flake check` is the one-command gate: forcing each toplevel evaluates its
 assertions, `_meta`'s included. It triggers Unstraightened's IFD on any change

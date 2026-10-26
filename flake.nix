@@ -31,7 +31,6 @@
     */
     feat-claude-code.url = "path:./features/apps/claude-code";
     feat-hop.url = "path:./features/apps/hop";
-    feat-claude-desktop.url = "path:./features/apps/claude-desktop";
     feat-claude-science.url = "path:./features/apps/claude-science";
     feat-samsung-galaxybook.url = "path:./features/hardware/samsung-galaxybook";
     feat-easyeffects.url = "path:./features/apps/easyeffects";
@@ -544,6 +543,22 @@
         call per homeConfigurations entry.
       */
       lib.homeConfigurationFor = host: args: self.homeLib.${host}.mkHome args;
+
+      /*
+        homeFeatures ./features -- a user repo's own feature tree, collected
+        exactly as this flake collects its own: features/<category>/<feature>/
+        with a home.nix is a feature, the rest are categories, the same
+        errors for empty or duplicate directories (lib/feature-dirs.nix), the
+        same leaf-name order. A module importing every home.nix found; each
+        feature gates itself with my.<feature>.enable.
+      */
+      lib.homeFeatures =
+        root:
+        {
+          imports = builtins.filter builtins.pathExists (
+            map (f: f.path + "/home.nix") (import ./lib/feature-dirs.nix root)
+          );
+        };
 
       /*
         The evaluation matrix: lib.matrix.<host>.<variant> is a full

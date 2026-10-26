@@ -354,14 +354,9 @@ in
       };
     };
 
-    claude-desktop = {
-      enable = true;
-      cowork.enable = true;
-      mcp = {
-        servers = mcpServers;
-        tokenFile = mcpTokenFile;
-      };
-    };
+    # The app itself is r0k0r's home (~/config/home, modules/apps/claude-desktop);
+    # only Cowork's host side is the system's.
+    claude-desktop.cowork.enable = true;
 
     # Beta; `claude-science serve` then the browser. Cheap to carry: one
     # prebuilt binary and a wrapper, no Electron (see the feature's package.nix).

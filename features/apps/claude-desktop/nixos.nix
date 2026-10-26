@@ -1,118 +1,61 @@
-{ config, inputs, lib, pkgs, ... }:
+/*
+  The SYSTEM half of Claude Desktop: Cowork's host support only.
+
+  The app itself, its MCP config and its persisted profile moved to r0k0r's
+  home repo (~/config/home, modules/apps/claude-desktop) on 2026-10-26: they
+  are a user's program and a user's files. What a home cannot do is write
+  outside $HOME, and Cowork needs the OVMF firmware at fixed /usr/share paths,
+  so that part stays here, behind its own switch.
+*/
+{ config, lib, pkgs, ... }:
 
 let
   cfg = config.my.claude-desktop;
-
-  # Repackaged from the .deb in Anthropic's apt repo; hash-pinned via the
-  # claude-desktop-bin flake input. Bump: features/claude-desktop/update.sh.
-  claude-desktop = pkgs.callPackage ./package.nix { src = inputs.feat-claude-desktop.src; };
 in
 {
-  options.my.claude-desktop = {
-    enable = lib.mkEnableOption "Claude Desktop (official Linux beta), repackaged from Anthropic's .deb";
+  options.my.claude-desktop.cowork.enable = lib.mkEnableOption ''
+    host support for Claude Desktop's Cowork ("dispatch") microVM: QEMU plus
+    the OVMF firmware paths the app probes for. The app itself is installed
+    by the user's home (modules/apps/claude-desktop in ~/config/home).
 
-    mcp.servers = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);
-      default = { };
-      example = lib.literalExpression ''
-        {
-          noteworthy = {
-            type = "http";
-            url = "http://yulee:8010/mcp";
-          };
-        }
-      '';
-      description = ''
-        MCP servers to declare to Claude Desktop, by name, written in the
-        same shape Claude Code takes so a host can hand one attrset to both.
+    Opt-in. Pulling qemu into the closure drags in 151 otherwise-untuned
+    packages -- its own glibc, systemd, gtk4 and pipewire among them -- which
+    measured as 74% of every upstream-identical package in this system. That
+    is a real cost and it belongs behind its own switch
+  '';
 
-        Claude Desktop's config file is stdio-only. Its own schema is
+  config = lib.mkIf cfg.cowork.enable {
+    environment.systemPackages = [ pkgs.qemu ];
 
-          { command, args?, env?, extensionId? }
+    /*
+      Cowork refuses to start with "Cowork requires QEMU" even when QEMU is
+      installed. The message is misleading: the gate is
 
-        and an entry carrying `type`/`url` is rejected on startup -- "not
-        valid MCP server configurations and were skipped". The HTTP
-        transports in the app serve connectors configured against the
-        account, not this file. So an `\{ type = "http"; url = ...; \}`
-        server declared here is translated: Desktop is given a small stdio
-        bridge to run, which posts each line to that URL.
+        !qemuPath || !firmwarePath || !virtiofsdPath
 
-        Merged into `~/.config/Claude/claude_desktop_config.json` at switch
-        rather than symlinked over it: that file is the app's own state --
-        preferences, folder grants -- and a read-only store symlink would
-        stop it writing its own settings. Only `mcpServers` is touched.
-      '';
-    };
+      and all three report the same string. qemu-system-x86_64 is resolved by
+      walking $PATH so it is found; virtiofsd and the guest image ship inside
+      the .deb. The one that fails is firmwarePath, probed at hardcoded Debian
+      absolute paths -- ["/usr/share/OVMF/OVMF_CODE_4M.fd",
+      "/usr/share/OVMF/OVMF_CODE.fd"] -- and /usr/share does not exist here.
 
-    mcp.tokenFile = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = ''
-        A file holding the bearer token for the http servers above.
-        Absolute, or relative to the user's home.
+      The variables store is not probed separately; the app derives it from
+      whichever CODE path matched, by literal substitution:
 
-        Handed to the bridge as `MCP_TOKEN_FILE`, so the token itself never
-        appears in the config, in the store, or in a process listing -- the
-        bridge reads it at startup, and rotating it is a restart.
-      '';
-    };
+        e.replace("OVMF_CODE","OVMF_VARS")
 
-    cowork = {
-      enable = lib.mkEnableOption ''
-        Cowork ("dispatch") microVM support: QEMU plus the OVMF firmware paths
-        the app probes for.
+      so CODE and VARS must sit beside each other under the same name stem, and
+      must be a matched pair (pflash sizes have to agree) -- hence both links
+      into the same OVMF build rather than two independently-resolved paths.
 
-        Opt-in, and deliberately NOT implied by `enable`. Pulling qemu into the
-        closure drags in 151 otherwise-untuned packages -- its own glibc,
-        systemd, gtk4 and pipewire among them -- which measured as 74% of every
-        upstream-identical package in this system. That is a real cost and it
-        belongs behind its own switch
-      '';
-    };
+      Symlinking rather than patching app.asar: blacken.py can only do
+      same-length byte replacements, and a /nix/store path is far longer than
+      the Debian one. This also survives Claude Desktop updates.
+    */
+    systemd.tmpfiles.rules = [
+      "d /usr/share/OVMF 0755 root root -"
+      "L+ /usr/share/OVMF/OVMF_CODE.fd - - - - ${pkgs.OVMF.firmware}"
+      "L+ /usr/share/OVMF/OVMF_VARS.fd - - - - ${pkgs.OVMF.variables}"
+    ];
   };
-
-  config = lib.mkIf cfg.enable (lib.mkMerge [
-    { environment.systemPackages = [ claude-desktop ]; }
-
-    {
-      my.state.user.state.directories = [
-        ".config/Claude" # Electron profile: login, sessions, MCP config (caches are skipped by the user's choice)
-      ];
-    }
-
-    (lib.mkIf cfg.cowork.enable {
-      environment.systemPackages = [ pkgs.qemu ];
-
-      /*
-        Cowork refuses to start with "Cowork requires QEMU" even when QEMU is
-        installed. The message is misleading: the gate is
-
-          !qemuPath || !firmwarePath || !virtiofsdPath
-
-        and all three report the same string. qemu-system-x86_64 is resolved by
-        walking $PATH so it is found; virtiofsd and the guest image ship inside
-        the .deb. The one that fails is firmwarePath, probed at hardcoded Debian
-        absolute paths -- ["/usr/share/OVMF/OVMF_CODE_4M.fd",
-        "/usr/share/OVMF/OVMF_CODE.fd"] -- and /usr/share does not exist here.
-
-        The variables store is not probed separately; the app derives it from
-        whichever CODE path matched, by literal substitution:
-
-          e.replace("OVMF_CODE","OVMF_VARS")
-
-        so CODE and VARS must sit beside each other under the same name stem, and
-        must be a matched pair (pflash sizes have to agree) -- hence both links
-        into the same OVMF build rather than two independently-resolved paths.
-
-        Symlinking rather than patching app.asar: blacken.py can only do
-        same-length byte replacements, and a /nix/store path is far longer than
-        the Debian one. This also survives Claude Desktop updates.
-      */
-      systemd.tmpfiles.rules = [
-        "d /usr/share/OVMF 0755 root root -"
-        "L+ /usr/share/OVMF/OVMF_CODE.fd - - - - ${pkgs.OVMF.firmware}"
-        "L+ /usr/share/OVMF/OVMF_VARS.fd - - - - ${pkgs.OVMF.variables}"
-      ];
-    })
-  ]);
 }

@@ -40,18 +40,6 @@
         "url": "https://downloads.claude.ai/claude-code-releases/2.1.296/linux-x64/claude"
       }
     },
-    "claude-desktop-bin": {
-      "flake": false,
-      "locked": {
-        "narHash": "sha256-l72DSyLqKmfVNkA69tRXcdE7ayOaN9zrryk2WjDNzvY=",
-        "type": "file",
-        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_2.31226.1_amd64.deb"
-      },
-      "original": {
-        "type": "file",
-        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_2.31226.1_amd64.deb"
-      }
-    },
     "claude-helper": {
       "flake": false,
       "locked": {
@@ -311,20 +299,6 @@
       },
       "original": {
         "path": "./features/apps/claude-code",
-        "type": "path"
-      },
-      "parent": []
-    },
-    "feat-claude-desktop": {
-      "inputs": {
-        "claude-desktop-bin": "claude-desktop-bin"
-      },
-      "locked": {
-        "path": "./features/apps/claude-desktop",
-        "type": "path"
-      },
-      "original": {
-        "path": "./features/apps/claude-desktop",
         "type": "path"
       },
       "parent": []
@@ -825,7 +799,6 @@
       "inputs": {
         "feat-agenix": "feat-agenix",
         "feat-claude-code": "feat-claude-code",
-        "feat-claude-desktop": "feat-claude-desktop",
         "feat-claude-science": "feat-claude-science",
         "feat-dms": "feat-dms",
         "feat-easyeffects": "feat-easyeffects",
