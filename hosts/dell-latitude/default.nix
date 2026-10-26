@@ -222,20 +222,9 @@
       enable = true;
       systemIntegration = true;
     };
-    kitty.enable = true;
-    starship.enable = true;
-    cursor-theme.enable = true;
+    # kitty, starship, the cursor theme, eza and his ssh client config are
+    # home features in his home repo (hosts/dell-latitude.nix there).
     firefox.enable = true;
-    ssh = {
-      enable = true;
-      # Interactive `ssh yulee`, as himself with his own key. yulee is in the
-      # `injoystickly@` tailnet and this laptop is in `sihooleebd@`: a SHARED
-      # node there, reachable by FQDN only (see the remote-builder peer below).
-      hosts.yulee = {
-        HostName = "yulee.tail2d4da1.ts.net";
-        User = "benjamin";
-      };
-    };
     nix-settings = {
       enable = true;
       # Automatic GC is off repo-wide (fork-project artifact preservation), but
@@ -253,7 +242,6 @@
 
     # Package sets the home halves of these features read from.
     base.enable = true;
-    eza.enable = true;
 
     power = {
       enable = true;

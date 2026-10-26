@@ -231,22 +231,6 @@
         "type": "github"
       }
     },
-    "easyeffects-presets": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1790709287,
-        "narHash": "sha256-Nd4LOgiZyrrkXeWfpBfrEkZwJ+i/xVjg6EPNf/+sGjw=",
-        "owner": "JackHack96",
-        "repo": "EasyEffects-Presets",
-        "rev": "1ac92c9be57bdfccec3fb9820924f9a870a9d56f",
-        "type": "github"
-      },
-      "original": {
-        "owner": "JackHack96",
-        "repo": "EasyEffects-Presets",
-        "type": "github"
-      }
-    },
     "emacs-overlay": {
       "inputs": {
         "nixpkgs": [
@@ -335,20 +319,6 @@
       },
       "original": {
         "path": "./features/session/dms",
-        "type": "path"
-      },
-      "parent": []
-    },
-    "feat-easyeffects": {
-      "inputs": {
-        "easyeffects-presets": "easyeffects-presets"
-      },
-      "locked": {
-        "path": "./features/apps/easyeffects",
-        "type": "path"
-      },
-      "original": {
-        "path": "./features/apps/easyeffects",
         "type": "path"
       },
       "parent": []
@@ -801,7 +771,6 @@
         "feat-claude-code": "feat-claude-code",
         "feat-claude-science": "feat-claude-science",
         "feat-dms": "feat-dms",
-        "feat-easyeffects": "feat-easyeffects",
         "feat-emacs": "feat-emacs",
         "feat-foldpen": "feat-foldpen",
         "feat-hakuspace": "feat-hakuspace",

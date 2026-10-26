@@ -316,7 +316,11 @@ let
 
   fromHosts = lib.concatMap extrasOf allHostMy;
 
-  tier3Anchors = fromFeatures ++ fromHosts;
+  # Packages home features run, which no system packages.nix names any more
+  # (see the file for why, and what replaces it).
+  fromHomes = import ./home-anchors.nix { pkgs = freshPkgs; };
+
+  tier3Anchors = fromFeatures ++ fromHosts ++ fromHomes;
   keyOf = pkg: pkg.pname or pkg.name or "unknown";
   tier3Closure = builtins.genericClosure {
     startSet = map (pkg: {

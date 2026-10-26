@@ -173,11 +173,20 @@ empty category and two features with the same leaf name are errors.
 | `core/` | `_meta` (cross-feature requires/roles), agenix, base, boot (+ optional plymouth splash), locale, packages, swapfile, users |
 | `nix/` | ccache, nix-settings, remote-builder |
 | `hardware/` | cuda, embedded-keyboard, keyd, libinput, pipewire, power, samsung-galaxybook, touch-gestures, upower, x-folding-trackpad |
-| `session/` | compositor, cursor-theme, dms, fcitx, fonts, greetd, hakuspace, hyprland, niri, qt-theming, session-env, session-services, sidedock, tuigreet |
+| `session/` | compositor, dms, fcitx, fonts, greetd, hakuspace, hyprland, niri, qt-theming, session-env, session-services, tuigreet |
 | `net/` | discovery, globaltun, headscale, network, openvpn, syncthing, tailscale, wireless-display |
-| `shell/` | eza, fish, ssh, starship, zsh |
-| `apps/` | astro, claude-code, claude-desktop, claude-science, desktop-apps, easyeffects, emacs, firefox, flamenco, flatpak, fx570ex, hop, kakaotalk, kakaotalk-system, kitty, media, opencode, opendisplay, samsung-ecosystem, waydroid |
+| `shell/` | fish, zsh |
+| `apps/` | astro, claude-code, claude-desktop, claude-science, desktop-apps, emacs, firefox, flamenco, flatpak, fx570ex, hop, kakaotalk, kakaotalk-system, media, opendisplay, samsung-ecosystem, waydroid |
 | `dev/` | arduino, dev-toolchain, diagnostics, direnv, latex, python-dev, qt-dev |
+
+System-wide features live here; a user's own features live in that user's
+home repo, in its own `features/` tree collected with `lib.homeFeatures` (see
+the home repo's README). Moved there on 2026-10-26: claude-desktop (the app;
+Cowork's host side stays as `my.claude-desktop.cowork`), cursor-theme,
+direnv (the daemon settings stay as `my.direnv`), easyeffects, eza, kitty,
+opencode, sidedock, ssh and starship. Their packages stay Tier 3 anchors
+through `tuning/runtime-cache/home-anchors.nix` until userCache evidence
+covers them.
 
 The category is organisation only. The option is `my.<name>` whatever the
 category, leaf names are unique across the tree, and modules are imported in

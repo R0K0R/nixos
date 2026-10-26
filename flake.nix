@@ -33,7 +33,6 @@
     feat-hop.url = "path:./features/apps/hop";
     feat-claude-science.url = "path:./features/apps/claude-science";
     feat-samsung-galaxybook.url = "path:./features/hardware/samsung-galaxybook";
-    feat-easyeffects.url = "path:./features/apps/easyeffects";
     feat-hyprland.url = "path:./features/session/hyprland";
     feat-foldpen.url = "path:./features/apps/foldpen";
 
@@ -543,6 +542,14 @@
         call per homeConfigurations entry.
       */
       lib.homeConfigurationFor = host: args: self.homeLib.${host}.mkHome args;
+
+      /*
+        hyprLua { inherit lib; } { name; src; values; } -- a home feature's
+        Hyprland Lua fragment, wired into the system's Hyprland home half the
+        same way the system's own features do it (lib/hypr-lua.nix). For home
+        repos' features (sidedock in r0k0r's).
+      */
+      lib.hyprLua = import ./lib/hypr-lua.nix;
 
       /*
         homeFeatures ./features -- a user repo's own feature tree, collected

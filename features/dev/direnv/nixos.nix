@@ -4,33 +4,21 @@ let
   cfg = config.my.direnv;
 in
 {
-  options.my.direnv = {
-    enable = lib.mkEnableOption ''
-      direnv with the nix-direnv integration: `use flake` in a project's
-      .envrc drops you into its devShell on cd, and caches the result so the
-      second entry is instant rather than a re-evaluation
-    '';
-  };
-
-  # Accounts this feature applies to; defaults to the primary user.
-  options.my.direnv.users = import ../../../lib/user-scope.nix { inherit lib config; };
-
   /*
-    No packages.nix: home-manager's programs.direnv installs direnv and
-    nix-direnv itself, from its own module. Adding them to a package list too
-    would install a SECOND copy that the shell hook does not point at -- the
-    hook is generated against `programs.direnv.package`, so the two could drift
-    to different versions with no error, and the one on PATH would be the one
-    not being used.
+    The SYSTEM half of direnv: only the nix-daemon settings nix-direnv needs.
+    direnv itself, its hook and its config are a home feature (r0k0r's home
+    repo, features/dev/direnv) since 2026-10-26. A host turns this on when
+    anyone on it uses nix-direnv.
   */
+  options.my.direnv.enable = lib.mkEnableOption ''
+    the nix-daemon settings nix-direnv relies on (keep-outputs,
+    keep-derivations); direnv itself is a home feature
+  '';
+
   config = lib.mkIf cfg.enable {
-    my.state.user.state.directories = [
-      ".local/share/direnv" # the allow list of trusted .envrc files
-    ];
     /*
-      Host-wide even though the feature is per-user scoped, because these are
-      nix-daemon settings and the daemon is not per-user. If anyone on the
-      machine uses nix-direnv, the store has to behave this way for everyone.
+      Host-wide, because these are nix-daemon settings and the daemon is not
+      per-user. If anyone on the machine uses nix-direnv, the store has to behave this way for everyone.
 
       WHY THESE TWO, specifically: nix-direnv keeps a devShell alive by rooting
       it through a profile in .direnv/. That root names the DERIVATION, and

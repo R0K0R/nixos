@@ -268,17 +268,9 @@ in
         shareHistoryWith = "r0k0r";
       };
     };
-    kitty.enable = true;
-    starship.enable = true;
-    cursor-theme.enable = true;
-    ssh = {
-      enable = true;
-      hosts = {
-        yulee = { };
-        note10.Port = 2022;
-      };
-    };
-    opencode.enable = true;
+    # kitty, starship, eza, the cursor theme, ssh, direnv, opencode,
+    # easyeffects and the side dock are home features (~/config/home). This is
+    # only the daemon side of direnv.
     direnv.enable = true;
     nix-settings.enable = true;
     # The system epoch (features/core/epoch): epoch.json in the toplevel, the
@@ -307,7 +299,6 @@ in
     emacs.enable = true;
     # Package sets, each owning its own list (features/<name>/packages.nix).
     base.enable = true;
-    eza.enable = true;
     dev-toolchain.enable = true;
     latex.enable = true;
     media.enable = true;
@@ -365,14 +356,10 @@ in
     # Toggle for the built-in keyboard, driven from the control centre. serio0
     # here is the i8042 KBD port; the option's description says how to confirm.
     embedded-keyboard.enable = true;
-    # Right-edge side dock (from sihooleebd/nixos). Keys: SUPER+S show/park,
-    # SUPER+CTRL+S dock/undock the focused window, SUPER+ALT+left/right or a
-    # 3-finger swipe on a card shift the pile, SUPER+P picture-in-picture,
-    # SUPER+ALT+T dock terminal. keystone = the 3D trapezoid look (plus
-    # scale-to-fit and the swipe), a Hyprland patch.
-    sidedock.enable = true;
     # Cast to Miracast TVs/monitors (Wi-Fi Direct) and Chromecasts.
     wireless-display.enable = true;
+    # keystone: the 3D trapezoid look of the side dock (a home feature), plus
+    # scale-to-fit and the swipe -- a Hyprland patch, so the system's.
     hyprland.keystone.enable = true;
     # Galaxy Z Fold 6 as a stylus tablet (~/git_shit/foldpen): S Pen or a dummy
     # pen in, low-fps mirror out, 3-finger gestures on the phone.
@@ -476,7 +463,6 @@ in
     power.enable = true;
     flatpak.enable = true;
     flamenco.enable = false;
-    easyeffects.enable = true;
 
     boot = {
       enable = true;
