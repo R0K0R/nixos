@@ -55,25 +55,13 @@
     "claude-code-bin": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-Ny0spTzoBsY/+24GU/h8e6KY2Ko8FPHnCoq5XhG6yy0=",
+        "narHash": "sha256-elmSD0Y8uJnvPgExDYAPl9yUriP3wHlN/Z9axExaKHw=",
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-code-releases/2.1.296/linux-x64/claude"
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.310/linux-x64/claude"
       },
       "original": {
         "type": "file",
-        "url": "https://downloads.claude.ai/claude-code-releases/2.1.296/linux-x64/claude"
-      }
-    },
-    "claude-desktop-bin": {
-      "flake": false,
-      "locked": {
-        "narHash": "sha256-l72DSyLqKmfVNkA69tRXcdE7ayOaN9zrryk2WjDNzvY=",
-        "type": "file",
-        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_2.31226.1_amd64.deb"
-      },
-      "original": {
-        "type": "file",
-        "url": "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_2.31226.1_amd64.deb"
+        "url": "https://downloads.claude.ai/claude-code-releases/2.1.310/linux-x64/claude"
       }
     },
     "claude-helper": {
@@ -286,22 +274,6 @@
         "type": "github"
       }
     },
-    "easyeffects-presets": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1790709287,
-        "narHash": "sha256-Nd4LOgiZyrrkXeWfpBfrEkZwJ+i/xVjg6EPNf/+sGjw=",
-        "owner": "JackHack96",
-        "repo": "EasyEffects-Presets",
-        "rev": "1ac92c9be57bdfccec3fb9820924f9a870a9d56f",
-        "type": "github"
-      },
-      "original": {
-        "owner": "JackHack96",
-        "repo": "EasyEffects-Presets",
-        "type": "github"
-      }
-    },
     "emacs-overlay": {
       "inputs": {
         "nixpkgs": [
@@ -365,22 +337,6 @@
         "system"
       ]
     },
-    "feat-claude-desktop": {
-      "inputs": {
-        "claude-desktop-bin": "claude-desktop-bin"
-      },
-      "locked": {
-        "path": "./features/apps/claude-desktop",
-        "type": "path"
-      },
-      "original": {
-        "path": "./features/apps/claude-desktop",
-        "type": "path"
-      },
-      "parent": [
-        "system"
-      ]
-    },
     "feat-claude-science": {
       "inputs": {
         "claude-science-bin": "claude-science-bin"
@@ -416,22 +372,6 @@
       },
       "original": {
         "path": "./features/session/dms",
-        "type": "path"
-      },
-      "parent": [
-        "system"
-      ]
-    },
-    "feat-easyeffects": {
-      "inputs": {
-        "easyeffects-presets": "easyeffects-presets"
-      },
-      "locked": {
-        "path": "./features/apps/easyeffects",
-        "type": "path"
-      },
-      "original": {
-        "path": "./features/apps/easyeffects",
         "type": "path"
       },
       "parent": [
@@ -1155,10 +1095,8 @@
       "inputs": {
         "feat-agenix": "feat-agenix",
         "feat-claude-code": "feat-claude-code",
-        "feat-claude-desktop": "feat-claude-desktop",
         "feat-claude-science": "feat-claude-science",
         "feat-dms": "feat-dms",
-        "feat-easyeffects": "feat-easyeffects",
         "feat-emacs": "feat-emacs",
         "feat-foldpen": "feat-foldpen",
         "feat-hakuspace": "feat-hakuspace",
@@ -1175,11 +1113,11 @@
         "tuning-cache-victus-15": "tuning-cache-victus-15"
       },
       "locked": {
-        "lastModified": 1792906842,
-        "narHash": "sha256-6VA2k0hDN5GsfQokFpDz+Sz3YeoK/iErp+jyTKpSuHQ=",
+        "lastModified": 1793017830,
+        "narHash": "sha256-pLONr3XQp+Fgcx+nfMUVIYK/XZ77DDvIjTM2c7GgqG4=",
         "owner": "R0K0R",
         "repo": "nixos",
-        "rev": "6339d3a2342ff152cfcbb2746e2781c28ee9c28a",
+        "rev": "d606a7f8bf357763a24318489a29b4016e2a6e54",
         "type": "github"
       },
       "original": {

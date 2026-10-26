@@ -129,6 +129,11 @@
               # so a module cannot name userInputs there. It only declares options.
               bonfire.homeModules.bonfire
               ./modules
+              # This repo's feature tree: features/<category>/<feature>/home.nix,
+              # collected like the system's (system.lib.homeFeatures). kitty,
+              # starship, eza, the cursor theme and the ssh config, which the
+              # system's dell-latitude used to give this home (2026-10-26).
+              (system.lib.homeFeatures ./features)
             ]
             ++ hostModule host;
           };

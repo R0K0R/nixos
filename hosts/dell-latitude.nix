@@ -51,7 +51,21 @@
     # --- shell and editors -----------------------------------------------------------------
     fastfetch.enable = true; # system info with the bonfire logo (see REBRAND.md)
     fishTools.enable = true; # zoxide + fzf
-    kittyLook.enable = true; # DepartureMono + 8 px margin
+    kitty.enable = true; # features/apps/kitty
+    kittyLook.enable = true; # DepartureMono + 8 px margin, over the kitty feature
+    starship.enable = true;
+    eza.enable = true;
+    cursor-theme.enable = true;
+    ssh = {
+      enable = true;
+      # Interactive `ssh yulee`, as himself with his own key. yulee is in the
+      # `injoystickly@` tailnet and this laptop is in `sihooleebd@`: a SHARED
+      # node there, reachable by FQDN only.
+      hosts.yulee = {
+        HostName = "yulee.tail2d4da1.ts.net";
+        User = "benjamin";
+      };
+    };
     fcitxTrayText.enable = true;
     neovim.enable = true;
     ownDoomConfig.enable = true; # sihooleebd/doom-emacs instead of the system's Doom config
