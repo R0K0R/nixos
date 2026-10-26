@@ -139,6 +139,27 @@ in
 
       quickshell.package = pkgs.quickshell;
     };
+
+    /*
+      Never remember a passwordless account. The greeter preselects the
+      remembered user and, with fingerprint auth available, starts PAM at
+      once; for an account with an empty hash pam_unix's nullok then succeeds
+      without a prompt, so after one guest login every boot went straight
+      back into guest with no way to pick r0k0r (2026-10-26). Dropping the
+      key before the greeter reads it leaves the user picker up instead.
+    */
+    systemd.services.greetd.preStart =
+      let
+        passwordless = lib.attrNames (lib.filterAttrs (_: u: u.passwordless) config.my.users);
+      in
+      lib.mkIf (passwordless != [ ]) (lib.mkAfter ''
+        mem=/var/lib/dms-greeter/.local/state/memory.json
+        if [ -f "$mem" ] && ${pkgs.jq}/bin/jq -e --argjson pl '${builtins.toJSON passwordless}' \
+             '.lastSuccessfulUser as $u | $pl | index($u)' "$mem" >/dev/null 2>&1; then
+          ${pkgs.jq}/bin/jq 'del(.lastSuccessfulUser)' "$mem" > "$mem.tmp" && mv "$mem.tmp" "$mem"
+          chown greeter: "$mem" || :
+        fi
+      '');
     })
 
   ];
