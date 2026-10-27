@@ -155,14 +155,7 @@
     */
     fish.systemIntegration = true;
 
-    /*
-      btop with CUDA, replacing the plain btop that features/base contributes.
-      Goes through my.packages.extra rather than users.users directly: extra is
-      ordered mkOrder 100, so under buildEnv's ignoreCollisions first-wins it is
-      deterministically the one on PATH, and features/packages emits a warning
-      naming the shadowed package instead of leaving it to module import order.
-    */
-    packages.extra.user = with pkgs; [ (btop.override { cudaSupport = true; }) ];
+    # btop with CUDA is r0k0r's home's (hosts/victus-15.nix there).
 
     locale = {
       enable = true;

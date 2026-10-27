@@ -381,18 +381,8 @@
       device = "/dev/input/by-path/pci-0000:00:15.1-platform-i2c_designware.1-event";
     };
 
-    /*
-      One-offs that do not justify a feature. Literal list -- see
-      my.packages.extra's own docs on why lookup.nix cannot read a mkIf here.
-    */
-    packages.extra.user = with pkgs; [
-      yt-dlp
-      mpv
-      foliate
-      localsend
-      # Google Workspace CLI (googleworkspace/cli); `gws classroom` for Classroom.
-      gws
-    ];
+    # r0k0r's one-off packages (yt-dlp, mpv, foliate, localsend, gws) are his
+    # home's (hosts/galaxybook4-pro360.nix there).
 
     /*
       Bootstrap, done: /etc/agenix/identity.txt holds the private age key
