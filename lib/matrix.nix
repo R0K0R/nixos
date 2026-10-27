@@ -67,8 +67,8 @@
             asserts it. CA alone is therefore the daemon flag only.
     btrfs-layout   /nix as its own subvolume (the host's, or @nix on a
             synthetic btrfs root).
-    impermanence   requires btrfs-layout (+ rootSubvolume, persist, systemd
-            initrd, which "on" supplies). Off also drops home = "impermanent"
+    impermanence   requires btrfs-layout (+ rootSubvolume, persist, which
+            "on" supplies). Off also drops home = "impermanent"
             from the host's users, which the registry refuses without the
             host fact -- galaxybook's r0k0r.
     guest-overlay  requires btrfs-layout; on = the feature + the host fact +
@@ -246,7 +246,6 @@ let
             swap.enable = lib.mkIf config.my.swapfile.enable (f true);
           };
           my.swapfile.path = lib.mkOverride 900 "/swap/swapfile";
-          boot.initrd.systemd.enable = f true;
           # impermanence asserts that every filesystem it binds into is
           # mounted in the initrd. victus-15's /home is its own filesystem
           # (found by this matrix): an impermanent victus would need this too.

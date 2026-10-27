@@ -60,7 +60,6 @@ in
     d.device == "/dev/disk/by-uuid/af35f49a-284f-481a-9e62-22e151185420"
     && d.allowDiscards
     && d.crypttabExtraOpts == [ "tpm2-device=auto" ]
-    && c.boot.initrd.systemd.enable
     && c.boot.initrd.systemd.tpm2.enable
   ) (builtins.toJSON c.boot.initrd.luks.devices.cryptroot.crypttabExtraOpts);
 
@@ -86,12 +85,6 @@ in
       hostWith {
         imports = [ ../hosts/galaxybook4-pro360/luks.nix ];
         fileSystems."/".device = lib.mkForce "/dev/disk/by-uuid/af35f49a-284f-481a-9e62-22e151185420";
-      }
-    );
-    luksScriptedInitrd = refusedBy "luks without the systemd initrd" "boot.initrd.systemd.enable" (
-      hostWith {
-        imports = [ ../hosts/galaxybook4-pro360/luks.nix ];
-        boot.initrd.systemd.enable = lib.mkForce false;
       }
     );
     luksBothUuidAndDevice = refusedBy "uuid and device both set" "exactly one of uuid and device" (

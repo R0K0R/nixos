@@ -268,10 +268,6 @@ in
             message = "my.impermanence: ${cfg.persistRoot} must be a filesystem mounted with neededForBoot.";
           }
           {
-            assertion = config.boot.initrd.systemd.enable;
-            message = "my.impermanence: the rollback is a systemd-initrd service; set boot.initrd.systemd.enable.";
-          }
-          {
             # agenix decrypts at activation with these keys: a key on the
             # wiped root is gone after the first reboot, and every secret with it.
             assertion = !(config.my.agenix.enable or false) || lib.all isPersisted config.age.identityPaths;

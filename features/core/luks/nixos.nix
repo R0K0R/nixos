@@ -48,8 +48,8 @@
   header with no backup loses the whole disk, and the backup plus any
   keyslot secret decrypts it, so it is as sensitive as the key.
 
-  ORDER IN THE INITRD (systemd stage 1, the NixOS default; impermanence needs
-  it too). NixOS writes /etc/crypttab into the initrd from
+  ORDER IN THE INITRD (systemd stage 1, the only NixOS stage 1 now;
+  impermanence needs it too). NixOS writes /etc/crypttab into the initrd from
   boot.initrd.luks.devices, and systemd-cryptsetup@<name>.service opens the
   mapper. The btrfs inside keeps its own filesystem UUID through an in-place
   encryption, so fileSystems."/" can stay /dev/disk/by-uuid/<btrfs uuid>: that
@@ -186,10 +186,6 @@ in
           {
             assertion = cfg.devices != { };
             message = "my.luks.enable needs at least one my.luks.devices.<name>.";
-          }
-          {
-            assertion = config.boot.initrd.systemd.enable;
-            message = "my.luks: TPM2 unlock via crypttab is systemd-cryptsetup's; set boot.initrd.systemd.enable.";
           }
           {
             assertion = !cfg.tpm2.enable || config.boot.initrd.systemd.tpm2.enable;
