@@ -23,7 +23,8 @@
     from the derivation's or that take a non-default stdenv argument.
 
   ccache's own configuration (cache dir, sizes, L2 peers) lives in
-  features/ccache. Only `wrapperConfig` crosses over, and it carries no
+  features/ccache, and so does sccache's for the Rust packages
+  (my.ccache.rust, overlays/rust-cache.nix). Only `wrapperConfig` crosses over, and it carries no
   remote-storage setting on purpose: env is ccache's highest-precedence config
   source, so L2 there would be baked into every derivation hash instead of
   staying a runtime lever.
@@ -166,7 +167,10 @@ in
     */
     warnings = lib.optional (
       config.my.ccache.enable && !(cfg.enable && config.my.tuning.enable && config.my.tuning.march != null)
-    ) "my.ccache.enable has no effect here: only my.tuning.heavy wraps packages in ccache, and it acts only with my.tuning.enable and my.tuning.march set. (my.ccache.builder still applies.)";
+    ) "my.ccache.enable has no effect here: only my.tuning.heavy wraps packages in ccache, and it acts only with my.tuning.enable and my.tuning.march set. (my.ccache.builder still applies.)"
+    ++ lib.optional (
+      config.my.ccache.rust.enable && !(cfg.enable && config.my.tuning.enable && config.my.tuning.march != null)
+    ) "my.ccache.rust.enable has no effect here: only my.tuning.heavy puts sccache into the tuned set's rustPlatform, and it acts only with my.tuning.enable and my.tuning.march set. (my.ccache.builder still creates the sccache directory.)";
   }
   (lib.mkIf cfg.enable {
     nixpkgs.overlays = lib.mkBefore [
@@ -183,6 +187,21 @@ in
           normalize = config.my.ccache.crossDerivation.enable;
           extraConfig = config.my.ccache.wrapperConfig;
         };
+      })
+    ];
+  })
+  /*
+    sccache for Rust (my.ccache.rust). Independent of my.ccache.enable --
+    different compiler, different wrapper -- but the same client/builder split
+    and the same cache root, so it lives in features/nix/ccache. Not ordered: it
+    replaces only `rustPlatform`, which no other tuning overlay touches, and
+    packages pick it up through callPackage from the final set.
+  */
+  (lib.mkIf (cfg.enable && config.my.ccache.rust.enable) {
+    nixpkgs.overlays = [
+      (import ./overlays/rust-cache.nix {
+        inherit lib;
+        inherit (config.my.ccache) cacheDir;
       })
     ];
   })

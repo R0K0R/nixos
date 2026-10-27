@@ -224,7 +224,7 @@ on upstream nixpkgs:
 - **btrfs-layout**
 - **impermanence** -- requires btrfs-layout
 - **guest-overlay** -- requires btrfs-layout
-- **ccache** -- client half consumed only by tuning's heavy overlay; builder half standalone
+- **ccache** -- client half consumed only by tuning's heavy overlay; builder half standalone (my.ccache.rust, sccache for the tuned Rust packages, is the same split)
 - **ca-derivations** -- the "tuned" package policy asserts march
 - **luks** -- TPM2 unlock, **no PIN** (the user's choice); requires nothing
 - **tuning** -- three independent levers, all default off:

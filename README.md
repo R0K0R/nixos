@@ -146,7 +146,7 @@ lib/
   registry-users.nix  registry -> my.users for the host being evaluated
   home-generator.nix  the one generator of a user's home (integrated + homeLib)
   home-manager.nix NixOS-integrated home-manager, on the generator
-tuning/            march, overlays, CA, heavy (mold+ccache), runtime-cache classifier
+tuning/            march, overlays, CA, heavy (mold+ccache+sccache), runtime-cache classifier
 templates/home/    `nix flake init -t .#home`: a user's home repo
 age/ + secrets.nix agenix secrets (encrypted) and their recipient map
 docs/              design notes and resolved investigations
@@ -171,7 +171,7 @@ empty category and two features with the same leaf name are errors.
 | category | features |
 |---|---|
 | `core/` | `_meta` (cross-feature requires/roles), agenix, base, boot (+ optional plymouth splash), locale, packages, swapfile, users |
-| `nix/` | ccache, nix-settings, remote-builder |
+| `nix/` | ccache (+ sccache for Rust), nix-settings, remote-builder |
 | `hardware/` | cuda, embedded-keyboard, keyd, libinput, pipewire, power, samsung-galaxybook, touch-gestures, upower, x-folding-trackpad |
 | `session/` | compositor, dms, fcitx, fonts, greetd, hakuspace, hyprland, niri, qt-theming, session-env, session-services, tuigreet |
 | `net/` | discovery, globaltun, headscale, network, openvpn, syncthing, tailscale, wireless-display |
@@ -425,6 +425,7 @@ narrowings and handover/kiosk misconfigurations are refused.
 | tuning lever `lto` | `my.tuning.lto.enable` | -- (`my.tuning.enable`; native mode without march) | exists; on for both hosts, with march |
 | heavy (mold + ccache over the tuned set) | `my.tuning.heavy` | -- | exists |
 | ccache | `my.ccache` (features/nix/ccache); in `_meta` as `ccache` (client) and `ccache.builder` | -- (the client half's only consumer is `my.tuning.heavy`, which warns when the two are not paired; `builder` with peers on the default key asserts agenix) | exists; on for both tuned hosts, `builder` on victus-15. Its own feature: tuning reads `wrapperConfig`, nothing more |
+| sccache for Rust (shared across packages: fixed vendor path) | `my.ccache.rust.enable` (client; features/nix/ccache/sccache.nix, applied to the tuned set's `rustPlatform` by tuning/overlays/rust-cache.nix); `my.ccache.rust.maxSize` (builder's `sccache.toml`, default 10G) | -- (same pairing warning as ccache; a builder without `<cacheDir>/sccache.toml` builds uncached, same output) | exists; on for both tuned hosts, builder dir on victus-15; yulee by hand (features/nix/ccache/yulee.md §6a, not done yet) |
 | content-addressed derivations | `my.ca-derivations` (features/nix/ca-derivations; the "tuned" package policy is applied by tuning/ca.nix, which needs tuning's classifier, and asserts march) | ca-derivations live on the evaluating daemon and every builder | exists; on for both tuned hosts |
 | btrfs-layout (`/nix` its own subvolume; root, persist, swap subvolumes) | `my.btrfs-layout` (features/core/btrfs-layout) | -- | exists; on for victus-15 (`/nix` only) and galaxybook4-pro360 (the full impermanence layout) |
 | impermanence | `my.impermanence` (features/core/impermanence) + registry fact `features.<host>.impermanence` | btrfs-layout (`_meta`; plus `rootSubvolume` and `persist`) | **live on galaxybook4-pro360 since 2026-10-24** (docs/impermanence-migration.md); `tests/impermanence-eval.sh` |

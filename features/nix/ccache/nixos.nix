@@ -36,6 +36,20 @@ ${lib.optionalString cfg.crossDerivation.enable ''
 ''}    remote_storage = file:${stage}${lib.concatMapStrings (p: " file:${peerDir p}|read-only=true|update-mtime=true") (lib.attrValues b.peers)}
   '';
 
+  /*
+    sccache's config for a BUILDER, the Rust counterpart of builderConf. The
+    derivations only name this file (SCCACHE_CONF) and the directory, so size
+    and read/write mode are runtime levers here exactly like ccache.conf's.
+    `dir` must be in the file, not the derivation env: an SCCACHE_DIR in the
+    env replaces the file's whole [cache.disk] table, size and all. sccache
+    trims to `size` itself (an LRU per server), so no trim timer.
+  */
+  sccacheConf = pkgs.writeText "sccache.toml" ''
+    [cache.disk]
+    dir = "${cfg.cacheDir}/sccache"
+    size = "${cfg.rust.maxSize}"
+  '';
+
   peerType = lib.types.submodule ({ name, ... }: {
     options = {
       name = lib.mkOption { type = lib.types.str; default = name; };
@@ -93,6 +107,34 @@ in
       type = lib.types.str;
       default = "40G";
       description = "max_size for L1, written to the builder's ccache.conf (not the derivation env, so it is a runtime lever). nixpkgs' programs.ccache never sets this; ccache's 5 GiB default thrashes on webkit-scale objects.";
+    };
+
+    rust = {
+      enable = lib.mkEnableOption ''
+        sccache for the Rust packages of the tuned host set (client half;
+        consumed by tuning/heavy.nix like the rest of this feature). Every
+        rustPlatform.buildRustPackage there gets a setup hook that moves the
+        vendored crates to a package-independent path and compiles through a
+        shared sccache, so a dependency crate built for one package is a hit
+        for the next -- unlike ccache, whose reuse stops at the derivation.
+
+        Changing it changes every Rust derivation in the tuned set (the hook is
+        an input), never anything substituted from upstream. Builders without
+        the cache build uncached and produce the same output. Measured: first
+        builds are not faster (~5% slower), same-package rebuilds 10-20%
+        faster -- see features/nix/ccache/sccache.nix
+      '';
+
+      maxSize = lib.mkOption {
+        type = lib.types.str;
+        default = "10G";
+        description = ''
+          Size cap of the builder's sccache directory, written to
+          <cacheDir>/sccache.toml (the builder half; a runtime lever, not in any
+          derivation). Small by default: victus-15's NVMe wear is a concern,
+          and the reuse is dependency rlibs, which are small. Set per builder.
+        '';
+      };
     };
 
     wrapperConfig = lib.mkOption {
@@ -214,6 +256,18 @@ ${lib.optionalString cfg.crossDerivation.enable "        export CCACHE_NIX_STORE
           a runtime edit is an experiment that lasts until the next switch.
         */
         "C+ ${l1}/ccache.conf 0664 root nixbld - ${builderConf}"
+
+        /*
+          sccache (my.ccache.rust): the objects, and its config BESIDE them --
+          sccache's LRU walks everything under its own directory and would
+          evict a config file kept there. Copied for the same reason as
+          ccache.conf: the derivations read it from inside the sandbox. Always
+          created on a builder, whatever this host's own rust.enable: the
+          clients are other hosts. Moving sccache.toml away switches every
+          client on this builder to uncached builds at the next build.
+        */
+        "d ${cfg.cacheDir}/sccache 2775 root nixbld -"
+        "C+ ${cfg.cacheDir}/sccache.toml 0664 root nixbld - ${sccacheConf}"
       ] ++ map (p: "d ${peerDir p} 0755 root root -") (lib.attrValues b.peers);
 
       /*

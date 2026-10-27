@@ -148,6 +148,44 @@ Sanity: `tailscale ping 100.64.0.2` must say `via <ip>:41641` (direct), not
     CRON
     sudo chmod +x /etc/cron.daily/ccache-trim-stage
 
+## 6a. sccache for Rust (my.ccache.rust) -- NOT DONE YET
+
+The Rust half (features/nix/ccache/sccache.nix, tuning/overlays/rust-cache.nix)
+needs two things on the builder and nothing else: the object directory and the
+config file beside it. The sandbox path is the existing `/var/cache/ccache`, so
+nix.conf does not change. Until both exist, every Rust build here prints
+"sccache-hook: ... not usable in this sandbox; building without sccache" and
+builds exactly as it would with the cache (same output -- the vendor move and
+the remap do not depend on it).
+
+    sudo mkdir -m2775 /var/cache/ccache/sccache
+    sudo chown root:nixbld /var/cache/ccache/sccache
+    sudo tee /var/cache/ccache/sccache.toml <<'CONF'
+    [cache.disk]
+    dir = "/var/cache/ccache/sccache"
+    size = "20G"
+    CONF
+    sudo chown root:nixbld /var/cache/ccache/sccache.toml
+    sudo chmod 664 /var/cache/ccache/sccache.toml
+
+`dir` must be in this file and must be exactly that path: the derivations check
+`/var/cache/ccache/sccache` is writable before they turn sccache on, and they
+deliberately never set SCCACHE_DIR (an env SCCACHE_DIR replaces this file's
+whole `[cache.disk]` table, `size` with it). The file is NOT inside the object
+directory because sccache's LRU walks every file under it and would evict it.
+`size` is read by each build's server at start, so like ccache.conf it is a
+runtime lever; sccache trims to it itself, no cron job. `rw_mode = "READ_ONLY"`
+in the same table makes this builder use the cache without adding to it;
+moving the file away turns sccache off here at the next build.
+
+2775 root:nixbld, same as l1: the builds' servers run with umask 002 so the ten
+nixbld users can write into each other's subdirectories.
+
+Leftovers to remove at the same time (r0k0r-owned parents, nixbldN-owned
+contents, hence sudo): the 2026-10-27 measurement caches
+
+    sudo rm -rf /var/cache/ccache/l2-stage/sccache-probe /var/cache/ccache/l2-stage/sccache-impl
+
 ## 7. CA derivations (tuning/ca.nix) -- daemon-side flag (done)
 
     experimental-features = nix-command flakes ca-derivations
