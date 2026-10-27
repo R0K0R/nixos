@@ -1,7 +1,8 @@
 # Code completion for Emacs (minuet) on the galaxybook, served from this
 # machine's GPU: Qwen2.5-Coder 1.5B, the best of the local models in the Typst
-# completion benchmark (9/40 exact, ~0.2 s on the RTX 3050) and the one that
-# fits a 4 GB card whole.
+# completion benchmark (~0.2 s on the RTX 3050).  At 8 bits (1.65 GB): 11/40
+# exact against 4-bit's 9/40 and 6-bit's 10/40, no slower; the 3B was no
+# better than the 1.5B, and a 4 GB card has the room.
 #
 # Listens on the Tailscale address only.  The firewall is off on this host and
 # it also sits on school Wi-Fi, so 0.0.0.0 would serve the whole network.
@@ -10,8 +11,8 @@
 let
   # Pinned to the Hugging Face commit the benchmark used.
   model = pkgs.fetchurl {
-    url = "https://huggingface.co/QuantFactory/Qwen2.5-Coder-1.5B-GGUF/resolve/73c3c696087d8d57a3005e31f2afe78f43059739/Qwen2.5-Coder-1.5B.Q4_K_M.gguf";
-    hash = "sha256-qcy2voAkEuYeGsvuYoeiOxHlbpRxhWD5EAdcZLYZSRA=";
+    url = "https://huggingface.co/QuantFactory/Qwen2.5-Coder-1.5B-GGUF/resolve/73c3c696087d8d57a3005e31f2afe78f43059739/Qwen2.5-Coder-1.5B.Q8_0.gguf";
+    hash = "sha256-S1JPnoUJa1kICcHTXnthaQDQ2XfRLS907sFoUs3YXtY=";
   };
 in
 {
