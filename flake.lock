@@ -80,18 +80,6 @@
         "type": "github"
       }
     },
-    "claude-science-bin": {
-      "flake": false,
-      "locked": {
-        "narHash": "sha256-LlU9hrLsypPg29REDiSdnkGRQp80BqkZgYoqDVkQHk4=",
-        "type": "file",
-        "url": "https://downloads.claude.ai/claude-science/0.1.60/linux-x64"
-      },
-      "original": {
-        "type": "file",
-        "url": "https://downloads.claude.ai/claude-science/0.1.60/linux-x64"
-      }
-    },
     "dank-greeter": {
       "inputs": {
         "dank-qml-common": "dank-qml-common",
@@ -209,22 +197,6 @@
         "type": "github"
       }
     },
-    "doom-private_2": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1792657374,
-        "narHash": "sha256-JVIwE8FdrzN8B1CiMIEcuNXoHK04FB1ezLgfg9BAu4Y=",
-        "owner": "R0K0R",
-        "repo": "doom-emacs",
-        "rev": "36106be6bc6064826eaa14e1f827623f947b3d94",
-        "type": "github"
-      },
-      "original": {
-        "owner": "R0K0R",
-        "repo": "doom-emacs",
-        "type": "github"
-      }
-    },
     "doomdir": {
       "flake": false,
       "locked": {
@@ -337,22 +309,6 @@
         "system"
       ]
     },
-    "feat-claude-science": {
-      "inputs": {
-        "claude-science-bin": "claude-science-bin"
-      },
-      "locked": {
-        "path": "./features/apps/claude-science",
-        "type": "path"
-      },
-      "original": {
-        "path": "./features/apps/claude-science",
-        "type": "path"
-      },
-      "parent": [
-        "system"
-      ]
-    },
     "feat-dms": {
       "inputs": {
         "claude-helper": "claude-helper",
@@ -380,7 +336,6 @@
     },
     "feat-emacs": {
       "inputs": {
-        "doom-private": "doom-private_2",
         "nix-doom-emacs-unstraightened": "nix-doom-emacs-unstraightened",
         "nixpkgs": [
           "system",
@@ -1095,7 +1050,6 @@
       "inputs": {
         "feat-agenix": "feat-agenix",
         "feat-claude-code": "feat-claude-code",
-        "feat-claude-science": "feat-claude-science",
         "feat-dms": "feat-dms",
         "feat-emacs": "feat-emacs",
         "feat-foldpen": "feat-foldpen",
@@ -1113,11 +1067,11 @@
         "tuning-cache-victus-15": "tuning-cache-victus-15"
       },
       "locked": {
-        "lastModified": 1793017830,
-        "narHash": "sha256-pLONr3XQp+Fgcx+nfMUVIYK/XZ77DDvIjTM2c7GgqG4=",
+        "lastModified": 1793062524,
+        "narHash": "sha256-K05lRn+iHGYHn8S1rzZtg0kbZj6qiloi66pcbPrWBgk=",
         "owner": "R0K0R",
         "repo": "nixos",
-        "rev": "d606a7f8bf357763a24318489a29b4016e2a6e54",
+        "rev": "44861eae384542e6943e2a5c495a6b6d95ee4729",
         "type": "github"
       },
       "original": {

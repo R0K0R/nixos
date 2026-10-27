@@ -64,8 +64,10 @@ flake's inputs (the system's feature halves need it); this repo's own inputs are
 
 The system flake's feature home halves (fish, kitty, cursor theme, qt theming, ...) are still included in
 this home by `mkHome`. Where he differs from them the difference is a small module here that layers on
-top (`shell/kitty.nix` overrides the kitty font and margin, `shell/fish.nix` adds zoxide and fzf,
-`editor/emacs.nix` swaps the Doom directory); where he does not, there is nothing here at all.
+top (`shell/kitty.nix` overrides the kitty font and margin, `shell/fish.nix` adds zoxide and fzf);
+where he does not, there is nothing here at all. `features/` holds his own copies of what the system
+used to give this home: kitty, starship, eza, the cursor theme, ssh, and Doom Emacs (built from his
+`doom-private` input).
 
 ## Rebuilding
 

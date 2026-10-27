@@ -68,7 +68,14 @@
     };
     fcitxTrayText.enable = true;
     neovim.enable = true;
-    ownDoomConfig.enable = true; # sihooleebd/doom-emacs instead of the system's Doom config
+    # Doom Emacs from his own config (the doom-private input); the Emacs build is the system's.
+    emacs = {
+      enable = true;
+      font = {
+        family = "DepartureMono Nerd Font";
+        size = 16;
+      };
+    };
 
     # --- apps ------------------------------------------------------------------------------
     # KakaoTalk via Wine (galaxybook runs it via Waydroid instead).

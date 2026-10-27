@@ -70,10 +70,9 @@
     hearth.url = "github:sihooleebd/hearth";
 
     /*
-      His own Doom config (the former ~/.doom.d), a plain source tree. Used instead of the
-      system's Doom directory when my.ownDoomConfig.enable is set; the Emacs build and
-      Unstraightened (the pipeline that turns a Doom directory into Nix derivations) stay the
-      system's.
+      His own Doom config (the former ~/.doom.d), a plain source tree: what features/apps/emacs
+      builds from. The Emacs build and Unstraightened (the pipeline that turns a Doom directory
+      into Nix derivations) stay the system's.
     */
     doom-private = {
       url = "github:sihooleebd/doom-emacs";

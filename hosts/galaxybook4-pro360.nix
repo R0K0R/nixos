@@ -57,7 +57,6 @@
     kittyLook.enable = true; # DepartureMono + 8 px margin
     fcitxTrayText.enable = true;
     neovim.enable = true;
-    ownDoomConfig.enable = true; # sihooleebd/doom-emacs instead of the system's Doom config
 
     # --- apps ------------------------------------------------------------------------------
     # KakaoTalk via Wine (galaxybook runs it via Waydroid instead).
