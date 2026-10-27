@@ -1,3 +1,13 @@
+/*
+  The SYSTEM half of emacs: what shapes the host's package set or needs root.
+  The broken-flag handlers and the emacsPackagesFor overlay below, the Emacs
+  builds (./env.nix, which the home half imports), the authinfo secret, and
+  the `headless` fact. The Doom config, the daemon, gpg-agent, fonts and the
+  Doom config pin are the home half (r0k0r's home repo, features/apps/emacs;
+  benjamin's has its own) since 2026-10-27. Unstraightened's home module
+  (./flake.nix homeModule) still goes into every home from
+  lib/home-generator.nix: both homes build Doom through it.
+*/
 { config, lib, ... }:
 
 let
@@ -46,61 +56,9 @@ in
         decrypted. Exactly the silent-breakage class that assertion exists for.
       '';
     };
-
-    machineLocalElisp = lib.mkOption {
-      type = lib.types.lines;
-      default = "";
-      description = ''
-        Elisp written to ~/.config/home-manager/doom-machine-local.el, which
-        Doom's config.el loads if present. For genuinely per-machine settings --
-        font sizes tuned to one display, and nothing that should follow the
-        config to another host.
-      '';
-    };
-
-    font = lib.mkOption {
-      type = lib.types.nullOr (
-        lib.types.submodule {
-          options = {
-            family = lib.mkOption {
-              type = lib.types.str;
-              description = ''Doom font family (e.g. "JetBrainsMonoNL Nerd Font").'';
-            };
-            size = lib.mkOption {
-              type = lib.types.int;
-              description = "Doom font size in px, tuned to this machine's display.";
-            };
-            weight = lib.mkOption {
-              type = lib.types.nullOr lib.types.str;
-              default = null;
-              description = ''Optional doom-font :weight (e.g. "semi-light"); variable-pitch stays default.'';
-            };
-          };
-        }
-      );
-      default = null;
-      description = ''
-        Per-machine Doom font. When set, generates the doom-machine-local.el hook that pins doom-font
-        + doom-variable-pitch-font and reloads -- the common per-host tweak, so a host writes
-        `my.emacs.font = { family; size; }` instead of hand-copying the same defun. Prepended to
-        machineLocalElisp, which stays free-form for anything else.
-      '';
-    };
   };
 
-  # Accounts this feature applies to; defaults to the primary user.
-  options.my.emacs.users = import ../../../lib/user-scope.nix { inherit lib config; };
-
   config = lib.mkIf cfg.enable {
-    my.state.user.secret.directories = [
-      ".gnupg" # private keys behind authinfo.gpg (gpg-agent.conf is home-manager's)
-    ];
-    my.state.user.state.files = [
-      ".newsrc.eld" # Gnus read marks and subscriptions
-    ];
-    my.state.user.optional.directories = [
-      ".local/share/doom" # doomLocalDir: profiles and transient state; regenerated on first run
-    ];
     my.internal.features."emacs.authinfo" = {
       requires = [ "agenix" ];
       enabledBy = cfg.authinfoSecret != null;

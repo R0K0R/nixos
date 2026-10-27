@@ -16,15 +16,12 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Former ~/.doom.d (https://github.com/R0K0R/doom-emacs).
-    doom-private = {
-      url = "github:R0K0R/doom-emacs";
-      flake = false;
-    };
+    # The Doom config itself (formerly the doom-private input here) is each
+    # home repo's own input since 2026-10-27.
   };
 
   outputs =
-    { nix-doom-emacs-unstraightened, doom-private, ... }:
+    { nix-doom-emacs-unstraightened, ... }:
     let
       unstraightened = nix-doom-emacs-unstraightened;
       doomscript = "${unstraightened}/build-helpers/doomscript.nix";
@@ -111,6 +108,5 @@
             }
           ];
         };
-      doomDir = doom-private;
     };
 }

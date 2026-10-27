@@ -232,13 +232,8 @@
       # Weekly GC + 14-day retention (see the feature) keeps it in check.
       gc.automatic = true;
     };
-    emacs = {
-      enable = true;
-      font = {
-        family = "DepartureMono Nerd Font";
-        size = 16;
-      };
-    };
+    # The Emacs build; the Doom config and its font are his home's.
+    emacs.enable = true;
 
     # Package sets the home halves of these features read from.
     base.enable = true;

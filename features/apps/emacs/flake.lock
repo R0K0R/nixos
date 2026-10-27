@@ -1,21 +1,5 @@
 {
   "nodes": {
-    "doom-private": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1793031943,
-        "narHash": "sha256-V6W8UGzFeYV6S+X61c7FoM5nZuRpAHr4fmSFU4YOuHE=",
-        "owner": "R0K0R",
-        "repo": "doom-emacs",
-        "rev": "8ba50962e42f701257b1c09f141c87a6eddd5cc9",
-        "type": "github"
-      },
-      "original": {
-        "owner": "R0K0R",
-        "repo": "doom-emacs",
-        "type": "github"
-      }
-    },
     "doomdir": {
       "flake": false,
       "locked": {
@@ -131,7 +115,6 @@
     },
     "root": {
       "inputs": {
-        "doom-private": "doom-private",
         "nix-doom-emacs-unstraightened": "nix-doom-emacs-unstraightened",
         "nixpkgs": "nixpkgs"
       }

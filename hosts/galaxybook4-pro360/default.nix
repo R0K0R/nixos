@@ -478,18 +478,7 @@ in
     # features/_meta asserts my.agenix.enable alongside this.
     emacs.authinfoSecret = ../../age/authinfo.age;
 
-    emacs.machineLocalElisp = ''
-      ;;; -*- lexical-binding: t; -*-
-      ;;; Loaded by Doom `config.el` from ~/.config/home-manager/doom-machine-local.el
-
-      (defun my/machine-local-reset-fonts-h ()
-        (setq doom-font (font-spec :family "JetBrainsMonoNL Nerd Font" :size 13 :weight 'semi-light)
-              doom-variable-pitch-font (font-spec :family "JetBrainsMonoNL Nerd Font" :size 13))
-        (when (fboundp 'doom-init-fonts-h)
-          (doom-init-fonts-h 'reload)))
-
-      (add-hook 'emacs-startup-hook #'my/machine-local-reset-fonts-h)
-    '';
+    # The Doom config, its fonts and the daemon are the home's (emacs there).
 
     greetd.enable = true;
     qt-theming.enable = true;
