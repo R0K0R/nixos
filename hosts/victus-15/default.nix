@@ -258,6 +258,9 @@
     # dependency rebuilds to identical BYTES, this one when it rebuilds to
     # different bytes but identical HEADERS.
     ccache.crossDerivation.enable = true;
+    # sccache for the tuned set's Rust packages, shared across packages through
+    # a fixed vendor path (features/nix/ccache/sccache.nix).
+    ccache.rust.enable = true;
     # Builds for galaxybook's daemon as the trusted "nix-ssh" account; the
     # people on this machine are untrusted (registry).
     remote-builder.server = {
@@ -276,6 +279,9 @@
       # way by hand (features/ccache/yulee.md §5).
       peers.yulee = { host = "100.64.0.1"; };
     };
+    # sccache's cap on this builder (sccache.toml). Kept at the 10G default on
+    # purpose: NVMe wear on this machine is a concern.
+    ccache.rust.maxSize = "10G";
   };
 
   /*

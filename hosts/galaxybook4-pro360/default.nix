@@ -142,6 +142,9 @@
     # dependency rebuilds to identical BYTES, this one when it rebuilds to
     # different bytes but identical HEADERS.
     ccache.crossDerivation.enable = true;
+    # sccache for the tuned set's Rust packages, shared across packages through
+    # a fixed vendor path (features/nix/ccache/sccache.nix).
+    ccache.rust.enable = true;
 
     # Accounts (r0k0r, primary; groups incl. dialout) come from
     # registry/hosts.nix + registry/users/ -- see lib/registry-users.nix.
