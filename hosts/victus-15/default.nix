@@ -138,7 +138,6 @@
     */
 
     zsh = {
-      enable = true;
       systemIntegration = true;
       systemPlugins = true;
       root = {
@@ -150,17 +149,11 @@
     };
 
     /*
-      benjamin keeps fish. He never had the home-manager half either, and fish
-      needs none -- autosuggestions, syntax highlighting, prefix history search
-      and ctrl+arrow are all fish defaults. `users` scopes the home-manager side
-      to him alone, so r0k0r is unaffected; systemIntegration stays on because
-      there is again a fish login shell wanting vendor completion paths.
+      benjamin keeps fish. systemIntegration stays on because there is a fish
+      login shell wanting vendor completion paths; his fish config is his
+      home's (my.fish there).
     */
-    fish = {
-      enable = true;
-      systemIntegration = true;
-      users = [ "benjamin" ];
-    };
+    fish.systemIntegration = true;
 
     /*
       btop with CUDA, replacing the plain btop that features/base contributes.

@@ -55,7 +55,6 @@ let
             # Its own list, not the host's plus these: the real host now has a
             # guest and a handoff of its own (registry/users), and the checks
             # below are about exactly these accounts.
-            # benjamin too: the host file names him (my.fish.users).
             users = [ "r0k0r" "benjamin" "guest" "visitor" ];
             # Added to the host's own narrowing, not in place of it: `//`
             # on `narrow` would drop narrow.r0k0r.home = "impermanent".

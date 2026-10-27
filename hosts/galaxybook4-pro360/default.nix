@@ -237,16 +237,11 @@ in
     # Android build registers as a competing primary device and evicts the
     # phone, server-side.
     session-env.enable = true;
-    # benjamin's login shell (registry), as on victus-15: the feature scoped
-    # to him alone, so r0k0r's zsh is unaffected; systemIntegration for the
-    # vendor completion paths a fish login shell wants.
-    fish = {
-      enable = true;
-      systemIntegration = true;
-      users = [ "benjamin" ];
-    };
+    # benjamin's login shell (registry), as on victus-15: the vendor
+    # completion paths a fish login shell wants. His fish config is his
+    # home's; r0k0r's zsh config is r0k0r's home's.
+    fish.systemIntegration = true;
     zsh = {
-      enable = true;
       # r0k0r's login shell is zsh (above), so the NixOS module goes on too --
       # it is what puts system packages' /share/zsh site-functions on fpath.
       # Without it completions from system packages are silently absent.

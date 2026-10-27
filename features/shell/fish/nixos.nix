@@ -1,10 +1,14 @@
+/*
+  The SYSTEM half of fish: fish as a system shell (programs.fish, the vendor
+  completion paths) and the warning for a fish login shell without it. A
+  user's fish config is the home half (my.fish in a home repo) since
+  2026-10-27.
+*/
 { config, lib, pkgs, ... }:
 
 let
   cfg = config.my.fish;
 
-  # Its own packages, read here so the feature is self-contained.
-  pkgSet = import ./packages.nix { inherit pkgs; };
 
   # Accounts whose LOGIN shell is fish. Matched on pname rather than by
   # comparing derivations, so an overridden or wrapped fish still counts.
@@ -14,7 +18,6 @@ let
 in
 
 {
-  options.my.fish.enable = lib.mkEnableOption "the fish shell user config: aliases, abbreviations and interactive init";
 
   options.my.fish.systemIntegration = lib.mkOption {
     type = lib.types.bool;
@@ -42,8 +45,8 @@ in
 
         * /etc/fish/config.fish, and the fish package in systemPackages.
 
-      NOT enabled by `my.fish.enable`. That switch is the home-manager half --
-      a user's aliases, abbreviations and prompt -- and it is legitimate to want
+      NOT implied by the home half (my.fish in a home repo) -- a user's
+      aliases, abbreviations and prompt -- and it is legitimate to want
       fish as an interactive shell you invoke by name without making it a system
       shell. Auto-enabling would also make this feature stop describing what the
       machine does, which is the property the whole layout exists to keep.
@@ -56,16 +59,7 @@ in
     '';
   };
 
-  # Home-only feature: the NixOS side exists to declare the switch that
-  # features/fish/home.nix gates on via osConfig.
-  # Accounts this feature applies to; defaults to the primary user.
-  options.my.fish.users = import ../../../lib/user-scope.nix { inherit lib config; };
-
   config = lib.mkMerge [
-    (lib.mkIf cfg.enable {
-      my.packages.perUser = lib.genAttrs cfg.users (_: pkgSet.user);
-    })
-
     /*
       mkIf rather than `programs.fish.enable = cfg.systemIntegration`, because
       types.bool merges with mergeEqualOption: a host that also sets

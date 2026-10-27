@@ -216,12 +216,9 @@
     opendisplay.enable = true;
     session-env.enable = true;
     # His login shell. systemIntegration: the NixOS module (vendor completion
-    # paths, and NixOS refuses a fish login shell without programs.fish);
-    # enable: the home-manager half, which his home repo receives.
-    fish = {
-      enable = true;
-      systemIntegration = true;
-    };
+    # paths, and NixOS refuses a fish login shell without programs.fish). His
+    # fish config is his home's (my.fish there).
+    fish.systemIntegration = true;
     # kitty, starship, the cursor theme, eza and his ssh client config are
     # home features in his home repo (hosts/dell-latitude.nix there).
     firefox.enable = true;

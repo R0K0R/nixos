@@ -1,13 +1,18 @@
+/*
+  The SYSTEM half of zsh: zsh as a system and login shell (programs.zsh), the
+  plugins in /etc/zshrc, and root's zsh. ./interactive.nix holds the
+  preferences root shares with the home half (my.zsh in a home repo, which
+  imports it), since 2026-10-27.
+*/
 { config, lib, pkgs, ... }:
 
 let
   cfg = config.my.zsh;
 
-  # Its own packages, read here so the feature is self-contained.
-  pkgSet = import ./packages.nix { inherit pkgs; };
 
-  # Preferences shared with features/zsh/home.nix -- see that file's header for
-  # why they live apart from both halves.
+  # Preferences shared with the home half (my.zsh in a home repo, which
+  # imports this file through the system flake), so root's zsh and the
+  # user's cannot drift.
   interactive = import ./interactive.nix;
 
   # Accounts whose LOGIN shell is zsh. Matched on pname rather than by
@@ -18,8 +23,6 @@ let
 in
 
 {
-  options.my.zsh.enable = lib.mkEnableOption "the zsh shell user config: aliases, completion, highlighting and interactive init";
-
   options.my.zsh.systemIntegration = lib.mkOption {
     type = lib.types.bool;
     default = false;
@@ -79,8 +82,8 @@ in
     enable = lib.mkEnableOption ''
       zsh as root's login shell.
 
-      Separate from my.zsh.enable, which is the home-manager half and cannot
-      apply to root. Pair it with my.zsh.systemPlugins or root gets a bare
+      Separate from the home half (my.zsh in a home repo), which cannot apply
+      to root. Pair it with my.zsh.systemPlugins or root gets a bare
       zsh -- the warning below says so if it is missing
     '';
 
@@ -105,19 +108,7 @@ in
     };
   };
 
-  # Home-only feature: the NixOS side exists to declare the switch that
-  # features/zsh/home.nix gates on via osConfig.
-  # Accounts this feature applies to; defaults to the primary user.
-  options.my.zsh.users = import ../../../lib/user-scope.nix { inherit lib config; };
-
   config = lib.mkMerge [
-    (lib.mkIf cfg.enable {
-      my.state.user.state.files = [
-        ".zsh_history" # shell history (root shares it via shareHistoryWith)
-      ];
-      my.packages.perUser = lib.genAttrs cfg.users (_: pkgSet.user);
-    })
-
     /*
       mkIf rather than `programs.zsh.enable = cfg.systemIntegration`, because
       types.bool merges with mergeEqualOption: a host that also sets
