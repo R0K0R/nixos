@@ -56,18 +56,6 @@
         "type": "github"
       }
     },
-    "claude-science-bin": {
-      "flake": false,
-      "locked": {
-        "narHash": "sha256-LlU9hrLsypPg29REDiSdnkGRQp80BqkZgYoqDVkQHk4=",
-        "type": "file",
-        "url": "https://downloads.claude.ai/claude-science/0.1.60/linux-x64"
-      },
-      "original": {
-        "type": "file",
-        "url": "https://downloads.claude.ai/claude-science/0.1.60/linux-x64"
-      }
-    },
     "dank-greeter": {
       "inputs": {
         "dank-qml-common": "dank-qml-common",
@@ -283,20 +271,6 @@
       },
       "original": {
         "path": "./features/apps/claude-code",
-        "type": "path"
-      },
-      "parent": []
-    },
-    "feat-claude-science": {
-      "inputs": {
-        "claude-science-bin": "claude-science-bin"
-      },
-      "locked": {
-        "path": "./features/apps/claude-science",
-        "type": "path"
-      },
-      "original": {
-        "path": "./features/apps/claude-science",
         "type": "path"
       },
       "parent": []
@@ -769,7 +743,6 @@
       "inputs": {
         "feat-agenix": "feat-agenix",
         "feat-claude-code": "feat-claude-code",
-        "feat-claude-science": "feat-claude-science",
         "feat-dms": "feat-dms",
         "feat-emacs": "feat-emacs",
         "feat-foldpen": "feat-foldpen",

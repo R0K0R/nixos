@@ -24,7 +24,9 @@
     # list. Now an explicit feature, so it has to be asked for.
     claude-code.enable = true;
 
-    astro.enable = true;
+    # Siril is a home feature (astro); astropy goes into the shared python-dev
+    # environment, which is the system's.
+    python-dev.packages = [ (ps: [ ps.astropy ]) ];
     # Toolkit (nvcc, CUDA_PATH). 8.6 is the RTX 3050 Laptop; a different card
     # means changing it. cudaSupport OFF for now: on, it rebuilds every
     # CUDA-aware package in the closure (ffmpeg, gstreamer, obs, ...) with CUDA.

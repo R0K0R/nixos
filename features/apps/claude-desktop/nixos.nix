@@ -1,11 +1,11 @@
 /*
-  The SYSTEM half of Claude Desktop: Cowork's host support only.
+  The SYSTEM half of claude-desktop: Cowork's host side.
 
-  The app itself, its MCP config and its persisted profile moved to r0k0r's
-  home repo (~/config/home, modules/apps/claude-desktop) on 2026-10-26: they
-  are a user's program and a user's files. What a home cannot do is write
-  outside $HOME, and Cowork needs the OVMF firmware at fixed /usr/share paths,
-  so that part stays here, behind its own switch.
+  The app itself, its MCP config and its persisted profile are the home half
+  (r0k0r's home repo, features/apps/claude-desktop) since 2026-10-26: a
+  user's program and a user's files. What a home cannot do is write outside
+  $HOME, and Cowork needs QEMU plus the OVMF firmware at fixed /usr/share
+  paths, so that stays here.
 */
 { config, lib, pkgs, ... }:
 
@@ -13,10 +13,10 @@ let
   cfg = config.my.claude-desktop;
 in
 {
-  options.my.claude-desktop.cowork.enable = lib.mkEnableOption ''
-    host support for Claude Desktop's Cowork ("dispatch") microVM: QEMU plus
-    the OVMF firmware paths the app probes for. The app itself is installed
-    by the user's home (modules/apps/claude-desktop in ~/config/home).
+  options.my.claude-desktop.enable = lib.mkEnableOption ''
+    the host side of Claude Desktop's Cowork ("dispatch") microVM: QEMU plus
+    the OVMF firmware paths the app probes for. The app itself is the home
+    half
 
     Opt-in. Pulling qemu into the closure drags in 151 otherwise-untuned
     packages -- its own glibc, systemd, gtk4 and pipewire among them -- which
@@ -24,7 +24,7 @@ in
     is a real cost and it belongs behind its own switch
   '';
 
-  config = lib.mkIf cfg.cowork.enable {
+  config = lib.mkIf cfg.enable {
     environment.systemPackages = [ pkgs.qemu ];
 
     /*

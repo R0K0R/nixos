@@ -176,17 +176,30 @@ empty category and two features with the same leaf name are errors.
 | `session/` | compositor, dms, fcitx, fonts, greetd, hakuspace, hyprland, niri, qt-theming, session-env, session-services, tuigreet |
 | `net/` | discovery, globaltun, headscale, network, openvpn, syncthing, tailscale, wireless-display |
 | `shell/` | fish, zsh |
-| `apps/` | astro, claude-code, claude-desktop, claude-science, desktop-apps, emacs, firefox, flamenco, flatpak, fx570ex, hop, kakaotalk, kakaotalk-system, media, opendisplay, samsung-ecosystem, waydroid |
-| `dev/` | arduino, dev-toolchain, diagnostics, direnv, latex, python-dev, qt-dev |
+| `apps/` | claude-code, claude-desktop (system half), claude-science (system half), desktop-apps (system half), emacs, firefox, flatpak, hop, kakaotalk-system, opendisplay, waydroid |
+| `dev/` | direnv (system half), python-dev |
 
 System-wide features live here; a user's own features live in that user's
 home repo, in its own `features/` tree collected with `lib.homeFeatures` (see
-the home repo's README). Moved there on 2026-10-26: claude-desktop (the app;
-Cowork's host side stays as `my.claude-desktop.cowork`), cursor-theme,
-direnv (the daemon settings stay as `my.direnv`), easyeffects, eza, kitty,
-opencode, sidedock, ssh and starship. Their packages stay Tier 3 anchors
-through `tuning/runtime-cache/home-anchors.nix` until userCache evidence
-covers them.
+the home repo's README). Moved there: cursor-theme, easyeffects, eza, kitty,
+opencode, sidedock, ssh, starship (2026-10-26); arduino, astro, dev-toolchain,
+diagnostics, fx570ex, kakaotalk, latex, media, qt-dev, samsung-ecosystem
+(2026-10-27).
+
+A feature split between the two keeps ONE name: the system half is
+`my.<feature>` in the host file and does what needs root, the home half is
+`my.<feature>` in the home and installs and configures the program. A home
+half reads its own system half (`osConfig.my.<feature>`) and the facts of the
+features it plugs into (`my.hyprland`, `my.desktop`), and asserts that its
+system half is on when it cannot work without it. Split today: claude-desktop
+(Cowork's qemu and OVMF links), claude-science (loader, CA file, /bin/bash),
+desktop-apps (themes, qt6ct, MTP, the rnote fixes), direnv (the daemon's
+keep-outputs). astro's astropy sits in victus-15's python-dev environment.
+
+A moved feature's packages.nix is copied verbatim into
+`tuning/runtime-cache/home-anchors/`, which keeps those packages Tier 3
+anchors (the system cannot read a home repo) until userCache evidence covers
+them.
 
 The category is organisation only. The option is `my.<name>` whatever the
 category, leaf names are unique across the tree, and modules are imported in

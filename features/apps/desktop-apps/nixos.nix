@@ -1,170 +1,112 @@
+/*
+  The SYSTEM half of desktop-apps: what every account's programs resolve
+  against -- icon and cursor themes and qt6ct (guests' GNOME and the greeter
+  included) -- the MTP udev rule, and the rnote fixes, an overlay on the host's
+  package set so every home's rnote gets them (benjamin installs it too). The
+  applications themselves are the home half (r0k0r's home repo, features/apps/
+  desktop-apps), since 2026-10-27.
+*/
 { config, lib, pkgs, ... }:
 
 let
   cfg = config.my.desktop-apps;
-
-  /*
-    Read here rather than assembled centrally, so this feature installs its own
-    packages for anyone who drops the directory into a config that has never
-    heard of this repo's conventions. tuning/runtime-cache/lookup.nix reads the
-    same file independently for its Tier 3 anchor set -- two consumers, one
-    file, no coupling between them.
-  */
   pkgSet = import ./packages.nix { inherit pkgs; };
-
-  # Zoom's launcher, with the panel scale put into its config -- see below.
-  zoomScaled = ''
-    conf="''${XDG_CONFIG_HOME:-$HOME/.config}/zoomus.conf"
-    scale=${config.my.desktop.primaryOutputScale}
-    if ! ${pkgs.gnugrep}/bin/grep -qx 'autoScale=false' "$conf" 2>/dev/null ||
-       ! ${pkgs.gnugrep}/bin/grep -qx "scaleFactor=$scale" "$conf" 2>/dev/null; then
-      [ -s "$conf" ] || printf '[General]\n' >"$conf"
-      ${pkgs.gnused}/bin/sed -i -e '/^autoScale=/d' -e '/^scaleFactor=/d' \
-        -e "/^\[General\]$/a autoScale=false\nscaleFactor=$scale" "$conf"
-    fi
-    exec ${pkgs.zoom-us}/bin/zoom "$@"
-  '';
 in
 {
-  options.my.desktop-apps.enable = lib.mkEnableOption "GUI applications and the icon/theme packages they resolve against";
+  options.my.desktop-apps.enable = lib.mkEnableOption "the host side of desktop-apps: icon/cursor themes, qt6ct, MTP device access, the rnote fixes";
 
-  # Accounts this feature applies to; defaults to the primary user.
-  options.my.desktop-apps.users = import ../../../lib/user-scope.nix { inherit lib config; };
+  config = lib.mkIf cfg.enable {
+    environment.systemPackages = pkgSet.system;
 
-  config = lib.mkIf cfg.enable (lib.mkMerge [
-    {
-      my.state.user.state.directories = [
-        ".config/google-chrome/Default" # Chrome profile (the ~4 GB of model caches beside it are skipped)
-        ".config/google-chrome/Profile 1" # second Chrome profile
-        ".config/discord" # Discord login and settings
-        ".config/Vencord" # Vencord (Discord client mod) settings and plugins
-        ".zoom" # Zoom chat db and login
-        ".config/libreoffice" # LibreOffice user profile
-        ".pki" # NSS db: imported and client certificates
-        ".local/share/pki" # NSS db used by newer Chromium
-      ];
-      my.state.user.state.files = [
-        ".config/google-chrome/Local State" # Chrome profile index and encryption key wrapper
-        ".config/zoomus.conf" # Zoom prefs; the scale wrapper edits it in place
-        ".local/share/user-places.xbel" # Dolphin and file-dialog sidebar bookmarks
-      ];
-    }
-    {
-      /*
-        rnote SIGSEGV on touch: when the canvas's two-finger pan claims a touch
-        sequence, GTK cancels the pinch-zoom gesture on it and emits `cancel`
-        WHILE denying the sequence. rnote 0.14.2's handler then calls
-        set_state(Denied) itself, re-entering GTK's state propagation for a
-        sequence being torn down; gdk_event_get_event_type reads a dangling
-        event. Coredump 2026-09-26 (frames: scrolled_window_drag_update_cb ->
-        _gtk_gesture_cancel_sequence -> rnote GestureZoom cancel ->
-        gtk_gesture_set_state -> gdk_event_get_event_type). Same crash site as
-        upstream flxzt/rnote#1848 (open, unfixed in 0.14.2). Drop when fixed.
-      */
-      nixpkgs.overlays = [
-        (final: prev: {
-          rnote = prev.rnote.overrideAttrs (old: {
-            patches = (old.patches or [ ]) ++ [
-              ./rnote-zoom-cancel-reentrancy.patch
-              # Deep zoom on imported PDF pages: render only the visible part once a
-              # full-page image would pass 16 Mpx, instead of a whole-page bitmap that
-              # grows with zoom^2. Built against stock 0.14.2 on yulee 2026-10-05.
-              ./rnote-vectorimage-viewport-clip.patch
-            ];
+    /*
+      rnote SIGSEGV on touch: when the canvas's two-finger pan claims a touch
+      sequence, GTK cancels the pinch-zoom gesture on it and emits `cancel`
+      WHILE denying the sequence. rnote 0.14.2's handler then calls
+      set_state(Denied) itself, re-entering GTK's state propagation for a
+      sequence being torn down; gdk_event_get_event_type reads a dangling
+      event. Coredump 2026-09-26 (frames: scrolled_window_drag_update_cb ->
+      _gtk_gesture_cancel_sequence -> rnote GestureZoom cancel ->
+      gtk_gesture_set_state -> gdk_event_get_event_type). Same crash site as
+      upstream flxzt/rnote#1848 (open, unfixed in 0.14.2). Drop when fixed.
+    */
+    nixpkgs.overlays = [
+      (final: prev: {
+        rnote = prev.rnote.overrideAttrs (old: {
+          patches = (old.patches or [ ]) ++ [
+            ./rnote-zoom-cancel-reentrancy.patch
+            # Deep zoom on imported PDF pages: render only the visible part once a
+            # full-page image would pass 16 Mpx, instead of a whole-page bitmap that
+            # grows with zoom^2. Built against stock 0.14.2 on yulee 2026-10-05.
+            ./rnote-vectorimage-viewport-clip.patch
+          ];
 
-            /*
-              Memory, measured 2026-10-05 on a document with imported PDF pages:
-              rnote idled at 2.5 GB, of which ~1.2 GB was freed memory kept in
-              glibc's per-thread arenas (64/128 MB regions, one per render
-              thread), and pinch-zooming spiked it to 5 GB+ -- once to ~34 GB and
-              an OOM kill that froze the laptop for minutes. Cause: imported PDF
-              pages (VectorImage) render as a FULL-page bitmap at the current
-              zoom, so memory grows with zoom^2 (a 981 MB solid-white page buffer
-              was found live).
+          /*
+            Memory, measured 2026-10-05 on a document with imported PDF pages:
+            rnote idled at 2.5 GB, of which ~1.2 GB was freed memory kept in
+            glibc's per-thread arenas (64/128 MB regions, one per render
+            thread), and pinch-zooming spiked it to 5 GB+ -- once to ~34 GB and
+            an OOM kill that froze the laptop for minutes. Cause: imported PDF
+            pages (VectorImage) render as a FULL-page bitmap at the current
+            zoom, so memory grows with zoom^2 (a 981 MB solid-white page buffer
+            was found live).
 
-              MALLOC_ARENA_MAX=2 caps the arenas, returning most of the retained
-              memory. --set-default, so an explicit value still wins.
-            */
-            preFixup = (old.preFixup or "") + ''
-              gappsWrapperArgs+=(--set-default MALLOC_ARENA_MAX 2)
-            '';
+            MALLOC_ARENA_MAX=2 caps the arenas, returning most of the retained
+            memory. --set-default, so an explicit value still wins.
+          */
+          preFixup = (old.preFixup or "") + ''
+            gappsWrapperArgs+=(--set-default MALLOC_ARENA_MAX 2)
+          '';
 
-            /*
-              ...and a cap, so a runaway render dies on its own in seconds
-              instead of dragging the whole system through swap. The desktop
-              entry runs `rnote`, so `rnote` becomes a launcher that starts the
-              real one in its own scope. MemoryHigh makes the kernel reclaim
-              hard first; past MemoryMax only rnote is killed. Swap is limited
-              too, since a scope allowed to swap freely just moves the freeze.
-              Falls back to a plain exec where systemd-run cannot work.
+          /*
+            ...and a cap, so a runaway render dies on its own in seconds
+            instead of dragging the whole system through swap. The desktop
+            entry runs `rnote`, so `rnote` becomes a launcher that starts the
+            real one in its own scope. MemoryHigh makes the kernel reclaim
+            hard first; past MemoryMax only rnote is killed. Swap is limited
+            too, since a scope allowed to swap freely just moves the freeze.
+            Falls back to a plain exec where systemd-run cannot work.
 
-              The scope gets an explicit --unit. Left to itself, systemd-run names
-              it run-p<PID>-i<N>, and a launcher that already starts each app in
-              its own systemd-run scope (DMS does) has exec'd this script in that
-              same PID: the inner scope then collides with the outer one ("Unit
-              ... was already loaded"), systemd-run exits, and rnote never starts
-              from the desktop entry while working fine from a terminal.
-            */
-            postFixup = (old.postFixup or "") + ''
-              mv "$out/bin/rnote" "$out/bin/.rnote-uncapped"
-              cat > "$out/bin/rnote" <<EOF
-              #!${final.runtimeShell}
-              if command -v systemd-run >/dev/null 2>&1 && [ -n "\''${DBUS_SESSION_BUS_ADDRESS:-}\''${XDG_RUNTIME_DIR:-}" ]; then
-                exec systemd-run --user --scope --collect --quiet \\
-                  --unit="app-rnote-\$\$-\$RANDOM" \\
-                  -p MemoryHigh=5G -p MemoryMax=7G -p MemorySwapMax=1G \\
-                  -- "$out/bin/.rnote-uncapped" "\$@"
-              fi
-              exec "$out/bin/.rnote-uncapped" "\$@"
-              EOF
-              chmod +x "$out/bin/rnote"
-            '';
-          });
-        })
-      ];
-    }
+            The scope gets an explicit --unit. Left to itself, systemd-run names
+            it run-p<PID>-i<N>, and a launcher that already starts each app in
+            its own systemd-run scope (DMS does) has exec'd this script in that
+            same PID: the inner scope then collides with the outer one ("Unit
+            ... was already loaded"), systemd-run exits, and rnote never starts
+            from the desktop entry while working fine from a terminal.
+          */
+          postFixup = (old.postFixup or "") + ''
+            mv "$out/bin/rnote" "$out/bin/.rnote-uncapped"
+            cat > "$out/bin/rnote" <<EOF
+            #!${final.runtimeShell}
+            if command -v systemd-run >/dev/null 2>&1 && [ -n "\''${DBUS_SESSION_BUS_ADDRESS:-}\''${XDG_RUNTIME_DIR:-}" ]; then
+              exec systemd-run --user --scope --collect --quiet \\
+                --unit="app-rnote-\$\$-\$RANDOM" \\
+                -p MemoryHigh=5G -p MemoryMax=7G -p MemorySwapMax=1G \\
+                -- "$out/bin/.rnote-uncapped" "\$@"
+            fi
+            exec "$out/bin/.rnote-uncapped" "\$@"
+            EOF
+            chmod +x "$out/bin/rnote"
+          '';
+        });
+      })
+    ];
 
-    (lib.mkIf (pkgSet ? system) { environment.systemPackages = pkgSet.system; })
 
-    (lib.mkIf (builtins.elem pkgs.zoom-us (pkgSet.system or [ ])) {
-      /*
-        Zoom at the panel's scale. It runs under XWayland (zoomus.conf
-        xwayland=true), and Hyprland's xwayland force_zero_scaling hands X11
-        clients unscaled pixels, so Zoom has to scale itself -- its own
-        auto-detection sees a 96-dpi X screen and stays at 1x, two-thirds size
-        on the 1.5 panel. Its manual setting is the autoScale/scaleFactor pair
-        in [General]. Zoom owns and rewrites that file, so a home-manager file
-        would fight it; instead `zoom` (and `zoom-us`) set the two keys just
-        before starting it. hiPrio shadows the package's own binaries, and the
-        desktop entry runs a bare `zoom`, so it goes through this too.
-      */
-      environment.systemPackages = [
-        (lib.hiPrio (pkgs.writeShellScriptBin "zoom" zoomScaled))
-        (lib.hiPrio (pkgs.writeShellScriptBin "zoom-us" zoomScaled))
-      ];
-    })
+    /*
+      MTP: what makes a plugged-in phone actually appear in dolphin.
 
-    # Emitted only when non-empty, and keyed by this feature's `users`
-    # scope rather than by a hardcoded account -- see lib/user-scope.nix.
-    (lib.mkIf (pkgSet ? user) { my.packages.perUser = lib.genAttrs config.my.desktop-apps.users (_: pkgSet.user); })
+      kio-extras already ships the worker (lib/qt-6/plugins/kf6/kio/mtp.so,
+      linked against libmtp) and dolphin's wrapper puts kio-extras on
+      QT_PLUGIN_PATH, so the SOFTWARE half has been complete all along. What
+      was missing is the udev half: libmtp's 69-libmtp.rules sat unused in the
+      store, so a connected phone was never tagged ID_MTP_DEVICE=1 and never
+      got uaccess. The device enumerated correctly -- Samsung 04e8:6860, the
+      MTP product id -- and then nothing on the host claimed it, so Solid
+      never offered it and dolphin showed nothing. Diagnosed 2026-09-16.
 
-    {
-      /*
-        MTP: what makes a plugged-in phone actually appear in dolphin.
-
-        kio-extras already ships the worker (lib/qt-6/plugins/kf6/kio/mtp.so,
-        linked against libmtp) and dolphin's wrapper puts kio-extras on
-        QT_PLUGIN_PATH, so the SOFTWARE half has been complete all along. What
-        was missing is the udev half: libmtp's 69-libmtp.rules sat unused in the
-        store, so a connected phone was never tagged ID_MTP_DEVICE=1 and never
-        got uaccess. The device enumerated correctly -- Samsung 04e8:6860, the
-        MTP product id -- and then nothing on the host claimed it, so Solid
-        never offered it and dolphin showed nothing. Diagnosed 2026-09-16.
-
-        libmtp.out, not libmtp: the rules live in $out/lib/udev/rules.d, while
-        the default output for this package is `bin`.
-      */
-      services.udev.packages = [ pkgs.libmtp.out ];
-    }
-  ]);
+      libmtp.out, not libmtp: the rules live in $out/lib/udev/rules.d, while
+      the default output for this package is `bin`.
+    */
+    services.udev.packages = [ pkgs.libmtp.out ];
+  };
 }

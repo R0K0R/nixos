@@ -232,13 +232,10 @@ in
       };
     };
     waydroid.enable = true;
-    /*
-      The PC client under wine, NOT the Android one under waydroid above.
-      Kakao allows one phone plus one PC; the Android build registers as a
-      competing primary device and evicts the phone, and that check is
-      server-side, so there is nothing to configure around it.
-    */
-    kakaotalk.enable = true;
+    # KakaoTalk is the PC client under wine, a home feature -- NOT the Android
+    # one under waydroid above: Kakao allows one phone plus one PC, and the
+    # Android build registers as a competing primary device and evicts the
+    # phone, server-side.
     session-env.enable = true;
     # benjamin's login shell (registry), as on victus-15: the feature scoped
     # to him alone, so r0k0r's zsh is unaffected; systemIntegration for the
@@ -299,23 +296,15 @@ in
     emacs.enable = true;
     # Package sets, each owning its own list (features/<name>/packages.nix).
     base.enable = true;
-    dev-toolchain.enable = true;
-    latex.enable = true;
-    media.enable = true;
-    astro.enable = true;
+    # The apps and tool sets (dev-toolchain, latex, media, astro, desktop-apps,
+    # arduino, diagnostics, qt-dev, fx570ex, kakaotalk, samsung-ecosystem,
+    # claude-science) are home features (~/config/home). desktop-apps' host
+    # side -- themes, qt6ct, MTP, the rnote fixes -- stays here:
     desktop-apps.enable = true;
-    arduino.enable = true;
-    diagnostics.enable = true;
-    qt-dev.enable = true;
-    fx570ex.enable = true;
     # HWP/HWPX editor. defaultHandler is left at its default (true), so HOP
-    # takes application/x-hwp from LibreOffice, which features/desktop-apps also
+    # takes application/x-hwp from LibreOffice, which the home's desktop-apps
     # installs -- see the option's own note on why that is a separate decision.
     hop.enable = true;
-    samsung-ecosystem = {
-      enable = true;
-      budsStartUp = true;
-    };
 
     claude-code = {
       enable = true;
@@ -345,12 +334,13 @@ in
       };
     };
 
-    # The app itself is r0k0r's home (~/config/home, modules/apps/claude-desktop);
-    # only Cowork's host side is the system's.
-    claude-desktop.cowork.enable = true;
+    # The host side of the home's claude-desktop: Cowork's qemu and OVMF links.
+    claude-desktop.enable = true;
 
     # Beta; `claude-science serve` then the browser. Cheap to carry: one
     # prebuilt binary and a wrapper, no Electron (see the feature's package.nix).
+    # The host side of the home's claude-science: the loader, CA file and
+    # /bin/bash its sandbox needs.
     claude-science.enable = true;
 
     # Toggle for the built-in keyboard, driven from the control centre. serio0
@@ -462,7 +452,6 @@ in
 
     power.enable = true;
     flatpak.enable = true;
-    flamenco.enable = false;
 
     boot = {
       enable = true;

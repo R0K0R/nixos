@@ -1,45 +1,22 @@
-{ config, inputs, lib, pkgs, ... }:
+/*
+  The SYSTEM half of Claude Science: the three absolute paths its sandbox
+  needs and a home cannot provide. The app, its pin and its secrets are a home
+  feature (r0k0r's home repo, features/apps/claude-science) since 2026-10-27.
+*/
+{ config, lib, pkgs, ... }:
 
 let
   cfg = config.my.claude-science;
-
-  # Hash-pinned via the claude-science-bin flake input.
-  # Bump: features/claude-science/update.sh.
-  claude-science = pkgs.callPackage ./package.nix {
-    src = inputs.feat-claude-science.src;
-    version = inputs.feat-claude-science.version;
-  };
 in
 {
-  options.my.claude-science = {
-    enable = lib.mkEnableOption ''
-      Claude Science (beta), Anthropic's local research app.
-
-      `claude-science serve` starts a daemon on 127.0.0.1:8000 and opens the web
-      UI in a browser; `--detached` backgrounds it, `--no-browser` skips the
-      browser. State lives in ~/.claude-science, not in the store.
-
-      Note that `claude-science update` -- its self-updater -- cannot work here:
-      it rewrites its own executable, which is a read-only store path. That is
-      not a defect to work around, it is the pin doing its job. Use
-      features/claude-science/update.sh instead.
-
-      Turning this on sets environment.ldso, which is a system-wide change;
-      the reason is below and it is not incidental
-    '';
-  };
+  options.my.claude-science.enable = lib.mkEnableOption ''
+    the host side of Claude Science: a real loader at
+    /lib64/ld-linux-x86-64.so.2 (environment.ldso, a system-wide change), the
+    CA bundle as a real file, and /bin/bash -- what its sandbox needs. The app
+    itself is a home feature
+  '';
 
   config = lib.mkIf cfg.enable {
-    my.state.user.secret.directories = [
-      ".claude-science/identity" # daemon identity
-      ".claude-science/.key-backups" # backups of the encryption key
-      ".claude-science/.oauth-tokens" # connector OAuth tokens
-    ];
-    my.state.user.secret.files = [
-      ".claude-science/encryption.key" # encrypts the stored credentials; the 6 GB conda env is regenerable and not listed
-    ];
-    environment.systemPackages = [ claude-science ];
-
     /*
       Why a system-wide loader, and why NOT nix-ld.
 

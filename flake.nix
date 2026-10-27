@@ -31,7 +31,6 @@
     */
     feat-claude-code.url = "path:./features/apps/claude-code";
     feat-hop.url = "path:./features/apps/hop";
-    feat-claude-science.url = "path:./features/apps/claude-science";
     feat-samsung-galaxybook.url = "path:./features/hardware/samsung-galaxybook";
     feat-hyprland.url = "path:./features/session/hyprland";
     feat-foldpen.url = "path:./features/apps/foldpen";

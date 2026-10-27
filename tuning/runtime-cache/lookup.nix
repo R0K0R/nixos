@@ -316,9 +316,30 @@ let
 
   fromHosts = lib.concatMap extrasOf allHostMy;
 
-  # Packages home features run, which no system packages.nix names any more
-  # (see the file for why, and what replaces it).
-  fromHomes = import ./home-anchors.nix { pkgs = freshPkgs; };
+  /*
+    Packages HOME features run. A feature that moves into a home repo takes its
+    packages.nix along, and the system cannot read a user repo -- so it would
+    silently stop being an anchor. On victus-15, where Tier 1 had never seen
+    kitty (it only runs inside emacs there), that dropped kitty out of the
+    tuned set with gtk, ffmpeg, opencv and the doom build behind it
+    (2026-10-26).
+
+    home-anchors/<feature>.nix is a verbatim copy of the moved packages.nix,
+    same shape and same plain-nixpkgs rule. The designed source for this
+    evidence is the userCache (tuning-refresh, run as the user, records what
+    the home runs); these copies keep the tuned set unchanged until those
+    records cover a host, and they are what a stale userCache falls back to.
+    Every file is read, enabled or not (the system cannot see which a home
+    turns on): the same over-inclusion as fromFeatures.
+  */
+  homeAnchorDir = ./home-anchors;
+  fromHomes = lib.concatMap (
+    f:
+    let
+      ps = import (homeAnchorDir + "/${f}") { pkgs = freshPkgs; };
+    in
+    (ps.system or [ ]) ++ (ps.user or [ ]) ++ (ps.home or [ ])
+  ) (builtins.filter (lib.hasSuffix ".nix") (builtins.attrNames (builtins.readDir homeAnchorDir)));
 
   tier3Anchors = fromFeatures ++ fromHosts ++ fromHomes;
   keyOf = pkg: pkg.pname or pkg.name or "unknown";
