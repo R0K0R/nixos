@@ -310,8 +310,9 @@
     # keystone: the 3D trapezoid look of the side dock (a home feature), plus
     # scale-to-fit and the swipe -- a Hyprland patch, so the system's.
     hyprland.keystone.enable = true;
-    # Galaxy Z Fold 6 as a stylus tablet (~/git_shit/foldpen): S Pen or a dummy
-    # pen in, low-fps mirror out, 3-finger gestures on the phone.
+    # Galaxy Z Fold 6 as a stylus tablet (~/git_shit/foldpen): the grant --
+    # uinput for r0k0r (the default user scope) and the Wi-Fi port. The daemon
+    # and its keys are his home's (foldpen there).
     foldpen.enable = true;
 
     # X-Folding RGB Bluetooth keyboard: natural scroll on its trackpad without

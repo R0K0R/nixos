@@ -33,7 +33,6 @@
     feat-hop.url = "path:./features/apps/hop";
     feat-samsung-galaxybook.url = "path:./features/hardware/samsung-galaxybook";
     feat-hyprland.url = "path:./features/session/hyprland";
-    feat-foldpen.url = "path:./features/apps/foldpen";
 
     # Module/overlay-providing sub-flakes need the second half of the two-level
     # follows -- see each sub-flake's own header for why both are required.
