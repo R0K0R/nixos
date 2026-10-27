@@ -650,6 +650,14 @@
             the tuned set. Needs kvm (a builder). See tests/guest-overlay-vm.nix.
           */
           guest-overlay-vm = import ./tests/guest-overlay-vm.nix { inherit inputs lib; };
+
+          /*
+            features/nix/ccache's patched ccache: a hit across store hashes
+            rewrites the cached dependency file to this compilation's paths,
+            or misses. A sandboxed build with its own throwaway cache. See
+            tests/ccache-depfile.nix.
+          */
+          ccache-depfile = import ./tests/ccache-depfile.nix { inherit inputs lib; };
         };
 
       /*
