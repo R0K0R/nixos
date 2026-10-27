@@ -83,9 +83,16 @@ in
         Validated 2026-09-09 before implementing: the same source preprocessed
         against two zlib-dev paths with byte-identical headers differs on 158
         lines, every one a line marker, and hashes identically once those are
-        normalised. See features/ccache/nix-store-normalize.patch for why the
-        rewrite must be narrow -- a blanket one collides packages that embed
-        their own $out in a string literal
+        normalised. See features/nix/ccache/nix-store-normalize.patch for why
+        the rewrite must be narrow -- a blanket one collides packages that
+        embed their own $out in a string literal.
+
+        A hit's dependency file (-MD) is rewritten to this compilation's store
+        paths, or the hit becomes a miss when a path has no counterpart; before
+        that fix the .d named the storing derivation's paths and waf's gccdeps
+        failed samba's configure. Normalization is skipped for compiles that
+        write header locations into an output (debug info, PCH, .gcno, .su,
+        .ci, IPA clones, .dia/.sarif). checks.x86_64-linux.ccache-depfile
       '';
     };
 

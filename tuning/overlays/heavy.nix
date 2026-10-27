@@ -43,9 +43,9 @@
 
   The links carry the REAL compiler's version. A cc-wrapper takes `version`
   from the cc it wraps, so bare ccache-links makes `stdenv.cc.version` read
-  "4.13.6" (measured on glib) and every `versionAtLeast stdenv.cc.version` gate
-  in nixpkgs, useMoldLinker's own gcc >= 12 test included, takes the wrong
-  branch.
+  ccache's own version ("4.13.6" when measured on glib) and every
+  `versionAtLeast stdenv.cc.version` gate in nixpkgs, useMoldLinker's own
+  gcc >= 12 test included, takes the wrong branch.
 
   No CCACHE env beyond CCACHE_DIR and the static knobs: env is ccache's
   highest-precedence config source, so remote storage there would bake the L2
@@ -94,6 +94,15 @@ else
           against two zlib-dev paths with identical headers differs on 158
           lines, all of them line markers, and hashes identically once those are
           normalised -- for a trivial C file and for a 38k-line C++ TU alike.
+
+          A hit then replays a dependency file (.d) written by the derivation
+          that stored the entry, naming ITS store paths; waf's gccdeps rejects
+          that (samba, 2026-10-15). The patch rewrites each store path in the
+          restored .d to the one this compilation's line markers name, and
+          treats the hit as a miss when a path has no unambiguous counterpart.
+          Proven by checks.x86_64-linux.ccache-depfile (tests/ccache-depfile.nix).
+          The patch is against ccache 4.14.1; a ccache bump must re-run that
+          check.
         */
         ccachePkg =
           if ccache.normalize then
@@ -110,12 +119,12 @@ else
           /*
             cc-wrapper names and versions itself after the cc it wraps, and
             ccache.links calls itself "ccache-links" at ccache's own version. So
-            a ccache'd wrapper reads "…-ccache-links-wrapper-4.13.6" and loses
+            a ccache'd wrapper reads "…-ccache-links-wrapper-<ccache version>" and loses
             BOTH the compiler's identity and its version. Two consequences,
             both measured:
 
             - every `versionAtLeast stdenv.cc.version` gate in nixpkgs compares
-              against 4.13.6, useMoldLinker's own gcc >= 12 test included.
+              against ccache's version, useMoldLinker's own gcc >= 12 test included.
             - tuning/pkgs-config.nix skips its GCC-only
               -Wno-error=maybe-uninitialized for `*-clang-wrapper-*`. Renamed,
               the guard missed, clang got the flag, and its "unknown warning

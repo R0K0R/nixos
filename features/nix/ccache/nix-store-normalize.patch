@@ -1,7 +1,140 @@
+diff --git a/src/ccache/ccache.cpp b/src/ccache/ccache.cpp
+index 0d00cdf..efd5a26 100644
 --- a/src/ccache/ccache.cpp
 +++ b/src/ccache/ccache.cpp
-@@ -521,6 +521,70 @@
-   return strncmp(str, prefix.data(), prefix.length()) == 0;
+@@ -675,7 +675,19 @@ do_process_preprocessed_data(Context& ctx, Hash& hash, util::Bytes&& data)
+       inc_path_str.clear(); // inc_path is used from now on
+ 
+       if (inc_path != ctx.apparent_cwd || ctx.config.hash_dir()) {
+-        hash.hash(inc_path);
++        if (core::nix_store_normalize_applies(ctx)) {
++          // See the comment on nix_store_normalize in core/common.cpp.
++          const util::PathString inc_path_pstr(inc_path);
++          const std::string& real_path = inc_path_pstr.str();
++          std::string normalized = core::nix_store_normalize(real_path);
++          if (normalized != real_path) {
++            core::remember_nix_store_path(
++              ctx.nix_store_paths, normalized, real_path);
++          }
++          hash.hash(normalized);
++        } else {
++          hash.hash(inc_path);
++        }
+       }
+ 
+       TRY(remember_include_file(ctx, inc_path, hash, system, nullptr));
+@@ -2660,6 +2672,35 @@ calculate_result_and_manifest_key(Context& ctx,
+ 
+ enum class FromCacheCallMode : uint8_t { direct, cpp };
+ 
++// Collects the dependency file and stderr output of a result for the
++// CCACHE_NIX_STORE_NORMALIZE rewrite in from_cache (see core/common.cpp). Both
++// are always embedded; only object and .dwo files are stored raw.
++class NixStorePathCollector : public core::result::Deserializer::Visitor
++{
++public:
++  std::optional<std::string> dependency_file;
++  std::optional<std::string> stderr_output;
++
++  void
++  on_embedded_file(uint8_t /*file_number*/,
++                   core::result::FileType file_type,
++                   std::span<const uint8_t> data) override
++  {
++    if (file_type == core::result::FileType::dependency) {
++      dependency_file = std::string(util::to_string_view(data));
++    } else if (file_type == core::result::FileType::stderr_output) {
++      stderr_output = std::string(util::to_string_view(data));
++    }
++  }
++
++  void
++  on_raw_file(uint8_t /*file_number*/,
++              core::result::FileType /*file_type*/,
++              uint64_t /*file_size*/) override
++  {
++  }
++};
++
+ // Try to return the compile result from cache.
+ static tl::expected<bool, Failure>
+ from_cache(Context& ctx, FromCacheCallMode mode, const Hash::Digest& result_key)
+@@ -2706,6 +2747,37 @@ from_cache(Context& ctx, FromCacheCallMode mode, const Hash::Digest& result_key)
+     cache_entry.verify_checksum();
+     core::result::Deserializer deserializer(cache_entry.payload());
+     core::ResultRetriever result_retriever(ctx, result_key);
++    if (core::nix_store_normalize_applies(ctx)) {
++      // The entry may have been stored by a compilation that used other store
++      // paths. Decide before anything is written or printed.
++      NixStorePathCollector collector;
++      deserializer.visit(collector);
++      if (collector.dependency_file
++          && ctx.args_info.generating_dependencies) {
++        auto rewritten = depfile::rewrite_nix_store_paths(
++          *collector.dependency_file, ctx.nix_store_paths);
++        if (!rewritten) {
++          LOG("Not using result {}: dependency file: {}{}",
++              util::format_base16(result_key),
++              rewritten.error(),
++              mode == FromCacheCallMode::direct
++                ? " (direct mode, trying the preprocessor)"
++                : "");
++          return false;
++        }
++        if (*rewritten) {
++          LOG("Rewrote store paths in the cached dependency file");
++          result_retriever.set_dependency_file_content(std::move(**rewritten));
++        }
++      }
++      if (collector.stderr_output) {
++        if (auto rewritten = core::rewrite_nix_store_paths_in_text(
++              *collector.stderr_output, ctx.nix_store_paths)) {
++          LOG("Rewrote store paths in the cached stderr output");
++          result_retriever.set_stderr_content(std::move(*rewritten));
++        }
++      }
++    }
+     util::UmaskScope umask_scope(ctx.original_umask);
+     deserializer.visit(result_retriever);
+   } catch (core::ResultRetriever::WriteError& e) {
+diff --git a/src/ccache/context.hpp b/src/ccache/context.hpp
+index 966a819..21f47c4 100644
+--- a/src/ccache/context.hpp
++++ b/src/ccache/context.hpp
+@@ -20,6 +20,7 @@
+ 
+ #include <ccache/argsinfo.hpp>
+ #include <ccache/config.hpp>
++#include <ccache/core/common.hpp>
+ #include <ccache/core/manifest.hpp>
+ #include <ccache/hash.hpp>
+ #include <ccache/storage/storage.hpp>
+@@ -70,6 +71,10 @@ public:
+   // Files included by the preprocessor and their hashes.
+   std::unordered_map<std::string, Hash::Digest> included_files;
+ 
++  // Store paths from the preprocessor's line markers, by normalized form. Only
++  // filled when CCACHE_NIX_STORE_NORMALIZE applies (see core/common.cpp).
++  core::NixStorePaths nix_store_paths;
++
+   // Have we tried and failed to get colored diagnostics?
+   bool diagnostics_color_failed = false;
+ 
+diff --git a/src/ccache/core/common.cpp b/src/ccache/core/common.cpp
+index 528c3fe..c9011ed 100644
+--- a/src/ccache/core/common.cpp
++++ b/src/ccache/core/common.cpp
+@@ -28,6 +28,8 @@
+ #include <ccache/util/path.hpp>
+ #include <ccache/util/tokenizer.hpp>
+ 
++#include <cstdlib>
++
+ using IncludeDelimiter = util::Tokenizer::IncludeDelimiter;
+ 
+ namespace fs = util::filesystem;
+@@ -282,4 +284,147 @@ get_diagnostics_path_length(std::string_view line)
+   return path_end;
  }
  
 +// Nix store path normalisation, for cross-derivation cache reuse.
@@ -14,27 +147,59 @@
 +// dependent misses after any dependency is rebuilt, however trivially.
 +//
 +// Eliding just the hash lets those compilations share a cache entry. It stays
-+// sound because the include file's CONTENT is hashed separately, by
-+// remember_include_file() below, so headers that actually differ still produce
-+// different results. Only the location is forgotten.
++// sound because the include file's CONTENT is still hashed: in preprocessor
++// mode it is the preprocessed text itself, in direct mode
++// remember_include_file() hashes each file. Headers that actually differ still
++// produce different results. Only the location is forgotten.
 +//
 +// Deliberately narrow: it rewrites the include path ccache extracts from a line
 +// marker and nothing else, notably not string literals, which may legitimately
 +// contain a store path. A package compiled with
 +// -DDATADIR="/nix/store/<own out>/share" must not share entries with another.
 +//
-+// Off unless CCACHE_NIX_STORE_NORMALIZE is set, and suppressed when the
-+// compilation generates debug info, since DWARF records include directories and
-+// a reused object would then name a store path outside the consuming
-+// derivation's closure.
-+static bool
++// Off unless CCACHE_NIX_STORE_NORMALIZE is set, and suppressed whenever the
++// compilation produces an output that records include file locations, since a
++// reused result would then name a store path outside the consuming
++// derivation's closure: debug info (DWARF records include directories), a
++// precompiled header, coverage notes (.gcno), stack usage (.su), call graph
++// info (.ci), IPA clones and clang's serialized/SARIF diagnostics. Those all
++// name the header that defines an inline function or holds a diagnostic.
++//
++// Forgetting the location has one consequence that must be undone on a hit:
++// the result's dependency file (-MD and friends) was written by the
++// compilation that STORED the entry, so it names that compilation's store
++// paths. Most build systems never notice, but some validate it -- waf's
++// gccdeps fails samba's configure with "could not find
++// '/nix/store/<old hash>-dbus-dev/include/dbus-1.0/dbus/dbus.h'". So while
++// hashing, every line-marker path that normalization changed is remembered
++// (ctx.nix_store_paths: normalized -> the real path), and from_cache() rewrites
++// each store path in the restored dependency file to the path THIS compilation
++// uses with the same normalized form. When a store path in the dependency file
++// has no such counterpart (or two of them), ccache does not guess: the hit is
++// treated as a miss and the compiler runs. That includes every direct mode
++// hit, which never ran the preprocessor; it falls through to preprocessor
++// mode, which then has the map. The stderr text of the result is rewritten
++// with the same map, but best-effort only: it is free text, so paths without a
++// counterpart are left alone rather than forcing a miss.
++bool
 +nix_store_normalize_enabled()
 +{
 +  static const bool enabled = getenv("CCACHE_NIX_STORE_NORMALIZE") != nullptr;
 +  return enabled;
 +}
 +
-+static std::string
++bool
++nix_store_normalize_applies(const Context& ctx)
++{
++  const auto& ai = ctx.args_info;
++  return nix_store_normalize_enabled() && !ai.generating_debuginfo
++         && !ai.generating_pch && !ai.generating_coverage
++         && !ai.generating_stackusage && !ai.generating_callgraphinfo
++         && !ai.generating_ipa_clones && ai.output_dia.empty()
++         && ai.output_sarif.empty();
++}
++
++std::string
 +nix_store_normalize(std::string_view path)
 +{
 +  static constexpr std::string_view k_prefix = "/nix/store/";
@@ -68,20 +233,455 @@
 +  return result;
 +}
 +
- static bool
- is_on_preprocessor_directive_line(std::string_view data, size_t pos)
++void
++remember_nix_store_path(NixStorePaths& paths,
++                        std::string_view normalized,
++                        std::string_view path)
++{
++  const auto [it, inserted] =
++    paths.emplace(std::string(normalized), std::string(path));
++  if (!inserted && it->second != path) {
++    it->second.clear(); // Ambiguous.
++  }
++}
++
++std::optional<std::string>
++rewrite_nix_store_paths_in_text(std::string_view text,
++                                const NixStorePaths& paths)
++{
++  static constexpr std::string_view k_prefix = "/nix/store/";
++  const auto is_path_char = [](char c) {
++    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
++           || (c >= '0' && c <= '9') || c == '/' || c == '.' || c == '-'
++           || c == '_' || c == '+' || c == '=' || c == '?' || c == '~';
++  };
++
++  std::string result;
++  size_t copied = 0;
++  size_t pos = 0;
++  while ((pos = text.find(k_prefix, pos)) != std::string_view::npos) {
++    size_t end = pos + k_prefix.size();
++    while (end < text.size() && is_path_char(text[end])) {
++      ++end;
++    }
++    const auto path = text.substr(pos, end - pos);
++    const auto it = paths.find(nix_store_normalize(path));
++    if (it != paths.end() && !it->second.empty() && it->second != path) {
++      result.append(text.substr(copied, pos - copied));
++      result.append(it->second);
++      copied = end;
++    }
++    pos = end;
++  }
++  if (copied == 0) {
++    return std::nullopt;
++  }
++  result.append(text.substr(copied));
++  return result;
++}
++
+ } // namespace core
+diff --git a/src/ccache/core/common.hpp b/src/ccache/core/common.hpp
+index b565e50..90d0ad5 100644
+--- a/src/ccache/core/common.hpp
++++ b/src/ccache/core/common.hpp
+@@ -22,6 +22,7 @@
+ #include <optional>
+ #include <string>
+ #include <string_view>
++#include <unordered_map>
+ 
+ class Context;
+ 
+@@ -67,4 +68,33 @@ void send_to_console(const Context& ctx, std::string_view text, int fd);
+ // 3. <path>(line[,column]) :   // MSVC
+ std::size_t get_diagnostics_path_length(std::string_view line);
+ 
++// Nix store path normalisation (CCACHE_NIX_STORE_NORMALIZE), see common.cpp.
++
++// Normalized store path -> the path this compilation actually uses, collected
++// from the preprocessor's line markers. An empty value means the normalized
++// path is ambiguous: two different paths of this compilation map to it.
++using NixStorePaths = std::unordered_map<std::string, std::string>;
++
++bool nix_store_normalize_enabled();
++
++// Whether include paths of this compilation are hashed normalized.
++bool nix_store_normalize_applies(const Context& ctx);
++
++// Replace the hash of each /nix/store/<32-char hash>-<name> in `path` with a
++// placeholder.
++std::string nix_store_normalize(std::string_view path);
++
++// Record that this compilation uses `path`, whose normalized form is
++// `normalized`.
++void remember_nix_store_path(NixStorePaths& paths,
++                             std::string_view normalized,
++                             std::string_view path);
++
++// Replace each store path in free text (stderr) that has an unambiguous
++// counterpart in `paths` with that counterpart. Anything else is left as is.
++// Returns std::nullopt if nothing was replaced.
++std::optional<std::string>
++rewrite_nix_store_paths_in_text(std::string_view text,
++                                const NixStorePaths& paths);
++
+ } // namespace core
+diff --git a/src/ccache/core/resultretriever.cpp b/src/ccache/core/resultretriever.cpp
+index 66e2775..fa0d6c6 100644
+--- a/src/ccache/core/resultretriever.cpp
++++ b/src/ccache/core/resultretriever.cpp
+@@ -57,6 +57,18 @@ ResultRetriever::ResultRetriever(const Context& ctx,
  {
-@@ -675,7 +739,12 @@
-       inc_path_str.clear(); // inc_path is used from now on
+ }
  
-       if (inc_path != ctx.apparent_cwd || ctx.config.hash_dir()) {
--        hash.hash(inc_path);
-+        if (nix_store_normalize_enabled()
-+            && !ctx.args_info.generating_debuginfo) {
-+          hash.hash(nix_store_normalize(util::pstr(inc_path).str()));
-+        } else {
-+          hash.hash(inc_path);
++void
++ResultRetriever::set_dependency_file_content(std::string content)
++{
++  m_dependency_file_content = std::move(content);
++}
++
++void
++ResultRetriever::set_stderr_content(std::string content)
++{
++  m_stderr_content = std::move(content);
++}
++
+ void
+ ResultRetriever::on_embedded_file(uint8_t file_number,
+                                   FileType file_type,
+@@ -74,7 +86,10 @@ ResultRetriever::on_embedded_file(uint8_t file_number,
+         compiler::strip_includes_from_msvc_show_includes(m_ctx, data)),
+       STDOUT_FILENO);
+   } else if (file_type == FileType::stderr_output) {
+-    core::send_to_console(m_ctx, util::to_string_view(data), STDERR_FILENO);
++    core::send_to_console(m_ctx,
++                          m_stderr_content ? std::string_view(*m_stderr_content)
++                                           : util::to_string_view(data),
++                          STDERR_FILENO);
+   } else {
+     const auto dest_path = get_dest_path(file_type);
+     if (dest_path.empty()) {
+@@ -236,7 +251,9 @@ ResultRetriever::write_dependency_file(const fs::path& path,
+                                      FMT("Failed to write to {}: ", path));
+   };
+ 
+-  std::string_view str_data = util::to_string_view(data);
++  std::string_view str_data = m_dependency_file_content
++                                ? std::string_view(*m_dependency_file_content)
++                                : util::to_string_view(data);
+   size_t start_pos = 0;
+   const size_t colon_pos = str_data.find(": ");
+   if (colon_pos != std::string::npos) {
+diff --git a/src/ccache/core/resultretriever.hpp b/src/ccache/core/resultretriever.hpp
+index 517967e..629fffa 100644
+--- a/src/ccache/core/resultretriever.hpp
++++ b/src/ccache/core/resultretriever.hpp
+@@ -26,6 +26,7 @@
+ #include <filesystem>
+ #include <optional>
+ #include <span>
++#include <string>
+ 
+ class Context;
+ 
+@@ -52,9 +53,16 @@ public:
+                    result::FileType file_type,
+                    uint64_t file_size) override;
+ 
++  // Write `content` instead of the result's dependency file / stderr output
++  // (CCACHE_NIX_STORE_NORMALIZE, see core/common.cpp).
++  void set_dependency_file_content(std::string content);
++  void set_stderr_content(std::string content);
++
+ private:
+   const Context& m_ctx;
+   std::optional<Hash::Digest> m_result_key;
++  std::optional<std::string> m_dependency_file_content;
++  std::optional<std::string> m_stderr_content;
+ 
+   std::filesystem::path get_dest_path(result::FileType file_type) const;
+ 
+diff --git a/src/ccache/depfile.cpp b/src/ccache/depfile.cpp
+index a3a84c5..a6eed03 100644
+--- a/src/ccache/depfile.cpp
++++ b/src/ccache/depfile.cpp
+@@ -113,6 +113,97 @@ make_paths_relative_in_output_dep(const Context& ctx)
+   return {};
+ }
+ 
++tl::expected<std::optional<std::string>, std::string>
++rewrite_nix_store_paths(std::string_view content,
++                        const core::NixStorePaths& paths)
++{
++  // Same token rules as tokenize() below, but working on spans of `content`
++  // so that a replaced path is the only thing that changes.
++  std::string result;
++  size_t copied = 0; // content[0, copied) is in result
++  bool rewritten = false;
++  bool in_first_targets = true;
++
++  const size_t length = content.size();
++  size_t i = 0;
++  while (i < length) {
++    if (util::is_space(content[i])) {
++      ++i;
++      continue;
++    }
++    if (content[i] == '\\' && i + 1 < length && content[i + 1] == '\n') {
++      i += 2; // Line continuation.
++      continue;
++    }
++    if (content[i] == ':') {
++      in_first_targets = false;
++      ++i;
++      continue;
++    }
++
++    const size_t start = i;
++    std::string token;
++    while (i < length) {
++      if (content[i] == ':' && token.length() == 1
++          && !util::is_space(token[0]) && i + 1 < length
++          && (content[i + 1] == '/' || content[i + 1] == '\\')) {
++        token += content[i]; // Windows path.
++        ++i;
++        continue;
++      }
++      if (content[i] == ':' || util::is_space(content[i])
++          || (content[i] == '\\' && i + 1 < length
++              && content[i + 1] == '\n')) {
++        break;
++      }
++      if (i + 1 < length) {
++        if (content[i] == '\\'
++            && (content[i + 1] == '\\' || content[i + 1] == '#'
++                || content[i + 1] == ':' || content[i + 1] == ' '
++                || content[i + 1] == '\t')) {
++          ++i;
++        } else if (content[i] == '$' && content[i + 1] == '$') {
++          ++i;
 +        }
-       }
++      }
++      token += content[i];
++      ++i;
++    }
++
++    if (in_first_targets) {
++      // The object file. ResultRetriever replaces it with this compilation's
++      // target anyway.
++      continue;
++    }
++    const std::string normalized = core::nix_store_normalize(token);
++    if (normalized == token) {
++      continue; // Not a store path.
++    }
++    const auto it = paths.find(normalized);
++    if (it == paths.end()) {
++      return tl::unexpected(
++        FMT("{} has no counterpart among this compilation's include files",
++            token));
++    }
++    if (it->second.empty()) {
++      return tl::unexpected(FMT(
++        "{} matches more than one include file of this compilation", token));
++    }
++    if (it->second != token) {
++      result.append(content.substr(copied, start - copied));
++      result.append(escape_filename(it->second));
++      copied = i;
++      rewritten = true;
++    }
++  }
++
++  if (!rewritten) {
++    return std::nullopt;
++  }
++  result.append(content.substr(copied));
++  return result;
++}
++
+ std::vector<std::string>
+ tokenize(std::string_view text)
+ {
+diff --git a/src/ccache/depfile.hpp b/src/ccache/depfile.hpp
+index e7b161b..7ce564b 100644
+--- a/src/ccache/depfile.hpp
++++ b/src/ccache/depfile.hpp
+@@ -20,6 +20,8 @@
  
-       TRY(remember_include_file(ctx, inc_path, hash, system, nullptr));
+ class Context;
+ 
++#include <ccache/core/common.hpp>
++
+ #include <tl/expected.hpp>
+ 
+ #include <optional>
+@@ -37,6 +39,17 @@ std::optional<std::string> rewrite_source_paths(const Context& ctx,
+ tl::expected<void, std::string>
+ make_paths_relative_in_output_dep(const Context& ctx);
+ 
++// For CCACHE_NIX_STORE_NORMALIZE: replace each /nix/store/<hash>-... path in a
++// dependency file restored from the cache with the path that has the same
++// normalized form in `paths`, i.e. the one the current compilation uses. The
++// targets of the first rule (the object file) are left alone, as are all bytes
++// outside replaced paths. Returns std::nullopt if nothing needed replacing and
++// an error, naming the path, if a store path has no unambiguous counterpart.
++// See core/common.cpp.
++tl::expected<std::optional<std::string>, std::string>
++rewrite_nix_store_paths(std::string_view content,
++                        const core::NixStorePaths& paths);
++
+ // Split `text` into tokens. A colon token delimits the target tokens from
+ // dependency tokens. An empty token marks the end of an entry.
+ std::vector<std::string> tokenize(std::string_view text);
+diff --git a/unittest/test_core_common.cpp b/unittest/test_core_common.cpp
+index 96441b2..c13078c 100644
+--- a/unittest/test_core_common.cpp
++++ b/unittest/test_core_common.cpp
+@@ -146,4 +146,46 @@ TEST_CASE("core::get_diagnostics_path_length")
+ #endif
+ }
+ 
++TEST_CASE("core::nix_store_normalize")
++{
++  const std::string zero = "00000000000000000000000000000000";
++  CHECK(core::nix_store_normalize("") == "");
++  CHECK(core::nix_store_normalize("/usr/include/x.h") == "/usr/include/x.h");
++  CHECK(core::nix_store_normalize(
++          "/nix/store/0123456789abcdfghijklmnpqrsvwxyz-zlib-dev/include/zlib.h")
++        == FMT("/nix/store/{}-zlib-dev/include/zlib.h", zero));
++  // Too short a hash, or no dash after it: not a store path.
++  CHECK(core::nix_store_normalize("/nix/store/0123-zlib")
++        == "/nix/store/0123-zlib");
++  CHECK(core::nix_store_normalize(
++          "/nix/store/0123456789abcdfghijklmnpqrsvwxyz/zlib")
++        == "/nix/store/0123456789abcdfghijklmnpqrsvwxyz/zlib");
++}
++
++TEST_CASE("core::rewrite_nix_store_paths_in_text")
++{
++  const std::string zero = "00000000000000000000000000000000";
++  const std::string h1 = "1111111111111111111111111111111a";
++  const std::string h2 = "2222222222222222222222222222222b";
++  core::NixStorePaths paths;
++  core::remember_nix_store_path(paths,
++                                FMT("/nix/store/{}-z/include/z.h", zero),
++                                FMT("/nix/store/{}-z/include/z.h", h2));
++
++  CHECK(!core::rewrite_nix_store_paths_in_text("no paths\n", paths));
++  CHECK(!core::rewrite_nix_store_paths_in_text(
++    FMT("/nix/store/{}-z/include/z.h:1:2: warning\n", h2), paths));
++  // Unknown paths are left alone in free text.
++  CHECK(!core::rewrite_nix_store_paths_in_text(
++    FMT("/nix/store/{}-z/include/other.h:1: x\n", h1), paths));
++  CHECK(core::rewrite_nix_store_paths_in_text(
++          FMT("In file included from \x1b[01m/nix/store/{0}-z/include/z.h:3"
++              "\x1b[m,\n/nix/store/{0}-z/include/z.h:1:2: warning: x\n",
++              h1),
++          paths)
++        == FMT("In file included from \x1b[01m/nix/store/{0}-z/include/z.h:3"
++               "\x1b[m,\n/nix/store/{0}-z/include/z.h:1:2: warning: x\n",
++               h2));
++}
++
+ TEST_SUITE_END();
+diff --git a/unittest/test_depfile.cpp b/unittest/test_depfile.cpp
+index e265f7b..dc91e8a 100644
+--- a/unittest/test_depfile.cpp
++++ b/unittest/test_depfile.cpp
+@@ -489,4 +489,94 @@ TEST_CASE("depfile::untokenize")
+             " bar.h\n"));
+ }
+ 
++TEST_CASE("depfile::rewrite_nix_store_paths")
++{
++  const std::string h1 = "1111111111111111111111111111111a";
++  const std::string h2 = "2222222222222222222222222222222b";
++  const std::string h3 = "3333333333333333333333333333333c";
++  const std::string zero = "00000000000000000000000000000000";
++  const auto store = [](const std::string& hash, std::string_view rest) {
++    return FMT("/nix/store/{}-{}", hash, rest);
++  };
++
++  core::NixStorePaths paths;
++  core::remember_nix_store_path(paths,
++                                store(zero, "dbus-dev/include/dbus/dbus.h"),
++                                store(h2, "dbus-dev/include/dbus/dbus.h"));
++  core::remember_nix_store_path(paths,
++                                store(zero, "zlib-dev/include/zlib.h"),
++                                store(h1, "zlib-dev/include/zlib.h"));
++
++  SUBCASE("store paths are replaced, every other byte is kept")
++  {
++    const auto content = FMT(
++      "/nix/store/{0}-out/foo.o: foo.c \\\n"
++      "  {1}   {2} \\\n"
++      " /build/x.h\n"
++      "\n"
++      "{1}:\n"
++      "\n"
++      "{2}:\n",
++      h3,
++      store(h1, "dbus-dev/include/dbus/dbus.h"),
++      store(h1, "zlib-dev/include/zlib.h"));
++    const auto result = depfile::rewrite_nix_store_paths(content, paths);
++    REQUIRE(result);
++    REQUIRE(*result);
++    CHECK(**result
++          == FMT("/nix/store/{0}-out/foo.o: foo.c \\\n"
++                 "  {1}   {2} \\\n"
++                 " /build/x.h\n"
++                 "\n"
++                 "{1}:\n"
++                 "\n"
++                 "{2}:\n",
++                 h3,
++                 store(h2, "dbus-dev/include/dbus/dbus.h"),
++                 store(h1, "zlib-dev/include/zlib.h")));
++  }
++
++  SUBCASE("nothing to replace")
++  {
++    const auto content =
++      FMT("foo.o: foo.c {}\n", store(h1, "zlib-dev/include/zlib.h"));
++    const auto result = depfile::rewrite_nix_store_paths(content, paths);
++    REQUIRE(result);
++    CHECK(!*result);
++  }
++
++  SUBCASE("no counterpart is an error")
++  {
++    const auto content =
++      FMT("foo.o: foo.c {}\n", store(h1, "dbus-dev/include/dbus/other.h"));
++    const auto result = depfile::rewrite_nix_store_paths(content, paths);
++    REQUIRE(!result);
++    CHECK(result.error().find("dbus/other.h") != std::string::npos);
++    CHECK(!depfile::rewrite_nix_store_paths(content, {}));
++  }
++
++  SUBCASE("ambiguous counterpart is an error")
++  {
++    core::remember_nix_store_path(paths,
++                                  store(zero, "zlib-dev/include/zlib.h"),
++                                  store(h3, "zlib-dev/include/zlib.h"));
++    const auto content =
++      FMT("foo.o: foo.c {}\n", store(h1, "zlib-dev/include/zlib.h"));
++    CHECK(!depfile::rewrite_nix_store_paths(content, paths));
++  }
++
++  SUBCASE("escaped characters")
++  {
++    core::remember_nix_store_path(paths,
++                                  store(zero, "x/include/a b.h"),
++                                  store(h2, "x/include/a b.h"));
++    const auto content =
++      FMT("foo.o: {}\n", store(h1, "x/include/a\\ b.h"));
++    const auto result = depfile::rewrite_nix_store_paths(content, paths);
++    REQUIRE(result);
++    REQUIRE(*result);
++    CHECK(**result == FMT("foo.o: {}\n", store(h2, "x/include/a\\ b.h")));
++  }
++}
++
+ TEST_SUITE_END();
