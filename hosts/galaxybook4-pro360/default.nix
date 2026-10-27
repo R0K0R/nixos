@@ -1,28 +1,5 @@
 { inputs, lib, pkgs, ... }:
 
-let
-  # One definition, two programs: Claude Code reads it from a project's
-  # .mcp.json, Claude Desktop from its own config.
-  mcpServers.noteworthy = {
-    type = "http";
-    url = "http://yulee:8010/mcp";
-  };
-
-  # The server refuses anyone without this; it is generated on the server and
-  # copied here, never committed and never in the store.
-  # Relative to the user's home; the features resolve it.
-  mcpTokenFile = ".config/noteworthy/mcp-token";
-
-  # The book's own skill, pinned.  It lives in the noteworthy repo, which is
-  # where it is edited and where a clone picks it up by itself; this copy is
-  # for sessions run anywhere else.
-  noteworthySkill = pkgs.fetchFromGitHub {
-    owner = "sihooleebd";
-    repo = "noteworthy";
-    rev = "b5c405b7931d69feee68625b248e2dde5856c25e";
-    hash = "sha256-+F/a0fWpRV1Ti7uOR958Rjdcxhn/jK8MBrhqrqMqlL8=";
-  };
-in
 {
   imports = [
     ./hardware-configuration.nix
@@ -312,21 +289,8 @@ in
         (pkgs.callPackage ../../features/apps/claude-code/kitty-inline-img.nix { })
       ];
       shareWithRoot = true;
-      gemma.enable = true;
-      # The book's own server: it edits through the Yjs rooms, so an agent's
-      # change reaches whoever has the file open instead of being written
-      # under them and reverted at the room's next save.
-      mcp = {
-        servers = mcpServers;
-        projects = [ "git_shit/noteworthy" ];
-        userScope = true;
-        tokenFile = mcpTokenFile;
-      };
-      skills.noteworthy = "${noteworthySkill}/.claude/skills/noteworthy";
-      watermarksRemover = {
-        enable = true;
-        service.enable = true;
-      };
+      # gemma-claude, skills, MCP servers and watermarks-remover are the
+      # home's (claude-code there).
     };
 
     # The host side of the home's claude-desktop: Cowork's qemu and OVMF links.

@@ -1,3 +1,11 @@
+/*
+  The SYSTEM half of claude-code: the pinned package, wrapped with
+  extraBinPackages, on every account's PATH -- the fallback session and root's
+  `sudo claude` run it too -- the /root/.claude link, and ~/.claude's
+  persistence. The per-user setup (gemma-claude, skills, MCP servers,
+  watermarks-remover) is the home half, my.claude-code in a home repo, since
+  2026-10-27.
+*/
 { config, inputs, lib, pkgs, ... }:
 
 let
@@ -59,158 +67,7 @@ in
         defaultText = lib.literalExpression "the primary user";
       description = "Whose ~/.claude the root symlink points at.";
     };
-
-    gemma = {
-      enable = lib.mkEnableOption ''
-        the `gemma-claude` wrapper: claude-code pointed at a local
-        OpenAI-compatible endpoint instead of Anthropic's API
-      '';
-
-      baseURL = lib.mkOption {
-        type = lib.types.str;
-        default = "http://yulee:8002";
-        description = ''
-          Endpoint the wrapper talks to. Deliberately not shared with the
-          opencode feature or DMS's AI panel: those name the same host today
-          but are independent consumers, not one value duplicated.
-        '';
-      };
-
-      sonnetModel = lib.mkOption {
-        type = lib.types.str;
-        default = "diffusiongemma";
-        description = "Model substituted for Sonnet (and Haiku).";
-      };
-
-      opusModel = lib.mkOption {
-        type = lib.types.str;
-        default = "gemma4-31b";
-        description = "Model substituted for Opus.";
-      };
-    };
-
-    watermarksRemover = {
-      enable = lib.mkEnableOption ''
-        watermarks-remover: wm-* CLI tools plus its two Claude Code skills,
-        pinned to a commit in watermarks-remover.nix rather than installed
-        with upstream's install_skill.py
-      '';
-
-      service = {
-        enable = lib.mkOption {
-          type = lib.types.bool;
-          default = false;
-          description = ''
-            Run the local HTTP service as a user unit. Only the
-            remove-ai-marks skill needs it; clean-user-facing-text is
-            self-contained and the wm-* tools call the scripts directly.
-          '';
-        };
-
-        port = lib.mkOption {
-          type = lib.types.port;
-          default = 8765;
-          description = "Loopback port for the service. Upstream's default.";
-        };
-      };
-    };
-
-    skills = lib.mkOption {
-      type = lib.types.attrsOf lib.types.path;
-      default = { };
-      example = lib.literalExpression ''
-        { noteworthy = "''${skillSrc}/.claude/skills/noteworthy"; }
-      '';
-      description = ''
-        Skills to put in `~/.claude/skills`, by the name they take there.
-
-        For skills that should be available in every project. One that belongs
-        to a single project is better committed to that project's own
-        `.claude/skills/`, where Claude Code finds it without any of this and
-        anyone cloning the repo gets it too.
-
-        Claude Desktop is not covered: its skills live in the account, uploaded
-        through `/v1/skills`, so there is no directory here to fill.
-      '';
-    };
-
-    mcp = {
-      servers = lib.mkOption {
-        type = lib.types.attrsOf (lib.types.attrsOf lib.types.anything);
-        default = { };
-        example = lib.literalExpression ''
-          {
-            noteworthy = {
-              type = "http";
-              url = "http://yulee:8010/mcp";
-            };
-          }
-        '';
-        description = ''
-          MCP servers to declare, by name, in the shape Claude Code reads
-          (`type` and `url` for HTTP; `command`, `args`, `env` for stdio).
-
-          Written as a `.mcp.json` in each directory `mcp.projects` names,
-          that being the only config file Claude Code reads without being
-          told to on the command line: `--mcp-config` is a global variadic
-          flag, so baking it into a wrapper swallows the subcommand after it,
-          and `~/.claude.json` is state the program rewrites itself.
-
-          Claude Code still asks once, per project, before it will talk to a
-          server declared this way. That prompt is its trust gate and this
-          option does not try to answer it.
-        '';
-      };
-
-      tokenFile = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = null;
-        example = ".config/noteworthy/mcp-token";
-        description = ''
-          A file holding the bearer token for the http servers above.
-          Absolute, or relative to the user's home -- the relative form keeps
-          a host file free of `/home/<name>` paths.
-
-          Read at switch and written into each project's `.mcp.json`, which is
-          then mode 600 and no longer a store symlink -- a store path is
-          world-readable by construction, so a token cannot live in one.
-
-          `.mcp.json` is meant to be committed, so a project whose token is
-          inlined this way should ignore the file in git.
-        '';
-      };
-
-      userScope = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = ''
-          Also declare the servers at user scope, so every session sees them,
-          not only sessions started inside one of `projects`.
-
-          User scope lives in `~/.claude.json`, which is Claude Code's own
-          state file -- the reason `projects` exists at all. It is therefore
-          MERGED at switch, touching only `mcpServers` (the same approach
-          claude-desktop takes with its config), never symlinked over: a
-          read-only store path would stop the program writing its own state.
-          With `tokenFile` set, the merged entries carry the token, and the
-          file is kept at mode 600.
-        '';
-      };
-
-      projects = lib.mkOption {
-        type = lib.types.listOf lib.types.str;
-        default = [ ];
-        example = [ "git_shit/noteworthy" ];
-        description = ''
-          Directories, relative to the user's home, to write `.mcp.json`
-          into. A project gets the servers only if it is named here: which
-          sessions may act through a server is a decision, not a default.
-        '';
-      };
-    };
   };
-
-  options.my.claude-code.users = import ../../../lib/user-scope.nix { inherit lib config; };
 
   config = lib.mkIf cfg.enable {
     my.state.user.state.directories = [
