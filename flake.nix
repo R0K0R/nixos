@@ -3,10 +3,11 @@
 
   inputs = {
     # Pinned in flake.lock. Use nixos-YY.MM when that branch exists, or keep unstable.
-    # combined-fundamental: all cross-build fixes merged onto current
-    # nixos-unstable, rebuilt as individual pr/* branches (see nixpkgs-contrib)
+    # combined-2026-10-23: all cross-build fixes cherry-picked onto nixos-unstable
+    # 3ec636362e18, rebuilt as individual pr/* branches (see nixpkgs-contrib)
     # for upstreaming, plus this one combined branch actually used for building.
-    nixpkgs.url = "github:R0K0R/nixpkgs/combined-fundamental";
+    # combined-fundamental (the previous base, upstream 7fd4004d) stays as it was.
+    nixpkgs.url = "github:R0K0R/nixpkgs/combined-2026-10-23";
 
     # Intentionally NOT follows = "nixpkgs" — unaffected by
     # --override-input nixpkgs path:/home/r0k0r/nixpkgs-patch.
@@ -18,10 +19,11 @@
     # builds on the premise that both trees are the same revision, and an
     # untuned set (dell-latitude, a home with my.tuning off) is built from it.
     # After rebasing the fork: find its base (the newest non-fork commit of
-    # combined-fundamental) and run
+    # the combined branch) and run
     #   nix flake lock --override-input nixpkgs-upstream github:NixOS/nixpkgs/<base>
     # 530051b bumped the fork and left this at e7439b6, three days older; fixed
-    # 2026-10-18 (fork 00a171f = upstream 7fd4004d + fork commits).
+    # 2026-10-18 (fork 00a171f = upstream 7fd4004d + fork commits). Now
+    # combined-2026-10-23 = upstream 3ec636362e18 + fork commits.
     nixpkgs-upstream.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     /*
