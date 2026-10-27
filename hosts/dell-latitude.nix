@@ -68,6 +68,10 @@
     };
     fcitxTrayText.enable = true;
     neovim.enable = true;
+    # Home halves of the system's base, fcitx and network (same names there).
+    base.enable = true; # gh and its credential helper
+    fcitx.enable = true;
+    network.enable = true; # the KDE Connect daemon
     # Doom Emacs from his own config (the doom-private input); the Emacs build is the system's.
     emacs = {
       enable = true;
