@@ -1,3 +1,8 @@
+/*
+  The SYSTEM half of base: the CLI tools every host wants. gh with the git
+  credential helper it writes, and its token, are the home half, my.base in a
+  home repo, since 2026-10-27.
+*/
 { config, lib, pkgs, ... }:
 
 let
@@ -15,18 +20,7 @@ in
 {
   options.my.base.enable = lib.mkEnableOption "baseline CLI tools every host wants regardless of role";
 
-  # Accounts this feature applies to; defaults to the primary user.
-  options.my.base.users = import ../../../lib/user-scope.nix { inherit lib config; };
-
   config = lib.mkIf cfg.enable (lib.mkMerge [
-    {
-      my.state.user.secret.files = [
-        ".config/gh/hosts.yml" # gh OAuth token (config.yml is home-manager's)
-      ];
-    }
     (lib.mkIf (pkgSet ? system) { environment.systemPackages = pkgSet.system; })
-    # Emitted only when non-empty, and keyed by this feature's `users`
-    # scope rather than by a hardcoded account -- see lib/user-scope.nix.
-    (lib.mkIf (pkgSet ? user) { my.packages.perUser = lib.genAttrs config.my.base.users (_: pkgSet.user); })
   ]);
 }

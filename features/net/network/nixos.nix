@@ -1,3 +1,8 @@
+/*
+  The SYSTEM half of network: NetworkManager, KDE Connect's package and
+  firewall ports, playerctl. The KDE Connect daemon unit and its paired-device
+  keys are the home half, my.network in a home repo, since 2026-10-27.
+*/
 { config, lib, pkgs, ... }:
 
 let
@@ -30,13 +35,7 @@ in
     '';
   };
 
-  # Accounts the KDE Connect daemon runs for; defaults to the primary user.
-  options.my.network.users = import ../../../lib/user-scope.nix { inherit lib config; };
-
   config = lib.mkIf cfg.enable {
-    my.state.user.secret.directories = lib.optionals cfg.kdeconnect.enable [
-      ".config/kdeconnect" # device key/cert and trusted phones; losing it means re-pairing
-    ];
     networking.networkmanager.enable = true;
 
     /*

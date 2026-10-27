@@ -1,3 +1,10 @@
+/*
+  The SYSTEM half of fcitx: the input method itself (i18n.inputMethod, part
+  of the epoch's environment), the synthesized GTK3 immodules cache and the
+  daemon unit -- what every session, guests' included, needs. fcitx5's own
+  config (trigger keys, the Hangul profile) and the learned-dictionary state
+  are the home half, my.fcitx in a home repo, since 2026-10-27.
+*/
 { config, lib, pkgs, ... }:
 
 let
@@ -7,13 +14,7 @@ in
   options.my.fcitx.enable =
     lib.mkEnableOption "fcitx5 input method (Hangul), Wayland-native, started as a user service";
 
-  # Accounts this feature applies to; defaults to the primary user.
-  options.my.fcitx.users = import ../../../lib/user-scope.nix { inherit lib config; };
-
   config = lib.mkIf cfg.enable {
-    my.state.user.state.directories = [
-      ".local/share/fcitx5" # learned hangul and user dictionary data
-    ];
     /*
       THE GTK3 IMMODULES CACHE, synthesized -- because under IntraISACross the
       tuned gtk3 ships none, and without it no GTK3 app has an IME at all.
