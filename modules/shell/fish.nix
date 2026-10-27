@@ -2,8 +2,9 @@
 
 {
   options.my.fishTools.enable = lib.mkEnableOption ''
-    zoxide and fzf with their fish hooks. Layered on the system's fish feature
-    (which owns programs.fish); the fastfetch greeting is modules/shell/fastfetch
+    zoxide and fzf with their fish hooks. Layered on the fish feature
+    (features/shell/fish, which owns programs.fish); the fastfetch greeting is
+    modules/shell/fastfetch
   '';
 
   config = lib.mkIf config.my.fishTools.enable {

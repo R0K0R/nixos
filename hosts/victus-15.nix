@@ -10,4 +10,6 @@
 { ... }:
 
 {
+  # His fish config (the system keeps fish as a login shell here).
+  my.fish.enable = true;
 }

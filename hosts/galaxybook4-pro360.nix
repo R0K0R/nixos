@@ -16,6 +16,7 @@
 
 {
   my = {
+    fish.enable = true; # his fish config; the login shell is the system's
     # --- the bonfire desktop ---------------------------------------------------------------
     hyprland.enable = true;
 
