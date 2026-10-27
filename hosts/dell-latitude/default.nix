@@ -259,14 +259,9 @@
       enable = true;
       greeting = "bonfire";
     };
-    # qt-theming's home half only repairs DMS's matugen output (a user service
-    # deriving a black KDE scheme from DankMatugen.colors, and qt6ct.conf edits).
-    # He runs no DMS, so it applies to nobody; the system half (the QT_PLUGIN_PATH
-    # entry that makes the qt6ct platform theme loadable) stays.
-    qt-theming = {
-      enable = true;
-      users = [ ];
-    };
+    # The QT_PLUGIN_PATH entry that makes the qt6ct platform theme loadable.
+    # The home half only repairs DMS's matugen output; he runs no DMS.
+    qt-theming.enable = true;
     session-services = {
       enable = true;
       # What his desktop leans on that a bare compositor does not provide:
@@ -290,13 +285,9 @@
       kdeconnect.enable = true;
     };
 
-    # Hyprland: the compositor package, UWSM and the session entry stay the
-    # system's; the CONFIGURATION is his own (a home module in his home repo, with
-    # his keybinds and his rules), so the system's Hyprland home half applies to
-    # nobody here. Left in scope it would write a second Lua config and
-    # hl.config settings that merge into his.
+    # Hyprland: the compositor package, UWSM and the session entry are the
+    # system's; the configuration is his home's.
     hyprland = {
-      users = [ ];
       # His 3D dock (the "dock"-tagged windows rendered as a perspective
       # trapezoid) and his home's decoration:keystone_* options need the
       # keystone build of the compositor: the stock one rejects those keys.

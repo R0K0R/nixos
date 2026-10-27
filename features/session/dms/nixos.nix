@@ -11,53 +11,10 @@ in
 
   options.my.dms = {
     enable = lib.mkEnableOption ''
-      DankMaterialShell: the desktop shell (bar, dock, launcher, lock screen).
-      The shell itself is configured in this feature's home half
+      DankMaterialShell's system half: the shell's role, the rotation hook
+      for its bar. The shell itself (settings, plugins, compositor glue) is
+      the home half, my.dms in a home repo
     '';
-
-    settingsOverride = lib.mkOption {
-      type = lib.types.either (lib.types.attrsOf lib.types.anything) (
-        lib.types.functionTo (lib.types.attrsOf lib.types.anything)
-      );
-      default = { };
-      example = lib.literalExpression ''{ showBattery = false; fontScale = 1.2; }'';
-      description = ''
-        Per-host changes merged over ./settings.nix with `recursiveUpdate`.
-        Empty means "exactly settings.nix", so a host that says nothing gets the
-        shared config unchanged.
-
-        This is the RIGHT tool for anything that is a preference rather than a
-        fact: greeterWallpaperPath, currentThemeName, fontFamily, fontScale,
-        popupTransparency, iconTheme. Those differ between machines by taste --
-        a bigger panel wants a different fontScale, a different machine wants a
-        different wallpaper -- and there is nothing in the config they could
-        ever be derived from, because no fact determines them.
-
-        The one anti-pattern is overriding something the host ALREADY declares
-        elsewhere. `enableFprint` is derived in home.nix from
-        services.fprintd.enable instead of being overridden here, because those
-        are two names for one fact and two copies of a fact can drift. If a
-        value has a real source, read it; if it is taste, put it here.
-
-        Two accepted shapes:
-
-          ATTRSET -- merged with `recursiveUpdate`. Nested attrsets merge
-          partially, so `cursorSettings.size = 16` keeps `cursorSettings.theme`.
-          This is what you want almost always.
-
-          FUNCTION -- `prev: prev // { ... }`, given the fully-derived settings
-          and returning the final set. The escape hatch for LISTS, which
-          `recursiveUpdate` replaces wholesale rather than merging. The lists
-          that matter are big: `barConfigs` is ~84 lines, plus
-          `controlCenterWidgets`, `appIdSubstitutions`, `powerMenuActions`.
-          Restating a whole bar in a host file to change one transparency would
-          defeat the point, so a function can edit them in place:
-
-            settingsOverride = prev: prev // {
-              barConfigs = map (b: b // { transparency = 0.5; }) prev.barConfigs;
-            };
-      '';
-    };
 
     greeter = {
       enable = lib.mkEnableOption "the DMS login greeter (dank-greeter, a separate upstream repo)";
@@ -74,15 +31,7 @@ in
     };
   };
 
-  # Accounts this feature applies to; defaults to the primary user.
-  options.my.dms.users = import ../../../lib/user-scope.nix { inherit lib config; };
-
   config = lib.mkMerge [
-    (lib.mkIf cfg.enable {
-      my.state.user.state.directories = [
-        ".local/state/DankMaterialShell" # session.json, notepad notes, app usage, plugin state
-      ];
-    })
     {
       my.internal.features.dms = {
         # The shell reads my.desktop.compositor for its workspace and bar

@@ -42,12 +42,10 @@
 */
 {
   options.my.qt-theming.enable = lib.mkEnableOption ''
-    Qt theming outside Plasma: the QT_PLUGIN_PATH entry that makes qt6ct
-    loadable, plus the home half's qt6ct scheme and kdeglobals management
+    Qt theming outside Plasma, the system half: the QT_PLUGIN_PATH entry that
+    makes qt6ct loadable. The qt6ct scheme and kdeglobals management are the
+    home half, my.qt-theming in a home repo
   '';
-
-  # Accounts this feature applies to; defaults to the primary user.
-  options.my.qt-theming.users = import ../../../lib/user-scope.nix { inherit lib config; };
 
   config = lib.mkIf config.my.qt-theming.enable {
     environment.profileRelativeSessionVariables.QT_PLUGIN_PATH = [

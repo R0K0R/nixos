@@ -181,20 +181,41 @@ empty category and two features with the same leaf name are errors.
 
 System-wide features live here; a user's own features live in that user's
 home repo, in its own `features/` tree collected with `lib.homeFeatures` (see
-the home repo's README). Moved there: cursor-theme, easyeffects, eza, kitty,
-opencode, sidedock, ssh, starship (2026-10-26); arduino, astro, dev-toolchain,
-diagnostics, fx570ex, kakaotalk, latex, media, qt-dev, samsung-ecosystem
-(2026-10-27).
+the home repo's README). Moved there whole: cursor-theme, easyeffects, eza,
+kitty, opencode, sidedock, ssh, starship (2026-10-26); arduino, astro,
+dev-toolchain, diagnostics, fx570ex, kakaotalk, latex, media, qt-dev,
+samsung-ecosystem (2026-10-27).
 
 A feature split between the two keeps ONE name: the system half is
-`my.<feature>` in the host file and does what needs root, the home half is
-`my.<feature>` in the home and installs and configures the program. A home
-half reads its own system half (`osConfig.my.<feature>`) and the facts of the
-features it plugs into (`my.hyprland`, `my.desktop`), and asserts that its
-system half is on when it cannot work without it. Split today: claude-desktop
-(Cowork's qemu and OVMF links), claude-science (loader, CA file, /bin/bash),
-desktop-apps (themes, qt6ct, MTP, the rnote fixes), direnv (the daemon's
-keep-outputs). astro's astropy sits in victus-15's python-dev environment.
+`my.<feature>` in the host file and does what needs root or what every
+session shares, the home half is `my.<feature>` in the home and configures the
+program. A home half reads its own system half (`osConfig.my.<feature>`) and
+the facts of the features it plugs into (`my.hyprland`, `my.desktop`), and
+asserts that its system half is on when it cannot work without it. Split
+today, system half first:
+
+| feature | system half | home half |
+|---|---|---|
+| base | the baseline CLI packages | gh and its credential helper |
+| claude-code | the pinned package on every PATH, root's ~/.claude link | gemma-claude, skills, MCP servers, watermarks-remover |
+| claude-desktop | Cowork's qemu and OVMF links | the app, its MCP config |
+| claude-science | loader, CA file, /bin/bash | the app, its pin and secrets |
+| desktop-apps | themes, qt6ct, MTP udev, the rnote fixes (overlay) | the applications |
+| direnv | keep-outputs/keep-derivations | direnv + nix-direnv |
+| dms | the greeter, the DMS pin, the bar's rotation hook | the shell: settings, plugins, compositor glue |
+| emacs | the overlay, problem handlers, Emacs builds, authinfo, `headless` | Doom, its pin, the daemon, fonts |
+| fcitx | i18n.inputMethod, the GTK3 immodules cache, the daemon | fcitx5's config |
+| fish, zsh | the login shell, /etc/zshrc plugins, root's zsh | the interactive config |
+| foldpen | uinput for `users`, the port | the daemon, its keys |
+| hyprland | the compositor build, session entry, modKey/keystone/rotationHooks | the Lua config, session scripts |
+| network | NetworkManager, KDE Connect's ports | the KDE Connect daemon |
+| qt-theming | QT_PLUGIN_PATH | the qt6ct scheme, kdeglobals |
+| waydroid | the container, its service, the images | its Hyprland keys, the Android /data |
+
+astro's astropy sits in victus-15's python-dev environment. Not moved: what
+every account or session needs (greeters, GNOME, fallback-session, firefox,
+flatpak, gl-namespace, the epoch), hardware, nix and networking, and niri and
+hakuspace (off everywhere).
 
 A moved feature's packages.nix is copied verbatim into
 `tuning/runtime-cache/home-anchors/`, which keeps those packages Tier 3

@@ -215,9 +215,6 @@ in
       my.state.system.state.directories = [
         "/var/lib/waydroid" # images, vendor overlay and waydroid.cfg; reinitialised by waydroid-init
       ];
-      my.state.user.state.directories = [
-        ".local/share/waydroid" # Android /data: installed apps and their logins (3 GB)
-      ];
 
       # Always use the nftables build. Plain `waydroid` wraps `waydroid-net.sh` with `iptables`;
       # NixOS firewalls/stack are effectively nft-based (`USE_NFTABLES=1` in nixpkgs), otherwise

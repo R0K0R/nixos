@@ -127,9 +127,9 @@ in
   # dad7e9d (system-wide installs, Sober); doom is "optional", which the
   # default classes leave out. .ssh is not here any more: ssh is a home
   # feature since 2026-10-26, and the home's my.persist declares it.
-  featureState = expect "fprint, cups, AccountsService, waydroid, flatpak reach /persist; firefox, DMS, Claude Code reach the persist-home's user data; optional doom does not" (
+  featureState = expect "fprint, cups, AccountsService, waydroid, flatpak reach /persist; firefox and Claude Code reach the persist-home's user data; optional doom does not" (
     lib.all (d: lib.elem d dirsOf) [ "/var/lib/fprint" "/var/lib/cups" "/var/lib/AccountsService" "/var/lib/waydroid" "/var/lib/flatpak" ]
-    && lib.all (p: lib.elem p (pickUser "directories")) [ ".mozilla/firefox" ".local/state/DankMaterialShell" ]
+    && lib.all (p: lib.elem p (pickUser "directories")) [ ".mozilla/firefox" ".claude" ]
     && lib.all (p: lib.elem p (pickUser "files")) [ ".claude.json" ]
     && !(lib.elem ".local/share/doom" (pickUser "directories"))
     && lib.hasInfix (builtins.unsafeDiscardStringContext (toString expectedUserData)) c.systemd.services.persist-home-r0k0r.serviceConfig.ExecStart
