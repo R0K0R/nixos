@@ -1,8 +1,16 @@
 diff --git a/src/ccache/ccache.cpp b/src/ccache/ccache.cpp
-index 0d00cdf..efd5a26 100644
+index 0d00cdf..4747198 100644
 --- a/src/ccache/ccache.cpp
 +++ b/src/ccache/ccache.cpp
-@@ -675,7 +675,19 @@ do_process_preprocessed_data(Context& ctx, Hash& hash, util::Bytes&& data)
+@@ -80,6 +80,7 @@
+ #endif
+ 
+ #include <algorithm>
++#include <chrono>
+ #include <cerrno>
+ #include <cstdint>
+ #include <cstdio>
+@@ -675,7 +676,20 @@ do_process_preprocessed_data(Context& ctx, Hash& hash, util::Bytes&& data)
        inc_path_str.clear(); // inc_path is used from now on
  
        if (inc_path != ctx.apparent_cwd || ctx.config.hash_dir()) {
@@ -15,6 +23,7 @@ index 0d00cdf..efd5a26 100644
 +          if (normalized != real_path) {
 +            core::remember_nix_store_path(
 +              ctx.nix_store_paths, normalized, real_path);
++            core::remember_nix_store_objects(ctx.nix_store_objects, real_path);
 +          }
 +          hash.hash(normalized);
 +        } else {
@@ -23,18 +32,30 @@ index 0d00cdf..efd5a26 100644
        }
  
        TRY(remember_include_file(ctx, inc_path, hash, system, nullptr));
-@@ -2660,6 +2672,35 @@ calculate_result_and_manifest_key(Context& ctx,
+@@ -2660,6 +2674,78 @@ calculate_result_and_manifest_key(Context& ctx,
  
  enum class FromCacheCallMode : uint8_t { direct, cpp };
  
-+// Collects the dependency file and stderr output of a result for the
-+// CCACHE_NIX_STORE_NORMALIZE rewrite in from_cache (see core/common.cpp). Both
-+// are always embedded; only object and .dwo files are stored raw.
++// First pass over a result for CCACHE_NIX_STORE_NORMALIZE (see
++// core/common.cpp): collects the dependency file and stderr output, which are
++// always embedded, and scans every other file for references to store objects
++// this compilation does not use.
 +class NixStorePathCollector : public core::result::Deserializer::Visitor
 +{
 +public:
++  NixStorePathCollector(const Context& ctx,
++                        const Hash::Digest& result_key,
++                        const core::NixStoreObjects* objects)
++    : m_ctx(ctx),
++      m_result_key(result_key),
++      m_objects(objects)
++  {
++  }
++
 +  std::optional<std::string> dependency_file;
 +  std::optional<std::string> stderr_output;
++  std::optional<std::string> foreign_reference; // "<file type>: <path>"
++  uint64_t scanned_bytes = 0;
 +
 +  void
 +  on_embedded_file(uint8_t /*file_number*/,
@@ -45,29 +66,79 @@ index 0d00cdf..efd5a26 100644
 +      dependency_file = std::string(util::to_string_view(data));
 +    } else if (file_type == core::result::FileType::stderr_output) {
 +      stderr_output = std::string(util::to_string_view(data));
++    } else {
++      scan(file_type, util::to_string_view(data));
 +    }
 +  }
 +
 +  void
-+  on_raw_file(uint8_t /*file_number*/,
-+              core::result::FileType /*file_type*/,
++  on_raw_file(uint8_t file_number,
++              core::result::FileType file_type,
 +              uint64_t /*file_size*/) override
 +  {
++    const auto path =
++      m_ctx.storage.local.get_raw_file_path(m_result_key, file_number);
++    const auto data = util::read_file<std::string>(path);
++    if (!data) {
++      foreign_reference = FMT("{}: cannot read {}: {}",
++                              core::result::file_type_to_string(file_type),
++                              path,
++                              data.error());
++      return;
++    }
++    scan(file_type, *data);
++  }
++
++private:
++  const Context& m_ctx;
++  const Hash::Digest& m_result_key;
++  const core::NixStoreObjects* m_objects;
++
++  void
++  scan(core::result::FileType file_type, std::string_view data)
++  {
++    if (foreign_reference || (m_objects && m_objects->empty())) {
++      return;
++    }
++    scanned_bytes += data.size();
++    if (auto ref = core::find_foreign_nix_store_reference(data, m_objects)) {
++      foreign_reference =
++        FMT("{} names {}", core::result::file_type_to_string(file_type), *ref);
++    }
 +  }
 +};
 +
  // Try to return the compile result from cache.
  static tl::expected<bool, Failure>
  from_cache(Context& ctx, FromCacheCallMode mode, const Hash::Digest& result_key)
-@@ -2706,6 +2747,37 @@ from_cache(Context& ctx, FromCacheCallMode mode, const Hash::Digest& result_key)
+@@ -2706,6 +2792,56 @@ from_cache(Context& ctx, FromCacheCallMode mode, const Hash::Digest& result_key)
      cache_entry.verify_checksum();
      core::result::Deserializer deserializer(cache_entry.payload());
      core::ResultRetriever result_retriever(ctx, result_key);
 +    if (core::nix_store_normalize_applies(ctx)) {
 +      // The entry may have been stored by a compilation that used other store
 +      // paths. Decide before anything is written or printed.
-+      NixStorePathCollector collector;
++      const auto scan_start = std::chrono::steady_clock::now();
++      NixStorePathCollector collector(ctx,
++                                      result_key,
++                                      mode == FromCacheCallMode::direct
++                                        ? nullptr
++                                        : &ctx.nix_store_objects);
 +      deserializer.visit(collector);
++      if (collector.foreign_reference) {
++        LOG("Not using result {}: {}, which this compilation does not use{}",
++            util::format_base16(result_key),
++            *collector.foreign_reference,
++            mode == FromCacheCallMode::direct
++              ? " (direct mode, trying the preprocessor)"
++              : "");
++        return false;
++      }
++      LOG("Scanned {} bytes of the result for other store paths in {} us",
++          collector.scanned_bytes,
++          std::chrono::duration_cast<std::chrono::microseconds>(
++            std::chrono::steady_clock::now() - scan_start)
++            .count());
 +      if (collector.dependency_file
 +          && ctx.args_info.generating_dependencies) {
 +        auto rewritten = depfile::rewrite_nix_store_paths(
@@ -98,7 +169,7 @@ index 0d00cdf..efd5a26 100644
      deserializer.visit(result_retriever);
    } catch (core::ResultRetriever::WriteError& e) {
 diff --git a/src/ccache/context.hpp b/src/ccache/context.hpp
-index 966a819..21f47c4 100644
+index 966a819..280188a 100644
 --- a/src/ccache/context.hpp
 +++ b/src/ccache/context.hpp
 @@ -20,6 +20,7 @@
@@ -109,19 +180,20 @@ index 966a819..21f47c4 100644
  #include <ccache/core/manifest.hpp>
  #include <ccache/hash.hpp>
  #include <ccache/storage/storage.hpp>
-@@ -70,6 +71,10 @@ public:
+@@ -70,6 +71,11 @@ public:
    // Files included by the preprocessor and their hashes.
    std::unordered_map<std::string, Hash::Digest> included_files;
  
 +  // Store paths from the preprocessor's line markers, by normalized form. Only
 +  // filled when CCACHE_NIX_STORE_NORMALIZE applies (see core/common.cpp).
 +  core::NixStorePaths nix_store_paths;
++  core::NixStoreObjects nix_store_objects;
 +
    // Have we tried and failed to get colored diagnostics?
    bool diagnostics_color_failed = false;
  
 diff --git a/src/ccache/core/common.cpp b/src/ccache/core/common.cpp
-index 528c3fe..c9011ed 100644
+index 528c3fe..6cf4bc7 100644
 --- a/src/ccache/core/common.cpp
 +++ b/src/ccache/core/common.cpp
 @@ -28,6 +28,8 @@
@@ -133,7 +205,7 @@ index 528c3fe..c9011ed 100644
  using IncludeDelimiter = util::Tokenizer::IncludeDelimiter;
  
  namespace fs = util::filesystem;
-@@ -282,4 +284,147 @@ get_diagnostics_path_length(std::string_view line)
+@@ -282,4 +284,273 @@ get_diagnostics_path_length(std::string_view line)
    return path_end;
  }
  
@@ -181,6 +253,25 @@ index 528c3fe..c9011ed 100644
 +// mode, which then has the map. The stderr text of the result is rewritten
 +// with the same map, but best-effort only: it is free text, so paths without a
 +// counterpart are left alone rather than forcing a miss.
++//
++// Binary outputs cannot be rewritten that way, and one hole remains in them:
++// __builtin_FILE() and std::source_location::current() are resolved by the
++// compiler from the line markers, so a header path they put into the object
++// never appears in the preprocessed text and the key cannot tell two store
++// hashes apart. (__FILE__ is fine: it expands in the text, hence in the key.)
++// So before a hit is accepted, every restored file other than stderr and the
++// dependency file is scanned, decompressed and in memory, for a reference to
++// a store object that has the same name as one of this compilation's include
++// store objects (ctx.nix_store_objects) but another hash -- in plain form, or
++// with the hash uppercased, which is what nixpkgs' gcc
++// (mangle-NIX_STORE-in-__FILE__.patch) writes for __FILE__ and
++// __builtin_FILE(). Such a hit is a miss. nixpkgs' clang wrapper instead maps
++// each include dir to /nix/store/eeee...-<name> with -fmacro-prefix-map; that
++// is the same for every hash and not a valid hash, so it is ignored. Store
++// paths of objects this compilation does not include from (the package's own
++// $out in a string literal, already part of the key) never count. A direct
++// mode hit has no line markers to compare with, so there any store reference
++// sends it to preprocessor mode.
 +bool
 +nix_store_normalize_enabled()
 +{
@@ -245,6 +336,113 @@ index 528c3fe..c9011ed 100644
 +  }
 +}
 +
++namespace {
++
++constexpr std::string_view k_nix_store_prefix = "/nix/store/";
++constexpr size_t k_nix_store_hash_len = 32;
++
++struct NixStoreReference
++{
++  std::string hash; // lowercased
++  std::string object; // /nix/store/<placeholder>-<name>
++  size_t end;         // just past <name>
++};
++
++bool
++is_nix_store_name_char(char c)
++{
++  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
++         || (c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.'
++         || c == '_' || c == '?' || c == '=';
++}
++
++// Parse a store object reference at `pos` (which points at /nix/store/). The
++// hash may be all lowercase (as Nix writes it) or all uppercase (nixpkgs' gcc
++// mangling of __FILE__); it must be in Nix's base32 alphabet, which has no e,
++// o, u or t.
++std::optional<NixStoreReference>
++parse_nix_store_reference(std::string_view text, size_t pos)
++{
++  const size_t hash_start = pos + k_nix_store_prefix.size();
++  const size_t dash = hash_start + k_nix_store_hash_len;
++  if (dash >= text.size() || text[dash] != '-') {
++    return std::nullopt;
++  }
++  bool lower = false;
++  bool upper = false;
++  std::string hash;
++  hash.reserve(k_nix_store_hash_len);
++  for (size_t i = hash_start; i < dash; ++i) {
++    char c = text[i];
++    if (c >= 'A' && c <= 'Z') {
++      upper = true;
++      c = static_cast<char>(c - 'A' + 'a');
++    } else if (c >= 'a' && c <= 'z') {
++      lower = true;
++    } else if (!(c >= '0' && c <= '9')) {
++      return std::nullopt;
++    }
++    if (c == 'e' || c == 'o' || c == 'u' || c == 't') {
++      return std::nullopt;
++    }
++    hash += c;
++  }
++  if (lower && upper) {
++    return std::nullopt;
++  }
++  size_t end = dash + 1;
++  while (end < text.size() && is_nix_store_name_char(text[end])) {
++    ++end;
++  }
++  if (end == dash + 1) {
++    return std::nullopt;
++  }
++  NixStoreReference ref;
++  ref.hash = std::move(hash);
++  ref.object = FMT("{}{}{}",
++                   k_nix_store_prefix,
++                   std::string(k_nix_store_hash_len, '0'),
++                   text.substr(dash, end - dash));
++  ref.end = end;
++  return ref;
++}
++
++} // namespace
++
++void
++remember_nix_store_objects(NixStoreObjects& objects, std::string_view path)
++{
++  for (size_t pos = path.find(k_nix_store_prefix);
++       pos != std::string_view::npos;
++       pos = path.find(k_nix_store_prefix, pos + 1)) {
++    if (auto ref = parse_nix_store_reference(path, pos)) {
++      objects[ref->object].insert(ref->hash);
++    }
++  }
++}
++
++std::optional<std::string>
++find_foreign_nix_store_reference(std::string_view data,
++                                 const NixStoreObjects* objects)
++{
++  for (size_t pos = data.find(k_nix_store_prefix);
++       pos != std::string_view::npos;
++       pos = data.find(k_nix_store_prefix, pos + 1)) {
++    const auto ref = parse_nix_store_reference(data, pos);
++    if (!ref) {
++      continue;
++    }
++    if (!objects) {
++      return std::string(data.substr(pos, ref->end - pos));
++    }
++    const auto it = objects->find(ref->object);
++    if (it != objects->end() && !it->second.contains(ref->hash)) {
++      return std::string(data.substr(pos, ref->end - pos));
++    }
++  }
++  return std::nullopt;
++}
++
 +std::optional<std::string>
 +rewrite_nix_store_paths_in_text(std::string_view text,
 +                                const NixStorePaths& paths)
@@ -282,18 +480,19 @@ index 528c3fe..c9011ed 100644
 +
  } // namespace core
 diff --git a/src/ccache/core/common.hpp b/src/ccache/core/common.hpp
-index b565e50..90d0ad5 100644
+index b565e50..d68dee2 100644
 --- a/src/ccache/core/common.hpp
 +++ b/src/ccache/core/common.hpp
-@@ -22,6 +22,7 @@
+@@ -22,6 +22,8 @@
  #include <optional>
  #include <string>
  #include <string_view>
 +#include <unordered_map>
++#include <unordered_set>
  
  class Context;
  
-@@ -67,4 +68,33 @@ void send_to_console(const Context& ctx, std::string_view text, int fd);
+@@ -67,4 +69,53 @@ void send_to_console(const Context& ctx, std::string_view text, int fd);
  // 3. <path>(line[,column]) :   // MSVC
  std::size_t get_diagnostics_path_length(std::string_view line);
  
@@ -318,6 +517,26 @@ index b565e50..90d0ad5 100644
 +void remember_nix_store_path(NixStorePaths& paths,
 +                             std::string_view normalized,
 +                             std::string_view path);
++
++// Store objects (/nix/store/<placeholder>-<name>) of this compilation's
++// line-marker paths -> the hashes this compilation uses for each.
++using NixStoreObjects =
++  std::unordered_map<std::string, std::unordered_set<std::string>>;
++
++// Record the store objects referenced by `path`, which this compilation uses.
++void remember_nix_store_objects(NixStoreObjects& objects,
++                                std::string_view path);
++
++// Find a reference in `data` (a restored object file or other binary output)
++// to a store object that has the same name as one in `objects` but a hash this
++// compilation does not use -- in plain form or in the uppercased-hash form
++// nixpkgs' gcc gives __FILE__ and __builtin_FILE(). With `objects` null, any
++// store reference counts. Hashes that cannot be real (outside Nix's base32
++// alphabet, e.g. the eeee... that nixpkgs' clang wrapper maps headers to) are
++// ignored. Returns the reference found, if any.
++std::optional<std::string>
++find_foreign_nix_store_reference(std::string_view data,
++                                 const NixStoreObjects* objects);
 +
 +// Replace each store path in free text (stderr) that has an unambiguous
 +// counterpart in `paths` with that counterpart. Anything else is left as is.
@@ -536,10 +755,10 @@ index e7b161b..7ce564b 100644
  // dependency tokens. An empty token marks the end of an entry.
  std::vector<std::string> tokenize(std::string_view text);
 diff --git a/unittest/test_core_common.cpp b/unittest/test_core_common.cpp
-index 96441b2..c13078c 100644
+index 96441b2..5418446 100644
 --- a/unittest/test_core_common.cpp
 +++ b/unittest/test_core_common.cpp
-@@ -146,4 +146,46 @@ TEST_CASE("core::get_diagnostics_path_length")
+@@ -146,4 +146,86 @@ TEST_CASE("core::get_diagnostics_path_length")
  #endif
  }
  
@@ -583,6 +802,46 @@ index 96441b2..c13078c 100644
 +        == FMT("In file included from \x1b[01m/nix/store/{0}-z/include/z.h:3"
 +               "\x1b[m,\n/nix/store/{0}-z/include/z.h:1:2: warning: x\n",
 +               h2));
++}
++
++TEST_CASE("core::find_foreign_nix_store_reference")
++{
++  const std::string h1 = "1111111111111111111111111111111a";
++  const std::string h2 = "2222222222222222222222222222222b";
++  std::string h1_upper = h1;
++  h1_upper.back() = 'A';
++  core::NixStoreObjects objects;
++  core::remember_nix_store_objects(
++    objects, FMT("/nix/store/{}-dep-hdr/include/dep.h", h2));
++  core::remember_nix_store_objects(
++    objects, FMT("/nix/store/{}-glibc-dev/include/stdio.h", h1));
++
++  const auto find = [&](const std::string& data) {
++    return core::find_foreign_nix_store_reference(data, &objects);
++  };
++  const std::string nul(1, '\0');
++
++  // This compilation's own paths, plain and mangled.
++  CHECK(!find("x" + nul + "/nix/store/" + h2 + "-dep-hdr/include/dep.h" + nul));
++  CHECK(!find(FMT("/nix/store/{}-glibc-dev/include/stdio.h", h1_upper)));
++  // The same name with another hash, plain and mangled.
++  CHECK(find(nul + "/nix/store/" + h1 + "-dep-hdr/include/dep.h" + nul)
++        == FMT("/nix/store/{}-dep-hdr", h1));
++  CHECK(find(FMT("/nix/store/{}-dep-hdr/include/dep.h", h1_upper))
++        == FMT("/nix/store/{}-dep-hdr", h1_upper));
++  // Unrelated store objects (e.g. the package's own $out) and the clang
++  // wrapper's -fmacro-prefix-map form never count.
++  CHECK(!find(FMT("/nix/store/{}-mypkg-1.0/share", h1)));
++  CHECK(!find("/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-dep-hdr/include/x.h"));
++  // A longer name is another store object.
++  CHECK(!find(FMT("/nix/store/{}-dep-hdr-extra/x.h", h1)));
++  // Not a hash: mixed case, short, no dash.
++  CHECK(!find("/nix/store/111111111111111111111111111111aA-dep-hdr"));
++  CHECK(!find("/nix/store/1111-dep-hdr"));
++  // Without a map every store reference counts.
++  CHECK(core::find_foreign_nix_store_reference(
++    FMT("/nix/store/{}-mypkg-1.0/share", h1), nullptr));
++  CHECK(!core::find_foreign_nix_store_reference("no store paths", nullptr));
 +}
 +
  TEST_SUITE_END();

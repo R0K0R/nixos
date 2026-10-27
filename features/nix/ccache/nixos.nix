@@ -92,7 +92,10 @@ in
         that fix the .d named the storing derivation's paths and waf's gccdeps
         failed samba's configure. Normalization is skipped for compiles that
         write header locations into an output (debug info, PCH, .gcno, .su,
-        .ci, IPA clones, .dia/.sarif). checks.x86_64-linux.ccache-depfile
+        .ci, IPA clones, .dia/.sarif). And a hit whose restored object names
+        one of this compilation's include store objects under ANOTHER hash
+        (__builtin_FILE() / std::source_location in a header, plain or as
+        nixpkgs' gcc mangles it) is a miss. checks.x86_64-linux.ccache-depfile
       '';
     };
 

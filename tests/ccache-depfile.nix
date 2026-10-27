@@ -18,8 +18,15 @@
     3   the .d names a store path with no line marker in this compilation (a
         file #embed'ed next to the header) -> miss, rather than guess
     4   -fstack-usage: the .su names the header -> no normalization, miss
-    info  __builtin_FILE() in a header: NOT handled, printed only. The object
-        keeps A's (nixpkgs-gcc-mangled, so not a reference) path.
+    5   __builtin_FILE() in a header inline function (C) and
+    6   std::source_location::current() in one (C++): the compiler resolves
+        them from the line markers, so the key cannot see the path; the cached
+        object would name A (as nixpkgs' gcc mangles it: hash uppercased) ->
+        the scan of the restored object makes it a miss
+    7   a TU that uses <source_location> but puts no header path into the
+        object -> still a hit, byte-identical to a CCACHE_DISABLE=1 compile
+    timing  ten hits on a multi-MB object, with the patch's own scan timing
+        from the log (info only)
 
   `ccache` / `expectFixed` exist to run the same body against an unfixed
   ccache and show the bug (expectFixed = false prints instead of failing).
@@ -44,11 +51,20 @@ let
     static inline const char *dep_where(void) { return __builtin_FILE(); }
     #endif
   '';
+  headerCxx = writeText "dep.hpp" ''
+    #include <source_location>
+    inline const char *dep_here() { return std::source_location::current().file_name(); }
+  '';
+  headerPlain = writeText "plain.hpp" ''
+    inline int dep_twice(int x) { return 2 * x; }
+  '';
   # Same name, byte-identical header, different store path: they differ only
   # in an environment variable, so only the store hash differs.
   mkHdr = variant: extra: runCommand "dep-hdr" { inherit variant; } ''
     mkdir -p $out/include
     cat ${header} > $out/include/dep.h
+    cat ${headerCxx} > $out/include/dep.hpp
+    cat ${headerPlain} > $out/include/plain.hpp
     ${extra}
   '';
   hdrA = mkHdr "a" "";
@@ -74,9 +90,12 @@ pkgs.runCommandCC name { nativeBuildInputs = [ ccache pkgs.binutils ]; } ''
   ignore_options = -I* -isystem* -idirafter* -iquote*
   CONF
   export CCACHE_NIX_STORE_NORMALIZE=1 CCACHE_SLOPPINESS=random_seed CCACHE_UMASK=002
+  # As the builders run it; the scan must see decompressed bytes.
+  export CCACHE_COMPRESS=1
   export CCACHE_LOGFILE=$TMPDIR/ccache.log
   ccache --version | sed -n 1p
   cc=$(command -v gcc)
+  cxx=$(command -v g++)
 
   cat > main.c <<'C'
   #include <dep.h>
@@ -92,6 +111,17 @@ pkgs.runCommandCC name { nativeBuildInputs = [ ccache pkgs.binutils ]; } ''
   int e(void) { return dep_data[0] + dep_inline(2); }
   C
 
+  cat > here.cpp <<'C'
+  #include <dep.hpp>
+  const char *h() { return dep_here(); }
+  C
+  cat > still.cpp <<'C'
+  #include <source_location>
+  #include <plain.hpp>
+  const char *f() { return std::source_location::current().file_name(); }
+  int g(int x) { return dep_twice(x); }
+  C
+
   fails=0
   check() { # check <description> <command...>
     if "''${@:2}"; then echo "  ok:   $1"; else echo "  FAIL: $1"; fails=$((fails+1)); fi
@@ -99,16 +129,21 @@ pkgs.runCommandCC name { nativeBuildInputs = [ ccache pkgs.binutils ]; } ''
   hits() { ccache --print-stats | awk '$1=="preprocessed_cache_hit"{print $2}'; }
   misses() { ccache --print-stats | awk '$1=="preprocessed_cache_miss"{print $2}'; }
   # comp <label> <src> <args...>: one compile, reporting hit or miss.
-  comp() {
-    local label=$1 src=$2; shift 2
+  comp() { compx "$1" "$cc" "''${@:2}"; }
+  compx() {
+    local label=$1 compiler=$2 src=$3; shift 3
     local h0=$(hits) m0=$(misses)
-    ccache $cc -Wall -fdiagnostics-color=never -c "$src" -o out.o -MD -MF out.d "$@" 2> stderr.txt
+    ccache $compiler -Wall -fdiagnostics-color=never -c "$src" -o out.o -MD -MF out.d "$@" 2> stderr.txt
     local h1=$(hits) m1=$(misses)
     if [ "$h1" -gt "$h0" ]; then result=hit; elif [ "$m1" -gt "$m0" ]; then result=miss; else result=other; fi
     echo "== $label: $result (preprocessed_cache_hit $h0 -> $h1, preprocessed_cache_miss $m0 -> $m1)"
     sed 's/^/   .d | /' out.d
     sed 's/^/  err | /' stderr.txt
   }
+  # The form nixpkgs' gcc gives __FILE__ / __builtin_FILE(): hash uppercased.
+  mangled() { local p=$1 h=''${1:11:32}; echo "/nix/store/''${h^^}''${p:43}"; }
+  objnames() { strings -a "$2" | grep -qF -- "$1"; }
+  objlacks() { ! strings -a "$2" | grep -qF -- "$1"; }
   names() { grep -q -- "$1" "$2"; }
   lacks() { ! grep -q -- "$1" "$2"; }
 
@@ -148,10 +183,47 @@ pkgs.runCommandCC name { nativeBuildInputs = [ ccache pkgs.binutils ]; } ''
   check "-fstack-usage with B is a miss" test "$result" = miss
   check ".su does not name A" lacks "${hdrA}" out.su
 
-  echo; echo "### info: __builtin_FILE() in a header (NOT handled; reported, not asserted)"
+  echo; echo "### 5. __builtin_FILE() in a header inline function (C): the object would name A -> miss"
   comp "prime where.c with A" where.c -O2 -I${hdrA}/include
   comp "where.c with B" where.c -O2 -I${hdrB}/include
-  echo "   object strings naming dep-hdr:"; strings out.o | grep dep-hdr | sed 's/^/   .o | /' || true
+  strings -a out.o | grep dep-hdr | sed 's/^/   .o | /' || true
+  check "where.c with B is a miss" test "$result" = miss
+  check "object names B (mangled)" objnames "$(mangled ${hdrB})" out.o
+  check "object does not name A (mangled)" objlacks "$(mangled ${hdrA})" out.o
+  check "object does not name A (plain)" objlacks "${hdrA}" out.o
+
+  echo; echo "### 6. std::source_location::current() in a header inline function (C++): miss"
+  compx "prime here.cpp with A" "$cxx" here.cpp -std=c++20 -O2 -I${hdrA}/include
+  compx "here.cpp with B" "$cxx" here.cpp -std=c++20 -O2 -I${hdrB}/include
+  strings -a out.o | grep dep-hdr | sed 's/^/   .o | /' || true
+  check "here.cpp with B is a miss" test "$result" = miss
+  check "object names B (plain or mangled)" sh -c "strings -a out.o | grep -qiF -- ${hdrB}"
+  check "object does not name A (plain or mangled)" sh -c "! strings -a out.o | grep -qiF -- ${hdrA}"
+
+  echo; echo "### 7. <source_location> used, but no header path lands in the object: still a hit, bit-identical"
+  compx "prime still.cpp with A" "$cxx" still.cpp -std=c++20 -O2 -I${hdrA}/include
+  compx "still.cpp with B" "$cxx" still.cpp -std=c++20 -O2 -I${hdrB}/include
+  check "still.cpp with B is a hit" test "$result" = hit
+  cp out.o still-cached.o
+  CCACHE_DISABLE=1 ccache $cxx -Wall -fdiagnostics-color=never -c still.cpp -o still-fresh.o -MD -MF fresh.d -std=c++20 -O2 -I${hdrB}/include 2>/dev/null
+  check "cached object == fresh compile (CCACHE_DISABLE=1)" cmp still-cached.o still-fresh.o
+
+  echo; echo "### timing (info): hits on a large object"
+  head -c 16777216 /dev/urandom > big.bin
+  { echo '#include <dep.h>'
+    echo 'const char big_data[] = {'; echo '#embed "big.bin"'; echo '};'
+    for i in $(seq 1 3000); do echo "int f$i(int x) { return x * $i + dep_inline(x); }"; done
+  } > big.c
+  comp "prime big.c with A" big.c -std=c23 -O0 -I${hdrA}/include > /dev/null
+  ls -l out.o | awk '{print "   object bytes: " $5}'
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    s0=$(date +%s%N)
+    ccache $cc -c big.c -o out.o -std=c23 -O0 -Wall -fdiagnostics-color=never -MD -MF out.d -I${hdrB}/include 2>/dev/null
+    s1=$(date +%s%N)
+    echo "   hit $i: $(( (s1 - s0) / 1000000 )) ms"
+  done
+  echo "   hits so far: $(hits)"
+  grep "Scanned [0-9]* bytes" $CCACHE_LOGFILE | tail -10 | sed 's/^\[[^]]*\] *//; s/^/  log | /' || true
 
   echo; echo "### ccache log lines from the patch"
   grep -E "Not using result|Rewrote store paths" $CCACHE_LOGFILE | sed 's/^\[[^]]*\] *//; s/^/  log | /' || true

@@ -100,6 +100,9 @@ else
           that (samba, 2026-10-15). The patch rewrites each store path in the
           restored .d to the one this compilation's line markers name, and
           treats the hit as a miss when a path has no unambiguous counterpart.
+          It also scans the restored object: a header path the compiler wrote
+          from the line markers (__builtin_FILE, std::source_location), so
+          invisible to the key, under another hash makes the hit a miss.
           Proven by checks.x86_64-linux.ccache-depfile (tests/ccache-depfile.nix).
           The patch is against ccache 4.14.1; a ccache bump must re-run that
           check.
