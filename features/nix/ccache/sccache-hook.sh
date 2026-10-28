@@ -65,7 +65,8 @@ sccacheSetup() {
     fi
 
     # The server inherits this umask: 002 so the ten nixbld users can all
-    # write into the directories each other's servers create.
+    # write into the directories each other's servers create. (Only with
+    # sccache-entry-mode.patch: unpatched, daemonizing resets it to 027.)
     # Its output goes to a file, not a pipe: the daemon inherits the
     # descriptors, and a $(...) would wait on it until the build ends.
     # No idle shutdown: the server lives exactly as long as the build (stopped

@@ -75,7 +75,30 @@
 }:
 
 let
-  sccache = buildPackages.sccache;
+  /*
+    Patched, two ways, both about who can use an entry once it exists. The
+    server daemonizes through daemonix, which sets umask 0o027 whatever it was
+    started with -- so the hook's umask 002 never reached it, and every
+    directory it made was 0750, owned by the one nixbld user that happened to
+    make it. And an entry is a temporary file renamed into place, which
+    tempfile creates 0600. Measured on yulee and victus-15 2026-10-28 with the
+    unpatched build: fd's cache was all 2750/0750 nixbld1 directories. Any
+    other build user's server then failed to read or add entries (a cache
+    error, compiled through: silent misses), and a peer builder pulling the
+    directory (sccache-peer-pull) could read none of it. Patched, the server
+    keeps the inherited umask and an entry is 0666 minus it: 0664 entries in
+    2775 directories, like ccache's.
+
+    Third, a hit: sccache stamps the entry's times with an explicit "now"
+    (set_file_times), which only the file's OWNER may do. Measured on yulee
+    the same day, zoxide against fd's entries pulled from victus-15 (owned by
+    another user): 0 hits, 15 cache errors -- every hit was an EPERM. A NULL
+    time (utimensat) means "now" and needs only write access, which the
+    group has.
+  */
+  sccache = buildPackages.sccache.overrideAttrs (old: {
+    patches = (old.patches or [ ]) ++ [ ./sccache-entry-mode.patch ];
+  });
   dir = "${cacheDir}/sccache";
   # The builder's, not ours: dir, size and rw_mode live there (features/nix/
   # ccache writes it on NixOS builders, yulee.md by hand). Missing = no cache.

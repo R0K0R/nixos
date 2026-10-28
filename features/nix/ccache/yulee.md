@@ -148,7 +148,7 @@ Sanity: `tailscale ping 100.64.0.2` must say `via <ip>:41641` (direct), not
     CRON
     sudo chmod +x /etc/cron.daily/ccache-trim-stage
 
-## 6a. sccache for Rust (my.ccache.rust) -- NOT DONE YET
+## 6a. sccache for Rust (my.ccache.rust) (done 2026-10-28)
 
 The Rust half (features/nix/ccache/sccache.nix, tuning/overlays/rust-cache.nix)
 needs two things on the builder and nothing else: the object directory and the
@@ -185,6 +185,67 @@ Leftovers to remove at the same time (r0k0r-owned parents, nixbldN-owned
 contents, hence sudo): the 2026-10-27 measurement caches
 
     sudo rm -rf /var/cache/ccache/l2-stage/sccache-probe /var/cache/ccache/l2-stage/sccache-impl
+
+## 6b. sccache peer pull: victus-15's new entries, every ten minutes
+
+The sccache counterpart of §5, and the same thing victus-15 runs the other
+way (`sccache-peer-pull` from `my.ccache.builder.peers` in its host config).
+Why a copy and not a mount, and why only new entries, is in the comment above
+that service in features/nix/ccache/nixos.nix; the script below is the same
+one with this machine's key and peer filled in. Root, because the copies are
+given to root:nixbld; the key is the one the §5 mount already uses, so
+victus-15 already authorizes it. Entries are only readable to it once both
+builders build with the patched sccache (sccache-entry-mode.patch), which
+every Rust derivation of the bump onward has.
+
+    # /usr/local/sbin/sccache-peer-pull
+    #!/bin/bash
+    set -e
+    dir=/var/cache/ccache/sccache
+    [ -d "$dir" ] || exit 0
+    ssh="ssh -i /home/r0k0r/.ssh/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15"
+    pull() { # name user@host remote-dir
+      local state=$STATE_DIRECTORY/$1.since now since list n
+      now=$(date +%s)
+      since=$(cat "$state" 2>/dev/null) || since=$((now - 86400))
+      list=$(mktemp)
+      if ! $ssh "$2" "cd $3 && find . -type f ! -name '.sccachetmp*' -newermt @$((since - 300)) -printf '%P\n'" >"$list"; then
+        echo "peer $1: not reachable"
+        rm -f "$list"; return 0
+      fi
+      n=$(wc -l <"$list")
+      if [ "$n" -gt 0 ] && ! rsync -tp --ignore-existing --files-from="$list" \
+          --chmod=D2775,F664 --chown=root:nixbld -e "$ssh" "$2:$3/" "$dir/"; then
+        echo "peer $1: copy failed, retrying next time"
+        rm -f "$list"; return 0
+      fi
+      rm -f "$list"
+      echo "$now" >"$state"
+      echo "peer $1: $n new entries"
+    }
+    pull victus-15 r0k0r@100.64.0.2 /var/cache/ccache/sccache
+
+    # /etc/systemd/system/sccache-peer-pull.service
+    [Unit]
+    Description=Copy victus-15's new sccache entries into this builder's cache
+    [Service]
+    Type=oneshot
+    TimeoutStartSec=30min
+    StateDirectory=sccache-peer-pull
+    Nice=10
+    IOSchedulingClass=idle
+    ExecStart=/usr/local/sbin/sccache-peer-pull
+
+    # /etc/systemd/system/sccache-peer-pull.timer
+    [Timer]
+    OnBootSec=5min
+    OnUnitActiveSec=10min
+    [Install]
+    WantedBy=timers.target
+
+then `sudo chmod +x /usr/local/sbin/sccache-peer-pull && sudo systemctl
+daemon-reload && sudo systemctl enable --now sccache-peer-pull.timer`.
+`journalctl -u sccache-peer-pull` shows each pull's count.
 
 ## 7. CA derivations (tuning/ca.nix) -- daemon-side flag (done)
 
