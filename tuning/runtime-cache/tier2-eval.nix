@@ -136,9 +136,22 @@ let
     inherit inputs;
     hostName = host;
   };
-  standaloneHomes = lib.mapAttrs (username: _: (gen.mkHome { nixos = pass1; inherit username; }).config) (
-    gen.standaloneUsers lib cfg
-  );
+  /*
+    The placeholder persist entry: an impermanent standalone home asserts a
+    non-empty my.persist, and the real list is in the user's own repo, which
+    this evaluation never sees (2026-10-27: once the home features moved
+    there, r0k0r's gb4 home failed that assertion here and every value of
+    this file became an error). Only home.packages is read below, so the
+    entry changes nothing this file records.
+  */
+  standaloneHomes = lib.mapAttrs (
+    username: _:
+    (gen.mkHome {
+      nixos = pass1;
+      inherit username;
+      modules = [ { my.persist.directories = [ ".tier2-placeholder" ]; } ];
+    }).config
+  ) (gen.standaloneUsers lib cfg);
   /*
     Only the homes of accounts this host's tuning serves (my.users.<n>.tuned,
     registry/types.nix `tuned`): an untuned user's packages are not
