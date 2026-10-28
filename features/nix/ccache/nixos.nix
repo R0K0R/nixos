@@ -56,6 +56,7 @@ ${lib.optionalString cfg.crossDerivation.enable ''
       host = lib.mkOption { type = lib.types.str; description = "Address of the peer builder. Tailscale addresses are the default path here (direct WireGuard on this LAN, measured yulee<->victus 4.4 ms; a DERP fallback would multiply every per-op cost -- check `tailscale ping`)."; };
       user = lib.mkOption { type = lib.types.str; default = "r0k0r"; };
       stage = lib.mkOption { type = lib.types.str; default = "/var/cache/ccache/stage"; description = "The peer's write-behind stage directory, mounted here read-only."; };
+      sccacheDir = lib.mkOption { type = lib.types.str; default = "/var/cache/ccache/sccache"; description = "The peer's sccache directory, whose new entries sccache-peer-pull copies here."; };
     };
   });
 in
@@ -361,6 +362,80 @@ ${lib.optionalString cfg.crossDerivation.enable "        export CCACHE_NIX_STORE
         timerConfig = {
           OnBootSec = "1min";
           OnUnitActiveSec = "1min";
+        };
+      };
+
+      /*
+        sccache's half of the peer link: COPIED, not mounted. ccache can read a
+        peer's stage in place because remote_storage takes any number of
+        directories. sccache has one disk level only (the multi-level chain
+        takes each backend type once, config.rs), a network level cannot be
+        reached from a build sandbox, and a disk level is no use over sshfs
+        anyway: the server walks the whole directory to build its index when
+        it starts (lru_disk_cache init) -- once per build here -- and never
+        sees a file that arrived after that walk.
+
+        So every ten minutes the entries the peer wrote since the last pull
+        are copied into this builder's own directory, and the next build's
+        walk finds them like its own. Only NEW entries, by the peer's mtime:
+        a plain --ignore-existing of the whole tree would bring back every
+        entry this side had evicted, each pull, against a cap the peer's
+        bigger cache always exceeds -- NVMe wear for nothing on victus-15.
+        The first pull (no state) reaches back a day. Imports count toward
+        the cap; sccache trims at the next write.
+
+        A peer's entry is complete or absent: sccache writes a .sccachetmp*
+        file and renames it, and those are excluded. Readable because of
+        sccache-entry-mode.patch (entries were 0600 per build user before).
+        -p with --chmod, not --chmod alone: without -p a new file or directory
+        gets the sender's mode under this service's umask (0755), and a build
+        user could then not add entries to a directory this created.
+        Keys carry the target CPU flags, so a meteorlake entry can never
+        answer a znver3 compile. A peer that is down is retried next time.
+      */
+      systemd.services.sccache-peer-pull = lib.mkIf (b.peers != { }) {
+        description = "Copy the peer builders' new sccache entries into this builder's cache";
+        path = [ pkgs.coreutils pkgs.rsync pkgs.openssh ];
+        serviceConfig = {
+          Type = "oneshot";
+          TimeoutStartSec = "30min";
+          StateDirectory = "sccache-peer-pull";
+          Nice = 10;
+          IOSchedulingClass = "idle";
+        };
+        script = ''
+          dir=${cfg.cacheDir}/sccache
+          [ -d "$dir" ] || exit 0
+          ssh="ssh -i ${b.identityFile} -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o ServerAliveInterval=15"
+          pull() { # name user@host remote-dir
+            local state=$STATE_DIRECTORY/$1.since now since list n
+            now=$(date +%s)
+            since=$(cat "$state" 2>/dev/null) || since=$((now - 86400))
+            list=$(mktemp)
+            # Five minutes of overlap: an entry's mtime is when its write
+            # began, so one renamed into place just after the last pull's
+            # find is older than that pull.
+            if ! $ssh "$2" "cd $3 && find . -type f ! -name '.sccachetmp*' -newermt @$((since - 300)) -printf '%P\n'" >"$list"; then
+              echo "peer $1: not reachable"
+              rm -f "$list"; return 0
+            fi
+            n=$(wc -l <"$list")
+            if [ "$n" -gt 0 ] && ! rsync -tp --ignore-existing --files-from="$list" \
+                --chmod=D2775,F664 --chown=root:nixbld -e "$ssh" "$2:$3/" "$dir/"; then
+              echo "peer $1: copy failed, retrying next time"
+              rm -f "$list"; return 0
+            fi
+            rm -f "$list"
+            echo "$now" >"$state"
+            echo "peer $1: $n new entries"
+          }
+        '' + lib.concatMapStrings (p: "pull ${p.name} ${p.user}@${p.host} ${p.sccacheDir}\n") (lib.attrValues b.peers);
+      };
+      systemd.timers.sccache-peer-pull = lib.mkIf (b.peers != { }) {
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "5min";
+          OnUnitActiveSec = "10min";
         };
       };
 

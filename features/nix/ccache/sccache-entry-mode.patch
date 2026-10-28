@@ -1,0 +1,82 @@
+--- a/src/lru_disk_cache/mod.rs
++++ b/src/lru_disk_cache/mod.rs
+@@ -131,6 +131,27 @@
+     }
+ }
+ 
++/// Set a hit's times to now. Setting an explicit time (set_file_times) is
++/// for the file's owner only, so a hit on an entry another user wrote -- a
++/// shared cache directory's normal case -- failed with EPERM and became a
++/// cache error. A NULL time means "now" and needs only write access.
++#[cfg(unix)]
++fn touch(path: &Path) -> io::Result<()> {
++    use std::os::unix::ffi::OsStrExt;
++    let c = std::ffi::CString::new(path.as_os_str().as_bytes())?;
++    if unsafe { libc::utimensat(libc::AT_FDCWD, c.as_ptr(), std::ptr::null(), 0) } == 0 {
++        Ok(())
++    } else {
++        Err(io::Error::last_os_error())
++    }
++}
++
++#[cfg(not(unix))]
++fn touch(path: &Path) -> io::Result<()> {
++    let t = FileTime::now();
++    set_file_times(path, t, t)
++}
++
+ impl LruDiskCache {
+     /// Create an `LruDiskCache` that stores files in `path`, limited to `size` bytes.
+     ///
+@@ -334,8 +355,17 @@
+         let key = key.as_ref().to_owned();
+         self.pending.push(key.clone());
+         self.pending_size += size;
+-        tempfile::Builder::new()
+-            .prefix(TEMPFILE_PREFIX)
++        let mut builder = tempfile::Builder::new();
++        builder.prefix(TEMPFILE_PREFIX);
++        // An entry is shared by every user of the cache directory, not
++        // private to the one that wrote it: 0666 minus the umask, instead of
++        // the temporary file's 0600, which survives the rename into place.
++        #[cfg(unix)]
++        {
++            use std::os::unix::fs::PermissionsExt;
++            builder.permissions(std::fs::Permissions::from_mode(0o666));
++        }
++        builder
+             .tempfile_in(&self.root)
+             .map(|file| LruDiskCacheAddEntry { file, key, size })
+             .map_err(Into::into)
+@@ -383,8 +413,7 @@
+             .get(rel_path)
+             .ok_or(Error::FileNotInCache)
+             .and_then(|_| {
+-                let t = FileTime::now();
+-                set_file_times(&path, t, t)?;
++                touch(&path)?;
+                 File::open(path).map_err(Into::into)
+             })
+     }
+--- a/src/util.rs
++++ b/src/util.rs
+@@ -953,7 +953,18 @@
+     match env::var("SCCACHE_NO_DAEMON") {
+         Ok(ref val) if val == "1" => {}
+         _ => {
+-            Daemonize::new().start().context("failed to daemonize")?;
++            // Keep the umask the server was started with. daemonix's
++            // default is 0o027, which made every cache directory 0750 and
++            // unwritable to the other users sharing it.
++            let mask = unsafe {
++                let mask = libc::umask(0o022);
++                libc::umask(mask);
++                mask
++            };
++            Daemonize::new()
++                .umask(mask as u32)
++                .start()
++                .context("failed to daemonize")?;
+         }
+     }
+ 
