@@ -36,8 +36,9 @@ in
         # Same closure overlays/heavy.nix leaves alone, for a related reason:
         # there it is a stdenv-derived-from-stdenv cycle, here it is that a
         # CA outPath is a placeholder and poisons any reference check naming
-        # it. One list, one source of truth.
-        skip = config.my.tuning.heavy.skip;
+        # it. One list, one source of truth -- plus the packages only CA
+        # breaks (my.ca-derivations.skip), which keep their ccache.
+        skip = config.my.tuning.heavy.skip ++ ca.skip;
         inherit (ca) stripRefChecks;
       })
     ];
