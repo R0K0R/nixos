@@ -112,6 +112,28 @@ in
       exist to catch closure creep, on packages as central as systemd and mesa.
       That is the trade; it is off by default deliberately
     '';
+
+    skip = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "flatpak" ];
+      description = ''
+        Package names left input-addressed under packages = "tuned", on top of
+        my.tuning.heavy.skip (which also costs a package its ccache; this
+        does not).
+
+        For packages whose output names its own store path in a form Nix's
+        hash rewriting cannot find. A CA build runs under a scratch path and
+        Nix rewrites that hash to the final one afterwards -- but only where
+        the 32 characters are contiguous. flatpak's portal holds its own
+        bin/flatpak path as a string the compiler emits in fixed-size pieces
+        ("/nix/store/06bnd5lxkacr0pmp92scc" ... "h3c989sw0k0-flatpak-..."), so
+        that copy kept the scratch hash and the portal tried to run a flatpak
+        that never existed: Steam's first-run relaunch failed with "Failed to
+        execute child process ... (No such file or directory)" (2026-10-30).
+        Input-addressed, the path is final during the build and nothing is
+        rewritten.
+      '';
+    };
   };
 
   config = lib.mkMerge [
