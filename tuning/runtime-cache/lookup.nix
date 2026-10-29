@@ -399,9 +399,21 @@ let
   */
   aliasablePath = ./aliasable.nix;
   aliasable = if builtins.pathExists aliasablePath then import aliasablePath else null;
+  /*
+    Stale while the tiers are warm is an ERROR, not the pname-only fallback:
+    the 2026-10-27 nixpkgs bump refreshed the tiers and not this file, so
+    every lookup by attribute name where the pname differs missed again --
+    gtk3 ("gtk+3") among them, aliased to upstream's untuned build on
+    galaxybook4-pro360. It surfaced only because fcitx's immodules cache
+    refuses to build against an untuned gtk3; the other ~3200 mapped
+    attributes would have gone untuned silently. A cold cache everywhere is
+    still the fallback (nothing is known anyway).
+  */
   attrToPname =
     if aliasable != null && aliasable.nixpkgsNarHash == currentNarHash then
       aliasable.pnames or { }
+    else if hasWarmCache then
+      throw "tuning/runtime-cache/aliasable.nix was captured for another nixpkgs than this one, while this host's tier caches are current: lookups by attribute name would silently miss every package whose pname differs (gtk3 is gtk+3). Run tuning/runtime-cache/refresh-aliasable.sh and commit the result with the pin."
     else
       { };
 

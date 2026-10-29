@@ -1,5 +1,5 @@
 {
-  capturedAt = "2026-10-19T12:16:32Z";
+  capturedAt = "2026-10-29T05:21:16Z";
   names = [
     "AMB-plugins"
     "ArchiSteamFarm"
@@ -226,6 +226,7 @@
     "adminerevo"
     "adminneo"
     "adms"
+    "adno"
     "adns"
     "adolc"
     "adoptopenjdk-icedtea-web"
@@ -238,6 +239,7 @@
     "adscan"
     "adslib"
     "advancecomp"
+    "advent-of-code-data"
     "advi"
     "adw-bluetooth"
     "adw-gtk3"
@@ -583,6 +585,7 @@
     "android-studio-tools"
     "android-tools"
     "android-translation-layer"
+    "android-tv-remote"
     "androidsdk"
     "andyetitmoves"
     "anewer"
@@ -687,7 +690,6 @@
     "anyzig"
     "ao3downloader"
     "aoc-cli"
-    "aocd"
     "aocl-utils"
     "aonsoku"
     "apache-airflow"
@@ -813,6 +815,7 @@
     "apx-gui"
     "aqbanking"
     "aqtinstall"
+    "aqua"
     "aquamarine"
     "aquosctl"
     "arachne-pnr"
@@ -1009,6 +1012,7 @@
     "asn"
     "asn1c"
     "asn1editor"
+    "asn1scc"
     "asn2quickder"
     "asnmap"
     "asouldocs"
@@ -1064,6 +1068,7 @@
     "atftp"
     "ath9k-htc-blobless-firmware"
     "ath9k-htc-blobless-firmware-unstable"
+    "athas"
     "atheme"
     "athens"
     "atinout"
@@ -1411,6 +1416,7 @@
     "baresip"
     "bark"
     "bark-server"
+    "bark-wallet"
     "barlow"
     "barman"
     "barracuda"
@@ -1430,6 +1436,7 @@
     "basex"
     "basez"
     "bash-completion"
+    "bash-completor"
     "bash-env-json"
     "bash-git-prompt"
     "bash-language-server"
@@ -1486,6 +1493,7 @@
     "bazel_9"
     "bazelisk"
     "bb"
+    "bb-launcher"
     "bbe"
     "bbedit"
     "bbin"
@@ -1524,6 +1532,7 @@
     "beancount-language-server"
     "beancount-share"
     "beancount_2"
+    "beangrep"
     "beanhub-cli"
     "beanprice"
     "beanquery"
@@ -1531,7 +1540,6 @@
     "beanstalkd"
     "bear"
     "bearer"
-    "bearssl"
     "beatprints"
     "beats"
     "beauty-line-icon-theme"
@@ -1710,6 +1718,7 @@
     "bitmagnet"
     "bitmap"
     "bitrise"
+    "bitritter"
     "bitsnpicas"
     "bitwarden-cli"
     "bitwarden-desktop"
@@ -2255,6 +2264,7 @@
     "cachix"
     "cadabra2"
     "cadaver"
+    "cadcraft"
     "caddy"
     "cadical"
     "cadical_2"
@@ -2300,6 +2310,7 @@
     "calcure"
     "calcurse"
     "calendar-cli"
+    "calendr"
     "calf"
     "calibre"
     "calibre-no-speech"
@@ -2548,7 +2559,6 @@
     "castero"
     "castget"
     "castnow"
-    "castopod"
     "castor"
     "castsponsorskip"
     "castty"
@@ -2610,6 +2620,7 @@
     "cbfmt"
     "cbfstool"
     "cbftp"
+    "cbirds"
     "cbmbasic"
     "cbmc"
     "cbmc-viewer"
@@ -2680,6 +2691,7 @@
     "cdrdao"
     "cdrkit"
     "cdrtools"
+    "cdvd"
     "cdxgen"
     "cdxj-indexer"
     "cedar"
@@ -2737,6 +2749,7 @@
     "certsync"
     "cewl"
     "cewler"
+    "cf"
     "cf-hero"
     "cf-terraforming"
     "cf-tool"
@@ -2786,6 +2799,7 @@
     "chance"
     "changedetection-io"
     "changelog-d"
+    "changelog-merge"
     "changelogen"
     "changelogger"
     "changelogging"
@@ -3020,6 +3034,7 @@
     "claude-monitor"
     "claude-powerline"
     "claude-usage-tracker"
+    "clavy"
     "claws"
     "claws-mail"
     "clazy"
@@ -3280,7 +3295,6 @@
     "code2prompt"
     "codebase-memory-mcp"
     "codeberg-cli"
-    "codeberg-pages"
     "codeblocks"
     "codeblocksFull"
     "codebook"
@@ -3288,6 +3302,7 @@
     "codebuff"
     "codec2"
     "codechecker"
+    "codechecker-unwrapped"
     "codecov-cli"
     "codecrafters-cli"
     "codecserver"
@@ -3743,6 +3758,7 @@
     "cracklib"
     "crackql"
     "crackxls"
+    "craft-fonts"
     "craftos-pc"
     "cramfsprogs"
     "cramfsswap"
@@ -3785,6 +3801,7 @@
     "crispy-doom"
     "critcmp"
     "criterion"
+    "critiq"
     "criu"
     "crlfsuite"
     "crlfuzz"
@@ -3853,6 +3870,8 @@
     "crystal_1_17"
     "crystal_1_18"
     "crystal_1_19"
+    "crystal_1_20"
+    "crystal_1_21"
     "crystalline"
     "crystfel"
     "crystfel-headless"
@@ -4000,6 +4019,7 @@
     "cutecom"
     "cutecosmic"
     "cutee"
+    "cutefetch"
     "cutemaze"
     "cutentr"
     "cutter"
@@ -4277,6 +4297,7 @@
     "decibels"
     "deck"
     "deck-app"
+    "deckcraft"
     "decker"
     "deckmaster"
     "decktape"
@@ -4294,6 +4315,7 @@
     "deepfilternet"
     "deepgit"
     "deepsecrets"
+    "deepseek-harness"
     "deepsource"
     "deeptools"
     "deer"
@@ -4302,6 +4324,7 @@
     "deface"
     "defaultbrowser"
     "deff"
+    "defmt-print"
     "defuddle"
     "defuddle-cli"
     "degate"
@@ -4350,6 +4373,7 @@
     "deployer"
     "depot-cli"
     "depotdownloader"
+    "depr"
     "deps-fnl"
     "depthcharge-tools"
     "deptry"
@@ -4502,6 +4526,7 @@
     "ding"
     "ding-libs"
     "dinghy"
+    "dingtalk-workspace-cli"
     "dinish"
     "dinit"
     "dino"
@@ -4624,6 +4649,7 @@
     "dmensamenu"
     "dmenu"
     "dmenu-bluetooth"
+    "dmenu-mac"
     "dmenu-rs"
     "dmenu-rs-enable-plugins"
     "dmenu-wayland"
@@ -4662,7 +4688,6 @@
     "dnsenum"
     "dnsi"
     "dnsight"
-    "dnslink-std-go"
     "dnslookup"
     "dnsmap"
     "dnsmasq"
@@ -4806,6 +4831,7 @@
     "dot-merlin-reader"
     "dot2tex"
     "dotacat"
+    "dotagents"
     "dotbot"
     "dotcolon-fonts"
     "dotconf"
@@ -5031,6 +5057,11 @@
     "dutctl"
     "duti"
     "dutree"
+    "dux-calendar"
+    "dux-gop"
+    "dux-greeter"
+    "dux-search"
+    "dux-shell"
     "dvb-apps"
     "dvc"
     "dvc-with-remotes"
@@ -5343,6 +5374,7 @@
     "emacs-gtk"
     "emacs-lsp-booster"
     "emacs-macport"
+    "emacs-mozc"
     "emacs-nox"
     "emacs-pgtk"
     "emacs30-macport"
@@ -5364,6 +5396,7 @@
     "emcee"
     "emerald-legacy-launcher"
     "emerald-legacy-launcher-unwrapped"
+    "emgucv"
     "emhash"
     "emilua"
     "emissary"
@@ -5560,6 +5593,7 @@
     "etcd"
     "etcd_3_5"
     "etcd_3_6"
+    "etcd_3_7"
     "ete"
     "ete-unwrapped"
     "etebase-server"
@@ -5807,6 +5841,7 @@
     "fast-cpp-csv-parser"
     "fast-downward"
     "fast-float"
+    "fast-resume"
     "fast-ssh"
     "fastJson"
     "fastahack"
@@ -6214,6 +6249,8 @@
     "flarectl"
     "flaresolverr"
     "flarum"
+    "flarum_1"
+    "flarum_2"
     "flashbench"
     "flashfocus"
     "flashgbx"
@@ -6226,6 +6263,7 @@
     "flask-unsign"
     "flasm"
     "flat-remix-gnome"
+    "flat-remix-gtk"
     "flat-remix-icon-theme"
     "flatbuffers"
     "flatbuffers_23"
@@ -6577,7 +6615,6 @@
     "framac"
     "frame"
     "frame-media-converter"
-    "framesh"
     "framework-control"
     "framework-tool"
     "framework-tool-tui"
@@ -7038,6 +7075,7 @@
     "geoclue2"
     "geoclue2-with-demo-agent"
     "geocode-glib_2"
+    "geode-cli"
     "geogebra"
     "geogebra6"
     "geogram"
@@ -7068,7 +7106,6 @@
     "gerrit_3_13"
     "gerrit_3_14"
     "gersemi"
-    "gershwin-system"
     "get-google-fonts"
     "get-graphql-schema"
     "get_iplayer"
@@ -7113,6 +7150,7 @@
     "ggshield"
     "ggz_base_libs"
     "gh"
+    "gh-actions-lock"
     "gh-aw"
     "gh-cal"
     "gh-cherry-pick"
@@ -7217,8 +7255,6 @@
     "gimoji"
     "gimp"
     "gimp-with-plugins"
-    "gimp2"
-    "gimp2-with-plugins"
     "gimp3"
     "gimp3-with-plugins"
     "gimx"
@@ -7436,6 +7472,7 @@
     "gitlab-timelogs"
     "gitlab-triage"
     "gitlab-workhorse"
+    "gitlabform"
     "gitleaks"
     "gitless"
     "gitlint"
@@ -7485,6 +7522,7 @@
     "gladtex"
     "glamoroustoolkit"
     "glance"
+    "glance-agent"
     "glanceclient"
     "glances"
     "glas"
@@ -7749,6 +7787,7 @@
     "go-bindata"
     "go-bindata-assetfs"
     "go-blueprint"
+    "go-c8y-cli"
     "go-callvis"
     "go-camo"
     "go-car"
@@ -8094,6 +8133,7 @@
     "gowall"
     "gowebly"
     "gowitness"
+    "gowrap"
     "gox"
     "goxel"
     "goxlr-utility"
@@ -8174,6 +8214,8 @@
     "grabserial"
     "gradescope-submit"
     "gradia"
+    "gradient"
+    "gradient-cli"
     "gradle"
     "gradle-completion"
     "gradle-dependency-tree-diff"
@@ -8188,6 +8230,7 @@
     "grafana"
     "grafana-alloy"
     "grafana-dash-n-grab"
+    "grafana-dashboard-linter"
     "grafana-image-renderer"
     "grafana-kiosk"
     "grafana-loki"
@@ -8241,7 +8284,6 @@
     "grass-sass"
     "grav"
     "grav_2"
-    "gravit"
     "grayjay"
     "grayjay-frontend"
     "grayjay-libcurlshim"
@@ -8271,6 +8313,7 @@
     "greybird"
     "gridcoin-research"
     "gridcoin-researchd"
+    "gridcraft"
     "gridlock"
     "gridtracker"
     "gridtracker2"
@@ -8486,6 +8529,7 @@
     "guile-xcb"
     "guile-zlib"
     "guile-zstd"
+    "guileImportsCheckHook"
     "guile_1_8"
     "guile_2_0"
     "guile_2_2"
@@ -8777,6 +8821,7 @@
     "hekatomb"
     "helio-workstation"
     "heliocron"
+    "helion"
     "helix"
     "helix-db"
     "helix-unwrapped"
@@ -8871,7 +8916,6 @@
     "highfive"
     "highfive-mpi"
     "highlight"
-    "highlight-assertions"
     "highlight-pointer"
     "highs"
     "highscore"
@@ -9274,6 +9318,7 @@
     "ibmcloud-cli"
     "ibtool"
     "ibus"
+    "ibus-mozc"
     "ibus-theme-tools"
     "ibus-with-plugins"
     "ibusMinimal"
@@ -9401,6 +9446,7 @@
     "ili2c"
     "illum"
     "illuminanced"
+    "ilo"
     "iloader"
     "ilspycmd"
     "ima-evm-utils"
@@ -9458,6 +9504,7 @@
     "immichframe"
     "immudb"
     "imnodes"
+    "impactor"
     "impala"
     "impl"
     "implot"
@@ -9759,7 +9806,6 @@
     "iscc"
     "isd"
     "ised"
-    "isisdl"
     "isl"
     "isl_0_20"
     "isl_0_23"
@@ -9973,6 +10019,8 @@
     "jflap"
     "jflex"
     "jfmt"
+    "jfmt-java"
+    "jfmt-rs"
     "jfrog-cli"
     "jfsutils"
     "jfsw"
@@ -10064,7 +10112,6 @@
     "joypixels"
     "joystickwake"
     "jp"
-    "jp-zip-codes"
     "jp2a"
     "jpcre2"
     "jpeg-archive"
@@ -10282,12 +10329,8 @@
     "kanidm-provision"
     "kanidmWithSecretProvisioning_1_10"
     "kanidmWithSecretProvisioning_1_11"
-    "kanidmWithSecretProvisioning_1_8"
-    "kanidmWithSecretProvisioning_1_9"
     "kanidm_1_10"
     "kanidm_1_11"
-    "kanidm_1_8"
-    "kanidm_1_9"
     "kanif"
     "kaniko"
     "kanit-font"
@@ -10562,6 +10605,7 @@
     "kmod"
     "kmod-blacklist-ubuntu"
     "kmod-debian-aliases"
+    "kmodigest"
     "kmon"
     "kmonad"
     "kmscon"
@@ -11353,6 +11397,7 @@
     "libdbusmenu-gtk3"
     "libdbusmenu-qt5"
     "libdc1394"
+    "libddwaf"
     "libde265"
     "libdecor"
     "libdeflate"
@@ -11962,6 +12007,7 @@
     "librepcb"
     "librepo"
     "librepods"
+    "libreqos"
     "libresample"
     "libresidfp"
     "librespeed-cli"
@@ -12398,6 +12444,7 @@
     "line-awesome"
     "linear"
     "linearicons-free"
+    "linearmouse"
     "linecast"
     "linenoise"
     "lineselect"
@@ -12443,6 +12490,7 @@
     "linux_6_18"
     "linux_6_6"
     "linux_7_2"
+    "linux_7_3"
     "linux_latest"
     "linux_logo"
     "linux_testing"
@@ -12529,6 +12577,7 @@
     "llama-cpp"
     "llama-cpp-cuda"
     "llama-cpp-rocm"
+    "llama-cpp-sycl"
     "llama-cpp-vulkan"
     "llama-swap"
     "llama-swap-minimal"
@@ -13149,6 +13198,8 @@
     "mate-wayland-session"
     "materia-everforest-kvantum"
     "materia-kde-theme"
+    "materia-theme"
+    "materia-theme-transparent"
     "material-black-colors"
     "material-cursors"
     "material-design-icons"
@@ -13561,6 +13612,7 @@
     "mhonarc"
     "mhost"
     "mi2ly"
+    "miasma"
     "michabo"
     "micro"
     "micro-full"
@@ -13619,7 +13671,6 @@
     "mimikatz"
     "mimir"
     "mimir-sleep"
-    "min"
     "min-ed-launcher"
     "minari"
     "minc_tools"
@@ -13668,7 +13719,6 @@
     "minimodem"
     "minimp3"
     "mininet"
-    "minio"
     "minio-certgen"
     "minio-client"
     "minio-cpp"
@@ -13705,6 +13755,7 @@
     "mint-x-icons"
     "mint-y-icons"
     "mintotp"
+    "minuspod"
     "minutor"
     "mio"
     "mir"
@@ -13786,6 +13837,7 @@
     "mkrand"
     "mkroot-utils"
     "mksh"
+    "mkslides"
     "mkspiffs"
     "mktemp"
     "mktoc"
@@ -13842,6 +13894,7 @@
     "mmseqs2"
     "mmtc"
     "mmtf-cpp"
+    "mmtisobmff"
     "mmtui"
     "mmv"
     "mmv-go"
@@ -14037,7 +14090,6 @@
     "motioneye"
     "motoc"
     "motrix"
-    "motrix-next"
     "motus"
     "mount"
     "mount-zip"
@@ -14104,6 +14156,7 @@
     "mpdris2-rs"
     "mpdscribble"
     "mpeg2dec"
+    "mpeghdec"
     "mpfi"
     "mpfr"
     "mpfshell"
@@ -14281,6 +14334,7 @@
     "musescore"
     "musescore-evolution"
     "museum"
+    "musializer"
     "music-assistant"
     "music-assistant-desktop"
     "music-discord-rpc"
@@ -14375,6 +14429,7 @@
     "n8n-task-runner-launcher"
     "n98-magerun2"
     "naabu"
+    "nab"
     "nabi"
     "nacelle"
     "naev"
@@ -14388,6 +14443,7 @@
     "nak"
     "nakama"
     "nali"
+    "nam-shub-of-enki"
     "namaka"
     "namecoind"
     "namespace-cli"
@@ -14451,6 +14507,7 @@
     "navi"
     "navicat-premium"
     "navidrome"
+    "navidrome-unwrapped"
     "navidromePluginInstallHook"
     "navilu-font"
     "nawk"
@@ -14749,6 +14806,7 @@
     "nh"
     "nh-unwrapped"
     "nheko"
+    "nhentai"
     "nhost-cli"
     "ni"
     "nibtools"
@@ -14978,8 +15036,6 @@
     "noaa-apt"
     "noctalia"
     "noctalia-greeter"
-    "noctalia-qs"
-    "noctalia-shell"
     "nocturne"
     "node-core-utils"
     "node-glob"
@@ -15225,6 +15281,7 @@
     "numen"
     "numi"
     "numix-cursor-theme"
+    "numix-gtk-theme"
     "numix-icon-theme"
     "numix-icon-theme-circle"
     "numix-icon-theme-square"
@@ -15251,6 +15308,7 @@
     "nv-codec-headers-10"
     "nv-codec-headers-11"
     "nv-codec-headers-12"
+    "nv-codec-headers-13"
     "nv-codec-headers-9"
     "nvc"
     "nvcat"
@@ -15326,6 +15384,7 @@
     "oaknut"
     "oama"
     "oapi-codegen"
+    "oas2html"
     "oath-toolkit"
     "oathkeeper"
     "oatpp"
@@ -15658,6 +15717,7 @@
     "opencloud-desktop"
     "opencloud-desktop-shell-integration-dolphin"
     "opencloud-desktop-shell-integration-resources"
+    "opencloud-production"
     "opencode"
     "opencode-claude-auth"
     "opencode-desktop"
@@ -15689,6 +15749,8 @@
     "openfec"
     "openfga"
     "openfga-cli"
+    "openfoam"
+    "openfoam-unwrapped"
     "openfortivpn"
     "openfortivpn-webview"
     "openfortivpn-webview-qt"
@@ -15884,6 +15946,7 @@
     "opentxl-unwrapped"
     "opentype-sanitizer"
     "opentyrian"
+    "opentyrian2000"
     "openusage"
     "openusd"
     "openutau"
@@ -15891,6 +15954,7 @@
     "openvas-scanner"
     "openvas-smb"
     "openvdb"
+    "openvfs"
     "openvi"
     "openvino"
     "openvino-genai"
@@ -16334,6 +16398,7 @@
     "paru"
     "pasco"
     "paseo"
+    "paseo-desktop"
     "paseo-hub"
     "paseo-relay"
     "pasfmt"
@@ -16429,7 +16494,6 @@
     "pcmciautils"
     "pcmsolver"
     "pcre"
-    "pcre-cpp"
     "pcre2"
     "pcsc-cyberjack"
     "pcsc-safenet"
@@ -16669,10 +16733,10 @@
     "phototonic"
     "photoview"
     "php"
-    "php82"
     "php83"
     "php84"
     "php85"
+    "php86"
     "phpactor"
     "phpantom-lsp"
     "phpdocumentor"
@@ -16759,6 +16823,7 @@
     "pinboard-notes-backup"
     "pince"
     "pinchflat"
+    "pinchflat-ngx"
     "pineapple-pictures"
     "pineflash"
     "pinegrow"
@@ -16782,6 +16847,7 @@
     "pingu"
     "pingus"
     "pinit"
+    "pinless"
     "pinnacle"
     "pinniped"
     "pinnwand"
@@ -17056,7 +17122,7 @@
     "pokefinder"
     "pokeget-rs"
     "pokego"
-    "pokemmo-installer"
+    "pokemmo"
     "pokemon-colorscripts"
     "pokemon-colorscripts-mac"
     "pokemon-cursor"
@@ -17110,6 +17176,7 @@
     "ponysay"
     "poop"
     "pop"
+    "pop-gtk-theme"
     "pop-hp-wallpapers"
     "pop-icon-theme"
     "pop-launcher"
@@ -17244,6 +17311,7 @@
     "precious"
     "prefect"
     "prefetch-npm-deps"
+    "prefetch-swiftpm-deps"
     "prefetch-yarn-deps"
     "prek"
     "prelink"
@@ -17517,6 +17585,7 @@
     "protoc-gen-validate"
     "protoc-go-inject-tag"
     "protocol"
+    "protolens"
     "protolint"
     "protolock"
     "protols"
@@ -17539,6 +17608,7 @@
     "protonup-rs"
     "protonvpn-gui"
     "protorpc"
+    "protoscan"
     "protoscope"
     "prototext"
     "prototypejs"
@@ -17631,6 +17701,7 @@
     "public-inbox"
     "public-sans"
     "publicsuffix-list"
+    "publii"
     "pubs"
     "puddletag"
     "pueue"
@@ -17793,6 +17864,8 @@
     "python314FreeThreading"
     "python315"
     "python315FreeThreading"
+    "python316"
+    "python316FreeThreading"
     "python3Minimal"
     "pytr"
     "pytrainer"
@@ -18212,6 +18285,7 @@
     "rawtherapee"
     "raxml"
     "raxml-mpi"
+    "rayburst"
     "raycast"
     "rayforge"
     "raygui"
@@ -18319,6 +18393,7 @@
     "recon"
     "recon-ng"
     "recordbox"
+    "recordly"
     "recoverdm"
     "recoverjpeg"
     "rectangle"
@@ -18503,6 +18578,7 @@
     "restls"
     "restman"
     "restool"
+    "restorecond"
     "restream"
     "resumed"
     "resvg"
@@ -18703,7 +18779,6 @@
     "roapi-http"
     "roave-backward-compatibility-check"
     "robin-map"
-    "robo"
     "robo3t"
     "robodoc"
     "robotfindskitten"
@@ -18941,7 +19016,6 @@
     "ruby"
     "ruby-lsp"
     "ruby-mine"
-    "ruby_3_3"
     "ruby_3_4"
     "ruby_3_5"
     "ruby_4_0"
@@ -19070,7 +19144,6 @@
     "rxvt-unicode-emoji"
     "rxvt-unicode-unwrapped"
     "rxvt-unicode-unwrapped-emoji"
-    "rye"
     "rygel"
     "rymdport"
     "ryokucha"
@@ -19563,6 +19636,7 @@
     "seshat"
     "session-desktop"
     "sessiond"
+    "sessiond-backlight"
     "sessiond-hooks"
     "sessiond-power"
     "sessiond-uaccess"
@@ -20185,6 +20259,7 @@
     "sollya"
     "solo2-cli"
     "solo5"
+    "soloist"
     "solvespace"
     "somafm-cli"
     "somebar"
@@ -20233,6 +20308,7 @@
     "sound-theme-freedesktop"
     "soundalike"
     "soundconverter"
+    "soundcraft"
     "soundfont-arachno"
     "soundfont-fluid"
     "soundfont-generaluser"
@@ -20322,6 +20398,7 @@
     "specr-transpile"
     "spectmorph"
     "spectra"
+    "spectral"
     "spectral-language-server"
     "spectral-mic"
     "spectre-cli"
@@ -20527,6 +20604,7 @@
     "srt-xtransmit"
     "srtp"
     "srtrelay"
+    "ss14-launcher"
     "ssb-patchwork"
     "sscep"
     "sscg"
@@ -20574,7 +20652,6 @@
     "sshx-server"
     "ssimulacra2"
     "ssl-cert-check"
-    "ssl-proxy"
     "ssldump"
     "sslh"
     "sslmate"
@@ -20735,6 +20812,7 @@
     "stillcolor"
     "stirling-pdf"
     "stirling-pdf-desktop"
+    "stirling-pdf-free"
     "stix-otf"
     "stix-two"
     "stl-to-obj"
@@ -20934,6 +21012,7 @@
     "supertuxkart"
     "supertuxkart-server"
     "supervise"
+    "supervisord"
     "sure"
     "surelog"
     "surf"
@@ -21439,7 +21518,6 @@
     "telepathy-idle"
     "telepathy-mission-control"
     "teleport"
-    "teleport_17"
     "teleport_18"
     "telepresence"
     "telepresence2"
@@ -21913,6 +21991,7 @@
     "tlsclient"
     "tlsinfo"
     "tlspool"
+    "tlsrouter"
     "tlsrpt-reporter"
     "tlsx"
     "tlwg"
@@ -22006,6 +22085,7 @@
     "tonelib-noisereducer"
     "tonelib-zoom"
     "tony"
+    "toofan"
     "toolbox"
     "toolhive"
     "tooling-language-server"
@@ -22129,7 +22209,6 @@
     "trashy"
     "traverso"
     "tray-tui"
-    "trayer"
     "trayscale"
     "trdl-client"
     "trdsql"
@@ -22210,6 +22289,7 @@
     "trunk-ng"
     "trunk-recorder"
     "trurl"
+    "trustedcoin"
     "trustedqsl"
     "trusttunnel-endpoint"
     "trustymail"
@@ -22276,6 +22356,7 @@
     "ttp"
     "tts"
     "tts-mod-vault"
+    "ttt"
     "ttwatch"
     "tty-clock"
     "tty-share"
@@ -22421,7 +22502,6 @@
     "typeshare"
     "typespec"
     "typespeed"
-    "typewriter"
     "typical"
     "typioca"
     "typography"
@@ -22719,7 +22799,6 @@
     "unicodeit"
     "unicon-lang"
     "unicorn"
-    "unicorn-angr"
     "unidings"
     "uniex"
     "unifdef"
@@ -22747,7 +22826,6 @@
     "unison"
     "unison-fsmonitor"
     "unison-ucm"
-    "unit"
     "unitree-sdk2"
     "units"
     "units-llnl"
@@ -22805,6 +22883,7 @@
     "up"
     "upbound"
     "upbound-main"
+    "upbrr"
     "upcloud-cli"
     "update-dotdee"
     "update-nix-fetchgit"
@@ -22944,6 +23023,7 @@
     "uv-sort"
     "uvccapture"
     "uvcdynctrl"
+    "uvtools"
     "uvwasi"
     "uw-ttyp0"
     "uwc"
@@ -23450,6 +23530,7 @@
     "walker"
     "wall"
     "wallabag"
+    "wallet-engine"
     "wallrizz"
     "walls"
     "wallust"
@@ -23460,6 +23541,7 @@
     "wamr"
     "wamrc"
     "wander"
+    "wanderer"
     "wandio"
     "wangle"
     "wannier90"
@@ -23475,8 +23557,6 @@
     "warpgate"
     "warpinator"
     "warzone2100"
-    "wasabibackend"
-    "wasabiwallet"
     "wash-cli"
     "wasilibc"
     "wasm"
@@ -23701,6 +23781,7 @@
     "wgpu-utils"
     "wgsl-analyzer"
     "whale"
+    "what"
     "whatcable"
     "whatfiles"
     "whatip"
@@ -23720,6 +23801,7 @@
     "whichllm"
     "whipper"
     "whisky"
+    "whisp"
     "whisparr"
     "whisparr_2"
     "whisparr_3"
@@ -23924,6 +24006,7 @@
     "wooting-udev-rules"
     "wooz"
     "wordbook"
+    "wordcraft"
     "wordgrinder"
     "wordlists"
     "wordnet"
@@ -24150,6 +24233,7 @@
     "xcodebuild"
     "xcodegen"
     "xcodes"
+    "xcodes-app"
     "xcolor"
     "xcompmgr"
     "xcompose"
@@ -24590,6 +24674,7 @@
     "xrizer"
     "xroar"
     "xrootd"
+    "xrpc"
     "xrq"
     "xrsh"
     "xsane"
@@ -24712,6 +24797,7 @@
     "yamlfix"
     "yamlfmt"
     "yamllint"
+    "yamlpath"
     "yamlscript"
     "yams"
     "yandex-cloud"
@@ -25055,6 +25141,7 @@
     "zls_0_14"
     "zls_0_15"
     "zls_0_16"
+    "zls_0_17"
     "zlspectrumequalizer"
     "zlsplitter"
     "zluda"
@@ -25166,6 +25253,7 @@
     "zulu17"
     "zulu21"
     "zulu25"
+    "zulu27"
     "zulu8"
     "zunclient"
     "zunit"
@@ -25192,8 +25280,8 @@
     "zzuf"
     "zzz"
   ];
-  nixpkgsNarHash = "sha256-2w8ImkuVlwAiVtLkxr0MCbqhyQAC+VxSutXRV3ANcYc=";
-  nixpkgsRev = "c4e5229a59f10f21ce5df1aa2a6373f425a7030e";
+  nixpkgsNarHash = "sha256-QsK3tKyiWQvW+Bxu6E2cSGVYHeRxbyRpS0lme1+G+Xc=";
+  nixpkgsRev = "f75e29b3dddcff5d97260dccdfdea9d8b82d63a5";
   pnames = {
     AMB-plugins = "amb-plugins";
     ArchiSteamFarm = "archisteamfarm";
@@ -25689,6 +25777,8 @@
     crystal_1_17 = "crystal";
     crystal_1_18 = "crystal";
     crystal_1_19 = "crystal";
+    crystal_1_20 = "crystal";
+    crystal_1_21 = "crystal";
     crystfel-headless = "crystfel";
     csfml_2 = "csfml";
     ctypes_sh = "ctypes.sh";
@@ -25714,6 +25804,7 @@
     czkawka-full = "czkawka";
     d2coding = "d2codingfont";
     dafny = "Dafny";
+    dankcalendar = "dux-calendar";
     dart-bin = "dart";
     dart-source = "dart";
     datalab = "datalab-platform";
@@ -25745,6 +25836,7 @@
     dex-oidc = "dex";
     dfhack = "dwarf-fortress-full";
     dformat = "dfmt";
+    dgop = "dux-gop";
     dict = "dictd";
     dict-cc-py = "dict.cc.py";
     dieHook = "die-hook";
@@ -25759,7 +25851,8 @@
     djview4 = "djview";
     dl-poly-classic-mpi = "DL_POLY_Classic";
     dmenu-rs-enable-plugins = "dmenu-rs";
-    dnslink-std-go = "dnslink";
+    dms-greeter = "dux-greeter";
+    dms-shell = "dux-shell";
     dnsname-cni = "cni-plugin-dnsname";
     dnsutils = "bind";
     docbook2x = "docbook2X";
@@ -25814,6 +25907,7 @@
     drone = "drone.io";
     drone-oss = "drone.io-oss";
     druid = "apache-druid";
+    dsearch = "dux-search";
     dsseries = "libsane-dsseries";
     dt-schema = "dtschema";
     dubBuildHook = "dub-build-hook";
@@ -25899,6 +25993,7 @@
     etBook = "et-book";
     etcd_3_5 = "etcd";
     etcd_3_6 = "etcd";
+    etcd_3_7 = "etcd";
     eternity = "eternity-engine";
     ethersync = "teamtype";
     eventstore = "EventStore";
@@ -25986,6 +26081,8 @@
     fishMinimal = "fish";
     flamegraph = "FlameGraph";
     flare-signal = "flare";
+    flarum_1 = "flarum";
+    flarum_2 = "flarum";
     flashbench = "flashbench-unstable";
     flatbuffers_23 = "flatbuffers";
     flattenReferencesGraph = "flatten-references-graph";
@@ -26157,8 +26254,6 @@
     ghostscriptX = "ghostscript-with-X";
     ghostscript_headless = "ghostscript";
     gimagereader-qt = "gimagereader";
-    gimp2 = "gimp";
-    gimp2-with-plugins = "gimp-with-plugins";
     gimp3 = "gimp";
     gimp3-with-plugins = "gimp-with-plugins";
     gir-rs = "gir";
@@ -26458,13 +26553,14 @@
     jetbrains-gateway = "gateway";
     jetbrains-mps = "mps";
     jetty_12 = "jetty";
+    jfmt-java = "jfmt";
+    jfmt-rs = "jfmt";
     jing = "jing-trang";
     jitsi-excalidraw = "jitsi-excalidraw-backend";
     jitsi-videobridge = "jitsi-videobridge2";
     jmc2obj = "j-mc-2-obj";
     jmusicbot = "JMusicBot";
     joplin = "joplin-cli";
-    jp-zip-codes = "jp-zip-code";
     jre = "openjdk";
     jre11_minimal = "openjdk-minimal-jre";
     jre17_minimal = "openjdk-minimal-jre";
@@ -26505,12 +26601,8 @@
     kanata-with-cmd = "kanata";
     kanidmWithSecretProvisioning_1_10 = "kanidm-with-secret-provisioning";
     kanidmWithSecretProvisioning_1_11 = "kanidm-with-secret-provisioning";
-    kanidmWithSecretProvisioning_1_8 = "kanidm-with-secret-provisioning";
-    kanidmWithSecretProvisioning_1_9 = "kanidm-with-secret-provisioning";
     kanidm_1_10 = "kanidm";
     kanidm_1_11 = "kanidm";
-    kanidm_1_8 = "kanidm";
-    kanidm_1_9 = "kanidm";
     kanit-font = "kanit";
     karma-runner = "karma";
     katagoCPU = "katago";
@@ -26815,6 +26907,7 @@
     linux_6_18 = "linux";
     linux_6_6 = "linux";
     linux_7_2 = "linux";
+    linux_7_3 = "linux";
     linux_latest = "linux";
     linux_testing = "linux";
     linux_xanmod = "linux-xanmod";
@@ -26828,6 +26921,7 @@
     lklWithFirewall = "lkl";
     llama-cpp-cuda = "llama-cpp";
     llama-cpp-rocm = "llama-cpp";
+    llama-cpp-sycl = "llama-cpp";
     llama-cpp-vulkan = "llama-cpp";
     llama-swap-minimal = "llama-swap";
     lld_18 = "lld";
@@ -27013,7 +27107,8 @@
     morse_cli = "morse-cli";
     mount = "util-linux";
     moveBuildTree = "move-build-tree-hook";
-    mozc-ut = "mozc";
+    mozc = "mozc-server";
+    mozc-ut = "mozc-server";
     mozwire = "MozWire";
     mpd-small = "mpd";
     mpdris2 = "mpDris2";
@@ -27056,6 +27151,8 @@
     nanotts = "nano-tts";
     napi-rs-cli_3 = "napi-rs-cli";
     naproche = "Naproche-SAD";
+    navidrome = "navidrome-wrapped";
+    navidrome-unwrapped = "navidrome";
     navidromePluginInstallHook = "navidrome-plugin-install-hook";
     nbench = "nbench-byte";
     ncdu_1 = "ncdu";
@@ -27107,6 +27204,7 @@
     nginxStable = "nginx";
     ngt = "NGT";
     ngtcp2-gnutls = "ngtcp2";
+    nhentai = "doujinshi-dl";
     nim = "x86_64-unknown-linux-gnu-nim-wrapper";
     nim-atlas = "atlas";
     ninja_1_11 = "ninja";
@@ -27152,6 +27250,7 @@
     nv-codec-headers-10 = "nv-codec-headers";
     nv-codec-headers-11 = "nv-codec-headers";
     nv-codec-headers-12 = "nv-codec-headers";
+    nv-codec-headers-13 = "nv-codec-headers";
     nv-codec-headers-9 = "nv-codec-headers";
     nvidia_cg_toolkit = "nvidia-cg-toolkit";
     nwjs-sdk = "nwjs";
@@ -27335,10 +27434,10 @@
     phira-free = "phira";
     photon-rss = "photon";
     php = "php-with-extensions";
-    php82 = "php-with-extensions";
     php83 = "php-with-extensions";
     php84 = "php-with-extensions";
     php85 = "php-with-extensions";
+    php86 = "php-with-extensions";
     physfs_2 = "physfs";
     picolisp = "PicoLisp";
     pinegrow6 = "pinegrow";
@@ -27525,6 +27624,8 @@
     python314FreeThreading = "python3";
     python315 = "python3";
     python315FreeThreading = "python3";
+    python316 = "python3";
+    python316FreeThreading = "python3";
     python3Minimal = "python3-minimal";
     pywal = "pywal16";
     qMasterPassword = "qmasterpassword";
@@ -27634,7 +27735,6 @@
     rtl-sdr = "rtl-sdr-blog";
     rtl_wmbus = "rtl-wmbus";
     rtmpdump_gnutls = "rtmpdump";
-    ruby_3_3 = "ruby";
     ruby_3_4 = "ruby";
     ruby_3_5 = "ruby";
     ruby_4_0 = "ruby";
@@ -27675,6 +27775,7 @@
     scalapack-ilp64 = "scalapack";
     scenefx_0_5 = "scenefx";
     screego = "screego-server";
+    scspell = "scspell3k";
     scss-lint = "scss_lint";
     sd-mux-ctrl = "sd-mux-ctrl-unstable";
     sdbus-cpp_2 = "sdbus-cpp";
@@ -27761,7 +27862,7 @@
     sourceHighlight = "source-highlight";
     sox_ng = "sox";
     space-cadet-pinball = "SpaceCadetPinball";
-    space-station-14-launcher = "SS14.Launcher";
+    space-station-14-launcher = "ss14-launcher";
     spacx-gtk-theme = "gtk-theme-framework";
     spago = "spago-legacy";
     spamassassin = "SpamAssassin";
@@ -27896,7 +27997,6 @@
     teensyduino = "arduino";
     teetertorture = "teeter-torture";
     teeworlds-server = "teeworlds";
-    teleport_17 = "teleport";
     teleport_18 = "teleport";
     temurin-bin-11 = "temurin-bin";
     temurin-bin-17 = "temurin-bin";
@@ -28362,7 +28462,6 @@
     xp-pen-g430-driver = "xppen_3";
     xpraWithNvenc = "xpra";
     xq-xml = "xq";
-    xremap = "xremap-wlroots";
     xscast = "xscast-unstable";
     xxHash = "xxhash";
     xxd = "tinyxxd";
@@ -28412,6 +28511,7 @@
     zls_0_14 = "zls";
     zls_0_15 = "zls";
     zls_0_16 = "zls";
+    zls_0_17 = "zls";
     zmkBATx = "zmkbatx";
     zod = "zod-engine";
     zonemaster-cli = "Zonemaster-CLI";
@@ -28423,6 +28523,7 @@
     zulu17 = "zulu-ca-jdk";
     zulu21 = "zulu-ca-jdk";
     zulu25 = "zulu-ca-jdk";
+    zulu27 = "zulu-ca-jdk";
     zulu8 = "zulu-ca-jdk";
     zunclient = "python-zunclient";
     zynaddsubfx-fltk = "zynaddsubfx";
