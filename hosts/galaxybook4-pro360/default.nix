@@ -340,10 +340,12 @@
       ];
       peers = {
         yulee = {
-          # 3, matching yulee's own nix.conf. Builds dispatched over ssh-ng
-          # run regardless of the remote's max-jobs, so 7 meant up to 7 builds
-          # x cores=16 on a 24-thread machine that also runs simulations.
-          maxJobs = 3;
+          # Builds dispatched over ssh-ng run regardless of the remote's
+          # max-jobs (yulee's nix.conf says 3), so this is the real cap. Was 3
+          # while yulee also ran simulations; 16 since 2026-10-29, when yulee
+          # was free and the 3-job cap left its 24 threads mostly idle under a
+          # world build.
+          maxJobs = 16;
           speedFactor = 10;
           # No gccarch-meteorlake -- see victus-15 below. Neither peer is an
           # Intel machine, and neither is asked to EXECUTE meteorlake code:
