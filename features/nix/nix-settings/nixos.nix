@@ -84,7 +84,8 @@ in
     # 2.35, not nixpkgs' stable 2.34: 2.34's progress bar vanishes while -L
     # streams build logs (upstream 79e2d2f494, not backported to 2.34).
     # mkDefault: tuning/pkgs-config.nix picks the generic build of it on gb4.
-    nix.package = lib.mkDefault pkgs.nixVersions.nix_2_35;
+    # Patched, see ./nix-package.nix.
+    nix.package = lib.mkDefault (import ./nix-package.nix pkgs);
 
     # Point nix-shell / nix run / the flake registry at the unpatched upstream
     # nixpkgs so derivation hashes match what Hydra cached.  nixpkgs-upstream is

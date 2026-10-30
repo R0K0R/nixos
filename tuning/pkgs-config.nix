@@ -86,7 +86,7 @@ lib.mkIf config.my.tuning.qtPatches.enable {
     zoom.broken = "warn";
   };
 
-  nix.package = genericPkgs.nixVersions.nix_2_35; # why 2.35: features/nix-settings
+  nix.package = import ../features/nix/nix-settings/nix-package.nix genericPkgs; # why 2.35, and its patch: there
 
   nixpkgs.overlays = lib.mkAfter [
     (final: prev:

@@ -1,0 +1,54 @@
+Backport of NixOS/nix#16477 (Mic92, open since 2026-09-16) to 2.35.3: its
+source change, plus the DeleteRealisedOutputByName statement it uses, which
+upstream added after 2.35.3 (with `nix store build-trace delete`). Its
+functional tests target files 2.35 does not have.
+https://github.com/NixOS/nix/pull/16477
+
+diff --git a/src/libstore/local-store.cc b/src/libstore/local-store.cc
+index e1cf8dd7d..d08f661f7 100644
+--- a/src/libstore/local-store.cc
++++ b/src/libstore/local-store.cc
+@@ -112,6 +112,7 @@ struct LocalStore::State::Stmts
+     SQLiteStmt AddDerivationOutput;
+     SQLiteStmt RegisterRealisedOutput;
+     SQLiteStmt UpdateRealisedOutput;
++    SQLiteStmt DeleteRealisedOutputByName;
+     SQLiteStmt QueryValidDerivers;
+     SQLiteStmt QueryDerivationOutputs;
+     SQLiteStmt QueryRealisedOutput;
+@@ -389,6 +390,15 @@ LocalStore::LocalStore(ref<const Config> config)
+                     outputName = ?
+                 ;
+             )");
++        state->stmts->DeleteRealisedOutputByName.create(
++            state->db,
++            R"(
++                delete from BuildTraceV3
++                where
++                    drvPath = ? and
++                    outputName = ?
++                ;
++            )");
+         state->stmts->QueryRealisedOutput.create(
+             state->db,
+             R"(
+@@ -666,7 +676,18 @@ void LocalStore::registerDrvOutput(const Realisation & info)
+     experimentalFeatureSettings.require(Xp::CaDerivations);
+     retrySQLite<void>([&]() {
+         auto state(_state->lock());
+-        if (auto oldR = queryRealisation_(*state, info.id)) {
++        auto oldR = queryRealisation_(*state, info.id);
++        /* When the recorded output is gone (garbage collected)
++         * a differing rebuild replaces the trace instead of conflicting with it.
++         */
++        if (oldR && !info.isCompatibleWith(*oldR) && !isValidPath_(*state, oldR->outPath)) {
++            state->stmts->DeleteRealisedOutputByName.use()
++                .apply(info.id.drvPath.to_string())
++                .apply(info.id.outputName)
++                .exec();
++            oldR.reset();
++        }
++        if (oldR) {
+             if (info.isCompatibleWith(*oldR)) {
+                 auto combinedSignatures = oldR->signatures;
+                 combinedSignatures.insert(info.signatures.begin(), info.signatures.end());
