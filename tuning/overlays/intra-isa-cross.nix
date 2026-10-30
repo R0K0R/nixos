@@ -211,6 +211,26 @@
       });
     })
 
+    /*
+      autobahn 26.7.1's wheel REQUIRES cbor2, msgpack and ujson, but nixpkgs
+      lists them only as optional dependencies and test inputs. A native build
+      runs the tests, so they are on the path and pythonRuntimeDepsCheck
+      passes; under IntraISACross checks do not run and it fails ("cbor2 not
+      installed", 2026-10-31). An upstream packaging bug that only a build
+      without tests shows. Tuned set only: the build platform's autobahn stays
+      upstream's and keeps substituting.
+    */
+    (final: prev:
+      lib.optionalAttrs (((prev.stdenv.hostPlatform.gcc or { }).arch or "") != "") {
+        pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
+          (pyfinal: pyprev: {
+            autobahn = pyprev.autobahn.overridePythonAttrs (old: {
+              dependencies = old.dependencies ++ [ pyfinal.cbor2 pyfinal.msgpack pyfinal.ujson ];
+            });
+          })
+        ];
+      })
+
     # nixfmt is Haskell; cross-compiling it drags in iserv-proxy → network (C-FFI)
     # which fails configure with the cross GCC.  Use BUILD-platform binary instead.
     # GHC doesn't autovectorize; glibc uses IFUNC, so znver5 code runs on meteorlake.
