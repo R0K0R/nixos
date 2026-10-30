@@ -18,6 +18,15 @@ let
   gccMakeFlags =
     lib.optionalString (!kernelUsesClang && isCross) "CC=${cc}/bin/${pkgs.stdenv.cc.targetPrefix}gcc";
 
+  /*
+    What the kernel's own module build runs, from the kernel itself rather
+    than hand-listed: perl, elfutils, and pahole whenever the kernel carries
+    BTF. Since the 7.2 kernels of the 2026-10-27 bump it does, and with only
+    perl listed every module here died in its BTF step ("gen-btf.sh: pahole:
+    command not found").
+  */
+  moduleTools = kernel.moduleBuildDependencies;
+
   ivscModules = [
     "mei-vsc"
     "mei-vsc-hw"
@@ -29,7 +38,7 @@ let
     pname = "ipu-bridge-fix";
     version = "1.4-${kernel.modDirVersion}";
     src = "${fixes}/webcam-fix-book5/ipu-bridge-fix";
-    nativeBuildInputs = [ kernel.dev cc pkgs.gnumake pkgs.perl ]
+    nativeBuildInputs = [ kernel.dev cc pkgs.gnumake ] ++ moduleTools
       ++ lib.optionals kernelUsesClang [ pkgs.llvmPackages.lld ];
     buildPhase = ''
       make -C ${kernel.dev}/lib/modules/${kernel.modDirVersion}/build \
@@ -62,7 +71,7 @@ let
     pname = "ov02c10-26mhz-fix";
     version = "1.0-${kernel.modDirVersion}";
     src = "${fixes}/ov02c10-26mhz-fix";
-    nativeBuildInputs = [ kernel.dev cc pkgs.gnumake pkgs.perl ]
+    nativeBuildInputs = [ kernel.dev cc pkgs.gnumake ] ++ moduleTools
       ++ lib.optionals kernelUsesClang [ pkgs.llvmPackages.lld ];
     buildPhase = ''
       make -C ${kernel.dev}/lib/modules/${kernel.modDirVersion}/build \
