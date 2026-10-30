@@ -1,18 +1,27 @@
 # Code completion for Emacs (minuet) on the galaxybook, served from this
-# machine's GPU: Qwen2.5-Coder 1.5B, the best of the local models in the Typst
-# completion benchmark (~0.2 s on the RTX 3050).  At 8 bits (1.65 GB): 11/40
-# exact against 4-bit's 9/40 and 6-bit's 10/40, no slower; the 3B was no
-# better than the 1.5B, and a 4 GB card has the room.
+# machine's GPU: Qwen2.5-Coder 3B fine-tuned on Typst (~/git_shit/typst-fim:
+# LoRA on 110M tokens -- GitHub Typst since 2024, Typst Universe, these notes,
+# 21% other languages), at 6 bits (2.5 GB of the 4 GB card).  In the
+# completion benchmark against the stock 1.5B at 8 bits: the same 11/40 exact,
+# but closer misses (0.61 against 0.53) and Typst syntax right far more often
+# (LaTeX to Typst 12/20 against 4/20).
 #
 # Listens on the Tailscale address only.  The firewall is off on this host and
 # it also sits on school Wi-Fi, so 0.0.0.0 would serve the whole network.
 { lib, pkgs, ... }:
 
 let
-  # Pinned to the Hugging Face commit the benchmark used.
-  model = pkgs.fetchurl {
-    url = "https://huggingface.co/QuantFactory/Qwen2.5-Coder-1.5B-GGUF/resolve/73c3c696087d8d57a3005e31f2afe78f43059739/Qwen2.5-Coder-1.5B.Q8_0.gguf";
-    hash = "sha256-S1JPnoUJa1kICcHTXnthaQDQ2XfRLS907sFoUs3YXtY=";
+  # Not downloadable: it is trained on code without licences, so it stays
+  # private.  The file goes into the store by hand, on whichever machine
+  # builds this host, and is then found by its hash.
+  model = pkgs.requireFile {
+    name = "typst-coder-3b.Q6_K.gguf";
+    hash = "sha256-16Oc9fr5lrSn2LqepabbvavKWjuq+A8OSNdcr1KcwN8=";
+    message = ''
+      The fine-tuned completion model is not in the store.  From yulee's
+      ~/typst-fim/gguf/typst-coder-3b.Q6_K.gguf:
+        nix-store --add-fixed sha256 typst-coder-3b.Q6_K.gguf
+    '';
   };
 in
 {
