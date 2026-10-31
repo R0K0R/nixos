@@ -229,6 +229,42 @@
     })
 
     /*
+      kwin generates its Wayland server glue with qtwaylandscanner_kde, a tool
+      in its own tree. Cross-compiling without QTWAYLANDSCANNER_KDE_EXECUTABLE
+      it builds that tool as an ExternalProject, against the Qt it finds --
+      the TUNED one -- and runs it on the builder, where the tuned QtCore
+      refuses to start: "Incompatible processor. This Qt build requires the
+      following features: waitpkg" (2026-11-01). The tool's directory is a
+      standalone CMake project for exactly this case, so it is built here
+      against the build platform's Qt 6 and handed to kwin.
+    */
+    (final: prev:
+      lib.optionalAttrs (((prev.stdenv.hostPlatform.gcc or { }).arch or "") != "") {
+        kdePackages = prev.kdePackages.overrideScope (_: kp: {
+          kwin =
+            let
+              bb = prev.pkgsBuildBuild;
+              scanner = bb.stdenv.mkDerivation {
+                pname = "qtwaylandscanner-kde";
+                inherit (kp.kwin) version src;
+                sourceRoot = "kwin-${kp.kwin.version}/src/wayland/tools";
+                nativeBuildInputs = [ bb.cmake bb.ninja bb.kdePackages.extra-cmake-modules ];
+                buildInputs = [ bb.qt6.qtbase ];
+                dontWrapQtApps = true;
+                installPhase = ''
+                  install -Dm755 qtwaylandscanner_kde $out/bin/qtwaylandscanner_kde
+                '';
+              };
+            in
+            kp.kwin.overrideAttrs (old: {
+              cmakeFlags = (old.cmakeFlags or [ ]) ++ [
+                "-DQTWAYLANDSCANNER_KDE_EXECUTABLE=${scanner}/bin/qtwaylandscanner_kde"
+              ];
+            });
+        });
+      })
+
+    /*
       KF5 kguiaddons asks pkg-config for wayland-scanner's pkgdatadir to find
       wayland.xml. wayland-scanner is a nativeBuildInputs entry, so only the
       BUILD-platform pkg-config sees its .pc; the host one answered nothing
