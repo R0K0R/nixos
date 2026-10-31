@@ -247,6 +247,18 @@
               buildInputs = (old.buildInputs or [ ]) ++ [ final.wayland-scanner ];
             });
             /*
+              ktextwidgets' bin output holds nothing but its Qt Designer plugin,
+              and a cross build of KF5 does not build Designer plugins -- so
+              the output was never created and the build failed with "failed
+              to produce output path for output 'bin'" (2026-11-01). Created
+              empty here; Designer plugins matter only inside Qt Designer.
+            */
+            ktextwidgets = kprev.ktextwidgets.overrideAttrs (old: {
+              postInstall = (old.postInstall or "") + ''
+                mkdir -p "$bin"
+              '';
+            });
+            /*
               kdoctools runs its own meinproc5 and checkXML5 to build its
               documentation. Cross-compiling, it imports them only when told
               where the build platform's are (*_EXECUTABLE); without that the
