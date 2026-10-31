@@ -246,6 +246,25 @@
             kguiaddons = kprev.kguiaddons.overrideAttrs (old: {
               buildInputs = (old.buildInputs or [ ]) ++ [ final.wayland-scanner ];
             });
+            /*
+              kdoctools runs its own meinproc5 and checkXML5 to build its
+              documentation. Cross-compiling, it imports them only when told
+              where the build platform's are (*_EXECUTABLE); without that the
+              commands stayed the bare target names and the build died on
+              "KF5::meinproc5: command not found" (2026-11-01).
+              docbookl10nhelper is not installed anywhere, so there is no
+              build-platform one to name; kdoctools builds and runs its own.
+            */
+            kdoctools =
+              let
+                build = prev.pkgsBuildBuild.libsForQt5.__internalKF5.kdoctools;
+              in
+              kprev.kdoctools.overrideAttrs (old: {
+                cmakeFlags = (old.cmakeFlags or [ ]) ++ [
+                  "-DMEINPROC5_EXECUTABLE=${build}/bin/meinproc5"
+                  "-DCHECKXML5_EXECUTABLE=${build}/bin/checkXML5"
+                ];
+              });
           });
         });
       })
