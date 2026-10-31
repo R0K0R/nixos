@@ -125,18 +125,35 @@
           '';
         });
 
-        # In IntraISACross, qmlcachegen (from qtdeclarative.dev/bin) is not found
-        # via QT_HOST_BINS (which points to qtbase, not qtdeclarative).  qtPrepareTool
-        # resolves to an empty path → Makefile recipe is just "-o output.qmlc source.qml"
-        # → bash: o: command not found (Error 127, ignored during build) → install step
-        # tries to copy non-existent .qmlc files → fatal Error 3.
-        # .qmlc files are optional ahead-of-time QML cache; strip CONFIG += qmlcache
-        # so the EXTRA_COMPILERS and INSTALLS entries are never generated.
-        qtquickcontrols = qsuper.qtquickcontrols.overrideAttrs (old: {
-          postPatch = (old.postPatch or "") + ''
-            find . -name '*.pro' -exec sed -i 's/CONFIG += qmlcache//' {} +
-          '';
-        });
+        /*
+          qmlcachegen for every module that ahead-of-time compiles its QML.
+          nixpkgs patches qmake's qtPrepareTool to find tools with
+          `command -v`, i.e. on PATH, and qmlcachegen lives in qtdeclarative's
+          dev/bin -- the TUNED qtdeclarative, a buildInputs entry, whose bin/
+          strictDeps keeps off PATH. The lookup came back empty, the recipe
+          became "-o <file>.qmlc <file>.qml" (bash: o: command not found,
+          ignored) and the install of the missing .qmlc failed: qtquickcontrols
+          first, which used to have CONFIG += qmlcache stripped here, then
+          qtgraphicaleffects once the tuned qmake really ran (2026-10-31).
+          The tuned qmlcachegen could not run on a builder anyway (meteorlake
+          code on Zen 3). So the tuned qtdeclarative propagates the build
+          platform's, as a build tool: same Qt version, and the .qmlc bytecode
+          does not depend on the CPU.
+        */
+        # Tuned set only: this overlay also reaches pkgsBuildBuild, whose own
+        # pkgsBuildBuild.qt5 is itself (infinite recursion otherwise).
+        qtdeclarative =
+          if ((prev.stdenv.hostPlatform.gcc or { }).arch or "") == "" then
+            qsuper.qtdeclarative
+          else
+            qsuper.qtdeclarative.overrideAttrs (old: {
+              propagatedNativeBuildInputs = (old.propagatedNativeBuildInputs or [ ]) ++ [
+                (prev.pkgsBuildBuild.runCommand "qmlcachegen-for-build" { } ''
+                  mkdir -p $out/bin
+                  ln -s ${prev.pkgsBuildBuild.qt5.qtdeclarative.dev}/bin/qmlcachegen $out/bin/qmlcachegen
+                '')
+              ];
+            });
       });
 
       # jasper's CMakeLists.txt refuses to auto-detect __STDC_VERSION__ in
