@@ -229,6 +229,28 @@
     })
 
     /*
+      KF5 kguiaddons asks pkg-config for wayland-scanner's pkgdatadir to find
+      wayland.xml. wayland-scanner is a nativeBuildInputs entry, so only the
+      BUILD-platform pkg-config sees its .pc; the host one answered nothing
+      and the rule became "No rule to make target '/wayland.xml'"
+      (2026-10-31, now that strictDeps applies here). Listed as a host input
+      too: the .pc and the protocol XMLs are the same data on both sides. The
+      Qt 6 kguiaddons takes qtwayland instead and is unaffected.
+    */
+    (final: prev:
+      lib.optionalAttrs (((prev.stdenv.hostPlatform.gcc or { }).arch or "") != "") {
+        # The frameworks are their own scope inside libsForQt5 (__internalKF5);
+        # overriding it there reaches the frameworks that depend on kguiaddons.
+        libsForQt5 = prev.libsForQt5.overrideScope (_: lprev: {
+          __internalKF5 = lprev.__internalKF5.overrideScope (_: kprev: {
+            kguiaddons = kprev.kguiaddons.overrideAttrs (old: {
+              buildInputs = (old.buildInputs or [ ]) ++ [ final.wayland-scanner ];
+            });
+          });
+        });
+      })
+
+    /*
       autobahn 26.7.1's wheel REQUIRES cbor2, msgpack and ujson, but nixpkgs
       lists them only as optional dependencies and test inputs. A native build
       runs the tests, so they are on the path and pythonRuntimeDepsCheck
