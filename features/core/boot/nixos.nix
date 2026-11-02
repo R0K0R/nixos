@@ -7,6 +7,10 @@ let
   # wrapped in a minimal Plymouth *script* theme. It ships script.so so the
   # script module reaches the initrd too -- the NixOS plymouth module copies
   # plugins from the theme package (themesEnv), not from pkgs.plymouth.
+  # Copied from boot.plymouth.package, the plymouth themesEnv itself holds:
+  # the module builds its own variant, and a script.so from pkgs.plymouth
+  # differed from it and broke the buildEnv ("two given paths contain a
+  # conflicting subpath: .../lib/plymouth/script.so", dell, 2026-11-02).
   # ImageDir uses this store path; the module rewrites it to the initrd path
   # on its own. The art is a particular desktop's "bonfire" mark, so it is an
   # option a host asks for, not a default.
@@ -15,7 +19,7 @@ let
     ''
       d="$out/share/plymouth/themes/bonfire"
       mkdir -p "$d" "$out/lib/plymouth"
-      cp ${pkgs.plymouth}/lib/plymouth/script.so "$out/lib/plymouth/"
+      cp ${config.boot.plymouth.package}/lib/plymouth/script.so "$out/lib/plymouth/"
       python3 ${./plymouth-logo.py} ${./logo.txt} "$d/logo.png"
       cp ${./bonfire.script} "$d/bonfire.script"
       substitute ${./bonfire.plymouth.in} "$d/bonfire.plymouth" --replace @themedir@ "$d"
