@@ -332,7 +332,6 @@
     },
     "feat-hyprland": {
       "inputs": {
-        "hyprland-keystone": "hyprland-keystone",
         "hyprland-nixos": "hyprland-nixos"
       },
       "locked": {
@@ -465,23 +464,6 @@
         "owner": "golbin",
         "ref": "v0.4.1",
         "repo": "hop",
-        "type": "github"
-      }
-    },
-    "hyprland-keystone": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1792860036,
-        "narHash": "sha256-jZFSMdbhxbi9awjQkLWCsbZd4E+UhQg/ugO8eon476U=",
-        "owner": "R0K0R",
-        "repo": "Hyprland",
-        "rev": "a9685ffac72e015ccd848f8e4a9ee4379a16852b",
-        "type": "github"
-      },
-      "original": {
-        "owner": "R0K0R",
-        "ref": "keystone",
-        "repo": "Hyprland",
         "type": "github"
       }
     },

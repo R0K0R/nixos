@@ -1,4 +1,4 @@
-{ config, lib, inputs, ... }:
+{ config, lib, pkgs, inputs, ... }:
 
 {
   /*
@@ -18,15 +18,6 @@
     because the value is consumed by a shell script rather than by the config.
   */
   options.my.hyprland = {
-    keystone.enable = lib.mkEnableOption ''
-      EXPERIMENTAL per-window perspective-trapezoid rendering for windows tagged
-      "dock" (my.sidedock). Builds the compositor from the fork's `keystone`
-      branch (the overlay below; rendering from sihooleebd/nixos): the texture
-      vertex shaders honour a projective w, and renderTextureInternal
-      post-multiplies a yaw homography into the projection for dock windows;
-      every other window renders as before. Touches the same renderer as the
-      fork's blur and rotation fixes -- check a rotated output'';
-
     modKey = lib.mkOption {
       type = lib.types.str;
       default = "SUPER";
@@ -72,11 +63,16 @@
   config = lib.mkIf (config.my.desktop.compositor == "hyprland") {
     /*
       Hyprland from the R0K0R/Hyprland fork (features/hyprland/flake.nix says
-      how it is laid out): `nixos` = nixpkgs' tag + the local bug fixes, each
-      also on its own pr/* branch; `keystone` = that + the side-dock series.
-      It replaced a stack of patch files here (layoutmanager null space, gamma
-      zombie, input on monitor loss, soft-apply blur, keystone/01..11); each is
-      now one commit in the fork, its old header the commit message.
+      how it is laid out): its `nixos` branch, nixpkgs' tag + the local bug
+      fixes, each also on its own pr/* branch. It replaced a stack of patch
+      files here (layoutmanager null space, gamma zombie, input on monitor
+      loss, soft-apply blur); each is now one commit in the fork, its old
+      header the commit message.
+
+      This is the host's compositor: the greeter's, the portal's and that of
+      any account whose home brings none. A patched one (the keystone series,
+      a user's own patch) is a home's my.hyprland.package; the session entry
+      below starts it.
 
       patches = [ ]: nixpkgs' own patch (monitor-soft-apply-logical-size, from
       the nixpkgs fork) is a commit in the fork too and would not apply twice.
@@ -90,7 +86,7 @@
       (final: prev:
         let
           forkBase = "0.56.2";
-          branch = if config.my.hyprland.keystone.enable then "keystone" else "nixos";
+          branch = "nixos";
           src = inputs.feat-hyprland.src.${branch};
         in
         {
@@ -119,6 +115,52 @@
       # systemd user units uwsm needs (wayland-session-bindpid@.service etc.)
       # are missing -> "systemctl --user start ... exit status 5" crash loop.
       withUWSM = true;
+
+      /*
+        The session entry starts the logged-in account's compositor. A home's
+        my.hyprland.package lands in its profile; when that Hyprland is not this
+        one, hyprland.desktop runs the profile's start-hyprland with --path (its
+        default execvp("Hyprland") would find /run/wrappers/bin/Hyprland, this
+        build, first). Otherwise this build, through the cap_sys_nice wrapper as
+        before -- a profile's own binary runs without it (no SCHED_RR).
+
+        A symlinkJoin, so the session change rebuilds nothing. The uwsm entry
+        resolves hyprland.desktop through the user's data dirs, where a home's
+        own Hyprland package shadows this one; the greeter remembers the plain
+        entry.
+
+        Overridable like the package it wraps: the module's apply calls
+        .override { enableXWayland, withUWSM }, which reaches the real build.
+      */
+      package = lib.makeOverridable (
+        args:
+        let
+          real = pkgs.hyprland.override args;
+          launcher = pkgs.writeShellScript "hyprland-session" ''
+            sys=$(${pkgs.coreutils}/bin/readlink -f ${real}/bin/Hyprland)
+            for p in "$HOME/.nix-profile/bin" "/etc/profiles/per-user/''${USER:-$(${pkgs.coreutils}/bin/id -un)}/bin"; do
+              h=$(${pkgs.coreutils}/bin/readlink -f "$p/Hyprland" 2>/dev/null) || continue
+              if [ -x "$h" ] && [ "$h" != "$sys" ] && [ -x "$p/start-hyprland" ]; then
+                exec "$p/start-hyprland" --path "$h" "$@"
+              fi
+            done
+            exec ${real}/bin/start-hyprland "$@"
+          '';
+        in
+        pkgs.symlinkJoin {
+          inherit (real) pname version;
+          # one output, not real's out + man
+          meta = removeAttrs real.meta [ "outputsToInstall" ];
+          paths = [ real ];
+          postBuild = ''
+            ln -s ${launcher} $out/bin/hyprland-session
+            rm $out/share/wayland-sessions/hyprland.desktop
+            substitute ${real}/share/wayland-sessions/hyprland.desktop $out/share/wayland-sessions/hyprland.desktop \
+              --replace-fail "Exec=${real}/bin/start-hyprland" "Exec=$out/bin/hyprland-session"
+          '';
+          passthru = real.passthru // { unwrapped = real; };
+        }
+      ) { };
     };
   };
 }

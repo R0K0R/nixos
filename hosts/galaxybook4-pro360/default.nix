@@ -310,9 +310,6 @@
     embedded-keyboard.enable = true;
     # Cast to Miracast TVs/monitors (Wi-Fi Direct) and Chromecasts.
     wireless-display.enable = true;
-    # keystone: the 3D trapezoid look of the side dock (a home feature), plus
-    # scale-to-fit and the swipe -- a Hyprland patch, so the system's.
-    hyprland.keystone.enable = true;
     # Galaxy Z Fold 6 as a stylus tablet (~/git_shit/foldpen): the grant --
     # uinput for r0k0r (the default user scope) and the Wi-Fi port. The daemon
     # and its keys are his home's (foldpen there).

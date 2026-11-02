@@ -7,10 +7,11 @@
 
       pr/<name>   one bug fix each, on the tag nixpkgs packages -- the unit
                   that goes upstream
-      nixos       the tag + every pr/* fix, linear: what a host without the
-                  dock keystone runs
+      nixos       the tag + every pr/* fix, linear: the hosts' compositor
       keystone    nixos + the side-dock series (rendering, scale-to-fit,
-                  input, gestures, Lua touch/pen; one commit per concern)
+                  input, gestures, Lua touch/pen; one commit per concern):
+                  a home's compositor (r0k0r's my.hyprland.keystone), so
+                  an input of that home, not of this flake
 
     Change Hyprland in the fork (fix the commit that owns the concern), push,
     then `nix flake update feat-hyprland`. Pinned by branch in the URL --
@@ -20,17 +21,12 @@
     url = "github:R0K0R/Hyprland/nixos";
     flake = false;
   };
-  inputs.hyprland-keystone = {
-    url = "github:R0K0R/Hyprland/keystone";
-    flake = false;
-  };
 
   outputs =
-    { hyprland-nixos, hyprland-keystone, ... }:
+    { hyprland-nixos, ... }:
     {
       src = {
         nixos = hyprland-nixos;
-        keystone = hyprland-keystone;
       };
     };
 }

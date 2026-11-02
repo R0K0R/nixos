@@ -207,7 +207,7 @@ today, system half first:
 | fcitx | i18n.inputMethod, the GTK3 immodules cache, the daemon | fcitx5's config |
 | fish, zsh | the login shell, /etc/zshrc plugins, root's zsh | the interactive config |
 | foldpen | uinput for `users`, the port | the daemon, its keys |
-| hyprland | the compositor build, session entry, modKey/keystone/rotationHooks | the Lua config, session scripts |
+| hyprland | the compositor build (fork `nixos`), session entry (starts the account's own build), modKey/rotationHooks | the Lua config, session scripts, a patched compositor (`my.hyprland.package`, r0k0r's `keystone`) |
 | network | NetworkManager, KDE Connect's ports | the KDE Connect daemon |
 | qt-theming | QT_PLUGIN_PATH | the qt6ct scheme, kdeglobals |
 | waydroid | the container, its service, the images | its Hyprland keys, the Android /data |

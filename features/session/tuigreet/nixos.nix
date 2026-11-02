@@ -21,10 +21,11 @@ let
         # the compositor is launched bare. Same command line nixpkgs' own
         # programs.uwsm.waylandCompositors entries put in their .desktop files
         # (`uwsm start -F -- <binary>`); the binary stays start-hyprland, the
-        # launcher the compositor itself asks for.
+        # launcher the compositor itself asks for -- through the hyprland
+        # feature's hyprland-session, which picks the account's own build.
         bin =
           let
-            hypr = "${config.programs.hyprland.package}/bin/start-hyprland";
+            hypr = "${config.programs.hyprland.package}/bin/hyprland-session";
           in
           if config.programs.hyprland.withUWSM then
             "${lib.getExe config.programs.uwsm.package} start -F -- ${hypr}"

@@ -285,15 +285,6 @@
       kdeconnect.enable = true;
     };
 
-    # Hyprland: the compositor package, UWSM and the session entry are the
-    # system's; the configuration is his home's.
-    hyprland = {
-      # His 3D dock (the "dock"-tagged windows rendered as a perspective
-      # trapezoid) and his home's decoration:keystone_* options need the
-      # keystone build of the compositor: the stock one rejects those keys.
-      keystone.enable = true;
-    };
-
     /*
       Offload builds to yulee and victus-15, as benjamin.
 
