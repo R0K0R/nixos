@@ -25280,8 +25280,8 @@
     "zzuf"
     "zzz"
   ];
-  nixpkgsNarHash = "sha256-jM4IOVBYaY0nsQrMqvqZjUV8BlpyRRrnicID1nAraGM=";
-  nixpkgsRev = "5f8e0f6e66d9c244477161b497e5741ffb8fd054";
+  nixpkgsNarHash = "sha256-ycMKdPOfJg9gBTdJpPQHE2wGjE8T8f+kN+hTbbLITEg=";
+  nixpkgsRev = "5ca6d9c85ecdae408485b002bd427b9aba859f57";
   pnames = {
     AMB-plugins = "amb-plugins";
     ArchiSteamFarm = "archisteamfarm";
