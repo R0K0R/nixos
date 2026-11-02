@@ -15,7 +15,10 @@
   my = {
     fish.enable = true; # his fish config; the login shell is the system's
     # --- the bonfire desktop ---------------------------------------------------------------
-    hyprland.enable = true;
+    hyprland = {
+      enable = true;
+      keystone.enable = true; # his compositor: the host's build + modules/desktop/hyprland/trapezoid.patch
+    };
 
     bonfire = {
       enable = true;

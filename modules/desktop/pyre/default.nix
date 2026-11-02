@@ -8,7 +8,7 @@ let
   # hyprctl + jq on its PATH. hyprctl comes from the RUNNING compositor's own
   # package so the IPC protocol always matches.
   dock = pkgs.writeShellScript "pyre" ''
-    export PATH=${lib.makeBinPath [ osConfig.programs.hyprland.package pkgs.jq pkgs.coreutils pkgs.swaynotificationcenter pkgs.quickshell config.my.panelbus.package ]}''${PATH:+:$PATH}
+    export PATH=${lib.makeBinPath [ config.my.hyprland.package pkgs.jq pkgs.coreutils pkgs.swaynotificationcenter pkgs.quickshell config.my.panelbus.package ]}''${PATH:+:$PATH}
     exec ${pkgs.writeShellScript "pyre-impl" (builtins.readFile ./dock.sh)} "$@"
   '';
 
@@ -36,7 +36,7 @@ let
   # `/desktop` shell explorer and any explorer.exe with no path arg (e.g. the tray), so only real folder
   # windows are redirected.
   folderToDolphin = pkgs.writeShellScript "wine-folder-to-dolphin" ''
-    export PATH=${lib.makeBinPath [ osConfig.programs.hyprland.package pkgs.jq pkgs.coreutils pkgs.gnused pkgs.kdePackages.dolphin pkgs.xdg-utils ]}''${PATH:+:$PATH}
+    export PATH=${lib.makeBinPath [ config.my.hyprland.package pkgs.jq pkgs.coreutils pkgs.gnused pkgs.kdePackages.dolphin pkgs.xdg-utils ]}''${PATH:+:$PATH}
     PFX="$HOME/.local/share/wineprefixes/kakaotalk"
     addr="$1"
     pid=$(hyprctl clients -j | jq -r --arg a "$addr" 'first(.[]|select(.address==$a)).pid // empty')

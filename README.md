@@ -115,9 +115,10 @@ Things the old flake did in a NixOS half or at host level, and a home cannot. Th
 duplicate them; the system flake's `dell-latitude` host has to (an `assertion` in the modules catches the
 ones it can):
 
-- **Hyprland, keystone, the session.** `my.desktop.compositor = "hyprland"`, `my.hyprland.keystone.enable = true`
-  (the 3D dock and its `decoration:keystone_*` options), uwsm, the session `.desktop`, `my.desktop.primaryOutput`
-  `= "eDP-1"` and `primaryOutputScale = "0.8"`.
+- **Hyprland, the session.** `my.desktop.compositor = "hyprland"`, uwsm, the session `.desktop` (which starts
+  the profile's own Hyprland), `my.desktop.primaryOutput` `= "eDP-1"` and `primaryOutputScale = "0.8"`. The
+  keystone compositor (the 3D dock, its `decoration:keystone_*` options, the dockpile gesture) is this home's:
+  `my.hyprland.keystone.enable`, the host's build plus `modules/desktop/hyprland/trapezoid.patch`.
 - **The system's own Hyprland home half must not apply to benjamin.** It is applied to every account on a
   Hyprland host and writes a second, different Lua config and `hl.config` settings that would merge into (and
   conflict with) `modules/desktop/hyprland`. The same goes for `qt-theming`, which should only repair DMS's

@@ -1142,10 +1142,10 @@ in
           pkgs.runCommand "bonfire-swaync-gtk4-fixed" { } ''
             cp -r ${share}/swaync $out
             chmod -R u+w $out
-            ${lib.optionalString osConfig.my.hyprland.keystone.enable ''
+            ${lib.optionalString config.my.hyprland.keystone.enable ''
               # Dock-SHAPE the control centre: size/place it to a pyre card's footprint so the
               # compositor keystone (extended to the "swaync-control-center" LAYER in
-              # the keystone compositor patch (trapezoid.patch, now the fork's `keystone` branch)) warps it into the SAME trapezoid, and it occupies
+              # the keystone compositor patch (modules/desktop/hyprland/trapezoid.patch)) warps it into the SAME trapezoid, and it occupies
               # the dock's slot -- the two are toggled mutually exclusive (SUPER+N parks the dock;
               # showing the dock closes this). Values match modules/desktop/pyre's live geom on the dell
               # (2400x1350 logical: DW 800, right HGAP 40, top barH+VGAP 104, bottom VGAP 48,

@@ -202,7 +202,7 @@ let
   # survive a reboot). NB this is LIVE state -- a compositor config reload (monitor hotplug etc.)
   # resets the submap + device config, so a lock won't survive one; re-press to re-lock.
   inputLockToggle = pkgs.writeShellScript "hypr-input-lock" ''
-    export PATH=${lib.makeBinPath [ osConfig.programs.hyprland.package pkgs.jq pkgs.libnotify pkgs.coreutils ]}:$PATH
+    export PATH=${lib.makeBinPath [ cfg.package pkgs.jq pkgs.libnotify pkgs.coreutils ]}:$PATH
     state="''${XDG_RUNTIME_DIR:-/tmp}/bonfire-inputlock"
     pads=$(hyprctl devices -j | jq -r '.mice[]?.name | select(test("touchpad";"i"))')
     setpads() { for d in $pads; do hyprctl eval "hl.device({ name = \"$d\", enabled = $1 })" >/dev/null 2>&1; done; }
@@ -277,7 +277,7 @@ let
   # rounding MUST match the reader. (Lives here with its reader -- monitor-scale capture is a Hyprland
   # concern, not pyre's.)
   scalePersist = pkgs.writeShellScript "hypr-scale-capture" ''
-    export PATH=${lib.makeBinPath [ osConfig.programs.hyprland.package pkgs.jq pkgs.coreutils pkgs.gawk ]}:$PATH
+    export PATH=${lib.makeBinPath [ cfg.package pkgs.jq pkgs.coreutils pkgs.gawk ]}:$PATH
     state="$HOME/.config/hypr/monitor-scales"
     primary="${osConfig.my.desktop.primaryOutput}"
     mkdir -p "$HOME/.config/hypr"; touch "$state"
@@ -359,6 +359,7 @@ in
 
   wayland.windowManager.hyprland = {
     enable = cfg.enable;
+    inherit (cfg) package;
 
     # Lua, not hyprlang. Verified against this exact build's own source
     # (0.56.0's src/config/lua/bindings/*.cpp) rather than assumed from docs
@@ -520,7 +521,7 @@ in
             brightness = 1.1;
             contrast = 1.0;
           };
-        } // lib.optionalAttrs osConfig.my.hyprland.keystone.enable {
+        } // lib.optionalAttrs cfg.keystone.enable {
           # 3D dock: windows tagged "dock" (my.pyre) render as a perspective
           # trapezoid -- the patched compositor (my.hyprland.keystone) reads these
           # per-window. inset = left-edge horizontal pull-in, shrink = left-edge
@@ -622,7 +623,7 @@ in
       # the same preference the pre-readopt commit 990f0f5 carried.
       gesture = [
         # 4-finger drag = the built-in MOVE gesture. On a side-dock pile card (my.pyre) the
-        # PATCHED CMoveTrackpadGesture (the keystone compositor patch (trapezoid.patch, now the fork's `keystone` branch)) slides THAT card live
+        # PATCHED CMoveTrackpadGesture (the keystone compositor patch (modules/desktop/hyprland/trapezoid.patch)) slides THAT card live
         # under the finger and on release runs gestures:dock_swipe_exec (set in modules/desktop/pyre ->
         # dock.sh gesture-move) to cycle or spring back; elsewhere it moves the focused window. This
         # REPLACED the old Lua-function 4-finger gesture (one-shot on release) with continuous.
@@ -639,7 +640,7 @@ in
           action = "workspace";
         }
         # 3-finger HORIZONTAL show/hide of the side-dock pile (my.pyre), now CONTINUOUS: the
-        # PATCHED CDockPileTrackpadGesture (the keystone compositor patch (trapezoid.patch, now the fork's `keystone` branch)) slides the WHOLE pile
+        # PATCHED CDockPileTrackpadGesture (the keystone compositor patch (modules/desktop/hyprland/trapezoid.patch)) slides the WHOLE pile
         # live under the fingers and on release runs gestures:dock_pile_exec (set in modules/desktop/pyre
         # -> dock.sh gesture-pile) to settle shown/hidden or spring back. swipe LEFT reveals, RIGHT
         # hides. This REPLACED the old one-shot Lua-FUNCTION gesture (which only decided the verb on

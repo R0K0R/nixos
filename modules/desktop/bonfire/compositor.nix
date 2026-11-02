@@ -47,7 +47,7 @@ let
   # SUPER+N notification-centre toggle, made MUTUALLY EXCLUSIVE with the pyre: opening the panel
   # parks the dock first, because both claim the right-edge slot and the keystone trapezoid shape
   # (the compositor keystones the "swaync-control-center" layer so the panel IS a dock-card shape --
-  # see the keystone compositor patch (trapezoid.patch, now the fork's `keystone` branch); geometry matched in modules/desktop/bonfire/default.nix). `pyre`
+  # see the keystone compositor patch (modules/desktop/hyprland/trapezoid.patch); geometry matched in modules/desktop/bonfire/default.nix). `pyre`
   # is the dock's PATH wrapper (modules/desktop/pyre); the guard makes this a plain toggle on a host with
   # no dock. The reverse direction (showing the dock closes the panel) is in pyre's dock.sh.
   notifToggle = pkgs.writeShellScript "flare-toggle" ''

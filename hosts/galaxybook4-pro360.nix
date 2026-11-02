@@ -18,7 +18,10 @@
   my = {
     fish.enable = true; # his fish config; the login shell is the system's
     # --- the bonfire desktop ---------------------------------------------------------------
-    hyprland.enable = true;
+    hyprland = {
+      enable = true;
+      keystone.enable = true; # his compositor: the host's build + modules/desktop/hyprland/trapezoid.patch
+    };
 
     bonfire = {
       enable = true;
@@ -55,9 +58,33 @@
     # --- shell and editors -----------------------------------------------------------------
     fastfetch.enable = true; # system info with the bonfire logo (see REBRAND.md)
     fishTools.enable = true; # zoxide + fzf
-    kittyLook.enable = true; # DepartureMono + 8 px margin
+    kitty.enable = true; # features/apps/kitty
+    kittyLook.enable = true; # DepartureMono + 8 px margin, over the kitty feature
+    starship.enable = true;
+    eza.enable = true;
+    cursor-theme.enable = true;
+    ssh = {
+      enable = true;
+      # Interactive `ssh yulee`, as himself with his own key; the tailnet FQDN, as on the dell.
+      hosts.yulee = {
+        HostName = "yulee.tail2d4da1.ts.net";
+        User = "benjamin";
+      };
+    };
     fcitxTrayText.enable = true;
     neovim.enable = true;
+    # Home halves of the system's base, fcitx and network (same names there).
+    base.enable = true; # gh and its credential helper
+    fcitx.enable = true;
+    network.enable = true; # the KDE Connect daemon
+    # Doom Emacs from his own config (the doom-private input); the Emacs build is the system's.
+    emacs = {
+      enable = true;
+      font = {
+        family = "DepartureMono Nerd Font";
+        size = 16;
+      };
+    };
 
     # --- apps ------------------------------------------------------------------------------
     # KakaoTalk via Wine (galaxybook runs it via Waydroid instead).

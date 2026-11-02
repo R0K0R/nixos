@@ -662,11 +662,11 @@
         "nixpkgs": "nixpkgs_3"
       },
       "locked": {
-        "lastModified": 1791927538,
-        "narHash": "sha256-pfu27cH0LU41VVA8pmscqFwlVA9lIQDPYQduZ9t43iA=",
+        "lastModified": 1792849621,
+        "narHash": "sha256-DUOu6BZgcYTMRyd2j0eGoPO5LVlXdrpldVD2KJOfOlI=",
         "owner": "sihooleebd",
         "repo": "lyre",
-        "rev": "c1df318ef52f6e79377f3310a336c97efc1491ae",
+        "rev": "aa855910e845e582c1635a993138fe09de5ec11f",
         "type": "github"
       },
       "original": {
