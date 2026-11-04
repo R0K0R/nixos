@@ -364,3 +364,32 @@ nixpkgs offers 2.34.8, matching victus-15.
 
 ONE WAY. A newer Nix migrates the store's SQLite schema on first use and 2.18
 will not read it afterwards, which is why step 4 is not optional.
+
+### 9a. The patched Nix (done 2026-11-02)
+
+yulee runs the system flake's own Nix, 2.35.3+1: upstream 2.35.3 with
+features/nix/nix-settings/nix-ca-rebuild-after-gc.patch (a backport of
+NixOS/nix#16477), the same package the NixOS hosts run. The generic, untuned
+build runs on yulee's CPU, so it is copied in from a NixOS host's closure
+rather than built here, and rooted at ~/.local/state/nix-builds/patched-nix.
+With no build running (the restart aborts them):
+
+    n=/nix/store/<hash>-nix-2.35.3+1    # nix-package.nix's output
+    sudo $n/bin/nix profile remove nix --profile /nix/var/nix/profiles/default
+    sudo $n/bin/nix profile add $n --profile /nix/var/nix/profiles/default
+    sudo systemctl restart nix-daemon
+    nix store info                      # Version: 2.35.3+1
+
+`$n/bin/nix`, not the PATH's: the profile being rewritten is the one the
+PATH's nix comes from. /usr/local/bin/nix* and the daemon unit already point
+at the profile (steps 2 and 3 above), so nothing else changes.
+
+The patch does NOT make GC clean up after itself: GC still leaves a
+BuildTraceV3 row for every CA output it deletes, and a later lookup that
+trusts one fails with "some outputs are unexpectedly invalid" (the patch only
+replaces such a row when a differing rebuild re-registers). After every GC,
+with no build running, run the cleanup (~/buildtrace-cleanup.sh here, the
+same script on every host):
+
+    sudo bash ~/buildtrace-cleanup.sh   # backs up db.sqlite, drops rows
+                                        # whose outputPath is not valid
