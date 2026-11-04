@@ -754,8 +754,8 @@
     "tuning-cache-galaxybook4-pro360": {
       "flake": false,
       "locked": {
-        "lastModified": 1792825527,
-        "narHash": "sha256-tJAPNx9RUmR+Dhqm9EiZcEd/xzrOkglnY+UJzZ0EeoU=",
+        "lastModified": 1793607680,
+        "narHash": "sha256-nCrUvkRt0SH3pgwmN5RrlCZ1oSasPtXLr0h4+FI7nnc=",
         "path": "/var/lib/tuning-cache/galaxybook4-pro360",
         "type": "path"
       },
@@ -767,8 +767,8 @@
     "tuning-cache-victus-15": {
       "flake": false,
       "locked": {
-        "lastModified": 1792825540,
-        "narHash": "sha256-eeVjGwGd+nT9omxGciioPQ12Ay1XD0BUN1nCuqWczQ4=",
+        "lastModified": 1793607680,
+        "narHash": "sha256-ki3kiDVkYU/dKzyP2nXMb0C0/B93A0A9Y+LXgWburLs=",
         "path": "/var/lib/tuning-cache/victus-15",
         "type": "path"
       },
