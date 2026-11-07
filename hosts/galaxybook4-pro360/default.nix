@@ -292,8 +292,9 @@
         (pkgs.callPackage ../../features/apps/claude-code/kitty-inline-img.nix { })
       ];
       shareWithRoot = true;
-      # gemma-claude, skills, MCP servers and watermarks-remover are the
-      # home's (claude-code there).
+      # The system's claude-code: root's and the fallback session's. r0k0r's
+      # own (with the same two extras, gemma-claude, skills, MCP servers,
+      # watermarks-remover) is his home's claude-code, pinned there.
     };
 
     # The host side of the home's claude-desktop: Cowork's qemu and OVMF links.

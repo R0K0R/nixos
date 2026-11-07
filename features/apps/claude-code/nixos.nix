@@ -1,10 +1,13 @@
 /*
-  The SYSTEM half of claude-code: the pinned package, wrapped with
-  extraBinPackages, on every account's PATH -- the fallback session and root's
-  `sudo claude` run it too -- the /root/.claude link, and ~/.claude's
-  persistence. The per-user setup (gemma-claude, skills, MCP servers,
-  watermarks-remover) is the home half, my.claude-code in a home repo, since
-  2026-10-27.
+  The SYSTEM's claude-code: its own pinned package, wrapped with
+  extraBinPackages, on the system PATH -- for root's `sudo claude`, the
+  fallback session and any account whose home brings none -- plus the
+  /root/.claude link and ~/.claude's persistence.
+
+  A home's claude-code is separate (my.claude-code in a home repo, since
+  2026-11-08): its own pin, package and extraBinPackages, in its profile ahead
+  of this one, with gemma-claude, skills, MCP servers and watermarks-remover.
+  Neither reads the other's package; bumping one leaves the other alone.
 */
 { config, inputs, lib, pkgs, ... }:
 
