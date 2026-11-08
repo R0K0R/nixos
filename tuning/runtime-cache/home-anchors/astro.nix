@@ -3,5 +3,6 @@
 {
   system = with pkgs; [
     siril
+    stellarium
   ];
 }
