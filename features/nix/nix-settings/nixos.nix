@@ -96,10 +96,21 @@ in
 
     nix.gc.automatic = cfg.gc.automatic;
 
-    # mkDefault so the remote-builder feature's own substituter list (which adds
-    # peer stores) wins where both are enabled, rather than conflicting.
-    nix.settings.substituters = lib.mkDefault cfg.substituters;
-    nix.settings.trusted-public-keys = lib.mkDefault cfg.trustedPublicKeys;
+    # Normal priority: list options MERGE, so the remote-builder feature's peer
+    # stores add to these rather than conflicting. This was mkDefault, which
+    # lost to nixpkgs' own normal-priority `substituters = mkAfter [ cache ]`
+    # (mkAfter orders, it does not lower priority): on victus-15, where nothing
+    # else set the list, every entry here -- the CUDA cache included -- was
+    # silently dropped for nixpkgs' one default (found 2026-11-18).
+    nix.settings.substituters = cfg.substituters;
+    nix.settings.trusted-public-keys = cfg.trustedPublicKeys;
+    # 15 s, not 300. Substituter lookups are tiny, and a stalled transfer is
+    # only abandoned when this fires -- with lookups queued behind it (likely
+    # a shared HTTP/2 connection): a no-op build on yulee sat 5 minutes on one
+    # realisation lookup through Cloudflare WARP, then built in a minute once
+    # restarted with 15 (2026-11-18). A real download that stalls 15 s is
+    # retried, not failed.
+    nix.settings.stalled-download-timeout = lib.mkDefault 15;
     # trusted-users comes from the registry (features/core/users/nix-access.nix).
     /*
       Same shape as features/openvpn's profileSecret: the age.secrets entry is

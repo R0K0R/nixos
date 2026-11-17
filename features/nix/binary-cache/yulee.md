@@ -13,7 +13,11 @@ Run `setup-yulee.sh` on yulee as root (`sudo bash setup-yulee.sh`). It:
 2. writes `/etc/harmonia/config.toml` (`bind`, `priority`);
 3. installs `/etc/systemd/system/harmonia.service`, signing with
    `/etc/nix/yulee-store-secret.key` (the `secret-key-files` entry of
-   `/etc/nix/nix.conf`), and starts it.
+   `/etc/nix/nix.conf`), and starts it;
+4. makes yulee a client of victus-15's cache: a marked block in
+   `/etc/nix/nix.conf` (backed up first) adds `http://victus-15:5000`, trusts
+   `victus-15-1`, and sets `stalled-download-timeout = 15` as my.nix-settings
+   does on NixOS. It restarts nix-daemon only when no build is running.
 
 Check: `curl -s http://yulee:5000/nix-cache-info` from galaxybook.
 

@@ -44,3 +44,30 @@ systemctl restart harmonia.service
 sleep 2
 systemctl --no-pager --lines=5 status harmonia.service || true
 curl -sf http://127.0.0.1:5000/nix-cache-info && echo "harmonia: OK"
+
+# 4. yulee as a client: victus-15's cache and key, and the short stall timeout
+#    galaxybook and victus-15 get from my.nix-settings. A marked block, replaced
+#    on every run; extra-* so yulee's own substituters and keys stay as they are.
+CONF=/etc/nix/nix.conf
+BEGIN='# BEGIN binary-cache (etc/nixos features/nix/binary-cache/setup-yulee.sh)'
+END='# END binary-cache'
+cp -a "$CONF" "$CONF.bak-$(date +%Y%m%d-%H%M%S)"
+sed -i "\|^$BEGIN\$|,\|^$END\$|d" "$CONF"
+cat >> "$CONF" <<EOF
+$BEGIN
+extra-substituters = http://victus-15:5000?priority=10
+extra-trusted-public-keys = victus-15-1:W5OP8VVbu7Q7z2o5grHJ5Zp+ynm536+QVv+b8fBQJlQ=
+stalled-download-timeout = 15
+$END
+EOF
+# The daemon reads nix.conf at start. A restart kills builds it is running.
+# Each client connection is its own nix-daemon process; more than the one
+# listener means someone is connected (a build, a copy, a peer's builder).
+if [ "$(pgrep -c -x nix-daemon)" -gt 1 ]; then
+  echo "nix-daemon has active workers; restart it yourself when idle: systemctl restart nix-daemon" >&2
+else
+  systemctl restart nix-daemon
+  echo "nix-daemon restarted"
+fi
+nix config show substituters
+nix config show stalled-download-timeout

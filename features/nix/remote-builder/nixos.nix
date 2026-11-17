@@ -381,11 +381,11 @@ in
       # every binary cache, so under CA each unresolved derivation cost a 404 from
       # every public cache before the peer that had its build trace was asked:
       # 93% of a 34-minute query phase (measured 2026-10-24).
-      substituters = [ "https://cache.nixos.org" ]
-        ++ lib.imap0 (i: s: "${s}${if lib.hasInfix "?" s then "&" else "?"}priority=${toString (10 + i)}") cfg.substituters;
-      trusted-public-keys = [
-        "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
-      ] ++ cfg.trustedPublicKeys;
+      # Only the peers: cache.nixos.org and its key come from my.nix-settings
+      # (and nixpkgs' default), which these lists merge with.
+      substituters =
+        lib.imap0 (i: s: "${s}${if lib.hasInfix "?" s then "&" else "?"}priority=${toString (10 + i)}") cfg.substituters;
+      trusted-public-keys = cfg.trustedPublicKeys;
       # No trusted-substituters needed for untrusted users: the daemon lets them
       # pick any entry of this list too, so narrowing it to cache.nixos.org
       # (keeping a dead peer out of an eval) still works.

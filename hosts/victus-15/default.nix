@@ -183,10 +183,15 @@
       substituters = [
         "https://cache.nixos.org"
         "https://cuda-maintainers.cachix.org"
+        # yulee's store (harmonia, features/nix/binary-cache/yulee.md), asked
+        # before the public caches: it holds the tuned outputs those lack.
+        "http://yulee:5000?priority=11"
       ];
       trustedPublicKeys = [
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
         "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
+        # yulee's store key, for its cache above and for copies from it.
+        "yulee-1:KgdwkCN5m+hewJTk+A05PjwI3BbnZAE9NW2n634N7vM="
       ];
       # Was /etc/nix/signing-key.pem, untracked. Per host by definition: the
       # public half is what galaxybook lists in trusted-public-keys, so the
