@@ -262,7 +262,15 @@ switch_variant() {
   if [ -z "${drv:-}" ]; then
     drv=$(nix eval --raw "$repo#$attr.drvPath") || { note "evaluation failed"; return 1; }
   fi
-  if [ "$route" = sudo ]; then
+  # Already built? Ask this store alone. `nix build` of a generation that is
+  # already here still queries every substituter about each of the ~1600 CA
+  # derivations before concluding there is nothing to do: 40 s against 5.8 s
+  # for this local lookup, measured 2026-11-17 (and minutes when nothing is
+  # cached). A miss, or anything odd, falls through to the normal build.
+  out=$(nix realisation info --offline --option substituters "" "$drv^out" 2>/dev/null | tail -n1 | awk '{print $NF}')
+  if [ -n "$out" ] && [ -x "$out/activate" ]; then
+    note "already built: $out"
+  elif [ "$route" = sudo ]; then
     note "building as root (sudo): pinning builders is a trusted-user setting"
     out=$(sudo -- "$HM_NIX" build --no-link --print-out-paths "$drv^out" "${buildopts[@]}" 2>&"$buildfd") || { note "build failed"; return 1; }
   else
