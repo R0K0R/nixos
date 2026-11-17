@@ -1,0 +1,25 @@
+{
+  "_about": "Tailscale, as a node INSIDE the sing-box app -- so the phone keeps the tailnet with the Tailscale app off. It joins as its own device (not the Tailscale app's identity).",
+  "_fill": "auth_key: Tailscale admin console -> Settings -> Keys -> Generate auth key (reusable off, ephemeral off). Self-hosted control server (headscale or similar): add \"control_url\": \"https://...\".",
+  "endpoints": [
+    {
+      "type": "tailscale",
+      "tag": "tailscale",
+      "auth_key": "@FILL tskey-auth-...@",
+      "hostname": "phone-globaltun",
+      "state_directory": "tailscale",
+      "accept_routes": true
+    }
+  ],
+  "dns": {
+    "_about": "MagicDNS names through the tailscale endpoint; everything else keeps the profile's DNS.",
+    "servers": [ { "type": "tailscale", "tag": "tailscale-dns", "endpoint": "tailscale", "accept_default_resolvers": false } ],
+    "rules": [ { "domain_suffix": [ "ts.net" ], "server": "tailscale-dns" } ]
+  },
+  "route": {
+    "rules": [
+      { "ip_cidr": [ "100.64.0.0/10", "fd7a:115c:a1e0::/48" ], "outbound": "tailscale" },
+      { "domain_suffix": [ "ts.net" ], "outbound": "tailscale" }
+    ]
+  }
+}

@@ -26,7 +26,25 @@
 # ICMP is not carried: VpnService grants one tun to one app, so there is
 # nowhere to put the second tun `gticmp.py` needs. The app answers pings itself.
 #
-# Usage: ./globaltun-termux.sh {up|down|status}
+# QUIC (optional, alongside ssh -- set GT_QUIC_PORT): the sing-box APP speaks
+# Hysteria2 itself, so with QUIC the phone's traffic goes straight from the app
+# to the gateway over UDP, and Termux is not in the data path at all. Termux
+# then only starts the server over ssh, keeps the ssh path as the fallback, and
+# writes the app profile that holds both:
+#
+#   sing-box app --+-- quic: Hysteria2/UDP -> gateway            (preferred)
+#                  +-- ssh:  socks 127.0.0.1:$LOCAL_PORT -> above (fallback)
+#
+# Unlike the Linux client, the credentials are KEPT (in ~/.globaltun-quic):
+# the app reads its profile only when you import it, so per-run credentials
+# would mean re-importing on every `up`. `quic-reset` makes new ones.
+#
+# With QUIC, `up` also starts a watcher (`watch`, in the background): the app's
+# "proxy" switch defaults to QUIC, and the watcher moves it to the ssh path
+# while QUIC is down and back once QUIC has held -- through the app's API on
+# the phone's loopback (127.0.0.1:11090, with a secret kept in ~/.globaltun-quic).
+#
+# Usage: ./globaltun-termux.sh {up|down|status|quic-reset}
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -73,8 +91,13 @@ for d in "$HERE" "$HERE/.."; do
   # the gateway needs its own python3, which is exactly the prerequisite they
   # exist to remove.
   [ -z "${GT_RELAY_DIR:-}" ] && { [ -f "$d/gtrelay-linux-amd64" ] || [ -f "$d/gtrelay-linux-arm64" ]; } && GT_RELAY_DIR=$d
+  # Same for the QUIC server (only needed with GT_QUIC_PORT).
+  [ -z "${GT_QUIC_BIN_DIR:-}" ] && { [ -f "$d/gtquic-linux-amd64" ] || [ -f "$d/gtquic-linux-arm64" ]; } && GT_QUIC_BIN_DIR=$d
+  [ -z "${GT_APP_TEMPLATE:-}" ] && [ -f "$d/sing-box-android.json" ] && GT_APP_TEMPLATE=$d/sing-box-android.json
 done
 GT_RELAY_DIR=${GT_RELAY_DIR:-}
+GT_QUIC_BIN_DIR=${GT_QUIC_BIN_DIR:-}
+GT_APP_TEMPLATE=${GT_APP_TEMPLATE:-}
 [ -n "${GT_RSOCKS:-}" ]  || { echo "rsocks.py not found beside or above $HERE" >&2; exit 1; }
 [ -n "${GT_GTLOCAL:-}" ] || { echo "gtlocal.py not found beside or above $HERE" >&2; exit 1; }
 
@@ -83,6 +106,24 @@ RT=${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}
 CTL=$RT/globaltun.ctl
 GLPID=$RT/globaltun-gtlocal.pid
 GLLOG=$RT/globaltun-gtlocal.log
+
+QUIC_PORT=${GT_QUIC_PORT:-}
+# An IP literal: the phone's own DNS is on the network with no way out, and the
+# app would resolve a name through the very tunnel it is trying to reach.
+QUIC_HOST=${GT_QUIC_HOST:-${RHOST##*@}}
+QUIC_HOST=${QUIC_HOST%%:*}
+QUIC_DIR=${GT_QUIC_DIR:-$HOME/.globaltun-quic}
+QUIC_RDIR=/tmp/globaltun-quic-$QUIC_PORT
+# Where the rendered app profile goes. Termux's private files are invisible to
+# the app, so it is copied to shared storage when `termux-setup-storage` has
+# been run (~/storage/downloads), and also written beside this script.
+QUIC_PROFILE_NAME=globaltun-quic.json
+QUIC_API=127.0.0.1:11090
+WATCH_PID=$RT/globaltun-watch.pid
+WATCH_LOG=$RT/globaltun-watch.log
+# ssh-only, but with vpns.d/ snippets merged in
+SSH_PROFILE_NAME=globaltun-ssh.json
+PROFILE=
 
 SSHOPTS=(-i "$KEY" -p "$RPORT"
          -o StrictHostKeyChecking=accept-new
@@ -132,6 +173,208 @@ rsh1(){ ssh -S "$CTL" "$RHOST" "/bin/sh -c '$1'"; }
 # looks like "not listening". bash's /dev/tcp asks the only question that
 # matters and needs neither.
 port_open(){ (exec 3<>/dev/tcp/127.0.0.1/"$1") 2>/dev/null; }
+
+# --- QUIC ---------------------------------------------------------------------
+
+# Kept across runs on purpose (see the header). openssl-tool provides openssl:
+#   pkg install openssl-tool
+quic_creds(){
+  # The API secret came later than the rest: add it alone, so credentials
+  # (and the gateway password in an imported profile) stay as they are.
+  if [ -s "$QUIC_DIR/password" ] && [ ! -s "$QUIC_DIR/api_secret" ] && command -v openssl >/dev/null; then
+    ( umask 077; openssl rand -hex 16 > "$QUIC_DIR/api_secret" )
+  fi
+  [ -s "$QUIC_DIR/cert.pem" ] && [ -s "$QUIC_DIR/key.pem" ] && [ -s "$QUIC_DIR/password" ] \
+    && [ -s "$QUIC_DIR/api_secret" ] && return 0
+  command -v openssl >/dev/null || { echo "  quic: needs openssl -- pkg install openssl-tool" >&2; return 1; }
+  ( umask 077; mkdir -p "$QUIC_DIR"
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+      -keyout "$QUIC_DIR/key.pem" -out "$QUIC_DIR/cert.pem" -days 3650 \
+      -subj /CN=globaltun -addext subjectAltName=DNS:globaltun 2>/dev/null
+    openssl rand -hex 16 > "$QUIC_DIR/password"
+    openssl rand -hex 16 > "$QUIC_DIR/api_secret" )
+  [ -s "$QUIC_DIR/cert.pem" ] && [ -s "$QUIC_DIR/password" ] \
+    || { echo "  quic: could not generate credentials" >&2; rm -rf "$QUIC_DIR"; return 1; }
+  echo "  quic: new credentials in $QUIC_DIR -- import the profile below into the app"
+}
+
+# Push (content-addressed, like the relay: 40MB, once per gateway) and start the
+# Hysteria2 server with the kept credentials. Stopped by its pidfile, never
+# `pkill -f`, whose pattern would also match the shell running it.
+start_remote_quic(){
+  local arch bin sum rp pw
+  arch=$(rsh1 'uname -m' 2>/dev/null | tr -d '\r')
+  case $arch in
+    x86_64|amd64)                bin=$GT_QUIC_BIN_DIR/gtquic-linux-amd64 ;;
+    aarch64|arm64|armv8*|armv9*) bin=$GT_QUIC_BIN_DIR/gtquic-linux-arm64 ;;
+    *)                           bin= ;;
+  esac
+  [ -n "$GT_QUIC_BIN_DIR" ] && [ -n "$bin" ] && [ -f "$bin" ] || {
+    echo "  quic: no gtquic-linux-* for gateway arch '${arch:-unknown}' in this bundle" >&2; return 1; }
+  sum=$(sha256sum "$bin" | cut -c1-16); rp=/tmp/gtquic-$sum
+  if ! rsh1 "test -x $rp" 2>/dev/null; then
+    echo "  quic: pushing $(du -h "$bin" | cut -f1) server binary (once per gateway)..."
+    ssh -S "$CTL" "$RHOST" "/bin/sh -c 'cat > $rp.part && chmod +x $rp.part && mv $rp.part $rp'" < "$bin" \
+      || { echo "  quic: push failed" >&2; return 1; }
+  fi
+  pw=$(cat "$QUIC_DIR/password")
+  # Leave a running server alone when it is this exact binary, port and
+  # credentials: restarting it cuts the app's live QUIC connection for nothing
+  # (that is how the app got parked on ssh on 2026-11-17). The marker is a hash
+  # of what this function would write; anything different restarts it.
+  local mark
+  # Includes this function's own text, which holds the server config template:
+  # a changed config (e.g. logging turned off) restarts the server once.
+  mark=$( { echo "$rp $QUIC_PORT"; declare -f start_remote_quic; cat "$QUIC_DIR/cert.pem" "$QUIC_DIR/key.pem" "$QUIC_DIR/password"; } | sha256sum | cut -c1-32)
+  if rsh1 "test -f $QUIC_RDIR/pid && kill -0 \$(cat $QUIC_RDIR/pid) && test \"\$(cat $QUIC_RDIR/mark 2>/dev/null)\" = $mark" >/dev/null 2>&1; then
+    echo "remote quic server already running with these credentials -- left as is"
+    return 0
+  fi
+  # The server dials destinations itself, preferring IPv6: sing-box's default
+  # took IPv4 first, which on yulee cost ~190 ms per new connection (measured
+  # 2026-11-17: HTTPS to gstatic 343 ms over v4, 156 over v6; QUIC probes
+  # 308-365 -> 134-170 ms) and made QUIC probe slower than the ssh path, whose
+  # Go relay already prefers v6. A gateway with broken v6 loses at most
+  # sing-box's 300 ms fallback to v4, as the relay does.
+  rsh <<EOF
+D=$QUIC_RDIR
+[ -f \$D/pid ] && kill \$(cat \$D/pid) 2>/dev/null
+rm -rf \$D; umask 077; mkdir -p \$D
+cat > \$D/cert.pem <<'GTEOF'
+$(cat "$QUIC_DIR/cert.pem")
+GTEOF
+cat > \$D/key.pem <<'GTEOF'
+$(cat "$QUIC_DIR/key.pem")
+GTEOF
+cat > \$D/server.json <<'GTEOF'
+{"log":{"disabled":true},
+ "inbounds":[{"type":"hysteria2","tag":"quic-in","listen":"0.0.0.0","listen_port":$QUIC_PORT,
+   "users":[{"password":"$pw"}],
+   "tls":{"enabled":true,"alpn":["h3"],"certificate_path":"$QUIC_RDIR/cert.pem","key_path":"$QUIC_RDIR/key.pem"}}],
+ "outbounds":[{"type":"direct","tag":"direct"}],
+ "dns":{"servers":[{"type":"local","tag":"local"}]},
+ "route":{"default_domain_resolver":{"server":"local","strategy":"prefer_ipv6"}}}
+GTEOF
+# NOTHING is written on the gateway: logging is disabled in the config and the
+# process's own output goes to /dev/null. Even at warn level sing-box logs a
+# failed connection WITH its destination, and the gateway is somebody else's
+# box. Startup is proven without a log instead: the config checks out, and the
+# process is still alive two seconds later.
+$rp check -c \$D/server.json || { echo 'remote quic server: config rejected (above)'; exit 1; }
+S=\$(command -v setsid || command -v nohup || true)
+\$S $rp run -c \$D/server.json >/dev/null 2>&1 </dev/null &
+echo \$! > \$D/pid
+echo $mark > \$D/mark
+sleep 2
+if kill -0 \$(cat \$D/pid) 2>/dev/null; then
+  echo "remote quic server up: udp/$QUIC_PORT pid \$(cat \$D/pid) (logs nothing)"
+else
+  # Show why on THIS terminal only -- a few seconds in the foreground, output
+  # straight back over ssh, never into a file.
+  echo 'remote quic server FAILED to stay up; its startup output:'
+  timeout 3 $rp run -c \$D/server.json 2>&1 </dev/null | head -5
+  exit 1
+fi
+EOF
+}
+
+# The app profile, rendered by render-profile.py from sing-box-android.json:
+# QUIC beside the ssh socks when QUIC is up, plus every snippet in vpns.d/
+# (other VPNs carried INSIDE the app -- Android gives the VPN slot to one app
+# only). Written only when there is something to add; otherwise the plain
+# sing-box-android.json is the profile, as before.
+#   $1 = 1 when the QUIC server is up
+render_app_profile(){
+  local quic_ok=$1 out args
+  [ -n "$GT_APP_TEMPLATE" ] || { echo "  profile: sing-box-android.json not found beside or above $HERE" >&2; return 1; }
+  [ -f "$HERE/render-profile.py" ] || { echo "  profile: render-profile.py missing from the bundle" >&2; return 1; }
+  args=(--template "$GT_APP_TEMPLATE" --local-port "$LOCAL_PORT")
+  if [ "$quic_ok" = 1 ]; then
+    out=$HERE/$QUIC_PROFILE_NAME
+    args+=(--quic "$QUIC_HOST" "$QUIC_PORT" "$QUIC_DIR/password" "$QUIC_DIR/cert.pem"
+           --api "$QUIC_API" "$QUIC_DIR/api_secret")
+  else
+    out=$HERE/$SSH_PROFILE_NAME
+  fi
+  [ -d "$HERE/vpns.d" ] && args+=(--extras "$HERE/vpns.d")
+  python3 "$HERE/render-profile.py" "${args[@]}" --out "$out" || return 1
+  PROFILE=$out
+  echo "  profile: $out"
+  if [ -d "$HOME/storage/downloads" ]; then
+    cp "$out" "$HOME/storage/downloads/${out##*/}" \
+      && echo "           copied to Download/${out##*/} for the app to import"
+  else
+    echo "           run termux-setup-storage once to get it copied to Download/ for import"
+  fi
+}
+
+stop_remote_quic(){
+  [ -n "$QUIC_PORT" ] && have_ctl || return 0
+  rsh <<EOF
+D=$QUIC_RDIR
+[ -f \$D/pid ] && kill \$(cat \$D/pid) 2>/dev/null; rm -rf \$D; true
+EOF
+}
+
+# --- the transport watcher ----------------------------------------------------
+# The same policy as the Linux client's carrier-watch: QUIC by default; 2 failed
+# probes in a row (and ssh answering) -> ssh; 3 good QUIC probes -> back.
+# Probes are one small HTTPS request through each outbound, via the app's API.
+
+wlog(){ echo "$(date '+%F %T') $*" >> "$WATCH_LOG"; }
+api(){ curl -s --noproxy '*' -H "Authorization: Bearer $(cat "$QUIC_DIR/api_secret" 2>/dev/null)" "$@"; }
+quic_delay(){
+  api -m $(( ${2:-5000} / 1000 + 3 )) \
+    "http://$QUIC_API/proxies/$1/delay?timeout=${2:-5000}&url=https%3A%2F%2Fwww.gstatic.com%2Fgenerate_204" \
+    | grep -oE '"delay": *[0-9]+' | grep -oE '[0-9]+$'
+}
+quic_now(){ api -m 3 "http://$QUIC_API/proxies/proxy" | grep -oE '"now": *"[^"]*"' | cut -d'"' -f4; }
+quic_select(){
+  api -m 3 -X PUT -H 'Content-Type: application/json' -d "{\"name\":\"$1\"}" \
+    -o /dev/null -w '%{http_code}' "http://$QUIC_API/proxies/proxy" | grep -q '^204$'
+}
+TW_QFAIL=0 TW_QOK=0
+transport_watch(){
+  local now qd
+  now=$(quic_now)
+  [ -n "$now" ] || return 0            # app not running (or no QUIC profile): nothing to steer
+  qd=$(quic_delay quic 3000)
+  if [ "$now" = quic ]; then
+    if [ -n "$qd" ]; then TW_QFAIL=0; return 0; fi
+    TW_QFAIL=$((TW_QFAIL + 1))
+    if [ "$TW_QFAIL" -ge 2 ] && [ -n "$(quic_delay ssh 3000)" ] && quic_select ssh; then
+      wlog "quic stopped answering ($TW_QFAIL probes); switched to ssh"
+      TW_QFAIL=0 TW_QOK=0
+    fi
+  else
+    if [ -z "$qd" ]; then TW_QOK=0; return 0; fi
+    TW_QOK=$((TW_QOK + 1))
+    if [ "$TW_QOK" -ge 3 ] && quic_select quic; then
+      wlog "quic healthy again (${qd} ms, $TW_QOK probes); switched back from $now"
+      TW_QFAIL=0 TW_QOK=0
+    fi
+  fi
+}
+watch_loop(){
+  wlog "watching the app's transport switch (every ${GT_WATCH_INTERVAL:-10}s)"
+  while :; do
+    transport_watch
+    # keep the log from growing without bound on a phone
+    [ "$(wc -c < "$WATCH_LOG" 2>/dev/null || echo 0)" -gt 262144 ] && tail -n 200 "$WATCH_LOG" > "$WATCH_LOG.new" && mv "$WATCH_LOG.new" "$WATCH_LOG"
+    sleep "${GT_WATCH_INTERVAL:-10}"
+  done
+}
+watch_start(){
+  watch_stop
+  local d; d=$(command -v setsid || command -v nohup)
+  $d bash "$0" watch </dev/null >/dev/null 2>&1 &
+  echo $! > "$WATCH_PID"
+  echo "watcher up (pid $(cat "$WATCH_PID")): keeps the app on QUIC whenever QUIC works"
+}
+watch_stop(){
+  [ -f "$WATCH_PID" ] && kill "$(cat "$WATCH_PID")" 2>/dev/null
+  rm -f "$WATCH_PID"
+}
 
 up(){
   have_ctl || {
@@ -210,6 +453,20 @@ EOF
     && echo "gtlocal up: $(head -1 "$GLLOG")" \
     || { echo "gtlocal FAILED (nothing listening on $LOCAL_PORT):"; cat "$GLLOG"; exit 1; }
 
+  # QUIC never makes `up` fail: without it the ssh path above is the whole
+  # tunnel, exactly as before.
+  QUIC_OK=0
+  if [ -n "$QUIC_PORT" ]; then
+    echo "--- quic (alongside ssh)"
+    if quic_creds && start_remote_quic; then QUIC_OK=1
+    else echo "(quic unavailable -- ssh only)"; fi
+  fi
+  if [ "$QUIC_OK" = 1 ] || ls "$HERE"/vpns.d/*.json >/dev/null 2>&1; then
+    echo "--- app profile"
+    render_app_profile "$QUIC_OK" || echo "(profile not rendered -- use sing-box-android.json)"
+  fi
+  [ "$QUIC_OK" = 1 ] && watch_start
+
   cat <<EOT
 
 Termux itself is excluded from the VPN, so its own traffic does NOT go through
@@ -223,15 +480,24 @@ point at 127.0.0.1:$LOCAL_PORT, and the tun inbound must carry
   "exclude_package": ["com.termux"]
 or ssh's carrier is captured by the tunnel it carries.
 EOT
+  [ -n "$PROFILE" ] && cat <<EOT
+
+Use ${PROFILE##*/} in the app instead of sing-box-android.json. Import it
+again only when it changes (quic-reset, or a change in vpns.d/). It holds
+credentials -- delete the copy in Download/ after importing.$([ "$QUIC_OK" = 1 ] && printf '\nThe app talks Hysteria2 to %s:%s itself and falls back to the ssh path above.' "$QUIC_HOST" "$QUIC_PORT")
+EOT
+  return 0
 }
 
 down(){
+  watch_stop
   [ -f "$GLPID" ] && { kill "$(cat "$GLPID")" 2>/dev/null; rm -f "$GLPID"; }
   pkill -f 'python3 -u .*gtlocal.py' 2>/dev/null
   have_ctl && rsh <<EOF
 P=/tmp/globaltun-server-$RPORT_SS.pid
 [ -f \$P ] && kill \$(cat \$P) 2>/dev/null; rm -f \$P; true
 EOF
+  stop_remote_quic
   [ -S "$CTL" ] && ssh -S "$CTL" -O exit "$RHOST" 2>/dev/null
   rm -f "$CTL"
   echo "down (stop the VPN in the sing-box app too)"
@@ -249,11 +515,37 @@ status(){
     | grep -E '^(ip|loc)=' | sed 's/^/  /' \
     || echo "  FAILED -- the chain gtlocal -> ssh -L -> gateway relay is broken"
   echo "--- gtlocal log"; tail -3 "$GLLOG" 2>/dev/null
+  if [ -n "$QUIC_PORT" ]; then
+    echo "--- quic server on the gateway (udp/$QUIC_PORT)"
+    if have_ctl && rsh1 "test -f $QUIC_RDIR/pid && kill -0 \$(cat $QUIC_RDIR/pid)" >/dev/null 2>&1; then
+      echo "  running"
+    else
+      echo "  not running"
+    fi
+    [ -s "$QUIC_DIR/password" ] && echo "  credentials: $QUIC_DIR (profile: $HERE/$QUIC_PROFILE_NAME)"
+    echo "--- app transport (via its API)"
+    _now=$(quic_now)
+    if [ -n "$_now" ]; then
+      echo "  carrying traffic: $_now   (quic $(quic_delay quic 3000 || true) ms, ssh $(quic_delay ssh 3000 || true) ms)"
+    else
+      echo "  app not answering on $QUIC_API -- VPN off, or a profile from before the watcher"
+    fi
+    if [ -f "$WATCH_PID" ] && kill -0 "$(cat "$WATCH_PID")" 2>/dev/null; then
+      echo "  watcher: running$( [ -s "$WATCH_LOG" ] && echo "; last: $(tail -1 "$WATCH_LOG" | cut -c1-90)")"
+    else
+      echo "  watcher: NOT running (run up)"
+    fi
+  fi
 }
 
 case "${1:-}" in
   up)     up ;;
   down)   down ;;
   status) status ;;
-  *) echo "usage: $0 {up|down|status}" >&2; exit 2 ;;
+  watch)  watch_loop ;;
+  # New certificate and password; the next `up` starts the server with them and
+  # writes a new profile, which must be imported into the app again.
+  quic-reset) rm -rf "${QUIC_DIR:?}" "${HERE:?}/${QUIC_PROFILE_NAME:?}"
+              echo "quic credentials removed -- run up, then re-import $QUIC_PROFILE_NAME" ;;
+  *) echo "usage: $0 {up|down|status|quic-reset}" >&2; exit 2 ;;
 esac

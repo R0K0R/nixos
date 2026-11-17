@@ -1,0 +1,20 @@
+{
+  "_about": "Company / university VPNs speaking an OpenConnect-supported protocol. flavor: anyconnect (Cisco AnyConnect, ocserv), gp (Palo Alto GlobalProtect), pulse (Pulse/Ivanti Connect Secure), nc (Juniper Network Connect), fortinet (FortiGate SSL VPN), f5 (F5 BIG-IP).",
+  "_fill": "server, flavor, username, password, and the internal ranges/domains that should go to it (route.rules). auth_group if the portal asks for a group. Certificate login, tokens and host checks have their own sub-options (tls, token, csd, hip, tnc) -- see sing-box's openconnect endpoint docs. SSO/browser-only logins may not work headless.",
+  "endpoints": [
+    {
+      "type": "openconnect",
+      "tag": "work",
+      "server": "@FILL vpn.example.edu@",
+      "flavor": "anyconnect",
+      "username": "@FILL user@",
+      "password": "@FILL password@"
+    }
+  ],
+  "route": {
+    "rules": [
+      { "ip_cidr": [ "@FILL 10.0.0.0/8@" ], "outbound": "work" },
+      { "domain_suffix": [ "@FILL example.edu@" ], "outbound": "work" }
+    ]
+  }
+}

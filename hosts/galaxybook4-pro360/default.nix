@@ -193,6 +193,14 @@
       # LAN prefix in `main`.
       tailscaleDirect = true;
 
+      # QUIC alongside ssh: yulee is reachable over UDP on this LAN (measured
+      # 2026-11-17: 19MB/s over Hysteria2 vs 0-3MB/s over the ssh path in the
+      # same minute). 41080 = 40000 + remoteSocksPort, one per client.
+      quic = {
+        enable = true;
+        port = 41080;
+      };
+
       /*
         `sudo globaltun share` hosts an AP on this machine's own card and routes
         its clients through the tunnel. The AP is a second vif on wlo1 and must

@@ -57,7 +57,7 @@ let
 
     DNS is DNS-over-HTTPS so name resolution never depends on the UDP path.
   */
-  clientConfig = pkgs.writeText "globaltun-client.json" (builtins.toJSON {
+  mkClientConfig = { quic ? false }: {
     log = { level = "info"; timestamp = true; };
     dns = {
       servers = [ { type = "https"; tag = "remote-dns"; server = cfg.dns; detour = "proxy"; } ];
@@ -72,22 +72,109 @@ let
       mtu = 1400;
       auto_route = false;
       stack = "gvisor";
+    }] ++ lib.optionals quic [{
+      /*
+        The system resolver's ONLY upstream while the tunnel is up: `up`
+        points systemd-resolved here (a /run drop-in, `Domains=~.`), and
+        every query is answered over DoH through the tunnel.
+
+        Why loopback: a Wi-Fi roam is a sub-second gap that the tunnel
+        rides out (QUIC and TCP retransmit; measured 2026-11-17: 29 roams in
+        49 min on galaxybook, zero sing-box errors after them), but a plain
+        DNS datagram lost in that gap is gone -- resolved times out, marks the
+        server degraded, and lookups stall for 15-20 s. Over loopback nothing
+        is ever lost, and the DoH request inside the tunnel is simply late by
+        the gap. It also makes whatever DNS the local network hands out
+        irrelevant while the tunnel is up.
+      */
+      type = "direct";
+      tag = "dns-in";
+      listen = "127.0.0.2";
+      listen_port = 53;
     }];
-    outbounds = [
+    outbounds = (if quic then [
+      {
+        type = "hysteria2";
+        tag = "quic";
+        # Filled in by `up`: the resolved gateway address and the per-run
+        # password. Placeholders rather than a runtime-generated file so the
+        # rest of the config stays in the store, reviewable, and identical to
+        # the ssh-only one.
+        server = "@GT_QUIC_HOST@";
+        server_port = cfg.quic.port;
+        password = "@GT_QUIC_PASSWORD@";
+        tls = {
+          enabled = true;
+          server_name = "globaltun";
+          # Pinned: trusts exactly the certificate `up` generated, nothing else.
+          certificate_path = "/run/globaltun-quic/cert.pem";
+        };
+      }
+      { type = "socks"; tag = "ssh"; server = "127.0.0.1"; server_port = 1081; version = "5"; }
+      {
+        /*
+          A plain switch, defaulting to QUIC; carrier-watch flips it (via the
+          API below) to ssh when QUIC stops answering and BACK once QUIC is
+          healthy again -- see transport_watch in globaltun.sh.
+
+          It was a urltest, and that was wrong in a way that cost real time:
+          urltest only leaves the current pick when another beats it by the
+          tolerance, and the ssh probe can measure FASTER than QUIC even
+          though QUIC moves 5-10x the data. So one QUIC hiccup parked traffic
+          on ssh for good (seen on the Android client 2026-11-17: QUIC healthy,
+          traffic still on ssh). No `fallback` type exists in this sing-box.
+        */
+        type = "selector";
+        tag = "proxy";
+        outbounds = [ "quic" "ssh" ];
+        default = "quic";
+        interrupt_exist_connections = true;
+      }
+    ] else [
       { type = "socks"; tag = "proxy"; server = "127.0.0.1"; server_port = 1081; version = "5"; }
+    ]) ++ [
       { type = "direct"; tag = "direct"; }
     ];
     route = {
-      rules = [
+      rules = lib.optionals quic [
+        { inbound = [ "dns-in" ]; action = "hijack-dns"; }
+      ] ++ [
         { action = "sniff"; }
+      ] ++ lib.optionals (!quic) [
+        /*
+          ssh only: answer every port-53 query HERE, over DoH, so resolution
+          never rides the udp-over-tcp mux.
+
+          NOT with QUIC, where UDP is native: there the queries pass through to
+          the resolvers they were sent to, like any other datagram. Measured
+          2026-11-17 on galaxybook: with the hijack, systemd-resolved logged
+          "Using degraded feature set" for its upstreams 72 times an hour on
+          the ssh transport and 47 in QUIC's first ten minutes, and a
+          nixos-rebuild failed resolving cache.nixos.org -- the hijack, not
+          the transport, was the common factor.
+        */
         { protocol = "dns"; action = "hijack-dns"; }
+      ] ++ [
         { ip_is_private = true; outbound = "direct"; }
         { ip_cidr = [ "100.64.0.0/10" ]; outbound = "direct"; }
       ];
       final = "proxy";
       auto_detect_interface = true;
     };
-  });
+  } // lib.optionalAttrs quic {
+    # For `status`/`verify` (which transport carries traffic, each one's delay)
+    # and for carrier-watch, which flips the transport switch.
+    # Loopback, but any local user could reach it, and it can now SWITCH the
+    # transport -- so it takes the run's random secret (rendered by `up`).
+    experimental.clash_api = {
+      external_controller = "127.0.0.1:11090";
+      secret = "@GT_API_SECRET@";
+    };
+  };
+
+  clientConfig = pkgs.writeText "globaltun-client.json" (builtins.toJSON (mkClientConfig { }));
+  quicClientConfig = pkgs.writeText "globaltun-client-quic.json"
+    (builtins.toJSON (mkClientConfig { quic = true; }));
 
   /*
     PATH is pinned rather than inherited: this runs under sudo, and a root PATH
@@ -133,6 +220,45 @@ let
     # and -ldflags=-s -w has already done the stripping.
     dontFixup = true;
     meta.description = "static SOCKS5/UDP/ICMP relay pushed to a globaltun gateway";
+  };
+
+  /*
+    The QUIC transport's gateway half: sing-box as a Hysteria2 server, built the
+    way gtrelay is and for the same reason -- static, both architectures, pushed
+    over the ssh master, so the gateway still needs nothing installed.
+
+    NOT pkgs.sing-box itself: that one is CGO-enabled (it needs the store's
+    glibc loader, which a foreign gateway does not have) and 110MB with every
+    protocol compiled in. This reuses its source and vendored modules, so the
+    two cannot drift apart in version, and builds only `with_quic`: ~40MB
+    (sing-box's core is most of it), pushed once per binary per gateway --
+    content-addressed, like the relay. Seconds over a LAN; minutes over a
+    slow phone path, once.
+
+    -checklinkname=0 and the two link tags are what nixpkgs builds with; the
+    quic-go fork sing-box vendors relies on linkname into the runtime.
+  */
+  gtquic = pkgs.stdenv.mkDerivation {
+    pname = "gtquic";
+    inherit (pkgs.sing-box) version src;
+    nativeBuildInputs = [ pkgs.sing-box.go ];
+    buildPhase = ''
+      export HOME=$TMPDIR GOCACHE=$TMPDIR/go-cache GOPROXY=off GOFLAGS=-mod=vendor CGO_ENABLED=0
+      cp -r ${pkgs.sing-box.goModules} vendor
+      chmod -R u+w vendor
+      for arch in amd64 arm64; do
+        GOOS=linux GOARCH=$arch go build -trimpath \
+          -tags with_quic,badlinkname,tfogo_checklinkname0 \
+          -ldflags="-s -w -checklinkname=0 -X=github.com/sagernet/sing-box/constant.Version=${pkgs.sing-box.version}" \
+          -o gtquic-linux-$arch ./cmd/sing-box
+      done
+    '';
+    installPhase = ''
+      mkdir -p $out/bin
+      cp gtquic-linux-amd64 gtquic-linux-arm64 $out/bin/
+    '';
+    dontFixup = true;
+    meta.description = "static sing-box (Hysteria2 server only) pushed to a globaltun gateway";
   };
 
   /*
@@ -239,6 +365,15 @@ let
     export GT_SINGBOX=${pkgs.sing-box}/bin/sing-box
     export GT_DNS=${lib.escapeShellArg cfg.dns}
     export GT_SHARE=${if cfg.share.enable then "1" else "0"}
+    export GT_QUIC=${if cfg.quic.enable then "1" else "0"}
+    export GT_PIN_AP=${if cfg.pinAccessPoint then "1" else "0"}
+    '' + lib.optionalString cfg.quic.enable ''
+      # Only when on: quic.port has no default, and the QUIC config and the
+      # gateway binaries are only worth building for a host that uses them.
+      export GT_QUIC_PORT=${toString cfg.quic.port}
+      export GT_QUIC_HOST=${lib.escapeShellArg (if cfg.quic.host != null then cfg.quic.host else "")}
+      export GT_QUIC_BIN_DIR=${gtquic}/bin
+      export GT_SBCONF_QUIC=${quicClientConfig}
     '' + lib.optionalString cfg.share.enable ''
       # Emitted only when sharing is on. passwordFile, stationInterface and
       # countryCode deliberately have no defaults, so interpolating them
@@ -670,14 +805,98 @@ in
         not depend on it.
       '';
     };
+
+    pinAccessPoint = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        For a machine that does not move: while the tunnel is up, hold its
+        Wi-Fi on the access point it was on at `up`, instead of letting it
+        roam between APs of the same network. `down` releases it.
+
+        Why: every roam is a gap, and on a campus network with several APs at
+        similar strength the station roams constantly (galaxybook measured 7-11
+        roams per 10 min on 2026-11-17). A stationary host gains nothing from
+        roaming and loses every gap.
+
+        How: NetworkManager's BSSID for the active connection, set with
+        `nmcli connection modify --temporary` -- in memory only, so a reboot or
+        NetworkManager restart can never leave it pinned. NetworkManager cannot
+        apply a BSSID live, so `up` reconnects once, BEFORE the tunnel starts;
+        if that reconnect fails the pin is dropped and the link restored.
+        carrier-watch also drops it if the pinned AP is gone for 90 s, so a
+        rebooted or replaced AP cannot strand a headless box.
+
+        Requires NetworkManager. Laptops: leave it off.
+      '';
+    };
+
+    quic = {
+      enable = lib.mkEnableOption ''
+        a second transport ALONGSIDE the ssh one: a Hysteria2 (QUIC) server
+        pushed to the gateway over the ssh master, which the local sing-box
+        dials directly over UDP.
+
+        Expansion, not replacement. The ssh path is built exactly as before and
+        stays up; the client holds both behind a switch that defaults to QUIC,
+        and carrier-watch probes QUIC every 5 s: two failures move traffic to
+        ssh, three successes move it back. ICMP keeps
+        riding gticmp over ssh. When QUIC cannot start at all -- the gateway
+        will not run the binary, or its port is filtered -- `up` says so and
+        carries on ssh-only, so turning this on can never make `up` fail where
+        it used to work.
+
+        Why it exists: the ssh path is TCP carrying TCP (two congestion loops
+        on the same loss) and carries every UDP flow on ONE stream, so a stall
+        anywhere stalls everything. QUIC gives each flow its own stream and UDP
+        stays datagrams. It needs what ssh does not: the gateway must be
+        reachable over UDP from here, directly. That rules out a gateway behind
+        ssh jumps (set `host` to an address that is reachable) and is worth
+        checking on a new network before relying on it.
+
+        Credentials are per `up`: a fresh self-signed certificate (which the
+        client pins -- it trusts that one certificate and nothing else) and
+        password, generated into /run, pushed to the gateway, deleted on
+        `down`. Nothing to provision, persist or leak.
+      '';
+
+      port = lib.mkOption {
+        type = lib.types.nullOr lib.types.port;
+        default = null;
+        example = 41080;
+        description = ''
+          UDP port the QUIC server binds ON THE GATEWAY (all addresses). Like
+          `remoteSocksPort`, it must differ per client sharing a gateway --
+          `up` on one would otherwise kill the other's server -- and so has no
+          default. Convention on yulee: 40000 + remoteSocksPort, i.e. 41080
+          galaxybook4-pro360, 41082 victus-15, 41084 the Android client (android/).
+        '';
+      };
+
+      host = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "192.0.2.10";
+        description = ''
+          Address to dial the QUIC server at. Default: the host part of
+          `remote`. Resolved once, before the tunnel routes exist, and pinned
+          to the physical path like the ssh carrier is.
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
     # The keys are hand-installed files outside the store: under impermanence
     # they went with the first wipe (2026-10-24) and the tunnel could not log
     # in. agenix paths (/run/...) are rebuilt every boot and need nothing.
+    # Same for the hand-written passphrases: a hop's passwordFile, and share's
+    # PSK (/etc/globaltun-psk), which a reboot would otherwise wipe.
     my.state.system.secret.files = lib.filter (k: k != null && !lib.hasPrefix "/run/" k)
-      ([ cfg.sshKey ] ++ map (j: j.sshKey or null) cfg.jumps);
+      ([ cfg.sshKey ]
+        ++ map (j: j.sshKey or null) cfg.jumps
+        ++ map (j: j.passwordFile or null) cfg.jumps
+        ++ lib.optional cfg.share.enable cfg.share.passwordFile);
 
     /*
       NetworkManager must never touch the AP interface. It matches saved
@@ -733,6 +952,18 @@ in
       {
         assertion = !cfg.share.enable || cfg.share.countryCode != "";
         message = "my.globaltun.share.enable requires my.globaltun.share.countryCode (hostapd needs a regulatory domain for 5 GHz)";
+      }
+      {
+        assertion = !cfg.quic.enable || cfg.quic.port != null;
+        message = "my.globaltun.quic.enable requires my.globaltun.quic.port (one per client on a gateway; see its description)";
+      }
+      {
+        assertion = !cfg.quic.enable || cfg.jumps == [ ] || cfg.quic.host != null;
+        message = "my.globaltun.quic: the gateway sits behind ssh jumps, which cannot carry UDP; set my.globaltun.quic.host to an address this machine reaches directly";
+      }
+      {
+        assertion = !cfg.pinAccessPoint || config.networking.networkmanager.enable;
+        message = "my.globaltun.pinAccessPoint requires networking.networkmanager.enable (the pin is a NetworkManager BSSID)";
       }
       {
         assertion = !cfg.auto.enable || cfg.auto.ssids != [ ];

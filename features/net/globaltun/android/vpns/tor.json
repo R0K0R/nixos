@@ -1,0 +1,8 @@
+{
+  "_about": "EXPERIMENTAL: Tor as an outbound, for chosen apps (or as the default exit with route.final). Needs a sing-box app build that embeds Tor or can run a tor binary -- if the app rejects the profile, this is why; remove the file.",
+  "_fill": "Which apps go through Tor (package names).",
+  "outbounds": [ { "type": "tor", "tag": "tor" } ],
+  "route": {
+    "rules": [ { "package_name": [ "@FILL org.mozilla.firefox@" ], "outbound": "tor" } ]
+  }
+}

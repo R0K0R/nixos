@@ -11,6 +11,16 @@
 
   networking.hostName = "victus-15";
 
+  /*
+    Wi-Fi power save off. This box is on mains and its one radio is both the
+    upstream station and globaltun's AP: 230 of 244 disconnects from
+    2026-11-10 to 11-17 were the station dropping itself (`reason=4
+    locally_generated=1`), and mt7921 power save is a known source of exactly
+    that. Unmeasured how many it accounts for -- compare the share-watch log
+    before and after.
+  */
+  networking.networkmanager.wifi.powersave = false;
+
   my = {
     emacs = {
       enable = true;
@@ -57,6 +67,14 @@
       remotePort = 22;
       # Headless -- keep the admin LAN off the tunnel.
       keepDirect = [ "172.20.0.0/21" ];
+      # QUIC alongside ssh, as on galaxybook; 41082 = 40000 + remoteSocksPort.
+      quic = {
+        enable = true;
+        port = 41082;
+      };
+      # Stationary: hold the AP it is on while the tunnel is up, instead of
+      # roaming between KSA's APs (each roam is a gap). Released on down.
+      pinAccessPoint = true;
 
       /*
         This host is the better router of the two: its MT7921 allows

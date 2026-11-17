@@ -15,6 +15,10 @@
 #             after a link flap and rebuilds the ssh master -- see carrier_watch
 #   ssh-config : path to the generated jump chain (empty when there are none)
 #
+# With GT_QUIC=1 (my.globaltun.quic), `up` also starts a Hysteria2 server on the
+# gateway and the local sing-box holds QUIC and ssh side by side, health-checked;
+# ssh alone is what remains whenever QUIC cannot start or stops answering.
+#
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -154,6 +158,20 @@ STATE=/run/globaltun.state
 PINS=/run/globaltun.pins
 CW_PID=/run/globaltun-carrier-watch.pid
 CW_LOG=/run/globaltun-carrier-watch.log
+
+# QUIC transport -- opt-in, ALONGSIDE ssh (see the module's quic.enable). The
+# ssh path is built exactly as without it; QUIC is a second outbound the local
+# sing-box health-checks against it.
+#
+# $QUIC_DIR holds this run's credentials and the rendered client config, and
+# its client.json is the switch: present = sing-box runs the two-transport
+# config, absent = the plain ssh one. `up` removes it when the gateway side
+# cannot start, so a QUIC failure degrades to exactly the old tunnel.
+QUIC=${GT_QUIC:-0}
+QUIC_PORT=${GT_QUIC_PORT:-}
+QUIC_DIR=/run/globaltun-quic
+QUIC_RDIR=/tmp/globaltun-quic-$QUIC_PORT     # on the gateway, per client like the relay
+QUIC_API=127.0.0.1:11090                     # sing-box clash API, loopback, read-only use
 
 SSHOPTS=(-i "$KEY" -p "$RPORT"
          -o StrictHostKeyChecking=accept-new
@@ -343,8 +361,21 @@ repin(){   # repin TARGET DEV VIA -> 0 restored or still present, 1 device not b
   fi || return 1
   cw_log "restored $target ${via:+via $via }dev $dev"
 }
+# The QUIC server outlives the ssh master -- it is its own process on the
+# gateway, and its traffic never touched ssh -- so losing the master is NOT a
+# reason to restart it: that would cut the transport that was still carrying
+# everything. Restart only what is actually gone.
+quic_server_alive(){ rsh1 "test -f $QUIC_RDIR/pid && kill -0 \$(cat $QUIC_RDIR/pid)" >/dev/null 2>&1; }
+quic_watch(){
+  [ -s "$QUIC_DIR/client.json" ] && have_ctl || return 0
+  quic_server_alive && return 0
+  cw_log "quic server gone on the gateway; restarting it (ssh carried traffic meanwhile)"
+  if ( start_remote_quic ) >>"$CW_LOG" 2>&1; then cw_log "quic server back"
+  else cw_log "quic server restart failed; ssh keeps carrying traffic"; fi
+}
+
 carrier_watch(){
-  local target dev via fails=0 wait
+  local target dev via fails=0 wait ticks=0 apgone=0 pdev pbssid
   cw_log "watching the carrier ($CARRIER) and ${GT_KEEP_DIRECT:-no} keep-direct prefixes"
   while :; do
     wait=${GT_WATCH_INTERVAL:-5}
@@ -359,11 +390,30 @@ carrier_watch(){
       if ( GT_TIMEOUTS="${GT_WATCH_TIMEOUTS:-20 40}" GT_RETRY_DELAY=5 master ) >>"$CW_LOG" 2>&1 \
          && ( start_remote_relay ) >>"$CW_LOG" 2>&1; then
         cw_log "carrier back"; fails=0
+        quic_watch
       else
         fails=$((fails + 1))
         # back off while the far end (or the path to it) is still away
         wait=$(( fails < 6 ? 10 * fails : 60 ))
         cw_log "reconnect failed ($fails); next try in ${wait}s"
+      fi
+    fi
+    # About once a minute: one round trip over the existing master.
+    ticks=$((ticks + 1))
+    [ $((ticks % 12)) = 0 ] && quic_watch
+    # Every tick: keep traffic on QUIC whenever QUIC works.
+    transport_watch
+    # A pinned AP that has been gone 90 s (rebooted, replaced) must not strand
+    # the box: drop the pin and let it join whatever AP is there.
+    if [ -f "$AP_PIN" ]; then
+      IFS=$'\t' read -r _ pdev pbssid < "$AP_PIN"
+      if [ -n "$(ap_current "$pdev")" ]; then apgone=0
+      else
+        apgone=$((apgone + wait))
+        if [ "$apgone" -ge 90 ]; then
+          cw_log "pinned AP $pbssid gone for ${apgone}s; releasing the pin"
+          ap_release reconnect >>"$CW_LOG" 2>&1; apgone=0
+        fi
       fi
     fi
     sleep "$wait"
@@ -431,6 +481,12 @@ tailscale_bypass(){
 
 pin_carrier(){
   pin_prefix "$CARRIER/32" carrier || return 1
+  # The QUIC endpoint is usually the carrier itself (the gateway, no jumps);
+  # when it is not, it needs the same protection, or its UDP would be routed
+  # into the tunnel it is meant to carry.
+  if [ -s "$QUIC_DIR/client.json" ] && [ "$(cat "$QUIC_DIR/host")" != "$CARRIER" ]; then
+    pin_prefix "$(cat "$QUIC_DIR/host")/32" quic || return 1
+  fi
   # On a headless box the session bringing this up arrives over some network;
   # if its return path is swallowed by the tun the connection dies mid-command
   # and nothing is left to run `down`. GT_KEEP_DIRECT lists prefixes to leave on
@@ -567,6 +623,45 @@ start_gticmp(){
   echo "gticmp up: $(head -1 "$ICLOG"); icmp -> $ICTUN (table $IC_TABLE, lan=$lan direct)"
 }
 
+# The gateway's architecture as our binaries name it (amd64/arm64), or empty
+# when we ship nothing for it.
+gateway_arch(){
+  local arch
+  arch=$(rsh1 'uname -m' 2>/dev/null | tr -d '\r')
+  case $arch in
+    x86_64|amd64)                 echo amd64 ;;
+    aarch64|arm64|armv8*|armv9*)  echo arm64 ;;
+    *)                            echo "  gateway arch '${arch:-unknown}' has no shipped binary" >&2 ;;
+  esac
+}
+
+# push_cached LOCAL NAME -> echoes the path of LOCAL's copy on the gateway.
+#
+# Content-addressed by its own hash, so the push happens once per binary per
+# gateway and never again -- the relay is 2MB and the QUIC server 40MB, and the
+# reference path to a phone gateway runs at ~90KB/s, where re-pushing on every
+# `up` is pure waste. A changed binary lands at a different name, so there is
+# no stale-cache case to reason about.
+push_cached(){
+  local bin=$1 name=$2 sum rpath
+  sum=$(sha256sum "$bin" | cut -c1-16)
+  rpath=/tmp/$name-$sum
+  # `test`, not `[`: it is also a real binary, so it survives a login shell
+  # with no such builtin.
+  if rsh1 "test -x $rpath" 2>/dev/null; then
+    echo "  $name: binary already on the gateway ($rpath)" >&2
+  else
+    echo "  $name: pushing $(du -h "$bin" | cut -f1) binary -> $rpath" >&2
+    # Via a temp name: a push interrupted halfway would otherwise leave a
+    # truncated file at the cached path, which every later run would trust.
+    # stdin is the binary, so the command cannot come in on it; `-c` keeps
+    # the redirection out of the login shell's hands.
+    ssh -S "$CTL" "$RHOST" "/bin/sh -c 'cat > $rpath.part && chmod +x $rpath.part && mv $rpath.part $rpath'" < "$bin" \
+      || { echo "  $name: push failed" >&2; return 1; }
+  fi
+  echo "$rpath"
+}
+
 # Pick the relay this gateway can actually execute and make sure it is there.
 #
 # The gateway must need NOTHING pre-installed: a static binary with CGO off has
@@ -576,42 +671,15 @@ start_gticmp(){
 #
 # Echoes the command that starts the relay, or nothing if neither route works.
 pick_relay(){
-  local arch bin sum rpath
-  arch=$(rsh1 'uname -m' 2>/dev/null | tr -d '\r')
-  case $arch in
-    x86_64|amd64)                 bin=$GT_RELAY_DIR/gtrelay-linux-amd64 ;;
-    aarch64|arm64|armv8*|armv9*)  bin=$GT_RELAY_DIR/gtrelay-linux-arm64 ;;
-    *)                            bin= ;;
-  esac
+  local arch bin rpath
+  arch=$(gateway_arch)
+  bin=${arch:+$GT_RELAY_DIR/gtrelay-linux-$arch}
   [ -n "$bin" ] && [ -f "$bin" ] || bin=
 
   if [ -n "$bin" ]; then
-    # Content-addressed by its own hash, so the push happens once per binary
-    # per gateway and never again -- it is 2MB, and the reference path to the
-    # gateway runs at ~90KB/s, where re-pushing on every `up` is 25 seconds of
-    # pure waste. A changed binary lands at a different name, so there is no
-    # stale-cache case to reason about.
-    sum=$(sha256sum "$bin" | cut -c1-16)
-    rpath=/tmp/gtrelay-$sum
-    # `test`, not `[`: it is also a real binary, so it survives a login shell
-    # with no such builtin.
-    if rsh1 "test -x $rpath" 2>/dev/null; then
-      echo "  relay: $arch binary already on the gateway ($rpath)" >&2
-    else
-      echo "  relay: pushing $(du -h "$bin" | cut -f1) $arch binary -> $rpath" >&2
-      # Via a temp name: a push interrupted halfway would otherwise leave a
-      # truncated file at the cached path, which every later run would trust.
-      # stdin is the binary, so the command cannot come in on it; `-c` keeps
-      # the redirection out of the login shell's hands.
-      if ssh -S "$CTL" "$RHOST" "/bin/sh -c 'cat > $rpath.part && chmod +x $rpath.part && mv $rpath.part $rpath'" < "$bin"; then
-        :
-      else
-        echo "  relay: push failed, falling back to python3" >&2
-        bin=
-      fi
-    fi
+    rpath=$(push_cached "$bin" gtrelay) || { echo "  relay: falling back to python3" >&2; bin=; }
   else
-    echo "  relay: no binary for gateway arch '${arch:-unknown}', falling back to python3" >&2
+    echo "  relay: no binary for this gateway, falling back to python3" >&2
   fi
 
   # `-check` exits immediately without binding anything, so this proves the
@@ -733,6 +801,280 @@ fi
 EOF
 }
 
+# --- holding a stationary host on one access point (my.globaltun.pinAccessPoint)
+#
+# NetworkManager's BSSID for the active connection, set --temporary (memory
+# only: a reboot or NM restart can never leave it pinned). NM cannot apply a
+# BSSID to a live connection, so ap_pin reconnects once -- called from `up`
+# BEFORE the carrier exists, so nothing is riding the link yet. A reconnect that
+# fails drops the pin and reconnects plainly: this runs on headless boxes.
+AP_PIN=/run/globaltun.appin          # "connection<TAB>device<TAB>bssid"
+
+ap_current(){ iw dev "$1" link 2>/dev/null | awk '/^Connected to/{print $3; exit}'; }
+
+ap_pin(){
+  [ "${GT_PIN_AP:-0}" = 1 ] || return 0
+  [ -f "$AP_PIN" ] && return 0                     # already held (up re-run)
+  command -v nmcli >/dev/null || { echo "  ap pin: no nmcli; not pinning" >&2; return 0; }
+  local d conn bssid
+  d=$(dev)
+  bssid=$(ap_current "$d"); conn=$(nmcli -g GENERAL.CONNECTION device show "$d" 2>/dev/null)
+  [ -n "$bssid" ] && [ -n "$conn" ] || { echo "  ap pin: $d not on a Wi-Fi AP; not pinning"; return 0; }
+  nmcli connection modify --temporary "$conn" 802-11-wireless.bssid "$bssid" \
+    || { echo "  ap pin: NetworkManager refused; not pinning" >&2; return 0; }
+  printf '%s\t%s\t%s\n' "$conn" "$d" "$bssid" > "$AP_PIN"
+  echo "--- holding $d on $bssid ($conn) until down: reconnecting once"
+  if nmcli --wait 30 connection up "$conn" ifname "$d" >/dev/null 2>&1 && [ "$(ap_current "$d")" = "$bssid" ]; then
+    echo "  ap pin: on $bssid"
+  else
+    echo "  ap pin: could not reconnect to $bssid -- dropping the pin" >&2
+    ap_release reconnect
+  fi
+}
+
+# ap_release [reconnect]: drop the pin; with "reconnect", also bring the link up
+# unpinned (the pinned AP is gone). Without it the link stays where it is --
+# the pin only matters at the next association.
+ap_release(){
+  [ -f "$AP_PIN" ] || return 0
+  local conn d bssid
+  IFS=$'\t' read -r conn d bssid < "$AP_PIN"
+  rm -f "$AP_PIN"
+  nmcli connection modify --temporary "$conn" 802-11-wireless.bssid "" 2>/dev/null || true
+  [ "${1:-}" = reconnect ] && { nmcli --wait 30 connection up "$conn" ifname "$d" >/dev/null 2>&1 || true; }
+  echo "ap pin released ($bssid)"
+}
+
+# --- QUIC transport -----------------------------------------------------------
+
+# The address sing-box dials. Resolved HERE, once, before any tunnel route
+# exists: resolved later, by sing-box, the name would go to DoH over "proxy" --
+# which may be this very outbound.
+quic_resolve(){
+  local h=${GT_QUIC_HOST:-${RHOST##*@}}
+  h=${h%%:*}
+  case $h in *[!0-9.]*) h=$(getent ahostsv4 "$h" 2>/dev/null | awk '{print $1; exit}') ;; esac
+  [ -n "$h" ] || { echo "  quic: cannot resolve ${GT_QUIC_HOST:-${RHOST##*@}}" >&2; return 1; }
+  echo "$h"
+}
+
+# Fresh credentials for this run: a self-signed keypair the client pins (it
+# trusts that certificate and nothing else) and a random password. Kept when
+# already there, so carrier-watch can restart the gateway side with the SAME
+# ones the running client was configured with.
+quic_creds(){
+  [ -s "$QUIC_DIR/password" ] && [ -s "$QUIC_DIR/cert.pem" ] && [ -s "$QUIC_DIR/key.pem" ] \
+    && [ -s "$QUIC_DIR/host" ] && [ -s "$QUIC_DIR/api_secret" ] && return 0
+  local host
+  host=$(quic_resolve) || return 1
+  ( umask 077
+    rm -rf "$QUIC_DIR"; mkdir -p "$QUIC_DIR"
+    "$GT_SINGBOX" generate tls-keypair globaltun -m 12 > "$QUIC_DIR/pair.pem"
+    sed -n '/BEGIN PRIVATE KEY/,/END PRIVATE KEY/p' "$QUIC_DIR/pair.pem" > "$QUIC_DIR/key.pem"
+    sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' "$QUIC_DIR/pair.pem" > "$QUIC_DIR/cert.pem"
+    rm -f "$QUIC_DIR/pair.pem"
+    "$GT_SINGBOX" generate rand --hex 16 > "$QUIC_DIR/password"
+    "$GT_SINGBOX" generate rand --hex 16 > "$QUIC_DIR/api_secret"
+    echo "$host" > "$QUIC_DIR/host" )
+  [ -s "$QUIC_DIR/key.pem" ] && [ -s "$QUIC_DIR/cert.pem" ] && [ -s "$QUIC_DIR/password" ] \
+    || { echo "  quic: could not generate credentials" >&2; rm -rf "$QUIC_DIR"; return 1; }
+}
+
+# Render the two-transport client config. Its existence is what makes
+# sbconf() choose it.
+quic_client_conf(){
+  ( umask 077
+    sed -e "s|@GT_QUIC_HOST@|$(cat "$QUIC_DIR/host")|" \
+        -e "s|@GT_QUIC_PASSWORD@|$(cat "$QUIC_DIR/password")|" \
+        -e "s|@GT_API_SECRET@|$(cat "$QUIC_DIR/api_secret")|" \
+        "$GT_SBCONF_QUIC" > "$QUIC_DIR/client.json.new" ) \
+    && mv "$QUIC_DIR/client.json.new" "$QUIC_DIR/client.json"
+}
+
+# The config the local sing-box should run right now.
+sbconf(){
+  if [ "$QUIC" = 1 ] && [ -s "$QUIC_DIR/client.json" ]; then echo "$QUIC_DIR/client.json"
+  else echo "$GT_SBCONF"; fi
+}
+
+# Start (or restart) the Hysteria2 server on the gateway with this run's
+# credentials. Same contract as the relay: pushed over the master, needs only
+# an sshd and a writable /tmp. Stopped by its pidfile -- never `pkill -f`, whose
+# pattern would also match the very shell running it.
+start_remote_quic(){
+  local arch bin rpath pw
+  arch=$(gateway_arch)
+  bin=${arch:+$GT_QUIC_BIN_DIR/gtquic-linux-$arch}
+  [ -n "$bin" ] && [ -f "$bin" ] || { echo "  quic: no server binary for this gateway" >&2; return 1; }
+  rpath=$(push_cached "$bin" gtquic) || return 1
+  pw=$(cat "$QUIC_DIR/password")
+  # Unquoted outer heredoc: the PEMs, password and port expand HERE; \$ is what
+  # the gateway's /bin/sh expands. The inner heredocs are quoted, so nothing in
+  # the files is re-expanded there. Bound to 0.0.0.0, not ::, which fails on a
+  # gateway with IPv6 off -- the client dials IPv4 anyway.
+  # The server dials destinations itself, preferring IPv6: sing-box's default
+  # took IPv4 first, which on yulee cost ~190 ms per new connection (measured
+  # 2026-11-17: HTTPS to gstatic 343 ms over v4, 156 over v6; QUIC probes
+  # 308-365 -> 134-170 ms) and made QUIC probe slower than the ssh path, whose
+  # Go relay already prefers v6. A gateway with broken v6 loses at most
+  # sing-box's 300 ms fallback to v4, as the relay does.
+  rsh <<EOF
+D=$QUIC_RDIR
+[ -f \$D/pid ] && kill \$(cat \$D/pid) 2>/dev/null
+rm -rf \$D; umask 077; mkdir -p \$D
+cat > \$D/cert.pem <<'GTEOF'
+$(cat "$QUIC_DIR/cert.pem")
+GTEOF
+cat > \$D/key.pem <<'GTEOF'
+$(cat "$QUIC_DIR/key.pem")
+GTEOF
+cat > \$D/server.json <<'GTEOF'
+{"log":{"disabled":true},
+ "inbounds":[{"type":"hysteria2","tag":"quic-in","listen":"0.0.0.0","listen_port":$QUIC_PORT,
+   "users":[{"password":"$pw"}],
+   "tls":{"enabled":true,"alpn":["h3"],"certificate_path":"$QUIC_RDIR/cert.pem","key_path":"$QUIC_RDIR/key.pem"}}],
+ "outbounds":[{"type":"direct","tag":"direct"}],
+ "dns":{"servers":[{"type":"local","tag":"local"}]},
+ "route":{"default_domain_resolver":{"server":"local","strategy":"prefer_ipv6"}}}
+GTEOF
+# NOTHING is written on the gateway: logging is disabled in the config and the
+# process's own output goes to /dev/null. Even at warn level sing-box logs a
+# failed connection WITH its destination, and the gateway is somebody else's
+# box. Startup is proven without a log instead: the config checks out, and the
+# process is still alive two seconds later.
+$rpath check -c \$D/server.json || { echo 'remote quic server: config rejected (above)'; exit 1; }
+S=\$(command -v setsid || command -v nohup || true)
+\$S $rpath run -c \$D/server.json >/dev/null 2>&1 </dev/null &
+echo \$! > \$D/pid
+sleep 2
+if kill -0 \$(cat \$D/pid) 2>/dev/null; then
+  echo "remote quic server up: udp/$QUIC_PORT pid \$(cat \$D/pid) (logs nothing)"
+else
+  # Show why on THIS terminal only -- a few seconds in the foreground, output
+  # straight back over ssh, never into a file.
+  echo 'remote quic server FAILED to stay up; its startup output:'
+  timeout 3 $rpath run -c \$D/server.json 2>&1 </dev/null | head -5
+  exit 1
+fi
+EOF
+}
+
+# --- system DNS through the tunnel (QUIC config only) ---------------------------
+#
+# While up, systemd-resolved's only upstream is sing-box's loopback listener
+# (dns-in in the client config), which answers over DoH through the tunnel. A
+# global drop-in with `Domains=~.` outranks every link's DHCP servers -- the
+# ones NetworkManager pushes, and re-pushes on every roam -- without touching
+# any link, so NetworkManager has nothing to undo. More specific routing
+# domains (tailscale's tailnet on tailscale0) keep going to their own link.
+# /run, so a reboot can never leave the system pointed at a dead listener.
+DNS_LOCAL=127.0.0.2
+RESOLVED_DROPIN=/run/systemd/resolved.conf.d/globaltun.conf
+
+# One A query straight at the listener: 0 when it answers within the budget.
+dns_probe(){
+  python3 - "$DNS_LOCAL" <<'PYEOF'
+import socket, struct, sys, time
+q = struct.pack(">HHHHHH", 0x6774, 0x0100, 1, 0, 0, 0) + b"\x07example\x03com\x00" + struct.pack(">HH", 1, 1)
+for _ in range(6):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.settimeout(3)
+    try:
+        s.sendto(q, (sys.argv[1], 53))
+        if len(s.recv(1500)) > 12: sys.exit(0)
+    except OSError:
+        time.sleep(1)
+sys.exit(1)
+PYEOF
+}
+
+dns_takeover(){
+  [ -s "$QUIC_DIR/client.json" ] || return 0
+  systemctl is-active --quiet systemd-resolved 2>/dev/null \
+    || { echo "  dns: systemd-resolved not running; system DNS left alone"; return 0; }
+  # Prove it answers BEFORE handing it every lookup on the machine.
+  dns_probe || { echo "  dns: loopback listener $DNS_LOCAL did not answer; system DNS left alone" >&2; return 0; }
+  mkdir -p "${RESOLVED_DROPIN%/*}"
+  # The empty assignments reset the lists, so nothing from resolved.conf
+  # (DNS=, Domains=) is merged in beside ours.
+  cat > "$RESOLVED_DROPIN" <<EOF
+# Written by globaltun up, removed by globaltun down.
+[Resolve]
+DNS=
+DNS=$DNS_LOCAL
+Domains=
+Domains=~.
+EOF
+  systemctl reload systemd-resolved
+  resolvectl flush-caches 2>/dev/null || true
+  resolvectl reset-server-features 2>/dev/null || true
+  echo "  dns: system resolver -> $DNS_LOCAL (DoH through the tunnel); per-network servers bypassed"
+}
+
+dns_release(){
+  [ -f "$RESOLVED_DROPIN" ] || return 0
+  rm -f "$RESOLVED_DROPIN"
+  systemctl reload systemd-resolved 2>/dev/null || true
+  resolvectl flush-caches 2>/dev/null || true
+  resolvectl reset-server-features 2>/dev/null || true
+  echo "dns: system resolver back on the network's own servers"
+}
+
+stop_remote_quic(){
+  have_ctl || return 0
+  rsh <<EOF || true
+D=$QUIC_RDIR
+[ -f \$D/pid ] && kill \$(cat \$D/pid) 2>/dev/null; rm -rf \$D; true
+EOF
+}
+
+# The local sing-box's loopback API, with this run's secret.
+api(){ curl -s --noproxy '*' -H "Authorization: Bearer $(cat "$QUIC_DIR/api_secret" 2>/dev/null)" "$@"; }
+
+# quic_delay NAME [TIMEOUT_MS] -> the measured delay in ms, or nothing when it failed.
+quic_delay(){
+  api -m $(( ${2:-5000} / 1000 + 3 )) \
+    "http://$QUIC_API/proxies/$1/delay?timeout=${2:-5000}&url=https%3A%2F%2Fwww.gstatic.com%2Fgenerate_204" \
+    | grep -oE '"delay": *[0-9]+' | grep -oE '[0-9]+$'
+}
+quic_now(){
+  api -m 3 "http://$QUIC_API/proxies/proxy" | grep -oE '"now": *"[^"]*"' | cut -d'"' -f4
+}
+quic_select(){
+  api -m 3 -X PUT -H 'Content-Type: application/json' -d "{\"name\":\"$1\"}" \
+    -o /dev/null -w '%{http_code}' "http://$QUIC_API/proxies/proxy" | grep -q '^204$'
+}
+
+# Called every carrier-watch tick. QUIC is the default; ssh is where traffic
+# goes only while QUIC is down:
+#   on quic: 2 failed probes in a row, and ssh answering -> switch to ssh
+#   on ssh:  3 good QUIC probes in a row                -> switch back
+# The asymmetry is the point: leave fast when QUIC breaks, return only when it
+# has held. Probes are one small HTTPS request through each outbound.
+TW_QFAIL=0 TW_QOK=0
+transport_watch(){
+  [ -s "$QUIC_DIR/client.json" ] || return 0
+  local now qd
+  now=$(quic_now) || return 0
+  [ -n "$now" ] || return 0            # sing-box not answering its API: nothing to steer
+  qd=$(quic_delay quic 3000 || true)
+  if [ "$now" = quic ]; then
+    if [ -n "$qd" ]; then TW_QFAIL=0; return 0; fi
+    TW_QFAIL=$((TW_QFAIL + 1))
+    if [ "$TW_QFAIL" -ge 2 ] && [ -n "$(quic_delay ssh 3000 || true)" ] && quic_select ssh; then
+      cw_log "transport: quic stopped answering ($TW_QFAIL probes); switched to ssh"
+      TW_QFAIL=0 TW_QOK=0
+    fi
+  else
+    if [ -z "$qd" ]; then TW_QOK=0; return 0; fi
+    TW_QOK=$((TW_QOK + 1))
+    if [ "$TW_QOK" -ge 3 ] && quic_select quic; then
+      cw_log "transport: quic healthy again (${qd} ms, $TW_QOK probes); switched back from $now"
+      TW_QFAIL=0 TW_QOK=0
+    fi
+  fi
+  return 0
+}
+
 up(){
   need_root
   SB="$GT_SINGBOX"
@@ -741,9 +1083,23 @@ up(){
   # Before the routes move, so the last fix geoclue acted on was the real one.
   freeze_tz
 
+  # Before the carrier: pinning reconnects the Wi-Fi once.
+  ap_pin
+
   master
   echo "--- starting remote relay"
   start_remote_relay
+
+  if [ "$QUIC" = 1 ]; then
+    echo "--- starting remote quic server (alongside ssh)"
+    # Fresh credentials every `up`; carrier-watch reuses them within a run.
+    rm -rf "$QUIC_DIR"
+    if quic_creds && start_remote_quic && quic_client_conf; then :
+    else
+      rm -f "$QUIC_DIR/client.json"
+      echo "(quic unavailable -- continuing on ssh only, exactly as without it)"
+    fi
+  fi
 
   echo "--- starting local udp/tcp adapter"
   start_gtlocal
@@ -755,7 +1111,7 @@ up(){
   ip link del "$TUN" 2>/dev/null || true
 
   echo "--- starting local sing-box (tun)"
-  setsid "$SB" run -c "$GT_SBCONF" >"$LOG" 2>&1 </dev/null &
+  setsid "$SB" run -c "$(sbconf)" >"$LOG" 2>&1 </dev/null &
   echo $! > "$PIDF"
   sleep 2
   kill -0 "$(cat "$PIDF")" 2>/dev/null || { echo "local sing-box died:"; tail -30 "$LOG"; exit 1; }
@@ -775,6 +1131,14 @@ up(){
     echo "--- starting icmp relay"
     start_gticmp || echo "(icmp relay unavailable -- tcp/udp unaffected)"
   fi
+  if [ -s "$QUIC_DIR/client.json" ]; then
+    echo "--- transports (quic by default; carrier-watch moves traffic to ssh only while quic is down)"
+    local qd sd
+    qd=$(quic_delay quic || true); sd=$(quic_delay ssh || true)
+    echo "  quic: $( [ -n "$qd" ] && echo "$qd ms" || echo "NOT answering -- udp/$QUIC_PORT filtered on the way? ssh carries traffic meanwhile" )"
+    echo "  ssh:  $( [ -n "$sd" ] && echo "$sd ms" || echo "not answering" )"
+    dns_takeover
+  fi
   if [ "${GT_TAILSCALE_DIRECT:-0}" = 1 ]; then
     echo "up -- TCP + UDP (udp-over-tcp); tailscale underlay on the physical link, LAN peers direct"
   else
@@ -786,6 +1150,9 @@ down(){
   need_root
   # first: it would otherwise "repair" the routes this is about to remove
   carrier_watch_stop
+  # before sing-box goes: from here on the network's own DNS must answer
+  dns_release
+  ap_release
   [ -f "$PIDF" ] && { kill "$(cat "$PIDF")" 2>/dev/null || true; rm -f "$PIDF"; }
   [ -f "$GLPID" ] && { kill "$(cat "$GLPID")" 2>/dev/null || true; rm -f "$GLPID"; }
   pkill -f 'python3 -u .*gtlocal.py' 2>/dev/null || true
@@ -805,6 +1172,8 @@ down(){
 P=/tmp/globaltun-server-$RPORT_SS.pid
 [ -f \$P ] && kill \$(cat \$P) 2>/dev/null; rm -f \$P; true
 EOF
+  [ "$QUIC" = 1 ] && stop_remote_quic
+  rm -rf "$QUIC_DIR"
   [ -S "$CTL" ] && { ssh -S "$CTL" -O exit "$RHOST" 2>/dev/null || true; }
   rm -f "$CTL"
   ip route del 0.0.0.0/1   2>/dev/null || true
@@ -824,16 +1193,22 @@ reload_local(){   # restart only the local sing-box; keeps the ssh master + remo
   have_ctl || { echo "refusing: no live ssh master. Installing tun routes now would black-hole this box -- run 'up' instead." >&2; exit 1; }
   ss -ltn 2>/dev/null | grep -q ":$LPORT " || { echo "refusing: no :$LPORT forward -- run 'up' instead." >&2; exit 1; }
   SB="$GT_SINGBOX"
+  # Re-render from THIS package's template, keeping the run's credentials, so a
+  # changed client config takes effect without a full down/up.
+  [ "$QUIC" = 1 ] && [ -s "$QUIC_DIR/client.json" ] && quic_client_conf
   start_gtlocal
   [ -f "$PIDF" ] && { kill "$(cat "$PIDF")" 2>/dev/null || true; rm -f "$PIDF"; }
   for _ in $(seq 30); do ip link show "$TUN" >/dev/null 2>&1 || break; sleep 0.1; done
-  setsid "$SB" run -c "$GT_SBCONF" >"$LOG" 2>&1 </dev/null &
+  setsid "$SB" run -c "$(sbconf)" >"$LOG" 2>&1 </dev/null &
   echo $! > "$PIDF"
   for _ in $(seq 50); do ip link show "$TUN" >/dev/null 2>&1 && break; sleep 0.1; done
   ip link show "$TUN" >/dev/null 2>&1 || { echo "$TUN never came back:"; tail -20 "$LOG"; exit 1; }
   pin_carrier || true
   ip route replace 0.0.0.0/1   dev "$TUN"
   ip route replace 128.0.0.0/1 dev "$TUN"
+  # Idempotent: (re)points the system resolver at the new sing-box's listener,
+  # or leaves it alone if that listener does not answer.
+  [ "$QUIC" = 1 ] && dns_takeover
   echo "local sing-box reloaded"
 }
 
@@ -849,6 +1224,12 @@ verify(){
   echo "=== local log (last errors, icmp noise filtered)"
   grep -v 'icmp is not supported' "$LOG" 2>/dev/null | grep -E 'ERROR|FATAL|outbound|proxy' | tail -10
   echo "=== remote log tail"; have_ctl && rsh1 "tail -n 8 /tmp/globaltun-server-$RPORT_SS.log" || echo "(no master)"
+  if [ "$QUIC" = 1 ] && [ -s "$QUIC_DIR/client.json" ]; then
+    echo "=== transports (the checks above went through: $(quic_now || echo '?'))"
+    echo "  quic $(quic_delay quic || echo FAIL) ms   ssh $(quic_delay ssh || echo FAIL) ms"
+    # (the gateway's QUIC server keeps no log, by design -- see start_remote_quic)
+    have_ctl && { quic_server_alive && echo "  gateway quic server: running (logs nothing)" || echo "  gateway quic server: NOT running"; }
+  fi
 }
 
 # --- sharing the tunnel over a Wi-Fi AP on the same card -------------------
@@ -1062,7 +1443,7 @@ share_ap_follow(){
   fi
 }
 share_watch(){
-  local line freq pending=""
+  local line freq count
   share_log "watching $GT_SHARE_STA for channel switches and roams"
   iw event | while IFS= read -r line; do
     case $line in "$GT_SHARE_STA "*|"$GT_SHARE_STA:"*) ;; *) continue ;; esac
@@ -1071,8 +1452,28 @@ share_watch(){
         # the first standalone freq= -- not center_freq1=, which a greedy match caught
         freq=$(printf '%s\n' "$line" | grep -oE '(^|[ (])freq=[0-9]+' | head -n1 | grep -oE '[0-9]+$')
         [ -n "$freq" ] || { share_log "CSA without a frequency: $line"; continue; }
-        if share_ap_running && hostapd_cli -p "$SHARE_CTRL" -i "$GT_SHARE_AP" chan_switch 1 "$freq" ht >/dev/null 2>&1; then
+        # Switch IN STEP with the upstream: same beacon countdown, so both vifs
+        # finish their switch together. With `#channels <= 1` mac80211 can only
+        # move them as a pair -- "channel context reservation cannot be
+        # finalized because some interfaces aren't switching" is what it says
+        # when they arrive apart. A count of 1 made the AP finish ~2 s ahead of
+        # a station counting down ~20 beacons, and the station usually dropped
+        # (err=-16; 341 drops against 431 switches in victus-15's log, Nov 3-17).
+        # GT_SHARE_CSA_COUNT=1 restores the old behaviour for comparison.
+        count=$(printf '%s\n' "$line" | grep -oE 'count=[0-9]+' | head -n1 | grep -oE '[0-9]+$')
+        [ "${GT_SHARE_CSA_COUNT:-match}" = match ] || count=$GT_SHARE_CSA_COUNT
+        [ -n "$count" ] && [ "$count" -ge 1 ] || count=1
+        share_log "csa: ${line#"$GT_SHARE_STA"} -> AP count=$count"
+        if share_ap_running && hostapd_cli -p "$SHARE_CTRL" -i "$GT_SHARE_AP" chan_switch "$count" "$freq" ht >/dev/null 2>&1; then
           share_log "upstream switching to $freq MHz; AP switching with it"
+          # The outcome, for measuring this: a beacon is ~0.1 s, so the switch
+          # is done after count/10 s; check comfortably after.
+          ( sleep $((count / 10 + 4))
+            if iw dev "$GT_SHARE_STA" link 2>/dev/null | grep -q '^Connected'; then
+              share_log "csa result: station FOLLOWED the switch (count=$count)"
+            else
+              share_log "csa result: station dropped (count=$count)"
+            fi ) &
         else
           # Cannot follow in place: get out of the way so the station can switch.
           share_ap_stop
@@ -1139,6 +1540,24 @@ status(){
   echo "--- icmp rule";  ip rule show | grep -E "$IC_PRIO" || echo "  no icmp rule"
   echo "--- gtlocal";     ss -ltn 2>/dev/null | grep ":$LOCAL_PORT " || echo "  not listening"
   echo "--- local sing-box"; [ -f "$PIDF" ] && ps -o pid,etime,cmd -p "$(cat "$PIDF")" 2>/dev/null || echo "not running"
+  if [ "$QUIC" = 1 ]; then
+    echo "--- transports"
+    if [ -s "$QUIC_DIR/client.json" ]; then
+      local qd sd
+      qd=$(quic_delay quic || true); sd=$(quic_delay ssh || true)
+      echo "  carrying traffic: $(quic_now || echo '?')"
+      echo "  quic -> $(cat "$QUIC_DIR/host"):$QUIC_PORT  $( [ -n "$qd" ] && echo "$qd ms" || echo "not answering" )"
+      echo "  ssh  -> $RHOST  $( [ -n "$sd" ] && echo "$sd ms" || echo "not answering" )"
+      have_ctl && { quic_server_alive && echo "  gateway quic server: running" || echo "  gateway quic server: NOT running"; }
+      if [ -f "$RESOLVED_DROPIN" ]; then
+        echo "  system dns: $DNS_LOCAL (through the tunnel) -- $(dns_probe && echo answering || echo 'NOT ANSWERING')"
+      else
+        echo "  system dns: the network's own servers"
+      fi
+    else
+      echo "  ssh only (quic enabled, but its gateway side did not start this run)"
+    fi
+  fi
   echo "--- tun";        ip -br addr show "$TUN" 2>/dev/null || echo "no $TUN"
   echo "--- routes";     ip route show | grep -E '^(0\.0\.0\.0/1|128\.0\.0\.0/1|default|'"$CARRIER"')' || true
   echo "--- timezone";   if [ -f "$TZFREEZE" ]; then echo "  $(current_tz) (frozen by globaltun)"

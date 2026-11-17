@@ -176,6 +176,57 @@ bundle.
 routing and netfilter: a second tun, an `ipproto icmp` rule, a routing table and
 an interface-scoped exemption.
 
+## QUIC transport (opt-in, alongside ssh)
+
+`quic.enable` adds a second transport; it replaces nothing. `up` builds the ssh
+path exactly as before, then pushes a static Hysteria2 server (`gtquic`: this
+flake's sing-box, CGO off, `with_quic` only) to the gateway over the same
+master, and the local sing-box holds both in a `urltest` group:
+
+```
+tun9 -> sing-box --+-- quic: Hysteria2 over UDP, straight to the gateway  (preferred)
+                   +-- ssh:  SOCKS -> gtlocal -> ssh -L -> gtrelay          (always there)
+ICMP: tun8 -> gticmp -> ssh  (unchanged)
+```
+
+Both are probed every 30 s; one that stops answering is dropped and its
+connections are cut so they redial on the other. While both answer, traffic
+only moves for a 200 ms improvement, so a healthy pair does not flap.
+
+Why: the ssh path is TCP inside TCP and puts every UDP flow on one stream, so
+any stall stalls everything. Measured on the KSA LAN to yulee in the same
+minute, 20 MB download: **19 MB/s over QUIC; 0 B/s (stalled) then 3 MB/s over
+ssh**.
+
+What it needs that ssh does not: the gateway reachable **over UDP, directly**.
+Behind ssh jumps that is not the case — set `quic.host` to an address that is,
+or leave QUIC off there. It fails safe: if the server cannot start (no binary
+for the arch, noexec `/tmp`), `up` says so and runs the ssh-only config; if it
+starts but UDP is filtered on the way, `urltest` keeps traffic on ssh and `up`
+reports `quic: NOT answering`.
+
+Details that matter:
+
+- **Credentials are per `up`**: a self-signed certificate the client *pins*
+  (trusts that one and nothing else) and a random password, generated into
+  `/run/globaltun-quic/`, pushed to `/tmp/globaltun-quic-<port>/` (mode 700) on
+  the gateway, and deleted by `down`. Nothing to provision or persist.
+- **`quic.port` has no default**, for the same reason as `remoteSocksPort`.
+  Convention on yulee: `40000 + remoteSocksPort` (41080 galaxybook4-pro360,
+  41082 victus-15, 41084 the Android client).
+- **The QUIC server outlives the ssh master.** It is its own process and its
+  traffic never touches ssh, so carrier-watch does not restart it when the
+  master drops — that would cut the transport still carrying everything. It
+  checks the server once a minute (and after a reconnect) and restarts it only
+  if it is actually gone.
+- **The binary is ~40 MB**, pushed once per gateway (content-addressed, like the
+  relay). Seconds over a LAN, minutes over a slow phone path — once.
+- `status` and `verify` show which transport is carrying traffic and each one's
+  delay, from sing-box's loopback API on `127.0.0.1:11090`.
+
+On a Termux gateway, the server should run natively rather than under proot
+(no ptrace overhead) — untested so far; the ssh path is unaffected either way.
+
 ## Unrooted Android clients
 
 `android/` carries what a phone needs. It cannot run the Linux half at all: no
@@ -197,6 +248,85 @@ Nothing in the relays changes — the gateway relay and `gtlocal.py` are the sam
 files, referenced from the feature root rather than copied. Drop a
 `gtrelay-linux-*` binary into the bundle and the phone pushes the static relay
 too; without one it falls back to needing `python3` on the gateway.
+
+**QUIC on the phone** (`GT_QUIC_PORT` in `globaltun.env`, 41084 on yulee). The
+sing-box app speaks Hysteria2 itself, so here QUIC does more than on Linux: it
+takes Termux out of the data path entirely.
+
+```
+sing-box app --+-- quic: Hysteria2/UDP -> gateway            (preferred)
+               +-- ssh:  socks -> gtlocal -> ssh -L -> relay  (fallback, as before)
+```
+
+`up` starts the server over ssh and writes `globaltun-quic.json` — built from
+`sing-box-android.json` (same tun, same `exclude_package`), with the QUIC
+outbound added, a `urltest` group over both, and no DNS hijack. The certificate
+is inline because the app cannot read Termux's files, and copied to
+`Download/` when `termux-setup-storage` has been run. **Credentials are kept**
+in `~/.globaltun-quic` rather than made per run, since the app only reads a
+profile on import; `quic-reset` replaces them (re-import afterwards). The
+profile holds the gateway password: delete the `Download/` copy once imported.
+
+Needs `gtquic-linux-<gateway arch>` in the bundle (40 MB, pushed once per
+gateway) and `pkg install openssl-tool`. Missing either, `up` says so and the
+phone runs ssh-only with `sing-box-android.json`, exactly as before.
+
+Tested 2026-11-17 by running the script unprivileged against yulee and the
+rendered profile through sing-box (tun swapped for a local socks port): QUIC
+14.7 MB/s; killing the gateway server moved traffic to the ssh path on the
+group's next probe, **up to 30 s** later (`interval`); `down` left nothing on
+the gateway. Not yet run on a real phone.
+
+### Other VPNs, inside the one VPN slot
+
+Android gives the VPN slot to **one** app. Rather than choosing between the
+sing-box app and Tailscale (or NordVPN, or a work VPN), the other VPNs run
+*inside* sing-box: each is a snippet in `vpns.d/` beside the script, merged
+into the profile by `render-profile.py` on `up`. Each one's own traffic —
+control plane, handshakes, the encrypted packets — rides globaltun
+(`detour: proxy`), so it works on a network with no uplink, which is exactly
+where the standalone apps fail.
+
+Routing is per snippet: by destination (`ip_cidr`, `domain_suffix`), by app
+(`package_name`), or as the default exit (`route.final`; at most one, and DNS
+follows it so lookups do not leak around it). VPN server *names* resolve
+through a separate `bootstrap-dns` that always rides globaltun — otherwise a
+default-exit VPN would need itself to resolve its own server.
+
+| VPN | How to add it |
+|---|---|
+| **Tailscale** (also self-hosted control servers: add `control_url`) | copy `vpns/tailscale.json`, fill in an auth key. Joins as its own device. |
+| **NordVPN** (NordLynx) | `vpn2singbox.py nordvpn --token TOKEN [--country KR]` — key from Nord's API (unofficial; token from Nord Account → manual setup) |
+| **Cloudflare WARP** (free) | `vpn2singbox.py warp` — registers an anonymous device (unofficial API) |
+| **Mullvad, Proton VPN, Surfshark, IVPN, Windscribe, AirVPN, CyberGhost, TorGuard, hide.me** | download the provider's WireGuard config, `vpn2singbox.py wg FILE.conf` |
+| **PIA** | generate a WireGuard config with PIA's `manual-connections` scripts, then `wg` as above (PIA drops keys left unused for a while) |
+| **Your own WireGuard** (home router: OpenWrt, Fritz!Box, UniFi; a VPS) | its `.conf`, `vpn2singbox.py wg` |
+| **Outline / Shadowsocks** | `vpn2singbox.py ss 'ss://…'` (SIP002, plain or legacy keys; no plugins) |
+| **Company / university VPNs**: Cisco AnyConnect & ocserv, GlobalProtect, Pulse/Ivanti, Juniper, Fortinet, F5 | copy `vpns/openconnect.json`, set `flavor` and the internal ranges |
+| **Tor** | `vpns/tor.json` — experimental, needs an app build with Tor |
+
+Every converter takes the same routing flags: `--final`, `--apps PKG,…`,
+`--cidr NET,…`, `--domains SUF,…` (at least one). Output is mode 600 — it holds
+keys.
+
+**Not embeddable** with this sing-box: OpenVPN (it has no OpenVPN endpoint —
+so ExpressVPN and OpenVPN-only services), IPsec/IKEv2, ZeroTier, and anything
+that exists only as a closed app. For those, join `gt-router` / `gt-share`
+instead: the AP tunnels the phone at the network level and its VPN slot stays
+free for any app.
+
+**Which protocols the phone's app supports** is the app build's, not this
+repo's: WireGuard is in every official build; Tailscale, OpenConnect and Tor
+may not be. An unsupported one is rejected on import by name — remove that
+snippet.
+
+Tested 2026-11-17: profiles with 8 snippets at once (Mullvad-, Proton-, PIA-
+and wgcf-shaped WireGuard configs, Outline and Shadowsocks keys, Tailscale,
+OpenConnect, Tor) pass `sing-box check`, with and without QUIC; the refusals
+(leftover `@FILL`, two default exits, a duplicate tag) fire. Live: a WARP device
+registered by `vpn2singbox.py warp` carried traffic at 21.7 MB/s with Cloudflare
+reporting `warp=on`; Nord's public server list parses (the credential call
+needs an account and is untested). Not yet on a real phone.
 
 **Match the binary to the GATEWAY's architecture, not the phone's.** The phone
 is the client here: it only ever pushes the relay onward. With yulee as the
@@ -223,18 +353,24 @@ app answers pings itself, as sing-box did before `gticmp` existed.
 
 ### Setting one up
 
-On the phone, in Termux (`pkg install openssh python`):
+On the phone, in Termux (`pkg install openssh python openssl-tool`;
+`termux-setup-storage` once, so profiles are copied to `Download/`):
 
 ```sh
 mkdir -p ~/globaltun && cd ~/globaltun
 # from this repo: android/globaltun-termux.sh, android/globaltun.env,
-#                 android/sing-box-android.json, rsocks.py, gtlocal.py,
-#                 and optionally gtrelay-linux-{amd64,arm64}
+#                 android/sing-box-android.json, android/render-profile.py,
+#                 android/vpn2singbox.py, rsocks.py, gtlocal.py,
+#                 and optionally gtrelay-linux-{amd64,arm64} and (for QUIC)
+#                 gtquic-linux-<gateway arch>
+# other VPNs: snippets into ~/globaltun/vpns.d/ (templates in android/vpns/)
 ssh-keygen -t ed25519 -f ~/.ssh/globaltun -N ""      # add the .pub to both hops
 ./globaltun-termux.sh up
 ```
 
-Then import `sing-box-android.json` into the sing-box app and start the VPN.
+Then import the profile `up` names into the sing-box app and start the VPN:
+`globaltun-quic.json` with QUIC, `globaltun-ssh.json` with `vpns.d/` snippets
+but no QUIC, otherwise `sing-box-android.json` as is.
 Keep the Termux session alive; toggle the VPN in the app as needed. Only re-run
 `up` if the carrier drops.
 
