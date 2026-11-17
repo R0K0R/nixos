@@ -185,7 +185,9 @@
         "https://cuda-maintainers.cachix.org"
         # yulee's store (harmonia, features/nix/binary-cache/yulee.md), asked
         # before the public caches: it holds the tuned outputs those lack.
-        "http://yulee:5000?priority=11"
+        # By address: "yulee" does not resolve on this host (no MagicDNS in
+        # its resolver; ssh reaches it through its own alias), 2026-11-18.
+        "http://100.64.0.1:5000?priority=11"
       ];
       trustedPublicKeys = [
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
