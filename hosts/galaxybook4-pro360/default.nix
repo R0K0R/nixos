@@ -315,6 +315,12 @@
     # uinput for r0k0r (the default user scope) and the Wi-Fi port. The daemon
     # and its keys are his home's (foldpen there).
     foldpen.enable = true;
+    # USB cameras for gphoto2: libgphoto2's udev rules and the camera group for
+    # r0k0r (the default user scope). The programs are his home's (photography).
+    photography.enable = true;
+    # LocalSend's port (53317 TCP+UDP), so other devices can see and send to
+    # this laptop; the app is a one-off package in the home.
+    localsend.enable = true;
 
     # X-Folding RGB Bluetooth keyboard: natural scroll on its trackpad without
     # inverting pinch-zoom (the firmware sends pinch as Ctrl + wheel).
