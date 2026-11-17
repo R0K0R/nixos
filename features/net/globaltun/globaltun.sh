@@ -405,13 +405,16 @@ carrier_watch(){
     transport_watch
     # A pinned AP that has been gone 90 s (rebooted, replaced) must not strand
     # the box: drop the pin and let it join whatever AP is there.
+    # Wall-clock, not ticks: with the link down each tick also spends a
+    # minute on master reconnect attempts, so counting sleeps took many
+    # minutes to reach "90 s" (seen on victus-15, 2026-11-18).
     if [ -f "$AP_PIN" ]; then
       IFS=$'\t' read -r _ pdev pbssid < "$AP_PIN"
       if [ -n "$(ap_current "$pdev")" ]; then apgone=0
       else
-        apgone=$((apgone + wait))
-        if [ "$apgone" -ge 90 ]; then
-          cw_log "pinned AP $pbssid gone for ${apgone}s; releasing the pin"
+        [ "$apgone" = 0 ] && apgone=$(date +%s)
+        if [ $(( $(date +%s) - apgone )) -ge 90 ]; then
+          cw_log "pinned AP $pbssid gone for $(( $(date +%s) - apgone ))s; releasing the pin"
           ap_release reconnect >>"$CW_LOG" 2>&1; apgone=0
         fi
       fi
@@ -1331,6 +1334,17 @@ share_up(){
   [ "${GT_SHARE:-0}" = 1 ] || { echo "sharing is not enabled (my.globaltun.share.enable)" >&2; exit 1; }
   is_up || { echo "refusing: the tunnel is not up, so there is nothing to share" >&2; exit 1; }
 
+  # One share at a time. A second hostapd on the same vif makes mt7921's
+  # firmware time out programming the AP's keys and reset -- which drops the
+  # STATION too: on 2026-11-18 a share left running from the day before plus a
+  # new `share` took victus-15 off the network for 7 minutes. So stop whatever
+  # is there first, including a hostapd whose pidfile is gone.
+  local p
+  for p in $(pgrep -x hostapd 2>/dev/null); do
+    tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -qF "$SHARE_CONF" && { kill "$p" 2>/dev/null; echo "stopped a running hostapd ($p) first"; }
+  done
+  share_ap_running || [ -f "$SHARE_WATCH_PID" ] && { echo "a share is already running -- restarting it"; share_down >/dev/null; }
+
   local psk ch
   psk=$(cat "$GT_SHARE_PSK_FILE" 2>/dev/null) || { echo "cannot read $GT_SHARE_PSK_FILE" >&2; exit 1; }
   [ ${#psk} -ge 8 ] || { echo "the PSK in $GT_SHARE_PSK_FILE must be at least 8 characters" >&2; exit 1; }
@@ -1392,7 +1406,23 @@ share_up(){
   # only add work.
   echo 1 > /proc/sys/net/ipv4/ip_forward
 
-  hostapd -B -P "$SHARE_PID" "$SHARE_CONF"
+  # Bounded: a wedged firmware made hostapd hang here, holding the vif while
+  # the station could not reassociate.
+  if ! timeout 20 hostapd -B -P "$SHARE_PID" "$SHARE_CONF"; then
+    echo "hostapd did not come up within 20 s -- tearing the AP down so $GT_SHARE_STA can recover" >&2
+    share_down >/dev/null; exit 1
+  fi
+  # The station must survive the AP coming up. If the card dropped it (firmware
+  # reset), the AP is worse than useless: undo it now rather than strand the box.
+  local _i
+  for _i in $(seq 10); do
+    iw dev "$GT_SHARE_STA" link 2>/dev/null | grep -q '^Connected' || break
+    sleep 1
+  done
+  if ! iw dev "$GT_SHARE_STA" link 2>/dev/null | grep -q '^Connected'; then
+    echo "$GT_SHARE_STA lost its AP when the share came up -- stopping the share so it can rejoin" >&2
+    share_down >/dev/null; exit 1
+  fi
   dnsmasq --interface="$GT_SHARE_AP" --bind-interfaces \
           --dhcp-range="$GT_SHARE_DHCP" \
           --dhcp-option=3,"${GT_SHARE_ADDR%%/*}" --dhcp-option=6,"$GT_DNS" \
