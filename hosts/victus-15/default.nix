@@ -200,7 +200,10 @@
       enable = true;
       substituters = [
         "https://cache.nixos.org"
-        "https://cuda-maintainers.cachix.org"
+        # Not cuda-maintainers.cachix.org: it answers 401 "doesn't exist"
+        # (2026-11-18): every lookup an error, up to 3 s each from this host,
+        # and no help. It was in this list all along but
+        # dropped by a mkDefault bug until 3ba7289 brought it back.
         # yulee's store (harmonia, features/nix/binary-cache/yulee.md), asked
         # before the public caches: it holds the tuned outputs those lack.
         # By address: "yulee" does not resolve on this host (no MagicDNS in
@@ -209,7 +212,6 @@
       ];
       trustedPublicKeys = [
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
-        "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
         # yulee's store key, for its cache above and for copies from it.
         "yulee-1:KgdwkCN5m+hewJTk+A05PjwI3BbnZAE9NW2n634N7vM="
       ];
