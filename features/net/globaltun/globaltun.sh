@@ -1349,7 +1349,8 @@ share_up(){
   psk=$(cat "$GT_SHARE_PSK_FILE" 2>/dev/null) || { echo "cannot read $GT_SHARE_PSK_FILE" >&2; exit 1; }
   [ ${#psk} -ge 8 ] || { echo "the PSK in $GT_SHARE_PSK_FILE must be at least 8 characters" >&2; exit 1; }
 
-  ip link show "$GT_SHARE_AP" >/dev/null 2>&1 || iw dev "$GT_SHARE_STA" interface add "$GT_SHARE_AP" type __ap
+  local created=0
+  ip link show "$GT_SHARE_AP" >/dev/null 2>&1 || { iw dev "$GT_SHARE_STA" interface add "$GT_SHARE_AP" type __ap; created=1; }
   # Belt and braces alongside networking.networkmanager.unmanaged: NM matches
   # saved profiles against any wifi device, and on a card allowing two managed
   # interfaces it will autoconnect this one to the upstream network and move
@@ -1360,6 +1361,21 @@ share_up(){
     iw dev "$GT_SHARE_AP" set type __ap
   fi
   ip link set "$GT_SHARE_AP" up
+
+  # Adding a wlan interface fires NixOS's udev rule that restarts
+  # wpa_supplicant (`systemctl try-restart wpa_supplicant.service` on any wlan
+  # add/remove), which drops the station for a few seconds. Reading its channel
+  # inside that gap found none, and share gave up (victus-15, 2026-11-18, the
+  # first share after a reboot). So when the vif is new, wait for the station.
+  if [ "$created" = 1 ]; then
+    local _w
+    sleep 1
+    for _w in $(seq 20); do
+      iw dev "$GT_SHARE_STA" link 2>/dev/null | grep -q '^Connected' && break
+      [ "$_w" = 1 ] && echo "waiting for $GT_SHARE_STA to rejoin (adding $GT_SHARE_AP restarts wpa_supplicant)..."
+      sleep 1
+    done
+  fi
 
   local freq reason
   ch=$(iw dev "$GT_SHARE_STA" info | awk '/channel/{print $2}')
