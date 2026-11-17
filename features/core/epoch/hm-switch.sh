@@ -246,7 +246,11 @@ switch_plain() {
     "$([ "$route" = class ] && echo "via $NIX_REMOTE" || echo "shared daemon")"
   local hmargs=()
   if [ -n "$backup" ]; then hmargs=(-b "$backup"); fi
-  home-manager switch "${hmargs[@]}" --flake "$repo#$name" "$@"
+  # stderr to the terminal (fd 3, see below) so the build inside draws nix's
+  # progress bar instead of the full derivation list. home-manager writes its
+  # activation messages to stdout, which is still logged; on a terminal, its
+  # errors show there and not in last.log.
+  home-manager switch "${hmargs[@]}" --flake "$repo#$name" "$@" 2>&"$buildfd"
 }
 
 switch_variant() {
@@ -297,8 +301,9 @@ log=$state/last.log
 # on a terminal: through the pipe it prints the full "these N derivations will
 # be built" list instead (with CA derivations, an upper bound of thousands of
 # lines) and no progress at all. Keep the terminal on fd 3 and give it to the
-# build (switch_variant), so the bar draws there; everything else is still
-# logged. Not a terminal (a script, a cron job): fd 2, the log, as before.
+# build (switch_variant's nix build, switch_plain's home-manager), so the bar
+# draws there; everything else is still logged. Not a terminal (a script, a
+# cron job): fd 2, the log, as before.
 exec 3>&2
 if [ -t 3 ]; then buildfd=3; else buildfd=2; fi
 if [ "$build" = system ] && [ -z "$evalon" ]; then
