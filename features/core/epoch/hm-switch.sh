@@ -264,9 +264,9 @@ switch_variant() {
   fi
   if [ "$route" = sudo ]; then
     note "building as root (sudo): pinning builders is a trusted-user setting"
-    out=$(sudo -- "$HM_NIX" build --no-link --print-out-paths "$drv^out" "${buildopts[@]}") || { note "build failed"; return 1; }
+    out=$(sudo -- "$HM_NIX" build --no-link --print-out-paths "$drv^out" "${buildopts[@]}" 2>&"$buildfd") || { note "build failed"; return 1; }
   else
-    out=$(nix build --no-link --print-out-paths "$drv^out" "${buildopts[@]}") || { note "build failed"; return 1; }
+    out=$(nix build --no-link --print-out-paths "$drv^out" "${buildopts[@]}" 2>&"$buildfd") || { note "build failed"; return 1; }
   fi
   out=$(printf '%s\n' "$out" | tail -n1)
   [ -x "$out/activate" ] || { note "no activate script in $out"; return 1; }
@@ -285,6 +285,14 @@ switch_variant() {
 state=$(hm_switch_state)
 mkdir -p "$state"
 log=$state/last.log
+# The tee below turns stderr into a pipe, and nix shows its progress bar only
+# on a terminal: through the pipe it prints the full "these N derivations will
+# be built" list instead (with CA derivations, an upper bound of thousands of
+# lines) and no progress at all. Keep the terminal on fd 3 and give it to the
+# build (switch_variant), so the bar draws there; everything else is still
+# logged. Not a terminal (a script, a cron job): fd 2, the log, as before.
+exec 3>&2
+if [ -t 3 ]; then buildfd=3; else buildfd=2; fi
 if [ "$build" = system ] && [ -z "$evalon" ]; then
   switch_plain "$@" 2>&1 | tee "$log"
 else
