@@ -193,6 +193,9 @@
       # key's whole job is to say WHICH store vouched for a path.
       signingKeySecret = ../../age/nix-signing-key-victus-15.age;
     };
+    # This store as http://victus-15:5000 for galaxybook's substituters, signed
+    # with the key above (features/nix/binary-cache has the measurements).
+    binary-cache.enable = true;
 
     network.enable = true;
     boot.enable = true;

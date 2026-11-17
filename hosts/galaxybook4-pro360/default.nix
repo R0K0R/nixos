@@ -327,14 +327,16 @@
       # Evaluates this system for `nixos-rebuild-victus-15`: ~19 s there vs ~39-72 s
       # here. The other peers' wrappers still evaluate on this machine.
       evalWorker = "victus-15";
-      # ssh-ng, not ssh: nix queries realisations from SUBSTITUTERS to resolve a
-      # content-addressed output, and ssh:// is LegacySSHStore, which has no
-      # queryRealisation. It aborts with a SIGABRT stack trace rather than
-      # skipping the substituter (measured 2026-09-07, nix 2.34.8).
-      # nix-ssh on victus-15: its trusted builder account (my.remote-builder.server).
-      # yulee is unmanaged; its own nix.conf trusts r0k0r.
+      # HTTP binary caches (harmonia), not ssh-ng. Nix queries realisations from
+      # SUBSTITUTERS to resolve a content-addressed output; ssh:// (LegacySSHStore)
+      # has no queryRealisation and aborts (2026-09-07), and ssh-ng answers one
+      # query at a time and caches no miss: a no-op home build took 422 s, then
+      # 26 s over ssh-ng against 3.3 s over http, the no-substituter floor
+      # (2026-11-17, features/nix/binary-cache). harmonia serves realisations.
+      # victus-15: my.binary-cache. yulee is unmanaged: harmonia by hand, as in
+      # features/nix/binary-cache/yulee.md. Both sign with the keys below.
       # victus-15 first: it builds and holds the worlds; yulee is shared and often loaded.
-      substituters = [ "ssh-ng://nix-ssh@victus-15" "ssh-ng://r0k0r@yulee" ];
+      substituters = [ "http://victus-15:5000" "http://yulee:5000" ];
       trustedPublicKeys = [
         "yulee-1:KgdwkCN5m+hewJTk+A05PjwI3BbnZAE9NW2n634N7vM="
         "victus-15-1:W5OP8VVbu7Q7z2o5grHJ5Zp+ynm536+QVv+b8fBQJlQ="
