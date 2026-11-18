@@ -357,7 +357,20 @@
   services.tailscale = {
     enable = true;
     authKeyFile = "/run/agenix/tailscale-authkey";
+    # Declared, not a hidden pref: it was off on this node ("Tailscale DNS:
+    # disabled"), so tailnet names did not resolve here at all.
+    extraSetFlags = [ "--accept-dns=true" ];
   };
+
+  /*
+    DNS through systemd-resolved, as on galaxybook4-pro360 (see the reasoning
+    there): tailscale registers MagicDNS on tailscale0 through resolved's API
+    and NetworkManager hands each link's servers to resolved, instead of both
+    rewriting /etc/resolv.conf. NetworkManager switches to resolved by itself
+    when this is on. globaltun's DNS takeover then uses the same resolved
+    drop-in as on galaxybook (openresolv was the fallback for this host).
+  */
+  services.resolved.enable = true;
 
   # Clamshell mode -- this host runs closed-lid as a remote builder.
   services.logind.settings.Login = {
