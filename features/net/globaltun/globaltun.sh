@@ -990,12 +990,32 @@ sys.exit(1)
 PYEOF
 }
 
+# Without systemd-resolved (victus-15: NetworkManager feeding openresolv), the
+# same takeover is an exclusive openresolv entry: `-x` makes it the only source
+# of /etc/resolv.conf until it is deleted. Its marker is in /run, like the
+# resolved drop-in, so a reboot cannot leave resolv.conf pointing at a dead
+# listener.
+RESOLVCONF_IF=globaltun
+RESOLVCONF_MARK=/run/globaltun.dns-openresolv
+have_openresolv(){ command -v resolvconf >/dev/null && resolvconf --version 2>/dev/null | grep -q openresolv; }
+
 dns_takeover(){
   [ -s "$QUIC_DIR/client.json" ] || return 0
-  systemctl is-active --quiet systemd-resolved 2>/dev/null \
-    || { echo "  dns: systemd-resolved not running; system DNS left alone"; return 0; }
+  local how
+  if systemctl is-active --quiet systemd-resolved 2>/dev/null; then how=resolved
+  elif have_openresolv; then how=openresolv
+  else echo "  dns: neither systemd-resolved nor openresolv; system DNS left alone"; return 0
+  fi
   # Prove it answers BEFORE handing it every lookup on the machine.
   dns_probe || { echo "  dns: loopback listener $DNS_LOCAL did not answer; system DNS left alone" >&2; return 0; }
+  if [ "$how" = openresolv ]; then
+    printf '# globaltun: DoH through the tunnel, until globaltun down\nnameserver %s\n' "$DNS_LOCAL" \
+      | resolvconf -x -a "$RESOLVCONF_IF" \
+      || { echo "  dns: resolvconf refused; system DNS left alone" >&2; return 0; }
+    : > "$RESOLVCONF_MARK"
+    echo "  dns: resolv.conf -> $DNS_LOCAL (DoH through the tunnel, exclusive); per-network servers bypassed"
+    return 0
+  fi
   mkdir -p "${RESOLVED_DROPIN%/*}"
   # The empty assignments reset the lists, so nothing from resolved.conf
   # (DNS=, Domains=) is merged in beside ours.
@@ -1014,6 +1034,11 @@ EOF
 }
 
 dns_release(){
+  if [ -f "$RESOLVCONF_MARK" ]; then
+    resolvconf -f -d "$RESOLVCONF_IF" 2>/dev/null || true
+    rm -f "$RESOLVCONF_MARK"
+    echo "dns: resolv.conf back on the network's own servers"
+  fi
   [ -f "$RESOLVED_DROPIN" ] || return 0
   rm -f "$RESOLVED_DROPIN"
   systemctl reload systemd-resolved 2>/dev/null || true
@@ -1595,7 +1620,7 @@ status(){
       echo "  quic -> $(cat "$QUIC_DIR/host"):$QUIC_PORT  $( [ -n "$qd" ] && echo "$qd ms" || echo "not answering" )"
       echo "  ssh  -> $RHOST  $( [ -n "$sd" ] && echo "$sd ms" || echo "not answering" )"
       have_ctl && { quic_server_alive && echo "  gateway quic server: running" || echo "  gateway quic server: NOT running"; }
-      if [ -f "$RESOLVED_DROPIN" ]; then
+      if [ -f "$RESOLVED_DROPIN" ] || [ -f "$RESOLVCONF_MARK" ]; then
         echo "  system dns: $DNS_LOCAL (through the tunnel) -- $(dns_probe && echo answering || echo 'NOT ANSWERING')"
       else
         echo "  system dns: the network's own servers"
