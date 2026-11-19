@@ -14,5 +14,17 @@
   traces, cleared by hand with sqlite.) With the patch a trace whose output is
   no longer valid is replaced by the rebuild; two differing outputs that both
   exist are still an error.
+
+  nix-ca-stale-trace-is-unbuilt.patch is the other half: a LOOKUP of such a
+  trace answers "unbuilt" instead of the deleted path, which made every build
+  needing that output fail with "some outputs are unexpectedly invalid" until
+  the row was deleted by hand. Not yet reproduced: GC then a LOCAL rebuild
+  already recovers with the first patch alone (scratch-store test,
+  2026-11-19); the failing route (likely outputs from a builder or cache)
+  is untested, so keep the build-trace cleanup until it is.
 */
-ps: (ps.nixVersions.nixComponents_2_35.appendPatches [ ./nix-ca-rebuild-after-gc.patch ]).nix-everything
+ps:
+(ps.nixVersions.nixComponents_2_35.appendPatches [
+  ./nix-ca-rebuild-after-gc.patch
+  ./nix-ca-stale-trace-is-unbuilt.patch
+]).nix-everything

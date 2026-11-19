@@ -1,0 +1,40 @@
+A build trace whose output is no longer valid reads as no realisation.
+
+Garbage collection deletes a content-addressed output but keeps its row in
+BuildTraceV3. A lookup that returned such a row made the build take the
+missing path for the built output: DerivationGoal::checkPathValidity found
+the trace, the path was absent, and assertPathValidity failed with
+"some outputs are unexpectedly invalid" -- every build needing that output,
+until the row was deleted by hand (a day of failed galaxybook builds,
+2026-11-04; victus-15's GC once left 8640 such rows). queryRealisationUncached,
+which every realisation query goes through (builds, the daemon's clients,
+harmonia), now answers "unbuilt" for a stale row, so the output is rebuilt
+or substituted, and nix-ca-rebuild-after-gc.patch's registerDrvOutput then
+replaces the row. Applies on top of that patch.
+
+--- a/src/libstore/local-store.cc	2026-11-19 22:53:06.578319358 +0900
++++ b/src/libstore/local-store.cc	2026-11-19 22:53:14.889236505 +0900
+@@ -1651,8 +1651,21 @@
+     const DrvOutput & id, Callback<std::shared_ptr<const UnkeyedRealisation>> callback) noexcept
+ {
+     try {
+-        auto maybeRealisation = retrySQLite<std::optional<const UnkeyedRealisation>>(
+-            [&]() { return queryRealisation_(*_state->lock(), id); });
++        auto maybeRealisation =
++            retrySQLite<std::optional<const UnkeyedRealisation>>([&]() -> std::optional<const UnkeyedRealisation> {
++                auto state(_state->lock());
++                auto r = queryRealisation_(*state, id);
++                /* A build trace whose output is no longer valid (garbage
++                   collection deletes outputs, not their traces) is not a
++                   realisation: answering with it makes the caller take a
++                   missing path for the built output ("some outputs are
++                   unexpectedly invalid"). Report the output as unbuilt, so
++                   it is rebuilt or substituted; registerDrvOutput then
++                   replaces the stale row. */
++                if (r && !isValidPath_(*state, r->outPath))
++                    return std::nullopt;
++                return r;
++            });
+         if (maybeRealisation)
+             callback(std::make_shared<const UnkeyedRealisation>(maybeRealisation.value()));
+         else
