@@ -112,6 +112,22 @@ in
      programs.dank-material-shell on the *system* module — HM-only setups miss them.
      They are referenced by KDE Connect, GNOME-ish power UI tooling, portals, etc. */
   security.polkit.enable = true;
+  /* An admin authenticates as THEMSELVES. NixOS's admin rule offers every
+     member of wheel, and DMS's polkit agent has no identity chooser: it takes
+     the first, so on a host with two admins one of them is always asked for
+     the other's password -- r0k0r's correct password checked against
+     benjamin on galaxybook ("pam_unix(polkit-1:auth): authentication failure
+     ... user=benjamin", 2026-11-20). The first admin rule to answer wins and
+     NixOS's sits at the top of 10-nixos.rules, so this one is its own,
+     earlier file; a non-admin still falls through to wheel. */
+  environment.etc."polkit-1/rules.d/05-admin-is-self.rules".text = ''
+    polkit.addAdminRule(function(action, subject) {
+      if (subject.isInGroup("wheel")) {
+        return ["unix-user:" + subject.user];
+      }
+      return null;
+    });
+  '';
 
   # dconf package/CLI/D-Bus service itself -- see compiledGsettingsSchemas
   # above for why this alone doesn't fix schema discovery.
