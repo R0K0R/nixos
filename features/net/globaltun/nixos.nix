@@ -1087,7 +1087,8 @@ in
 
     systemd.services.globaltun-schedule = lib.mkIf cfg.schedule.enable {
       description = "Keep the globaltun tunnel up for the nightly window";
-      after = [ "network-online.target" ];
+      # No network ordering: without an active scheduled SSID the script does
+      # nothing, and the next tick (5 minutes) looks again.
       serviceConfig = {
         Type = "oneshot";
         ExecStart = lib.getExe scheduleScript;
