@@ -1105,6 +1105,8 @@ in
       serviceConfig = {
         Type = "oneshot";
         ExecStart = lib.getExe autoScript;
+        # See globaltun-schedule: the tunnel must outlive this oneshot.
+        KillMode = "process";
       };
     };
 
@@ -1125,6 +1127,13 @@ in
       serviceConfig = {
         Type = "oneshot";
         ExecStart = lib.getExe scheduleScript;
+        # `globaltun up` leaves the tunnel running (ssh, sing-box, gtlocal,
+        # gticmp, carrier-watch; setsid'd, but a cgroup is not a session), and
+        # a oneshot unit kills whatever remains in its cgroup once the script
+        # exits: the first scheduled bring-up (2026-11-22 01:50:00) was up at
+        # 01:50:11.0 and gone with the unit at 01:50:11.4. Only the script
+        # itself, long exited by then, may be killed.
+        KillMode = "process";
       };
     };
 
