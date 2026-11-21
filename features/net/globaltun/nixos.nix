@@ -482,13 +482,25 @@ let
     fi
 
     marker=/run/globaltun-schedule.window
+    smarker=/run/globaltun-schedule.share
     ours=0; [ "$(cat "$marker" 2>/dev/null)" = "$win" ] && ours=1
 
     teardown(){  # only a tunnel this schedule started
       if [ -e "$marker" ]; then
+        # The share forwards only into the tunnel (FORWARD -o $TUN), and
+        # `globaltun down` leaves it running: without this the AP stays up
+        # after the window with no way out. unshare is a no-op without one.
+        globaltun unshare >/dev/null 2>&1 || true
         if globaltun is-up; then log "$1; tearing down"; globaltun down; fi
-        rm -f "$marker"
+        rm -f "$marker" "$smarker"
       fi
+    }
+
+    share_once(){  # schedule.share: the share once per window, retried until it starts
+      ${lib.optionalString (!cfg.schedule.share) "return 0"}
+      [ "$(cat "$smarker" 2>/dev/null)" = "$win" ] && return 0
+      if globaltun share; then echo "$win" > "$smarker"; log "share started"
+      else log "share FAILED; will retry on next tick"; fi
     }
 
     if [ "$inwin" = 0 ]; then teardown "window over"; exit 0; fi
@@ -499,9 +511,10 @@ let
     for w in "''${want[@]}"; do [ "$ssid" = "$w" ] && match=1; done
     if [ "$match" = 0 ]; then teardown "left the scheduled SSIDs (now: ''${ssid:-none})"; exit 0; fi
 
-    # Already started this window: nothing more. A `globaltun down` by hand
-    # then sticks until the next window instead of being undone every tick.
-    [ "$ours" = 1 ] && exit 0
+    # Already started this window: nothing more for the tunnel. A `globaltun
+    # down` by hand then sticks until the next window instead of being undone
+    # every tick; the share is retried only while the tunnel is up.
+    if [ "$ours" = 1 ]; then globaltun is-up && share_once; exit 0; fi
     # Up by hand before the window: the person's tunnel, left alone (and so
     # not torn down at the window's end either).
     globaltun is-up && exit 0
@@ -509,6 +522,7 @@ let
     log "window $win on $ssid; bringing tunnel up"
     if GT_TIMEOUTS=${lib.escapeShellArg cfg.schedule.connectTimeouts} globaltun up; then
       echo "$win" > "$marker"
+      share_once
     else
       log "bring-up FAILED; will retry on next tick"
     fi
@@ -809,6 +823,17 @@ in
         defaultText = lib.literalExpression "config.my.globaltun.auto.connectTimeouts";
         description = "GT_TIMEOUTS for the scheduled bring-up; short, as the next tick retries.";
       };
+
+      share = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Also start the share (my.globaltun.share) once the scheduled tunnel
+          is up, retried each tick until it starts; a share stopped by hand
+          stays stopped. Whatever this says, the schedule stops a share before
+          tearing its tunnel down: the share forwards only into the tunnel.
+        '';
+      };
     };
 
     share = {
@@ -1064,6 +1089,14 @@ in
       {
         assertion = !cfg.auto.enable || config.networking.networkmanager.enable;
         message = "my.globaltun.auto.enable requires networking.networkmanager.enable (the SSID is read with nmcli)";
+      }
+      {
+        assertion = !(cfg.schedule.enable && cfg.schedule.share) || cfg.share.enable;
+        message = "my.globaltun.schedule.share requires my.globaltun.share.enable";
+      }
+      {
+        assertion = !cfg.schedule.enable || config.networking.networkmanager.enable;
+        message = "my.globaltun.schedule.enable requires networking.networkmanager.enable (the SSID is read with nmcli)";
       }
     ] ++ hopAssertions;
 
