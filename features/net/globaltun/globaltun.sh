@@ -428,7 +428,10 @@ carrier_watch_start(){
   echo $! > "$CW_PID"
 }
 carrier_watch_stop(){
-  [ -f "$CW_PID" ] && kill -- -"$(cat "$CW_PID")" 2>/dev/null
+  # A pid file can outlive its process (a watcher killed with the unit that
+  # started it): `|| true`, or under set -e the failed kill ends the script
+  # silently, before the rm that would clear the stale file.
+  [ -f "$CW_PID" ] && { kill -- -"$(cat "$CW_PID")" 2>/dev/null || true; }
   rm -f "$CW_PID"
 }
 
@@ -1566,14 +1569,15 @@ share_watch(){
   done
 }
 share_watch_start(){
-  [ -f "$SHARE_WATCH_PID" ] && kill "$(cat "$SHARE_WATCH_PID")" 2>/dev/null
+  [ -f "$SHARE_WATCH_PID" ] && { kill "$(cat "$SHARE_WATCH_PID")" 2>/dev/null || true; }
   setsid "$0" share-watch </dev/null >>"$SHARE_WATCH_LOG" 2>&1 &
   echo $! > "$SHARE_WATCH_PID"
 }
 share_watch_stop(){
   # setsid made the watcher a process-group leader; take its `iw event` and
   # any pending timer with it
-  [ -f "$SHARE_WATCH_PID" ] && kill -- -"$(cat "$SHARE_WATCH_PID")" 2>/dev/null
+  # As carrier_watch_stop: a stale pid file must not end the script.
+  [ -f "$SHARE_WATCH_PID" ] && { kill -- -"$(cat "$SHARE_WATCH_PID")" 2>/dev/null || true; }
   rm -f "$SHARE_WATCH_PID"
 }
 
