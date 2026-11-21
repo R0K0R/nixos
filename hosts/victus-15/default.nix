@@ -58,6 +58,8 @@
     */
     globaltun = {
       enable = true;
+      # Up for KSA's 02:00-06:00 curfew, on KSA only (01:50-06:10 by default).
+      schedule.enable = true;
       jumps = [ ];
       remote = "r0k0r@172.30.0.215";
       sshKey = "/home/r0k0r/ssh_key";

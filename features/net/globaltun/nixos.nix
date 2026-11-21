@@ -456,6 +456,63 @@ let
     GT_TIMEOUTS=${lib.escapeShellArg cfg.auto.connectTimeouts} globaltun up \
       || logger -t globaltun-auto "bring-up FAILED; will retry on next tick"
   '';
+
+  # my.globaltun.schedule: the tunnel up for a fixed nightly window, on the
+  # listed SSIDs only. It only ever tears down a tunnel it brought up itself,
+  # recorded as the window's start date in a /run marker (gone at reboot).
+  scheduleScript = pkgs.writeShellScriptBin "globaltun-schedule" ''
+    set -uo pipefail
+    export PATH=${lib.makeBinPath (runtimeDeps ++ [ globaltun pkgs.networkmanager pkgs.util-linux ])}:$PATH
+    exec 9>/run/globaltun-schedule.lock
+    flock -n 9 || exit 0
+    log(){ logger -t globaltun-schedule "$*"; }
+
+    mins(){ local h=''${1%%:*} m=''${1##*:}; echo $(( 10#$h * 60 + 10#$m )); }
+    up=$(mins ${lib.escapeShellArg cfg.schedule.up})
+    down=$(mins ${lib.escapeShellArg cfg.schedule.down})
+    now=$(mins "$(date +%H:%M)")
+    # The window may wrap midnight (01:50-06:10 does not; 23:00-06:00 would).
+    # A window is named by the date it started, so one that wraps is the same
+    # window on both sides of midnight.
+    if [ "$up" -le "$down" ]; then
+      inwin=$(( now >= up && now < down )); win=$(date +%F)
+    else
+      inwin=$(( now >= up || now < down ))
+      if [ "$now" -ge "$up" ]; then win=$(date +%F); else win=$(date -d yesterday +%F); fi
+    fi
+
+    marker=/run/globaltun-schedule.window
+    ours=0; [ "$(cat "$marker" 2>/dev/null)" = "$win" ] && ours=1
+
+    teardown(){  # only a tunnel this schedule started
+      if [ -e "$marker" ]; then
+        if globaltun is-up; then log "$1; tearing down"; globaltun down; fi
+        rm -f "$marker"
+      fi
+    }
+
+    if [ "$inwin" = 0 ]; then teardown "window over"; exit 0; fi
+
+    want=(${lib.escapeShellArgs cfg.schedule.ssids})
+    ssid=$(nmcli -t -f ACTIVE,SSID dev wifi 2>/dev/null | awk -F: '$1=="yes"{print $2; exit}')
+    match=0
+    for w in "''${want[@]}"; do [ "$ssid" = "$w" ] && match=1; done
+    if [ "$match" = 0 ]; then teardown "left the scheduled SSIDs (now: ''${ssid:-none})"; exit 0; fi
+
+    # Already started this window: nothing more. A `globaltun down` by hand
+    # then sticks until the next window instead of being undone every tick.
+    [ "$ours" = 1 ] && exit 0
+    # Up by hand before the window: the person's tunnel, left alone (and so
+    # not torn down at the window's end either).
+    globaltun is-up && exit 0
+
+    log "window $win on $ssid; bringing tunnel up"
+    if GT_TIMEOUTS=${lib.escapeShellArg cfg.schedule.connectTimeouts} globaltun up; then
+      echo "$win" > "$marker"
+    else
+      log "bring-up FAILED; will retry on next tick"
+    fi
+  '';
 in
 {
   options.my.globaltun = {
@@ -716,6 +773,41 @@ in
           what reacts promptly; this catches an uplink that dies without any
           link-state change.
         '';
+      };
+    };
+
+    schedule = {
+      enable = lib.mkEnableOption ''
+        the tunnel up every night from `up` to `down`, on the listed SSIDs only
+        (KSA's network curfew: no new connections from 02:00 to 06:00). It
+        tears down only a tunnel it started itself: one brought up by hand is
+        left alone, a `globaltun down` by hand sticks until the next night,
+        and leaving the SSIDs ends it early. Checked every 5 minutes and at
+        `up` and `down` exactly, so a machine waking mid-window catches up'';
+
+      ssids = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ "KSA" ];
+        description = "Wi-Fi networks the schedule applies on; anywhere else it does nothing.";
+      };
+
+      up = lib.mkOption {
+        type = lib.types.strMatching "[0-2][0-9]:[0-5][0-9]";
+        default = "01:50";
+        description = "Start of the window, HH:MM local time (curfew 02:00, with a 10-minute lead).";
+      };
+
+      down = lib.mkOption {
+        type = lib.types.strMatching "[0-2][0-9]:[0-5][0-9]";
+        default = "06:10";
+        description = "End of the window, HH:MM local time (curfew ends 06:00, plus 10 minutes).";
+      };
+
+      connectTimeouts = lib.mkOption {
+        type = lib.types.str;
+        default = cfg.auto.connectTimeouts;
+        defaultText = lib.literalExpression "config.my.globaltun.auto.connectTimeouts";
+        description = "GT_TIMEOUTS for the scheduled bring-up; short, as the next tick retries.";
       };
     };
 
@@ -989,6 +1081,27 @@ in
       timerConfig = {
         OnBootSec = "1min";
         OnUnitActiveSec = cfg.auto.interval;
+        AccuracySec = "10s";
+      };
+    };
+
+    systemd.services.globaltun-schedule = lib.mkIf cfg.schedule.enable {
+      description = "Keep the globaltun tunnel up for the nightly window";
+      after = [ "network-online.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe scheduleScript;
+      };
+    };
+
+    systemd.timers.globaltun-schedule = lib.mkIf cfg.schedule.enable {
+      description = "globaltun nightly window (${cfg.schedule.up}-${cfg.schedule.down})";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        # The two edges exactly, every 5 minutes for a machine that was asleep
+        # or off the SSIDs at the edge, and once after boot.
+        OnCalendar = [ "*-*-* ${cfg.schedule.up}:00" "*-*-* ${cfg.schedule.down}:00" "*:0/5" ];
+        OnBootSec = "2min";
         AccuracySec = "10s";
       };
     };
