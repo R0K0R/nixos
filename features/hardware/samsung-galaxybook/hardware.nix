@@ -122,7 +122,29 @@ lib.mkIf config.my.samsung-galaxybook.enable {
     exists, and PAM's fingerprint step fails at once and moves on to the password.
     Leaving tablet mode removes the flag; fprintd starts again on the next prompt.
   */
-  systemd.services.fprintd.unitConfig.ConditionPathExists = "!/run/fprintd-tablet-mode";
+  # Each flag is one reason the sensor is out of use; fprintd starts only when
+  # neither exists (repeated ConditionPathExists= must all hold).
+  systemd.services.fprintd.unitConfig.ConditionPathExists = [
+    "!/run/fprintd-tablet-mode"
+    "!/run/fprintd-keyboard-off"
+  ];
+
+  /*
+    Likewise while the built-in keyboard is switched off (my.embedded-keyboard,
+    the DMS control-panel button): the sensor sits in that keyboard deck, off
+    because the laptop is being used as a tablet or with an external keyboard,
+    so a prompt waiting for a finger only delays the password. Hooked onto the
+    toggle's own unit, so it follows the button however the unit is started or
+    stopped; ExecStopPost also runs when the detach itself failed, so the flag
+    cannot be left behind.
+  */
+  systemd.services.embedded-keyboard-disabled.serviceConfig = lib.mkIf (config.my.embedded-keyboard.enable or false) {
+    ExecStartPost = [
+      "${pkgs.coreutils}/bin/touch /run/fprintd-keyboard-off"
+      "-${config.systemd.package}/bin/systemctl stop fprintd.service"
+    ];
+    ExecStopPost = [ "${pkgs.coreutils}/bin/rm -f /run/fprintd-keyboard-off" ];
+  };
   systemd.services.fprintd-tablet-guard = {
     description = "Keep fprintd off while in tablet mode";
     wantedBy = [ "multi-user.target" ];
