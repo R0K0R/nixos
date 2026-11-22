@@ -1538,7 +1538,26 @@ share_watch(){
         [ "${GT_SHARE_CSA_COUNT:-match}" = match ] || count=$GT_SHARE_CSA_COUNT
         [ -n "$count" ] && [ "$count" -ge 1 ] || count=1
         share_log "csa: ${line#"$GT_SHARE_STA"} -> AP count=$count"
-        if share_ap_running && hostapd_cli -p "$SHARE_CTRL" -i "$GT_SHARE_AP" chan_switch "$count" "$freq" ht >/dev/null 2>&1; then
+        # STOP-FIRST (the default since 2026-11-23): even in step, the paired
+        # switch dropped the station EVERY time -- 90 of 90 on victus-15,
+        # Nov 18-23 -- costing the AP's clients ~19 s and the station its
+        # upstream (the tunnel's transport) for ~5 s. So get the AP out of the
+        # way at once: alone on the radio, the station can follow the switch
+        # itself, and the "channel switch" completion below restarts the AP
+        # on the new channel. dnsmasq is left running, so clients rejoin with
+        # their old address. The AP's clients lose the link either way (one
+        # radio); this aims to keep the station up and the gap short.
+        # GT_SHARE_CSA=paired restores the in-step switch for comparison.
+        if [ "${GT_SHARE_CSA:-stop}" != paired ]; then
+          share_ap_stop
+          share_log "upstream switching to $freq MHz; AP stopped first so the station can follow"
+          ( sleep $((count / 10 + 4))
+            if iw dev "$GT_SHARE_STA" link 2>/dev/null | grep -q '^Connected'; then
+              share_log "csa result: station FOLLOWED the switch (AP stopped first, count=$count)"
+            else
+              share_log "csa result: station dropped (AP stopped first, count=$count)"
+            fi ) &
+        elif share_ap_running && hostapd_cli -p "$SHARE_CTRL" -i "$GT_SHARE_AP" chan_switch "$count" "$freq" ht >/dev/null 2>&1; then
           share_log "upstream switching to $freq MHz; AP switching with it"
           # The outcome, for measuring this: a beacon is ~0.1 s, so the switch
           # is done after count/10 s; check comfortably after.
