@@ -1290,6 +1290,7 @@ SHARE_DNS_PID=/run/globaltun-dnsmasq.pid
 SHARE_WATCH_PID=/run/globaltun-share-watch.pid
 SHARE_WATCH_LOG=/run/globaltun-share-watch.log
 SHARE_CTRL=/run/globaltun-hostapd
+SHARE_CSA_TARGET=/run/globaltun-csa-target   # "freq epoch" of the last announced switch (hold mode)
 
 # Regulatory flags for one frequency, from the card's own table. Prints the
 # blocking reason and exits 0 when the channel cannot host an AP; exits 1 when
@@ -1538,17 +1539,21 @@ share_watch(){
         [ "${GT_SHARE_CSA_COUNT:-match}" = match ] || count=$GT_SHARE_CSA_COUNT
         [ -n "$count" ] && [ "$count" -ge 1 ] || count=1
         share_log "csa: ${line#"$GT_SHARE_STA"} -> AP count=$count"
-        # STOP-FIRST (the default since 2026-11-23): even in step, the paired
-        # switch dropped the station EVERY time -- 90 of 90 on victus-15,
-        # Nov 18-23 -- costing the AP's clients ~19 s and the station its
-        # upstream (the tunnel's transport) for ~5 s. So get the AP out of the
-        # way at once: alone on the radio, the station can follow the switch
-        # itself, and the "channel switch" completion below restarts the AP
-        # on the new channel. dnsmasq is left running, so clients rejoin with
-        # their old address. The AP's clients lose the link either way (one
-        # radio); this aims to keep the station up and the gap short.
-        # GT_SHARE_CSA=paired restores the in-step switch for comparison.
-        if [ "${GT_SHARE_CSA:-stop}" != paired ]; then
+        # GT_SHARE_CSA picks the strategy:
+        #   hold (default since 2026-11-23): the in-step switch below, so the
+        #     AP's clients follow by CSA without losing their association.
+        #     The station still drops (90 of 90, Nov 18-23), but the AP is then
+        #     already on the new channel -- the one the upstream moved to -- so
+        #     the `disconnected` handler keeps it there and waits for the
+        #     station to rejoin on it, instead of stopping the AP after 4 s.
+        #     A phone keeps its Wi-Fi (and so its sockets: Android tears them
+        #     down on any Wi-Fi loss) through ~5 s without internet.
+        #   paired: the in-step switch with the old 4 s stop.
+        #   stop: the AP stopped at once, restarted on the new channel when
+        #     the station has followed (clients reassociate).
+        csa_mode=${GT_SHARE_CSA:-hold}
+        [ "$csa_mode" = hold ] && printf '%s %s\n' "$freq" "$(date +%s)" > "$SHARE_CSA_TARGET"
+        if [ "$csa_mode" = stop ]; then
           share_ap_stop
           share_log "upstream switching to $freq MHz; AP stopped first so the station can follow"
           ( sleep $((count / 10 + 4))
@@ -1562,10 +1567,12 @@ share_watch(){
           # The outcome, for measuring this: a beacon is ~0.1 s, so the switch
           # is done after count/10 s; check comfortably after.
           ( sleep $((count / 10 + 4))
+            apf=$(iw dev "$GT_SHARE_AP" info 2>/dev/null | sed -n 's/.*channel [0-9]* (\([0-9]*\) MHz.*/\1/p')
+            cl=$(iw dev "$GT_SHARE_AP" station dump 2>/dev/null | grep -c '^Station')
             if iw dev "$GT_SHARE_STA" link 2>/dev/null | grep -q '^Connected'; then
-              share_log "csa result: station FOLLOWED the switch (count=$count)"
+              share_log "csa result: station FOLLOWED the switch (count=$count); AP on ${apf:-?} MHz, $cl client(s)"
             else
-              share_log "csa result: station dropped (count=$count)"
+              share_log "csa result: station dropped (count=$count); AP on ${apf:-?} MHz, $cl client(s)"
             fi ) &
         else
           # Cannot follow in place: get out of the way so the station can switch.
@@ -1576,9 +1583,25 @@ share_watch(){
         # A failed switch or a roam. Give the supplicant a moment on its own
         # first -- it often rejoins on the same channel -- then clear the way.
         ( sleep 4
-          iw dev "$GT_SHARE_STA" link 2>/dev/null | grep -q '^Connected' && exit 0
-          share_ap_stop
-          share_log "station still disconnected; AP stopped so it can rejoin on any channel" ) & ;;
+          linked(){ iw dev "$GT_SHARE_STA" link 2>/dev/null | grep -q '^Connected'; }
+          linked && exit 0
+          # hold: right after a switch the AP already sits on the channel the
+          # upstream moved to, where the station can rejoin without the AP
+          # moving. Keep its clients and wait (30 s) before clearing the way.
+          read -r tf ts < "$SHARE_CSA_TARGET" 2>/dev/null || tf=
+          apf=$(iw dev "$GT_SHARE_AP" info 2>/dev/null | sed -n 's/.*channel [0-9]* (\([0-9]*\) MHz.*/\1/p')
+          if [ -n "$tf" ] && [ $(( $(date +%s) - ${ts:-0} )) -le 60 ] && share_ap_running && [ "$apf" = "$tf" ]; then
+            share_log "station dropped in the switch; AP held on $tf MHz with its clients, waiting for the station"
+            i=0
+            while [ "$i" -lt 26 ]; do
+              sleep 1; i=$((i + 1))
+              linked && { share_log "station rejoined after $((i + 4)) s; AP and its clients kept"; exit 0; }
+            done
+            share_log "station not back in 30 s; AP stopped so it can rejoin on any channel"
+          else
+            share_log "station still disconnected; AP stopped so it can rejoin on any channel"
+          fi
+          share_ap_stop ) & ;;
       *connected*|*roamed*|*"channel switch"*)
         # joined or roamed (maybe elsewhere), or a switch finished: put the AP
         # where the station is. (Formats: iw event.c -- "connected to <bssid>",
