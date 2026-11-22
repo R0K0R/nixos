@@ -15,7 +15,26 @@ in
     keep-derivations); direnv itself is a home feature
   '';
 
-  config = lib.mkIf cfg.enable {
+  /*
+    Off by default since 2026-11-23. keep-outputs/keep-derivations are store-
+    wide, not per-shell: they keep the whole BUILD chain of every live path. On
+    galaxybook (tuned world, built remotely, never locally) a GC freed 8.7 GiB
+    of a 358.2 GiB store; measured from the database, only 57.6 GiB was needed
+    at runtime and 300.6 GiB was kept by these two alone -- 47 clang builds, 250
+    gcc, 1565 sources, 82 claude-code versions. The cost of off: a dev shell
+    re-fetches its inputs on the first `cd` after a GC; and a host that builds
+    for itself loses its toolchain to a GC, which is why this is a choice.
+  */
+  options.my.direnv.keepShellInputs = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = ''
+      Set keep-outputs and keep-derivations, so a GC keeps nix-direnv dev
+      shells' inputs -- and every live path's build chain with them.
+    '';
+  };
+
+  config = lib.mkIf (cfg.enable && cfg.keepShellInputs) {
     /*
       Host-wide, because these are nix-daemon settings and the daemon is not
       per-user. If anyone on the machine uses nix-direnv, the store has to behave this way for everyone.
