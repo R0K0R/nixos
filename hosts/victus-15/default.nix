@@ -227,6 +227,10 @@
     # This store as http://victus-15:5000 for galaxybook's substituters, signed
     # with the key above (features/nix/binary-cache has the measurements).
     binary-cache.enable = true;
+    # The system epoch and with it hm-switch / hm-rollback, as on galaxybook:
+    # this host's home (~/config/home, r0k0r@victus-15) switches the same way
+    # instead of by hand from a bundle (its last home was 2026-11-09).
+    epoch.enable = true;
 
     network.enable = true;
     boot.enable = true;
