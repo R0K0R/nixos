@@ -97,8 +97,15 @@
   system.stateVersion = "26.05";
 
   # Kernel choice stays in the host file: it is a property of this machine's
-  # hardware, not of any feature.
-  boot.kernelPackages = pkgs.linuxPackages_7_2;
+  # hardware, not of any feature. The newest line, always (2026-11-23; 7.3.5
+  # then): a pinned line goes end-of-life upstream and stops evaluating, as
+  # 7.2 did at the nixpkgs bump. The cost: the MAX98390 backport
+  # (features/hardware/samsung-galaxybook/max98390-hda.patch) and the webcam
+  # modules meet each new line untested -- if one fails to build, pin the
+  # previous line here until it is fixed. 7.3 was checked
+  # (feat/gb4-kernel-7.3, 46bc489): one fuzzed alc269.c hunk, all five
+  # quirk rows in place, both webcam modules built.
+  boot.kernelPackages = pkgs.linuxPackages_latest;
 
   my = {
     tuning = {
