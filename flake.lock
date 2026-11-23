@@ -43,11 +43,11 @@
     "claude-helper": {
       "flake": false,
       "locked": {
-        "lastModified": 1791789990,
-        "narHash": "sha256-2pk+70aXVBT0yXnKQFcTHV0HUAsfCoAXytKsSHloTIs=",
+        "lastModified": 1795430421,
+        "narHash": "sha256-/m7PwkTkHutPMC5YEWqfRv8mHUb8VzDSC2pnC1inG2g=",
         "owner": "R0K0R",
         "repo": "dms_claude_helper",
-        "rev": "5098ba3c0a6da7a6884587fe82642f1ec60cd128",
+        "rev": "fa7ce61845f903d29c42f6c762c65fc1972aabd8",
         "type": "github"
       },
       "original": {
