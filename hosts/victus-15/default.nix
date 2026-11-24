@@ -138,6 +138,13 @@
       identityPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
     };
 
+    # Notion for the planner server (the phone's MCP endpoint, the home's my.planner-server): the token is the
+    # `auth` user's, reached only through `auth notion` (features/apps/auth), as on galaxybook.
+    auth = {
+      enable = true;
+      services.notion.credentialsFile = ../../age/notion-credentials.age;
+    };
+
     /*
       r0k0r's login shell here is zsh (above), matching galaxybook.
 

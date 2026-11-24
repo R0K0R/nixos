@@ -456,6 +456,14 @@
     # features/_meta asserts my.agenix.enable alongside this.
     emacs.authinfoSecret = ../../age/authinfo.age;
 
+    # Logins usable but not readable by r0k0r (school sites, Notion): each secret is the `auth` user's, and
+    # `auth <service> ...` is the only way in (features/apps/auth).
+    auth = {
+      enable = true;
+      services.ksa.credentialsFile = ../../age/ksa-credentials.age;
+      services.notion.credentialsFile = ../../age/notion-credentials.age;
+    };
+
     # The Doom config, its fonts and the daemon are the home's (emacs there).
 
     greetd.enable = true;
