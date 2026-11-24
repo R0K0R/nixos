@@ -338,6 +338,14 @@
     # LocalSend's port (53317 TCP+UDP), so other devices can see and send to
     # this laptop; the app is a one-off package in the home.
     localsend.enable = true;
+    # Session cookies for the copykiller MCP server without r0k0r being able
+    # to read the password -- features/apps/copykiller-login.
+    # Off until the ciphertext exists (and is git-added), so a missing secret
+    # cannot block an unrelated switch.
+    copykiller-login = {
+      enable = builtins.pathExists ../../age/copykiller-credentials.age;
+      credentialsSecret = ../../age/copykiller-credentials.age;
+    };
 
     # X-Folding RGB Bluetooth keyboard: natural scroll on its trackpad without
     # inverting pinch-zoom (the firmware sends pinch as Ctrl + wheel).

@@ -185,6 +185,13 @@ in
   */
   "age/github-recovery-codes.age".publicKeys = [ galaxybook ];
 
+  /*
+    ksa.copykiller.com login (COPYKILLER_ID= / COPYKILLER_PW= lines), read only
+    by the copykiller-auth system user -- features/apps/copykiller-login. The
+    point is that r0k0r (and any agent running as r0k0r) cannot read it.
+  */
+  "age/copykiller-credentials.age".publicKeys = [ galaxybook ];
+
   # OpenVPN profile, credentials inline -- features/openvpn/nixos.nix.
   "age/openvpn-profile.age".publicKeys = [ galaxybook ];
 
