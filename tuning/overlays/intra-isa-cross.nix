@@ -176,6 +176,14 @@
       # testrwlock times out under build load (thread scheduling, not a bug).
       sdl3 = prev.sdl3.overrideAttrs (_: { doCheck = false; });
 
+      # vips' `patchShebangs .` resolves interpreters on the BUILD PATH, but its
+      # python3 is a host buildInput, which natively is on that PATH too and
+      # here is not: doc/fixup-gir-for-doc.py kept "#!/usr/bin/env python3"
+      # and the gir docs step died with "bad interpreter" (2026-11-25).
+      vips = prev.vips.overrideAttrs (o: {
+        nativeBuildInputs = (o.nativeBuildInputs or [ ]) ++ [ final.buildPackages.python3 ];
+      });
+
       # perl-Tk's PNG/Makefile.PL calls `pkg-config libpng` directly.  In
       # IntraISACross the setup hook for libpng.dev adds to PKG_CONFIG_PATH
       # but the value isn't visible when Makefile.PL shells out.  Set it
@@ -360,6 +368,17 @@
           cache.nixos.org (verified).
         */
         shader-slang = prev.pkgsBuildBuild.shader-slang;
+
+        /*
+          intel-npu-driver, the Meteor Lake NPU's firmware and userspace driver
+          (hardware.firmware). It links openvino-intel-npu-compiler, whose
+          vendored flatbuffers never builds the flatc it then runs under
+          IntraISACross ("thirdparty/flatbuffers/install/bin/flatc ... missing",
+          2026-11-25). A firmware blob and an offline model compiler gain
+          nothing from tuning; the untuned build substitutes from
+          cache.nixos.org (verified).
+        */
+        intel-npu-driver = prev.pkgsBuildBuild.intel-npu-driver;
 
         /*
           deno, for the same "take the BUILD-platform build" reason, though the

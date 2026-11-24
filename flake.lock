@@ -509,11 +509,11 @@
     "hyprland-nixos": {
       "flake": false,
       "locked": {
-        "lastModified": 1795537024,
-        "narHash": "sha256-AzCIZaemRy81Bx+qLi2MGGYxEcj05ZGa3ixjiiWJNCE=",
+        "lastModified": 1795562402,
+        "narHash": "sha256-3eZ9qwXqpjp1g7a5UZdrhVPFQtli9EjxjloQlshJEKs=",
         "owner": "R0K0R",
         "repo": "Hyprland",
-        "rev": "c1c9d789374b2e67a1cb6c74d6bdd3869ead361a",
+        "rev": "a303db9543a5c39ab04edc3f6f21af62461db337",
         "type": "github"
       },
       "original": {
@@ -631,11 +631,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1795511885,
-        "narHash": "sha256-kv1qGTGaUZWCP2ajQQRInmriKOALoA4C3C8nTG6bVAk=",
+        "lastModified": 1795562902,
+        "narHash": "sha256-IZmjEamygHEpaAcnbHQJIVac/W7EbHo9HYLnjjPyx4M=",
         "owner": "R0K0R",
         "repo": "nixpkgs",
-        "rev": "0db018641ef6f7907d09510ae1667a255428fae6",
+        "rev": "bf23c729bedbd9c6db7089369e306329cc7cb63f",
         "type": "github"
       },
       "original": {
