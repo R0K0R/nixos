@@ -85,8 +85,8 @@ in
         save = true;
         path = "/tmp/dms-greeter.log";
       };
-
-      quickshell.package = pkgs.quickshell;
+      # No runtime to pick any more: dms embeds Quickshell as dux-qt-base,
+      # built against this system's nixpkgs by default.
     };
 
     /*
