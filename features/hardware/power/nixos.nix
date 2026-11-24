@@ -76,11 +76,18 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    services.scx = {
+    # nixpkgs replaced services.scx with scx_loader (a D-Bus daemon, `scxctl`):
+    # the scheduler is its default_sched, and the arguments are that scheduler's
+    # args for the mode it starts in (default_mode Auto -> auto_mode).
+    services.scx-loader = {
       enable = true;
-      package = pkgs.scx.rustscheds; # scx_bpfland is a Rust scheduler; avoids C BPF build
-      scheduler = cfg.scheduler;
-      extraArgs = if cfg.schedulerArgs != null then cfg.schedulerArgs else schedArgs;
+      schedsPackages = [ pkgs.scx.rustscheds ]; # scx_bpfland is a Rust scheduler; avoids C BPF build
+      config = {
+        default_sched = cfg.scheduler;
+        default_mode = "Auto";
+        scheds.${cfg.scheduler}.auto_mode =
+          if cfg.schedulerArgs != null then cfg.schedulerArgs else schedArgs;
+      };
     };
 
     powerManagement = {

@@ -1,4 +1,4 @@
-{ config, inputs, lib, pkgs, ... }:
+{ config, inputs, lib, options, pkgs, ... }:
 
 let
   cfg = config.my.dms;
@@ -85,8 +85,25 @@ in
         save = true;
         path = "/tmp/dms-greeter.log";
       };
-
-      quickshell.package = pkgs.quickshell;
+      # No runtime to pick any more: dms embeds Quickshell as dux-qt-base,
+      # built against this system's nixpkgs by default.
+      #
+      # Tuned hosts only: its CMake try_run()s a cpptrace signal-safe-unwind
+      # check, which under IntraISACross is a cross build and cannot run
+      # ("try_run() invoked in cross-compiling mode", 2026-11-25). The check
+      # only proves cpptrace was built with libunwind, and the tuned cpptrace
+      # is (-DCPPTRACE_UNWIND_WITH_LIBUNWIND=TRUE); upstream's switch for
+      # exactly this case is DO_NOT_CHECK_CPPTRACE_USABILITY.
+      duxQtBase.package =
+        let
+          default = options.programs.dms-greeter.duxQtBase.package.default;
+        in
+        if ((pkgs.stdenv.hostPlatform.gcc or { }).arch or "") != "" then
+          default.overrideAttrs (o: {
+            cmakeFlags = (o.cmakeFlags or [ ]) ++ [ "-DDO_NOT_CHECK_CPPTRACE_USABILITY=ON" ];
+          })
+        else
+          default;
     };
 
     /*
