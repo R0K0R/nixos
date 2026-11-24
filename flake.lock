@@ -509,11 +509,11 @@
     "hyprland-nixos": {
       "flake": false,
       "locked": {
-        "lastModified": 1793845939,
-        "narHash": "sha256-8EZcH3ASqdehYMXCQ9mOhSSiNHZPBA3NrY83hswuztQ=",
+        "lastModified": 1795537024,
+        "narHash": "sha256-AzCIZaemRy81Bx+qLi2MGGYxEcj05ZGa3ixjiiWJNCE=",
         "owner": "R0K0R",
         "repo": "Hyprland",
-        "rev": "1ec3d067a66555a72accb2e73353e18c7aa892d7",
+        "rev": "c1c9d789374b2e67a1cb6c74d6bdd3869ead361a",
         "type": "github"
       },
       "original": {

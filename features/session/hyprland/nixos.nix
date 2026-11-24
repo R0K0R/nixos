@@ -85,7 +85,7 @@
     nixpkgs.overlays = [
       (final: prev:
         let
-          forkBase = "0.56.2";
+          forkBase = "0.57.2";
           branch = "nixos";
           src = inputs.feat-hyprland.src.${branch};
         in
