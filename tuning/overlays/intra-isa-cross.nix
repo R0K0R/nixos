@@ -349,6 +349,19 @@
         nixfmt = prev.pkgsBuildBuild.nixfmt;
 
         /*
+          shader-slang, for kitty, which puts slangc on its runtime PATH to
+          compile shaders. Under IntraISACross CMake is cross-compiling, and
+          slang then runs its own build-time generators (slang-embed, ...) by
+          bare name, expecting prebuilt ones: "slang-embed: command not found"
+          (2026-11-25). Building them for the host would not help either --
+          they would be -march=meteorlake binaries run on the Zen builders,
+          deno's mksnapshot trap. A shader compiler kitty calls now and then
+          gains nothing from tuning; the untuned build substitutes from
+          cache.nixos.org (verified).
+        */
+        shader-slang = prev.pkgsBuildBuild.shader-slang;
+
+        /*
           deno, for the same "take the BUILD-platform build" reason, though the
           failure it avoids is different.
 
