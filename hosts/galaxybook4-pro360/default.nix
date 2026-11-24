@@ -464,6 +464,10 @@
     # features/_meta asserts my.agenix.enable alongside this.
     emacs.authinfoSecret = ../../age/authinfo.age;
 
+    # adb to the phone: the key lives with a separate account, the free tools need nothing, and the
+    # full `phone adb shell` needs a polkit prompt you answer (features/apps/phone-adb).
+    phone-adb.enable = true;
+
     # Logins usable but not readable by r0k0r (school sites, Notion): each secret is the `auth` user's, and
     # `auth <service> ...` is the only way in (features/apps/auth).
     auth = {
