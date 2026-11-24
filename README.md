@@ -176,7 +176,7 @@ empty category and two features with the same leaf name are errors.
 | `session/` | compositor, dms, fcitx, fonts, greetd, hakuspace, hyprland, niri, qt-theming, session-env, session-services, tuigreet |
 | `net/` | discovery, globaltun, headscale, network, openvpn, syncthing, tailscale, wireless-display |
 | `shell/` | fish, zsh |
-| `apps/` | claude-code, claude-desktop (system half), claude-science (system half), desktop-apps (system half), emacs, firefox, flatpak, hop, kakaotalk-system, opendisplay, waydroid |
+| `apps/` | claude-code, claude-desktop (system half), claude-science (system half), desktop-apps (system half), emacs, firefox, flatpak, auth, copykiller-login, hop, kakaotalk-system, opendisplay, phone-adb, waydroid |
 | `dev/` | direnv (system half), python-dev |
 
 System-wide features live here; a user's own features live in that user's

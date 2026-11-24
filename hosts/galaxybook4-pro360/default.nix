@@ -338,6 +338,14 @@
     # LocalSend's port (53317 TCP+UDP), so other devices can see and send to
     # this laptop; the app is a one-off package in the home.
     localsend.enable = true;
+    # Session cookies for the copykiller MCP server without r0k0r being able
+    # to read the password -- features/apps/copykiller-login.
+    # Off until the ciphertext exists (and is git-added), so a missing secret
+    # cannot block an unrelated switch.
+    copykiller-login = {
+      enable = builtins.pathExists ../../age/copykiller-credentials.age;
+      credentialsSecret = ../../age/copykiller-credentials.age;
+    };
 
     # X-Folding RGB Bluetooth keyboard: natural scroll on its trackpad without
     # inverting pinch-zoom (the firmware sends pinch as Ctrl + wheel).
@@ -455,6 +463,18 @@
     # Gnus credentials via agenix -> /run/agenix/authinfo (tmpfs, owner r0k0r).
     # features/_meta asserts my.agenix.enable alongside this.
     emacs.authinfoSecret = ../../age/authinfo.age;
+
+    # adb to the phone: the key lives with a separate account, the free tools need nothing, and the
+    # full `phone adb shell` needs a polkit prompt you answer (features/apps/phone-adb).
+    phone-adb.enable = true;
+
+    # Logins usable but not readable by r0k0r (school sites, Notion): each secret is the `auth` user's, and
+    # `auth <service> ...` is the only way in (features/apps/auth).
+    auth = {
+      enable = true;
+      services.ksa.credentialsFile = ../../age/ksa-credentials.age;
+      services.notion.credentialsFile = ../../age/notion-credentials.age;
+    };
 
     # The Doom config, its fonts and the daemon are the home's (emacs there).
 

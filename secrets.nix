@@ -140,6 +140,15 @@ in
   # r0k0r, so the secret needs owner = "r0k0r" where it is declared.
   "age/authinfo.age".publicKeys = [ galaxybook ];
 
+  # Logins for features/apps/auth: KEY=value lines, decrypted for the `auth` system user only, never r0k0r.
+  # galaxybook only: the planner that uses them runs there.
+  # School sites (ksain.kr, my.ksa.hs.kr): KSAIN_ID/KSAIN_PW/MYKSA_ID/MYKSA_PW.
+  "age/ksa-credentials.age".publicKeys = [ galaxybook ];
+  # The DMS planner's Notion integration (NOTION_TOKEN), shared with the PLANNER page only.
+  # victus-15 too: its planner (the phone's MCP server, features/apps/planner-server) reads and writes the plan in
+  # Notion through the same `auth notion`.
+  "age/notion-credentials.age".publicKeys = [ galaxybook victus15 ];
+
   /*
     victus-15's TAILSCALE pre-auth key, read once by `tailscale up` and inert
     afterwards while the node stays authenticated. Its own file rather than a
@@ -175,6 +184,13 @@ in
     melt seed phrase, which matters most exactly when this file is needed.
   */
   "age/github-recovery-codes.age".publicKeys = [ galaxybook ];
+
+  /*
+    ksa.copykiller.com login (COPYKILLER_ID= / COPYKILLER_PW= lines), read only
+    by the copykiller-auth system user -- features/apps/copykiller-login. The
+    point is that r0k0r (and any agent running as r0k0r) cannot read it.
+  */
+  "age/copykiller-credentials.age".publicKeys = [ galaxybook ];
 
   # OpenVPN profile, credentials inline -- features/openvpn/nixos.nix.
   "age/openvpn-profile.age".publicKeys = [ galaxybook ];
