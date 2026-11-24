@@ -240,6 +240,29 @@
     "wrapGAppsHook4"
     "wrapGAppsNoGuiHook"
   ],
+
+  /*
+    Never host-aliased: packages whose OUTPUT names other host libraries by
+    absolute path, so an untuned copy is wrong at runtime even when nothing in
+    it is host-runtime code. Host splice only; the build splice is consistent
+    either way (untuned tool, untuned paths).
+
+    gobject-introspection-unwrapped ships cairo-1.0.typelib, whose
+    shared-library is "${lib.getLib cairo}/lib/libcairo-gobject.so.2"
+    (absolute_gir_path.patch). Aliased, it is upstream's callPackage result,
+    and the tuned wrapper -- gobject-introspection.nix does
+    `gobject-introspection-unwrapped.override { stdenv }` -- keeps every other
+    argument upstream gave it, cairo included: a GI named and compiled as
+    tuned, whose typelib points at UNTUNED cairo. pygobject then loads a second
+    libcairo-gobject next to the tuned one GTK linked, and any GTK3 Python app
+    passing a cairo.Region dies on the duplicate CairoRegion GType (found by
+    the foldpen session, 2026-11-25; installed tuned GI 20n8j3p5 -> untuned
+    cairo 3jf4p2dc). Only visible with a warm cache: a cold one skips the host
+    splice, which is why the 2026-11-24 rebuild looked fine.
+  */
+  hostKeepTunedNames ? [
+    "gobject-introspection-unwrapped"
+  ],
 }:
 
 let
@@ -337,7 +360,7 @@ let
 
   # Host splice: same names, minus the hard exclusion list and minus anything
   # genuinely host-runtime.
-  knownPatchedSet = lib.genAttrs knownPatchedNames (_: true);
+  knownPatchedSet = lib.genAttrs (knownPatchedNames ++ hostKeepTunedNames) (_: true);
   hostAliasNames = builtins.filter (
     n: !(neverAliasSet ? ${n}) && !(knownPatchedSet ? ${n}) && !(hostRuntimeClassifier.isHostRuntime n)
   ) structurallyKeepableNames;
