@@ -184,6 +184,17 @@
         nativeBuildInputs = (o.nativeBuildInputs or [ ]) ++ [ final.buildPackages.python3 ];
       });
 
+      # babl only generates babl-0.1.vapi when `dependency('vapigen')` -- a
+      # HOST pkg-config lookup -- finds vapigen.pc, and vala is only in its
+      # nativeBuildInputs, which natively is the same thing and here is not.
+      # So the tuned babl shipped its GIR but no vapi, and gegl's vapigen
+      # died on "Package `babl-0.1' not found" (2026-11-25). nixpkgs already
+      # puts vala in gegl's buildInputs for this; babl gets the build
+      # platform's, so the lookup succeeds and the vapigen run is native.
+      babl = prev.babl.overrideAttrs (o: {
+        buildInputs = (o.buildInputs or [ ]) ++ [ final.buildPackages.vala ];
+      });
+
       # perl-Tk's PNG/Makefile.PL calls `pkg-config libpng` directly.  In
       # IntraISACross the setup hook for libpng.dev adds to PKG_CONFIG_PATH
       # but the value isn't visible when Makefile.PL shells out.  Set it
