@@ -404,6 +404,17 @@
         localsend = prev.pkgsBuildBuild.localsend;
 
         /*
+          gimp 3.2: its meson configure runs test programs (meson.build:583,
+          "Can not run test applications in this cross environment"), and
+          nixpkgs' gimp has no cross support at all (2026-11-25). Untuned from
+          cache.nixos.org (verified). A REAL cost, unlike the entries above:
+          it brings the untuned gegl/babl with it, where gimp's pixel work
+          happens. A tuned gimp needs a meson exe_wrapper that can run
+          meteorlake binaries on the Zen builders -- not available.
+        */
+        gimp = prev.pkgsBuildBuild.gimp;
+
+        /*
           deno, for the same "take the BUILD-platform build" reason, though the
           failure it avoids is different.
 
