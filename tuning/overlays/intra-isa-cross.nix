@@ -392,6 +392,18 @@
         intel-npu-driver = prev.pkgsBuildBuild.intel-npu-driver;
 
         /*
+          localsend, a Flutter app: its C++ plugins are compiled by clang
+          straight from Flutter's CMake, while the stdenv (and so the
+          maybe-uninitialized gate in pkgs-config.nix) is GCC's. The clang
+          wrapper reads the same NIX_CXXFLAGS_COMPILE, gets the GCC-only
+          -Wno-error=maybe-uninitialized, and Flutter's -Werror makes the
+          unknown option fatal (2026-11-25). Dart is AOT-compiled and the
+          plugins are glue, so tuning buys nothing; the untuned build
+          substitutes from cache.nixos.org (verified).
+        */
+        localsend = prev.pkgsBuildBuild.localsend;
+
+        /*
           deno, for the same "take the BUILD-platform build" reason, though the
           failure it avoids is different.
 
