@@ -415,15 +415,6 @@
         gimp = prev.pkgsBuildBuild.gimp;
 
         /*
-          galaxy-buds-client (C#): tuned, its apphost pulls a tuned dotnet-vmr,
-          i.e. the whole .NET SDK from source plus a stage0 SDK before it
-          (2026-11-25, the last hours of the gb4 home build). A Bluetooth
-          control panel gains nothing; the untuned build substitutes from
-          cache.nixos.org (verified).
-        */
-        galaxy-buds-client = prev.pkgsBuildBuild.galaxy-buds-client;
-
-        /*
           deno, for the same "take the BUILD-platform build" reason, though the
           failure it avoids is different.
 
