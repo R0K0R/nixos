@@ -1358,6 +1358,37 @@ CONF
   )
 }
 
+# Share clients reach what this host reaches DIRECTLY -- the keep-direct
+# prefixes and the carrier (the tunnel's own server, e.g. yulee on the KSA LAN)
+# -- over the station, masqueraded to the station's address. Without it, a
+# client's 10.43.0.x source left victus as-is and the LAN, which has never
+# heard of that subnet, sent the reply to its gateway: a client of the AP could
+# not reach yulee except through an ssh jump via this host. Limited to those
+# destinations on purpose: everything else still goes only through the tunnel,
+# and a tunnel that is down does NOT turn into direct internet over the LAN.
+share_lan_dsts(){ echo ${GT_KEEP_DIRECT:-} ${CARRIER:+$CARRIER/32}; }
+share_lan(){ # $1: add | del
+  local d
+  for d in $(share_lan_dsts); do
+    if [ "$1" = add ]; then
+      iptables -C FORWARD -i "$GT_SHARE_AP" -o "$GT_SHARE_STA" -d "$d" -j ACCEPT 2>/dev/null ||
+        iptables -I FORWARD 1 -i "$GT_SHARE_AP" -o "$GT_SHARE_STA" -d "$d" -j ACCEPT
+      iptables -t nat -C POSTROUTING -s "$GT_SHARE_ADDR" -o "$GT_SHARE_STA" -d "$d" -j MASQUERADE 2>/dev/null ||
+        iptables -t nat -A POSTROUTING -s "$GT_SHARE_ADDR" -o "$GT_SHARE_STA" -d "$d" -j MASQUERADE
+    else
+      iptables -D FORWARD -i "$GT_SHARE_AP" -o "$GT_SHARE_STA" -d "$d" -j ACCEPT 2>/dev/null || true
+      iptables -t nat -D POSTROUTING -s "$GT_SHARE_ADDR" -o "$GT_SHARE_STA" -d "$d" -j MASQUERADE 2>/dev/null || true
+    fi
+  done
+  # Replies: only what belongs to a connection a client opened.
+  if [ "$1" = add ]; then
+    iptables -C FORWARD -i "$GT_SHARE_STA" -o "$GT_SHARE_AP" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null ||
+      iptables -I FORWARD 1 -i "$GT_SHARE_STA" -o "$GT_SHARE_AP" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+  else
+    iptables -D FORWARD -i "$GT_SHARE_STA" -o "$GT_SHARE_AP" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
+  fi
+}
+
 share_up(){
   need_root
   [ "${GT_SHARE:-0}" = 1 ] || { echo "sharing is not enabled (my.globaltun.share.enable)" >&2; exit 1; }
@@ -1448,7 +1479,8 @@ share_up(){
   iptables -C FORWARD -i "$TUN" -o "$GT_SHARE_AP" -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i "$TUN" -o "$GT_SHARE_AP" -j ACCEPT
   # No NAT: sing-box terminates each flow and re-originates it, then writes the
   # reply back to the tun addressed to the original client. Masquerading would
-  # only add work.
+  # only add work. The direct LAN destinations are the exception: share_lan.
+  share_lan add
   echo 1 > /proc/sys/net/ipv4/ip_forward
 
   # Bounded: a wedged firmware made hostapd hang here, holding the vif while
@@ -1632,6 +1664,7 @@ share_down(){
   iptables -D INPUT -i "$GT_SHARE_AP" -j ACCEPT 2>/dev/null || true
   iptables -D FORWARD -i "$GT_SHARE_AP" -o "$TUN" -j ACCEPT 2>/dev/null || true
   iptables -D FORWARD -i "$TUN" -o "$GT_SHARE_AP" -j ACCEPT 2>/dev/null || true
+  share_lan del
   ip link set "$GT_SHARE_AP" down 2>/dev/null || true
   echo "sharing stopped"
 }
