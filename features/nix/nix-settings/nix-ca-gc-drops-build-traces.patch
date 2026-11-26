@@ -1,0 +1,72 @@
+GC: delete a path's build traces with the path.
+
+2.35 dropped the BuildTraceV3 -> ValidPaths foreign key, whose cascade used
+to delete a realisation together with its output. Since then every GC leaves
+a stale trace per deleted CA output. Locally the two earlier patches cope
+(a rebuild replaces it; a lookup answers "unbuilt"), but a binary cache that
+serves the database directly does not: harmonia reads db.sqlite and handed
+gb4 traces for outputs yulee had GC'd, and every build needing one failed
+with "path ... is required, but there is no substituter that can build it"
+(2026-11-26).
+
+invalidatePath now deletes the traces naming the path as an output, as the
+cascade did. A migration adds the index that lookup needs and drops the
+stale traces older GCs already left -- what the manual sqlite cleanup did.
+
+--- a/src/libstore/local-store.cc	2026-11-26 16:32:22.237620164 +0900
++++ b/src/libstore/local-store.cc	2026-11-26 16:32:39.600202230 +0900
+@@ -113,6 +113,7 @@
+     SQLiteStmt RegisterRealisedOutput;
+     SQLiteStmt UpdateRealisedOutput;
+     SQLiteStmt DeleteRealisedOutputByName;
++    SQLiteStmt DeleteRealisedOutputsByPath;
+     SQLiteStmt QueryValidDerivers;
+     SQLiteStmt QueryDerivationOutputs;
+     SQLiteStmt QueryRealisedOutput;
+@@ -399,6 +400,14 @@
+                     outputName = ?
+                 ;
+             )");
++        state->stmts->DeleteRealisedOutputsByPath.create(
++            state->db,
++            R"(
++                delete from BuildTraceV3
++                where
++                    outputPath = ?
++                ;
++            )");
+         state->stmts->QueryRealisedOutput.create(
+             state->db,
+             R"(
+@@ -647,6 +656,16 @@
+ 
+     maybeUpgrade("20260309-drop-redundant-indexreferrer", "drop index if exists IndexReferrer");
+ 
++    /* invalidatePath now deletes a path's build traces by output path, once
++       per GC'd path, so that lookup needs an index. The same migration drops
++       the stale traces older GCs already left behind (outputs no longer
++       valid), which otherwise had to be cleared by hand. */
++    if (experimentalFeatureSettings.isEnabled(Xp::CaDerivations))
++        maybeUpgrade(
++            "20261126-buildtrace-gc-with-outputs",
++            "create index if not exists IndexBuildTraceV3OutputPath on BuildTraceV3(outputPath);\n"
++            "delete from BuildTraceV3 where outputPath not in (select path from ValidPaths)");
++
+     return ret;
+ }
+ 
+@@ -1040,6 +1059,14 @@
+ 
+     state.stmts->InvalidatePath.use().apply(printStorePath(path)).exec();
+ 
++    /* Since BuildTraceV3 dropped the foreign key to ValidPaths, deleting a
++       path left every build trace naming it as an output behind: a stale
++       trace that a binary cache serving this database directly (harmonia
++       reads db.sqlite) then hands out for an output nobody has. Delete the
++       traces along with the path, as the old foreign key's cascade did. */
++    if (experimentalFeatureSettings.isEnabled(Xp::CaDerivations))
++        state.stmts->DeleteRealisedOutputsByPath.use().apply(printStorePath(path)).exec();
++
+     /* Note that the foreign key constraints on the Refs table take
+        care of deleting the references entries for `path'. */
+ 

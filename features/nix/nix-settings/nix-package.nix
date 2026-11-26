@@ -1,6 +1,6 @@
 /*
-  The Nix every host runs: 2.35 (why 2.35: nixos.nix here), plus the one
-  patch below. A function of the package set, so the default here and the
+  The Nix every host runs: 2.35 (why 2.35: nixos.nix here), plus the patches
+  below. A function of the package set, so the default here and the
   generic build tuning/pkgs-config.nix picks on gb4 are the same Nix.
 
   nix-ca-rebuild-after-gc.patch backports NixOS/nix#16477, carried until it
@@ -22,9 +22,17 @@
   already recovers with the first patch alone (scratch-store test,
   2026-11-19); the failing route (likely outputs from a builder or cache)
   is untested, so keep the build-trace cleanup until it is.
+
+  nix-ca-gc-drops-build-traces.patch removes the cause the other two cope
+  with: the GC deletes a path's build traces with the path, as the dropped
+  foreign key's cascade did, and a one-time migration drops the stale traces
+  already there. The other two stay as the safety net. Needed beyond this
+  host because harmonia serves db.sqlite directly: a stale trace on a peer
+  became a substitution failure here (2026-11-26).
 */
 ps:
 (ps.nixVersions.nixComponents_2_35.appendPatches [
   ./nix-ca-rebuild-after-gc.patch
   ./nix-ca-stale-trace-is-unbuilt.patch
+  ./nix-ca-gc-drops-build-traces.patch
 ]).nix-everything
