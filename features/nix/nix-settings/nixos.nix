@@ -111,6 +111,16 @@ in
     # restarted with 15 (2026-11-18). A real download that stalls 15 s is
     # retried, not failed.
     nix.settings.stalled-download-timeout = lib.mkDefault 15;
+    /*
+      How long a cache's "I have this path" is believed without asking again.
+      The default is 30 days, and the peers' caches are not that stable: a GC
+      on yulee or victus removes paths their harmonia had advertised, and
+      every client kept requesting nar/… files that no longer existed ("does
+      not exist in binary cache", 2026-11-26) until the entry aged out. An
+      hour keeps the saving for one build session; cache.nixos.org never
+      deletes, so asking it again costs one round trip.
+    */
+    nix.settings.narinfo-cache-positive-ttl = lib.mkDefault 3600;
     # trusted-users comes from the registry (features/core/users/nix-access.nix).
     /*
       Same shape as features/openvpn's profileSecret: the age.secrets entry is
