@@ -52,7 +52,17 @@
   flakeRoot ? ../..,
 }:
 let
-  flake = builtins.getFlake (toString flakeRoot);
+  # As a git+file ref when it is a checkout: `getFlake "/etc/nixos"` is a PATH
+  # flake (no rev), so the feature walk saw untracked files too -- an empty
+  # leftover features/fx570ex/src/modes, unknown to git, turned every field of
+  # the 2026-11-26 Tier 2 cache into "«error: ... not a module»" strings. The
+  # git ref is the tree `nix build /etc/nixos` evaluates: tracked files only.
+  flake = builtins.getFlake (
+    let
+      root = toString flakeRoot;
+    in
+    if builtins.pathExists (root + "/.git") then "git+file://" + root else root
+  );
   inherit (flake) inputs;
   lib = inputs.nixpkgs.lib;
 
