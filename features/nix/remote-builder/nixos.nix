@@ -283,6 +283,15 @@ in
     # not in the registry, and the nix-access assertion does not cover it.
   })
   (lib.mkIf cfg.enable {
+    # The wrappers' local-eval fallback runs nixos-rebuild AS ROOT on the flake
+    # checkout, which a user owns; git then refuses it ("dubious ownership"), Nix
+    # reads the tree without git information, and self.rev -- my.epoch's rev --
+    # comes out null, so hm-switch --update finds no revision for the deployed
+    # epoch (2026-11-26). Trust exactly that checkout, system-wide.
+    programs.git = {
+      enable = true;
+      config.safe.directory = [ cfg.flakePath ];
+    };
     nix.distributedBuilds = true;
     # root's ssh state (known_hosts beyond the declared peers, config): the daemon
     # dials builders and ssh-ng substituters as root.

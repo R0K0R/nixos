@@ -206,12 +206,33 @@ let
       out=$(printf '%s\n' "$out" | tail -n1)
       case "$out" in /nix/store/*) ;; *) echo "${scriptName}: no store path from the build: $out" >&2; exit 1 ;; esac
 
+      # The evaluation ran on the peer from a COPY of the flake (a plain store path, no
+      # git), so the system's epoch.json says rev: null, and hm-switch --update cannot
+      # map the deployed epoch back to a revision: every gb4 deployment since
+      # my.epoch was recorded that way. The checkout here knows the rev; record it
+      # beside the epoch the system itself carries -- only for a clean tree (tracked
+      # files: untracked ones are not in the flake), since an edited tree is not that
+      # revision. A `git+file` ref cannot be evaluated on the peer instead: Nix
+      # insists on opening the repository there (measured 2026-11-26).
+      record_rev() {
+        local top=$1 rev git=${lib.getExe pkgs.git} jq=${lib.getExe pkgs.jq}
+        [ -r "$top/epoch.json" ] || return 0
+        [ "$("$jq" -r '.rev // empty' "$top/epoch.json")" = "" ] || return 0
+        [ -z "$("$git" -C ${cfg.flakePath} status --porcelain --untracked-files=no 2>/dev/null)" ] || return 0
+        rev=$("$git" -C ${cfg.flakePath} rev-parse HEAD 2>/dev/null) || return 0
+        "$jq" -c --arg rev "$rev" --arg top "$top" --arg t "$(date -Is)" \
+          '{time: $t, rev: $rev, epoch, host, generation: null, toplevel: $top, source: "nixos-rebuild-wrapper"}' \
+          "$top/epoch.json" | as_root tee -a /var/lib/nixos-epochs/history.jsonl >/dev/null \
+          && echo ">> recorded rev $rev for epoch $("$jq" -r .epoch "$top/epoch.json")" >&2
+      }
+
       case "$action" in
         build) echo "$out" ;;
         test) as_root "$out/bin/switch-to-configuration" test ;;
         switch|boot)
           as_root nix-env -p /nix/var/nix/profiles/system --set "$out" \
-            && as_root "$out/bin/switch-to-configuration" "$action" ;;
+            && as_root "$out/bin/switch-to-configuration" "$action" \
+            && { record_rev "$out" || true; } ;;
       esac
     '';
 
