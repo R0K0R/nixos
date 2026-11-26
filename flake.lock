@@ -762,8 +762,8 @@
     "tuning-cache-galaxybook4-pro360": {
       "flake": false,
       "locked": {
-        "lastModified": 1793607680,
-        "narHash": "sha256-nCrUvkRt0SH3pgwmN5RrlCZ1oSasPtXLr0h4+FI7nnc=",
+        "lastModified": 1795679380,
+        "narHash": "sha256-JohifY1BMXdV+uUYtfM9CgUqT58//xynHcpyt6N9Y9k=",
         "path": "/var/lib/tuning-cache/galaxybook4-pro360",
         "type": "path"
       },
