@@ -13,8 +13,23 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+    /*
+      The shell from the R0K0R/dux-shell fork (upstream duxlabs-dev/dux-shell,
+      formerly AvengeMedia/DankMaterialShell), laid out like the Hyprland fork:
+
+        pr/<name>  one fix each, on the commit pinned here -- the unit that goes
+                   upstream (gamma-drop-stale-output: Go core; focusedapp-
+                   special-workspace: QML)
+        nixos      that commit + every pr/* fix: what this input pins
+
+      They used to be patch files applied in the home's dms package, and every
+      DMS bump broke them silently; in the fork a bump is a rebase, with git's
+      conflicts instead of patch's rejects (2026-11-26). The planner tab stays
+      a home overlay on the installed QML (features/desktop/dms in the home),
+      on purpose: editing it must not rebuild the Go core.
+    */
     dms = {
-      url = "github:AvengeMedia/DankMaterialShell";
+      url = "github:R0K0R/dux-shell/nixos";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 

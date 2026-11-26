@@ -80,16 +80,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1795472775,
-        "narHash": "sha256-Aw1nDrYjxm9Vp31R4/gla3pfsTO1LuVKF4U1LHRV7kk=",
-        "owner": "AvengeMedia",
-        "repo": "DankMaterialShell",
-        "rev": "291f4c58786a4fa38832a3267e66b889748c7c40",
+        "lastModified": 1795681420,
+        "narHash": "sha256-VVX8Q5Oqi9irEYEaxSVLX64cb7WHr6pPBIz2/TGWIP4=",
+        "owner": "R0K0R",
+        "repo": "dux-shell",
+        "rev": "4deb4a8625b166e4efb74624f35e5abdc9398582",
         "type": "github"
       },
       "original": {
-        "owner": "AvengeMedia",
-        "repo": "DankMaterialShell",
+        "owner": "R0K0R",
+        "ref": "nixos",
+        "repo": "dux-shell",
         "type": "github"
       }
     },
