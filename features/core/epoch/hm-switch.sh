@@ -82,6 +82,43 @@ die() { printf 'hm-switch: %s\n' "$*" >&2; exit 1; }
 note() { printf 'hm-switch: %s\n' "$*" >&2; }
 is_peer() { case " $HM_PEERS " in *" $1 "*) return 0 ;; esac; return 1; }
 
+# epoch_of_rev REV: the history's record first; else this user's cache of
+# earlier evaluations; else EVALUATE that commit of the system flake. The
+# history only learns revisions that nixos-rebuild deployed, but a commit that
+# changes nothing a home sees (a fork fix, a cache relock) is never deployed,
+# and both --update and the plain check then refused it until someone appended
+# a record by hand with sudo (twice on 2026-11-27). Evaluating the committed
+# tree is what the switch would compute, so the answer is the same one.
+# Here and not in epoch-lib.sh: that is also sourced as root by the PAM
+# banner, which must never evaluate a repo.
+epoch_of_rev() {
+  local e cache
+  e=$(history_epoch_of_rev "$1")
+  if [ -n "$e" ]; then printf '%s\n' "$e"; return 0; fi
+  cache=$(hm_switch_state)/evaluated-epochs
+  e=$(grep -F "$1 " "$cache" 2>/dev/null | tail -n 1 | cut -d' ' -f2 | tr -cd 'a-z0-9')
+  if [ -n "$e" ]; then printf '%s\n' "$e"; return 0; fi
+  git -C "$HM_SYSTEM_FLAKE" cat-file -e "$1^{commit}" 2>/dev/null || return 0
+  note "system revision ${1:0:12} is not in the epoch history: evaluating its epoch (about a minute)"
+  e=$("$HM_NIX" eval --raw "git+file://$HM_SYSTEM_FLAKE?rev=$1#nixosConfigurations.\"$host\".config.system.build.epoch" 2>/dev/null | tr -cd 'a-z0-9')
+  [ -n "$e" ] || return 0
+  mkdir -p "$(dirname "$cache")" && printf '%s %s\n' "$1" "$e" >>"$cache"
+  printf '%s\n' "$e"
+}
+
+# newer_head_of_epoch EPOCH BASE: the system flake's HEAD, when it is pushed
+# (the home locks `system` from its github remote, which cannot fetch a local
+# commit), not behind BASE (never relock backwards), and evaluates to EPOCH.
+newer_head_of_epoch() {
+  local h
+  h=$(git -C "$HM_SYSTEM_FLAKE" rev-parse --verify -q HEAD 2>/dev/null) || return 0
+  [ "$h" != "$2" ] || return 0
+  [ -n "$(git -C "$HM_SYSTEM_FLAKE" branch -r --contains "$h" 2>/dev/null)" ] || return 0
+  if [ -n "$2" ] && ! git -C "$HM_SYSTEM_FLAKE" merge-base --is-ancestor "$2" "$h" 2>/dev/null; then return 0; fi
+  [ "$(epoch_of_rev "$h")" = "$1" ] && printf '%s\n' "$h"
+  return 0
+}
+
 if [ "$build" = peer ] && ! is_peer "$peer"; then die "--on $peer: not a peer of this host (peers: ${HM_PEERS:-none})"; fi
 if [ -n "$evalon" ] && ! is_peer "$evalon"; then die "--eval-on $evalon: not a peer of this host (peers: ${HM_PEERS:-none})"; fi
 if { [ "$build" != system ] || [ -n "$evalon" ]; } && [ $# -gt 0 ]; then
@@ -106,6 +143,11 @@ else
 
   if [ "$update" = 1 ]; then
     target=$(newest_rev_of_epoch "$cur")
+    head=$(newer_head_of_epoch "$cur" "$target")
+    if [ -n "$head" ]; then
+      note "the system flake's HEAD ${head:0:12} is newer than the newest recorded revision${target:+ ${target:0:12}} and has the running epoch: using it"
+      target=$head
+    fi
     if [ -z "$target" ]; then
       r=$(system_rev)
       case $r in
@@ -131,12 +173,13 @@ Ask the admin to commit, push and redeploy -- or use --force at your own risk." 
 
   rev=$(lock_system_rev "$lock")
   [ -n "$rev" ] || die "the locked 'system' input has no rev (a path: input?); cannot look up its epoch"
-  locked_epoch=$(history_epoch_of_rev "$rev")
+  locked_epoch=$(epoch_of_rev "$rev")
 
   if [ "$locked_epoch" != "$cur" ] && [ "$force" != 1 ]; then
     if [ -z "$locked_epoch" ]; then
       why="system revision $rev (locked in $lock) was never deployed on $host,
-so its epoch is unknown here."
+and evaluating its epoch failed (a commit not in $HM_SYSTEM_FLAKE, or an
+evaluation error -- try: nix eval --raw 'git+file://$HM_SYSTEM_FLAKE?rev=$rev#nixosConfigurations.\"$host\".config.system.build.epoch')."
     else
       why="system revision $rev (locked in $lock) has epoch $locked_epoch,
 but $host is running epoch $cur."

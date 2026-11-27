@@ -116,11 +116,16 @@ in
       The default is 30 days, and the peers' caches are not that stable: a GC
       on yulee or victus removes paths their harmonia had advertised, and
       every client kept requesting nar/… files that no longer existed ("does
-      not exist in binary cache", 2026-11-26) until the entry aged out. An
-      hour keeps the saving for one build session; cache.nixos.org never
-      deletes, so asking it again costs one round trip.
+      not exist in binary cache", 2026-11-26) until the entry aged out.
+      Ten days, not the hour this was first: an hour re-asked every cache
+      about every path at each switch more than an hour after the last, and
+      a home's ~2,100 content-addressed lookups made "querying info about
+      missing paths" take minutes (2026-11-27). A stale positive after a
+      builder GC costs a failed fetch and a fallback to copying from the
+      store that has the path; after GCing a builder, clear the clients'
+      /root/.cache/nix/binary-cache-v8.sqlite* to drop it at once.
     */
-    nix.settings.narinfo-cache-positive-ttl = lib.mkDefault 3600;
+    nix.settings.narinfo-cache-positive-ttl = lib.mkDefault (10 * 24 * 3600);
     # trusted-users comes from the registry (features/core/users/nix-access.nix).
     /*
       Same shape as features/openvpn's profileSecret: the age.secrets entry is
