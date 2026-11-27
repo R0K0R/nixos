@@ -195,6 +195,25 @@
         buildInputs = (o.buildInputs or [ ]) ++ [ final.buildPackages.vala ];
       });
 
+      # libgsl calls cblas_* but, by upstream design, records no NEEDED for
+      # its own libgslcblas: the program is meant to pick a CBLAS. Under the
+      # tuning's mold (my.tuning.heavy) that breaks every program reaching
+      # CBLAS only THROUGH libgsl. mold's --as-needed keeps a DSO only for
+      # references from the program's own objects (src/passes.rs: "DSOs that
+      # are not referenced directly by any object file are not needed"),
+      # where ld.bfd also counts the undefined symbols of the other DSOs.
+      # So `-Wl,--as-needed -lgsl -lgslcblas` silently dropped libgslcblas:
+      # enblend died on "libgsl.so.28: undefined symbol: cblas_snrm2" when
+      # help2man ran it (2026-11-27), and a program that does not run itself
+      # at build time would have failed only at its first BLAS call.
+      # Linking libgsl to it is what Debian ships. A program that links its
+      # own CBLAS still wins: its direct NEEDED comes first in the lookup.
+      gsl = prev.gsl.overrideAttrs (o: {
+        postFixup = (o.postFixup or "") + ''
+          patchelf --add-needed libgslcblas.so.0 --add-rpath "$out/lib" "$(readlink -f "$out/lib/libgsl.so")"
+        '';
+      });
+
       # perl-Tk's PNG/Makefile.PL calls `pkg-config libpng` directly.  In
       # IntraISACross the setup hook for libpng.dev adds to PKG_CONFIG_PATH
       # but the value isn't visible when Makefile.PL shells out.  Set it
