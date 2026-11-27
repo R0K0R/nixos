@@ -118,14 +118,30 @@ in
       let
         passwordless = lib.attrNames (lib.filterAttrs (_: u: u.passwordless) config.my.users);
       in
-      lib.mkIf (passwordless != [ ]) (lib.mkAfter ''
+      lib.mkMerge [
+      /*
+        Start from the user's session.json or none, never from the greeter's
+        own copy of last boot. Upstream's pre-start rewrites the copy's
+        wallpaper paths to /var/lib/dms-greeter/wallpaper*, and when no fresh
+        user session.json arrives to replace it (the fork moved it to
+        ~/.local/state/dms, which was not persisted), copy_wallpaper ran
+        `cp wallpaper wallpaper`, cp exited 1 on "are the same file", set -e
+        failed the unit, and greetd never started: no greeter after the boot
+        of 2026-11-27, Hyprland started by hand on a tty. Without a
+        session.json the greeter just shows its default wallpaper.
+      */
+      (lib.mkBefore ''
+        rm -f /var/lib/dms-greeter/session.json
+      '')
+      (lib.mkIf (passwordless != [ ]) (lib.mkAfter ''
         mem=/var/lib/dms-greeter/.local/state/memory.json
         if [ -f "$mem" ] && ${pkgs.jq}/bin/jq -e --argjson pl '${builtins.toJSON passwordless}' \
              '.lastSuccessfulUser as $u | $pl | index($u)' "$mem" >/dev/null 2>&1; then
           ${pkgs.jq}/bin/jq 'del(.lastSuccessfulUser)' "$mem" > "$mem.tmp" && mv "$mem.tmp" "$mem"
           chown greeter: "$mem" || :
         fi
-      '');
+      ''))
+      ];
     })
 
   ];
